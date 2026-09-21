@@ -64,7 +64,9 @@ package {
             if (this._type == TYPE_FIREBALL || this._type == TYPE_MAGMA) {
                 _graphic = new FIREBALL_CLIP();
                 if (this._type == TYPE_MAGMA) {
-                    _graphic.filters = [new GlowFilter(16748544, 1, 12, 12, 6, 1, false, false)];
+                    // 8 x 8 instead of 12 x 12: power-of-two blurs take Flash's fast path, and this filter is
+                    // recomputed every frame the fireball animates.
+                    _graphic.filters = [new GlowFilter(16748544, 1, 8, 8, 4, 1, false, false)];
                 }
             }
             else {

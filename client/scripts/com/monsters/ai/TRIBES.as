@@ -19,6 +19,23 @@ package com.monsters.ai {
 
         public static const D_IDS:Array = [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 47, 48, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110];
 
+        /** Inferno-only: wmids of Moloch strongholds (server tribeForCell.ts sends 51). */
+        public static const M_IDS:Array = [51, 52, 53, 54, 55, 56, 57, 58, 59, 60];
+
+        /**
+         * Inferno-only: devilish display names, keyed by the canonical tribe name the server
+         * sends in map cells. The canonical names double as frame labels and asset names, so
+         * they are never changed - only what the player reads is. Rename freely here.
+         */
+        public static const DEVIL_NAMES:Object = {
+                "Legionnaire": "Hellionnaire",
+                "Kozu": "Kozmodeus",
+                "Abunakki": "Abaddonakki",
+                "Dreadnaut": "Beelzenaut",
+                "Dreadnought": "Beelzenaut",
+                "Moloch": "Moloch"
+            };
+
         public static const k_DIGIT_LEVEL:uint = 0;
 
         public static const k_DIGIT_TRIBE:uint = 1;
@@ -38,7 +55,8 @@ package com.monsters.ai {
                     "k": K_IDS,
                     "a": A_IDS,
                     "d": D_IDS,
-                    "b": B_IDS
+                    "b": B_IDS,
+                    "m": M_IDS
                 };
             _tribes.l = {
                     "id": 1,
@@ -112,6 +130,21 @@ package com.monsters.ai {
                     "profilepic": "monsters/tribe_moloch_50.jpg",
                     "streampostpic": "tribe-moloch.v2.png"
                 };
+            if (GLOBAL.INFERNO_ONLY) {
+                _tribes.l.name = DisplayName("Legionnaire");
+                _tribes.k.name = DisplayName("Kozu");
+                _tribes.a.name = DisplayName("Abunakki");
+                _tribes.d.name = DisplayName("Dreadnaut");
+                // Moloch: fifth tribe. Same taunts, art and attack behaviour as the original
+                // Inferno tribe, exposed through the regular Map Room 2 lookup (wmid 51-60).
+                var molochKey:String = null;
+                _tribes.m = {};
+                for (molochKey in _infernotribes.d) {
+                    _tribes.m[molochKey] = _infernotribes.d[molochKey];
+                }
+                _tribes.m.id = 5;
+                _tribes.m.name = DisplayName("Moloch");
+            }
             _eventtribes = {};
             _eventtribes.b = {
                     "id": 1,
@@ -195,10 +228,30 @@ package com.monsters.ai {
             return _loc2_;
         }
 
+        /** Name shown to the player for a canonical tribe name coming from the server. */
+        public static function DisplayName(param1:String):String {
+            if (GLOBAL.INFERNO_ONLY && DEVIL_NAMES.hasOwnProperty(param1)) {
+                return DEVIL_NAMES[param1];
+            }
+            return param1;
+        }
+
+        /**
+         * Frame label inside the map cell clip for a canonical tribe name. The clip only has
+         * frames for the four original tribes; Moloch borrows the Dreadnaut icon (and is
+         * tinted by InfernoMapTheme) because an unknown label would throw.
+         */
+        public static function MapFrameName(param1:String):String {
+            if (param1 == "Moloch") {
+                return "Dreadnaut";
+            }
+            return param1;
+        }
+
         public static function ChooseTribesTable(param1:int = 0):Object {
             var _loc2_:int = param1;
             if (_loc2_ <= 0) {
-                _loc2_ = BASE.isInfernoMainYardOrOutpost ? 2 : 1;
+                _loc2_ = BASE.usesInfernoBackend ? 2 : 1;
             }
             switch (_loc2_) {
                 case 0:

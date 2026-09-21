@@ -668,7 +668,9 @@ package {
                 else if (Boolean(_loc8_._inProduction) && _loc8_._inProduction != "") {
                     _loc4_.mcLoading.visible = true;
                     ImageCache.GetImageWithCallBack("monsters/" + _loc8_._inProduction + "-medium.jpg", this.IconLoaded, true, 1, "", ["hatchery", _loc3_]);
-                    _loc12_ = int(CREATURELOCKER._creatures[_loc8_._inProduction].props.cTime);
+                    // Through GetProperty, not the raw table, so the progress bar follows the real hatch time
+                    // (academy level, and the 1-second hatching of inferno-only builds).
+                    _loc12_ = Math.max(1, int(CREATURES.GetProperty(_loc8_._inProduction, "cTime")));
                     if ((_loc13_ = 100 / _loc12_ * _loc8_._countdownProduce.Get()) < 0) {
                         _loc13_ = 0;
                     }

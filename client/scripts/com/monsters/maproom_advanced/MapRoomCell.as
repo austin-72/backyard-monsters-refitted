@@ -1,4 +1,5 @@
 package com.monsters.maproom_advanced {
+    import com.monsters.ai.TRIBES;
 
     import com.cc.utils.SecNum;
     import com.monsters.alliances.*;
@@ -18,6 +19,9 @@ package com.monsters.maproom_advanced {
         internal var Y:int;
 
         internal var _updated:Boolean;
+
+        /** The map data object this cell is currently drawn from (see MapRoomPopup.Update). */
+        internal var _ioShownData:Object = null;
 
         internal var _dataAge:int;
 
@@ -521,19 +525,23 @@ package com.monsters.maproom_advanced {
                 }
                 mc.y = -int((this._height - 100) * 0.6) + 18;
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                InfernoMapTheme.apply(mc, this._height);
+            }
             if (this._base > 0) {
                 mc.mcPlayer.visible = true;
                 mc.mcPlayer.mcFlag2.visible = false;
                 mc.mcPlayer.mcLevel.visible = false;
                 this.SetupAlliance();
                 if (this._base == 1) {
-                    mc.mcPlayer.gotoAndStop("tribe-" + this._name);
+                    mc.mcPlayer.gotoAndStop("tribe-" + TRIBES.MapFrameName(this._name));
+
                     mc.mcPlayer.mcLevel.gotoAndStop(1);
                     mc.mcPlayer.mcLevel.lv_txt.htmlText = "<b>" + this._level + "</b>";
                     if (Boolean(this._level) && this._level > 0) {
                         mc.mcPlayer.mcLevel.visible = true;
                     }
-                    mc.mcPlayer.mcFlag.txt.htmlText = "" + this._name;
+                    mc.mcPlayer.mcFlag.txt.htmlText = "" + TRIBES.DisplayName(this._name);
                     mc.mcPlayer.mcFlag.txt.y = this._inAllianceProps.txtNameY;
                     mc.mcPlayer.mcFlag.txtAlliance.htmlText = "";
                     mc.mcPlayer.mcFlag.txtAlliance.y = this._inAllianceProps.txtAllyY;
@@ -594,11 +602,17 @@ package com.monsters.maproom_advanced {
             else {
                 mc.mcPlayer.visible = false;
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                // After the icon's frame has been chosen, and on every update, not only for tribes:
+                // cells are recycled, so one that showed a Moloch stronghold a moment ago may now be a
+                // player, an outpost or open ground.
+                InfernoMapTheme.molochIcon(mc.mcPlayer, this._base == 1 && this._name == "Moloch");
+            }
             if (this._damage) {
                 mc.mcPlayer.mcFlag2.visible = false;
                 mc.mcPlayer.mcFlag.nameBar.mcBar.width = 100 / 100 * Math.max(0, 100 - this._damage);
                 if (this._base == 1) {
-                    mc.mcPlayer.mcFlag.txt.htmlText = "" + this._name + "";
+                    mc.mcPlayer.mcFlag.txt.htmlText = "" + TRIBES.DisplayName(this._name) + "";
                     mc.mcPlayer.mcFlag.nameBar.mcBar.gotoAndStop(!!this._destroyed ? "destroyed" : "wmyard");
                     mc.mcPlayer.mcFlag.nameBar.mcBG.gotoAndStop(!!this._destroyed ? "destroyed" : "wmyard");
                 }

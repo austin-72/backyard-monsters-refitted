@@ -67,7 +67,9 @@ package com.monsters.kingOfTheHill {
         }
 
         public function initialize(param1:Object = null):void {
-            if (!GLOBAL._flags[this.name] || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYard) {
+            // King of the Hill (the Krallen event) is an overworld feature: it hands out a champion, and the
+            // Inferno has no champion cage. Inferno yards never ran it; an inferno-only main yard must not either.
+            if (GLOBAL.INFERNO_ONLY || !GLOBAL._flags[this.name] || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYard) {
                 return;
             }
             if (param1) {

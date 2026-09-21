@@ -69,12 +69,12 @@ package {
             bRanges.addEventListener(MouseEvent.CLICK, this.ToggleRanges);
             bExpand.SetupKey("planner_expand_btn");
             if (BASE.isMainYardOrInfernoMainYard) {
-                if (Boolean(STORE._storeData.ENL) && STORE._storeData.ENL.q == 6) {
+                if (GLOBAL.yardExpansionsBought >= GLOBAL.yardExpansionsMax) {
                     bExpand.Enabled = false;
                 }
                 else {
                     bExpand.Enabled = true;
-                    bExpand.addEventListener(MouseEvent.CLICK, STORE.Show(1, 1, ["ENL"]));
+                    bExpand.addEventListener(MouseEvent.CLICK, STORE.Show(1, 1, [GLOBAL.yardExpansionItem]));
                 }
                 bExpand.visible = true;
             }

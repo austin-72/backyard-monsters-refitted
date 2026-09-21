@@ -28,6 +28,10 @@ package com.monsters.rendering {
 
         private var _curDrawIndex:uint;
 
+        private var _alphaMasks:Object = {};
+
+        private var _alphaMaskCount:int = 0;
+
         public function Renderer(param1:BitmapData, param2:Rectangle) {
             super();
             this.renderer_friend::_canvas = param1;
@@ -58,12 +62,66 @@ package com.monsters.rendering {
             var _loc1_:Vector.<RasterData> = RasterData.renderer_friend::s_visibleData;
             this._curCopyIndex = this._curDrawIndex = 0;
             if (RasterData.renderer_friend::s_needsSort) {
-                _loc1_.sort(this.sortRasterData);
+                this.sortByDepth(_loc1_);
                 RasterData.renderer_friend::s_needsSort = false;
             }
             this.renderer_friend::_canvas.lock();
-            this.rasterize(RasterData.renderer_friend::s_unsortedData.concat(_loc1_));
+            // Two passes instead of concat(): that built a new list of everything in the yard every frame.
+            this.rasterize(RasterData.renderer_friend::s_unsortedData);
+            this.rasterize(_loc1_);
             this.renderer_friend::_canvas.unlock();
+        }
+
+        /**
+         * The list needs sorting almost every frame during a battle, because every moving monster
+         * changes depth, yet it is nearly in order each time: buildings never move. Vector.sort()
+         * with a compare function costs thousands of function calls regardless; an insertion sort is
+         * close to free on a nearly sorted list, and it is stable, so equal depths do not flicker.
+         * When the list really is out of order (a yard has just loaded) it gives up early and the
+         * built-in sort does the job.
+         */
+        private function sortByDepth(param1:Vector.<RasterData>):void {
+            var i:int = 1;
+            var j:int = 0;
+            var item:RasterData = null;
+            var depth:Number = NaN;
+            var length:int = int(param1.length);
+            var budget:int = length * 12;
+            while (i < length) {
+                item = param1[i];
+                depth = item.renderer_friend::_depth;
+                j = i - 1;
+                while (j >= 0 && param1[j].renderer_friend::_depth > depth) {
+                    param1[j + 1] = param1[j];
+                    j--;
+                    if (--budget < 0) {
+                        param1[j + 1] = item;
+                        param1.sort(this.sortRasterData);
+                        return;
+                    }
+                }
+                param1[j + 1] = item;
+                i++;
+            }
+        }
+
+        /** Masks for half-transparent sprites, by size and alpha. They used to be made and thrown away per sprite per frame. */
+        private function alphaMaskFor(param1:int, param2:int, param3:uint):BitmapData {
+            var key:String = param1 + "x" + param2 + ":" + param3;
+            var mask:BitmapData = this._alphaMasks[key];
+            if (!mask) {
+                if (this._alphaMaskCount >= 96) {
+                    for each (mask in this._alphaMasks) {
+                        mask.dispose();
+                    }
+                    this._alphaMasks = {};
+                    this._alphaMaskCount = 0;
+                }
+                mask = new BitmapData(param1, param2, true, param3);
+                this._alphaMasks[key] = mask;
+                ++this._alphaMaskCount;
+            }
+            return mask;
         }
 
         private function cull(param1:Vector.<RasterData>):void {
@@ -103,14 +161,8 @@ package com.monsters.rendering {
                 this._pt.x = entry.renderer_friend::_pt.x;
                 this._pt.y = entry.renderer_friend::_pt.y;
                 if (entryBmd && !entry.renderer_friend::_blendMode && !entry.renderer_friend::_filter && (entry.renderer_friend::_scaleX & entry.renderer_friend::_scaleY) === 100) {
-                    if (entry.renderer_friend::_alpha !== 4278190080) {
-                        alphaMask = new BitmapData(entryBmd.width, entryBmd.height, true, entry.renderer_friend::_alpha);
-                    }
+                    alphaMask = entry.renderer_friend::_alpha !== 4278190080 ? this.alphaMaskFor(entryBmd.width, entryBmd.height, entry.renderer_friend::_alpha) : null;
                     this.renderer_friend::_canvas.copyPixels(entryBmd, entryBmd.rect, this._pt, alphaMask);
-                    if (alphaMask) {
-                        alphaMask.dispose();
-                        alphaMask = null;
-                    }
                 }
                 else {
                     this._matrix.createBox(entry.renderer_friend::_scaleX * 0.01, entry.renderer_friend::_scaleY * 0.01, 0, this._pt.x, this._pt.y);

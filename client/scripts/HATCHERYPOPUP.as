@@ -128,10 +128,23 @@ package {
        * @param {String} creatureID - the current creature's ID passed to MonsterInfoB
       */
 
+        /**
+         * The popup passes monsters around as bare numbers and used to rebuild the id as "IC" + number
+         * in an Inferno yard. That is wrong for an overworld monster that has been let into the Inferno:
+         * Rezghul is C19, and "IC19" does not exist, so hovering over him crashed and he could not be
+         * queued. Use the Inferno id when there is one, the overworld id otherwise.
+         */
+        private static function ioMonsterId(param1:int):String {
+            if (BASE.isInfernoMainYardOrOutpost && CREATURELOCKER._creatures["IC" + param1]) {
+                return "IC" + param1;
+            }
+            return "C" + param1;
+        }
+
         public function MonsterInfoB(creatureID:int):void {
             var currentCreature:String = null;
             var damageShown:int = 0;
-            var creatureStringID:String = BASE.isInfernoMainYardOrOutpost ? "IC" + creatureID : "C" + creatureID;
+            var creatureStringID:String = ioMonsterId(creatureID);
             var creature:Object = CREATURELOCKER._creatures[creatureStringID];
             ImageCache.GetImageWithCallBack("monsters/" + creatureStringID + "-portrait.jpg", this.IconLoaded, true, 1, "", [this.portrait1]);
             var speed:Number = 0;
@@ -236,8 +249,7 @@ package {
             return function(param1:MouseEvent = null):void {
                 var _loc4_:* = undefined;
                 var _loc5_:* = undefined;
-                var _loc2_:* = BASE.isInfernoMainYardOrOutpost ? "I" : "";
-                _loc2_ += "C" + n;
+                var _loc2_:* = ioMonsterId(n);
                 var _loc3_:* = 1 + _hatchery._lvl.Get();
                 if (!BASE.Charge(4, CREATURES.GetProperty(_loc2_, "cResource"), true)) {
                     if (BASE.isInfernoMainYardOrOutpost) {

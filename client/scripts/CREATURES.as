@@ -37,12 +37,17 @@ package {
             if (!monsterID || monsterID.substr(0, 1) == "G") {
                 return 0;
             }
+            if (GLOBAL.INFERNO_ONLY && statID == "cTime") {
+                return GLOBAL.ioHatchSeconds;
+            }
             try {
                 try {
                     if (monsterID == "C100") {
                         monsterID = "C12";
                     }
-                    if (!GLOBAL.player.m_upgrades[monsterID]) {
+                    // Only for monsters that exist: asking about a made-up id (the hatchery once asked for
+                    // "IC19") used to leave a junk entry in the player's academy data for good.
+                    if (!GLOBAL.player.m_upgrades[monsterID] && CREATURELOCKER._creatures[monsterID]) {
                         GLOBAL.player.m_upgrades[monsterID] = {"level": 1};
                     }
                     stat = CREATURELOCKER._creatures[monsterID].props[statID];

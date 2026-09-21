@@ -413,6 +413,9 @@ package {
         }
 
         public static function get DescentPassed():Boolean {
+            if (GLOBAL.INFERNO_ONLY) {
+                return true;
+            }
             var _loc2_:int = 0;
             var _loc1_:Boolean = false;
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && GLOBAL.StatGet("descentLvl") < 1) {

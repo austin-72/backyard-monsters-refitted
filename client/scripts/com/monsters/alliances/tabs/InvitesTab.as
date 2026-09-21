@@ -441,7 +441,7 @@ package com.monsters.alliances.tabs {
                 return;
             if (BASE._saving || BASE._loading || BASE._saveCounterA != BASE._saveCounterB)
                 return;
-            if (BASE.isInfernoMainYardOrOutpost)
+            if (BASE.usesInfernoBackend)
                 return;
 
             ALLIANCEWINDOW.Hide();

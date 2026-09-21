@@ -150,9 +150,14 @@ package {
             }
             else {
                 this.Quake(int(damage * _loc1_ * _loc2_));
-                _loc3_ = new QuakeGraphic(20, _range * 2);
-                _loc3_.graphic.y += _top;
-                _mc.addChild(_loc3_.graphic);
+                // One ring per tower at a time. The stock ring carried a 20 px glow filter while it grew
+                // to twice the tower's range, which Flash has to blur again on every frame at that size.
+                // A yard with two Quake towers could afford that; converted tribe yards have many.
+                if (!QuakeGraphic.isBusy(_mc)) {
+                    _loc3_ = new QuakeGraphic(20, _range * 2, _mc);
+                    _loc3_.graphic.y += _top;
+                    _mc.addChild(_loc3_.graphic);
+                }
             }
             _origin = new Point(_mc.x, _mc.y);
             _shake = 10;
@@ -254,22 +259,37 @@ package {
 }
 
 import flash.display.Shape;
-import flash.filters.GlowFilter;
+import flash.utils.Dictionary;
 import gs.TweenLite;
 
 class QuakeGraphic {
 
+    /** Towers (their clips) that currently show a ring. */
+    private static var s_busy:Dictionary = new Dictionary(true);
+
     public var graphic:Shape;
 
-    public function QuakeGraphic(param1:uint, param2:uint) {
+    private var _owner:Object;
+
+    public static function isBusy(param1:Object):Boolean {
+        return s_busy[param1] === true;
+    }
+
+    public function QuakeGraphic(param1:uint, param2:uint, param3:Object = null) {
         super();
+        this._owner = param3;
+        if (param3) {
+            s_busy[param3] = true;
+        }
         this.graphic = new Shape();
-        this.graphic.graphics.lineStyle(0.3, 6710988, 0.5);
+        // Layered strokes stand in for the glow: a wide faint one under a thin bright one.
+        this.graphic.graphics.lineStyle(4, 3379402, 0.18);
         this.graphic.graphics.drawEllipse(-param1, -param1 / 2, param1 * 2, param1);
+        this.graphic.graphics.lineStyle(1.5, 3379402, 0.55);
+        this.graphic.graphics.drawEllipse(-param1, -param1 / 2, param1 * 2, param1);
+        this.graphic.graphics.lineStyle(0.3, 6710988, 0.5);
         this.graphic.graphics.drawEllipse(-param1 * 0.8, -param1 / 2.5, param1 * 1.6, param1 * 0.8);
         this.graphic.graphics.drawEllipse(-param1 * 0.6, -param1 / 3.333333, param1 * 1.2, param1 * 0.6);
-        var _loc3_:GlowFilter = new GlowFilter(3379402, 1, 20, 20, 5 + Math.random() * 5, 1, false, false);
-        this.graphic.filters = [_loc3_];
         TweenLite.to(this.graphic, 1, {
                     "width": param2 * 2,
                     "height": param2,
@@ -279,8 +299,13 @@ class QuakeGraphic {
     }
 
     private function onComplete():void {
-        this.graphic.parent.removeChild(this.graphic);
-        this.graphic.filters = [];
+        if (this._owner) {
+            delete s_busy[this._owner];
+        }
+        if (this.graphic && this.graphic.parent) {
+            this.graphic.parent.removeChild(this.graphic);
+        }
         this.graphic = null;
+        this._owner = null;
     }
 }

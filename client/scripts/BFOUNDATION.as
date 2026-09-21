@@ -377,7 +377,7 @@ package {
             this._repairing = 0;
             this._mouseOffset = new Point(0, 0);
             this._oldY = 0;
-            if (BASE.isOutpostOrInfernoOutpost) {
+            if (BASE.isOutpostOrInfernoOutpost && !GLOBAL.outpostRecycling) {
                 this._blockRecycle = true;
             }
             InstanceManager.addInstance(this);
@@ -2510,7 +2510,7 @@ package {
             var _loc1_:String = null;
             if (this._countdownBuild.Get() > 0) {
                 if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
-                    if (BASE.isOutpostOrInfernoOutpost) {
+                    if (BASE.isOutpostOrInfernoOutpost && !GLOBAL.outpostRecycling) {
                         GLOBAL.Message(KEYS.Get("msg_stopconstructionoutpostbuilding"));
                     }
                     else {
@@ -2890,7 +2890,7 @@ package {
         }
 
         public function Constructed():void {
-            if (BASE.isOutpostOrInfernoOutpost) {
+            if (BASE.isOutpostOrInfernoOutpost && !GLOBAL.outpostRecycling) {
                 this._blockRecycle = true;
             }
             this._countdownBuild.Set(0);

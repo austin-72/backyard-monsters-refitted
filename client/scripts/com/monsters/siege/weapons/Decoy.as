@@ -186,7 +186,7 @@ package com.monsters.siege.weapons {
         }
 
         public function get damage():int {
-            return Math.max(0, Math.min(23500, getProperty(DAMAGE).getValueForLevel(level)));
+            return Math.max(0, Math.min(23500, ioValue("damage", getProperty(DAMAGE).getValueForLevel(level))));
         }
 
         override public function onActivation(param1:Number, param2:Number):void {
@@ -233,6 +233,10 @@ package com.monsters.siege.weapons {
             while (_loc2_ < _loc1_.length) {
                 if (_loc1_[_loc2_] is BUILDING22) {
                     BUILDING22(_loc1_[_loc2_]).EjectCreeps(new Point(this.x, this.y));
+                }
+                else if (_loc1_[_loc2_] is HOUSINGBUNKER) {
+                    // The Inferno has no Monster Bunker: defenders live in the Compound.
+                    HOUSINGBUNKER(_loc1_[_loc2_]).EjectCreeps(new Point(this.x, this.y), range);
                 }
                 _loc2_++;
             }

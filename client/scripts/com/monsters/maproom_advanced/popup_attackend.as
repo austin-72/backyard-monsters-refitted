@@ -70,7 +70,7 @@ package com.monsters.maproom_advanced {
             }
             this.tProcessing.htmlText = KEYS.Get("please_wait");
             this.bAction.Enabled = false;
-            if (!MapRoomManager.instance.isInMapRoom2 || BASE.isInfernoMainYardOrOutpost) {
+            if (!MapRoomManager.instance.isInMapRoom2 || BASE.usesInfernoBackend) {
                 this.bAction.Setup(KEYS.Get("btn_returnhome"));
             }
             else {

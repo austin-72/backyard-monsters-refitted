@@ -107,6 +107,12 @@ package {
             if (MapRoomManager.instance.isInMapRoom3 && (GLOBAL.mode === GLOBAL.e_BASE_MODE.VIEW || GLOBAL.mode === GLOBAL.e_BASE_MODE.WMVIEW)) {
                 gotoAndStop(GLOBAL.e_BASE_MODE.ATTACK);
             }
+            else if (GLOBAL.INFERNO_ONLY) {
+                // The top bar art has one frame per load mode, and the Inferno ones ("ibuild", "iattack"...)
+                // carry the bone / coal / sulfur / magma icons. They hold the same named parts as the
+                // overworld frames, so only the artwork changes.
+                gotoAndStop("i" + GLOBAL._loadmode);
+            }
             else {
                 gotoAndStop(GLOBAL._loadmode);
             }
@@ -188,6 +194,14 @@ package {
             mc.bAlert.addEventListener(MouseEvent.MOUSE_OUT, this.ButtonInfoHide);
             this._buttonIcons = [];
             this._buttonIcons = [mc.bInvite, mc.bGift, mc.bInbox, mc.bAlert];
+            // Server flag io_hideui: a comma separated list of top-bar buttons this server has no use
+            // for ("invite", "gift"). The icon row lays itself out from whichever buttons are visible.
+            if (GLOBAL.ioUiHidden("invite")) {
+                mc.bInvite.visible = false;
+            }
+            if (GLOBAL.ioUiHidden("gift")) {
+                mc.bGift.visible = false;
+            }
             addEventListener(Event.ENTER_FRAME, onSpinnerTick);
             mc.bEarn.bAction.tLabel.htmlText = KEYS.Get("btn_earn");
             if (GLOBAL._flags.showFBCEarn == 1) {
@@ -293,7 +307,7 @@ package {
                 this._siegeweapon.y = 20;
                 this._siegeweapon.Setup(!GLOBAL.isInAttackMode);
             }
-            if (GLOBAL._attackersCatapult > 0 && !BASE.isInfernoMainYardOrOutpost) {
+            if (GLOBAL._attackersCatapult > 0 && (GLOBAL.INFERNO_ONLY || !BASE.isInfernoMainYardOrOutpost)) {
                 this._catapult = new CATAPULTPOPUP();
                 mc.addChild(this._catapult);
                 this._catapult.x = 350;
@@ -556,7 +570,7 @@ package {
                         mc.mcPoints.tName.htmlText = KEYS.Get("uitop_yardownerlong", {"v1": BASE._ownerName.toUpperCase()});
                     }
                 }
-                else if (GLOBAL.mode == GLOBAL._loadmode) {
+                else if (GLOBAL.mode == GLOBAL._loadmode && !GLOBAL.INFERNO_ONLY) {
                     mc.mcPoints.tName.htmlText = KEYS.Get("uitop_backyardmonsters");
                 }
                 else {
@@ -575,7 +589,7 @@ package {
                     loader.load(new URLRequest("http://graph.facebook.com/" + BASE._loadedFBID + "/picture"));
                 }
             }
-            else if (GLOBAL.mode == GLOBAL._loadmode) {
+            else if (GLOBAL.mode == GLOBAL._loadmode && !GLOBAL.INFERNO_ONLY) {
                 mc.mcPoints.tName.htmlText = KEYS.Get("uitop_backyardmonsters");
             }
             else {
@@ -592,7 +606,8 @@ package {
         }
 
         public function addIcon(param1:DisplayObject):void {
-            if (Boolean(mc) && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+            // The only caller is the King of the Hill (Krallen) HUD icon: an overworld feature.
+            if (Boolean(mc) && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !GLOBAL.INFERNO_ONLY) {
                 param1.x = 222;
                 param1.y = 0;
                 this._kothIcon = mc.addChild(param1);
@@ -623,7 +638,7 @@ package {
 
         public function addResourceBar(param1:DisplayObject):void {
             var _loc2_:MovieClip = null;
-            if (Boolean(mc) && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !BASE.isInfernoMainYardOrOutpost) {
+            if (Boolean(mc) && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !BASE.usesInfernoBackend) {
                 if (MapRoomManager.instance.isInMapRoom2) {
                     _loc2_ = mc.mcOutposts;
                 }
@@ -1200,7 +1215,8 @@ package {
             var _loc11_:Object = null;
             var _loc12_:String = null;
             var _loc13_:MovieClip = null;
-            if (BASE.isInfernoMainYardOrOutpost) {
+            // Alliance powerup icons. Hidden in the legacy Inferno, which had no alliances.
+            if (BASE.usesInfernoBackend) {
                 this.BuffHide(null);
                 return;
             }

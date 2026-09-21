@@ -1,4 +1,5 @@
 package {
+    import flash.geom.Point;
     import com.monsters.display.ImageCache;
     import com.monsters.effects.ResourceBombs;
     import flash.display.Bitmap;
@@ -60,12 +61,22 @@ package {
             _imageContainer.addEventListener(MouseEvent.MOUSE_DOWN, this.Show);
             _imageContainer._image.buttonMode = true;
             this._items = [];
+            // The stock first row has three slots (tw0-tw2). A fourth, used by the Inferno ammunition, goes
+            // in the column the other rows use for theirs. Read the positions before slots are removed.
+            var ioSlots:Object = {"tw3": new Point(_mc.pb3.x, _mc.tw0.y)};
             for (_loc4_ in ResourceBombs._bombs) {
                 _loc3_ = int(ResourceBombs._bombs[_loc4_].col);
                 _loc2_ = int(ResourceBombs._bombs[_loc4_].group);
-                (_loc5_ = new CATAPULTITEM()).x = _mc[_loc4_].x;
-                _loc5_.y = _mc[_loc4_].y;
-                _mc.removeChild(_mc[_loc4_]);
+                _loc5_ = new CATAPULTITEM();
+                if (_mc[_loc4_]) {
+                    _loc5_.x = _mc[_loc4_].x;
+                    _loc5_.y = _mc[_loc4_].y;
+                    _mc.removeChild(_mc[_loc4_]);
+                }
+                else if (ioSlots[_loc4_]) {
+                    _loc5_.x = ioSlots[_loc4_].x;
+                    _loc5_.y = ioSlots[_loc4_].y;
+                }
                 _loc5_.Setup(_loc4_);
                 _loc5_.addEventListener(MouseEvent.MOUSE_OVER, this.overBomb(_loc5_));
                 _loc5_.addEventListener(MouseEvent.MOUSE_OUT, this.hideBomb(_loc5_));
@@ -130,6 +141,11 @@ package {
             _mc.tTitleTwig.htmlText = KEYS.Get("bomb_tw_name_pl");
             _mc.tTitlePebble.htmlText = KEYS.Get("bomb_pb_name_pl");
             _mc.tTitlePutty.htmlText = KEYS.Get("bomb_pu_name");
+            if (GLOBAL.INFERNO_ONLY) {
+                _mc.tTitleTwig.htmlText = KEYS.Get("#w_decoy#");
+                _mc.tTitlePebble.htmlText = KEYS.Get("#w_jars#");
+                _mc.tTitlePutty.htmlText = "Sulfur Bomb";
+            }
             var _loc3_:String = String(_loc1_[ResourceBombs._bombid.substr(0, 2)]);
             if (_loc2_.image != this._currentImage) {
                 ImageCache.GetImageWithCallBack(_loc2_.image, this.onImageLoaded);
@@ -203,7 +219,7 @@ package {
                 UI2._top._siegeweapon.Cancel();
             }
             if (ResourceBombs._state == 0) {
-                if (ResourceBombs._bombid && !ResourceBombs._bombs[ResourceBombs._bombid].used && GLOBAL._attackersResources["r" + ResourceBombs._bombs[ResourceBombs._bombid].resource].Get() >= ResourceBombs._bombs[ResourceBombs._bombid].cost) {
+                if (ResourceBombs._bombid && !ResourceBombs._bombs[ResourceBombs._bombid].used && ResourceBombs.canAfford(ResourceBombs._bombs[ResourceBombs._bombid])) {
                     ResourceBombs.BombAdd(ResourceBombs._bombs[ResourceBombs._bombid]);
                 }
             }

@@ -38,7 +38,7 @@ package {
                 mc.bReturn.SetupKey("btn_endattack");
                 mc.bAttack.visible = false;
             }
-            else if (MapRoomManager.instance.isInMapRoom2or3 && GLOBAL._currentCell && !BASE.isInfernoMainYardOrOutpost) {
+            else if (MapRoomManager.instance.isInMapRoom2or3 && GLOBAL._currentCell && !BASE.usesInfernoBackend) {
                 mc.bReturn.SetupKey("btn_openmap");
                 if ((GLOBAL.mode != GLOBAL.e_BASE_MODE.HELP || MapRoomManager.instance.isInMapRoom3) && !MapRoomManager.instance.viewOnly && GLOBAL._currentCell && MapRoomManager.instance.flingerInRange) {
                     if (GLOBAL._currentCell.isDestroyed && GLOBAL._currentCell.baseType != 2) {
@@ -117,7 +117,7 @@ package {
             else if (MapRoomManager.instance.isInMapRoom2or3 && GLOBAL._currentCell && GLOBAL._loadmode == GLOBAL.mode) {
                 MapRoomManager.instance.SetupAndShow();
             }
-            else if (BASE.isInfernoMainYardOrOutpost) {
+            else if (BASE.usesInfernoBackend) {
                 _loc2_ = MapRoomManager.instance.isInMapRoom3 ? int(EnumYardType.PLAYER) : int(EnumYardType.MAIN_YARD);
                 if (MAPROOM_DESCENT.InDescent) {
                     BASE.LoadBase(null, 0, 0, GLOBAL.e_BASE_MODE.BUILD, false, _loc2_);

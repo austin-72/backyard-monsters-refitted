@@ -32,6 +32,10 @@ package com.monsters.monsters.components.abilities {
                 return;
             }
             this.m_filter = new GlowFilter(16724735, 0.6, 8, 8, 4, 3);
+            if (param3 == "IO_SULFUR") {
+                // Inferno Catapult: the Sulfur Bomb's rage glows sulfur yellow, not putty pink.
+                this.m_filter = new GlowFilter(16766720, 0.7, 8, 8, 4, 3);
+            }
         }
 
         override protected function onUnregister():void {

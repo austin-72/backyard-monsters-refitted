@@ -1,4 +1,5 @@
 package com.monsters.maproom_advanced {
+    import com.monsters.ai.TRIBES;
     import com.monsters.alliances.AllyInfo;
     import com.monsters.display.ImageCache;
     import com.monsters.enums.EnumYardType;
@@ -11,6 +12,8 @@ package com.monsters.maproom_advanced {
     import flash.events.Event;
     import flash.events.IOErrorEvent;
     import flash.events.MouseEvent;
+    import flash.utils.getTimer;
+    import flash.display.DisplayObject;
     import flash.geom.Point;
     import flash.geom.Rectangle;
     import flash.net.URLRequest;
@@ -80,6 +83,18 @@ package com.monsters.maproom_advanced {
         private var _onViewOnlyBookmarkClick:Function;
 
         public static var s_Instance:MapRoomPopup = null;
+
+        /**
+         * Zoomed-out view: the cell layer is drawn at 1 / sqrt(2), which fits twice as many cells into
+         * the same window. Static, so the choice survives closing and reopening the map.
+         */
+        private static const IO_ZOOM_SCALE:Number = 0.7071;
+
+        private static var s_ioZoomedOut:Boolean = false;
+
+        private var _ioZoomButton:Button_CLIP = null;
+
+        private var _ioLastDragUpdate:int = 0;
 
         public function MapRoomPopup() {
             var w:int;
@@ -188,6 +203,16 @@ package com.monsters.maproom_advanced {
                 this.bJump.visible = false;
                 this.HideResourceDisplay();
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioInfernoResourceBars();
+            }
+            this._ioZoomButton = new Button_CLIP();
+            this._ioZoomButton.x = mcMask.x + 12;
+            this._ioZoomButton.y = mcMask.y + 12;
+            addChild(this._ioZoomButton);
+            this._ioZoomButton.Setup(s_ioZoomedOut ? "Zoom in" : "Zoom out");
+            this._ioZoomButton.buttonMode = true;
+            this._ioZoomButton.addEventListener(MouseEvent.CLICK, this.ioToggleZoom);
             mcInfo.labelOwner.htmlText = "<b>" + KEYS.Get("label_owner") + "</b>";
             if (Boolean(GLOBAL._flags.viximo) || Boolean(GLOBAL._flags.kongregate)) {
                 mcInfo.labelAlliance.htmlText = "<b>" + KEYS.Get("label_type") + "</b>";
@@ -241,6 +266,11 @@ package com.monsters.maproom_advanced {
             popupMC.tMessage.htmlText = KEYS.Get("label_jumptolocation");
             popupMC.tX.htmlText = "";
             popupMC.tY.htmlText = "";
+            if (GLOBAL.INFERNO_ONLY) {
+                // The fields may be restricted to digits in the FLA; allow the minus sign too.
+                popupMC.tX.restrict = "0-9\\-";
+                popupMC.tY.restrict = "0-9\\-";
+            }
             popupMC.bJump.SetupKey("btn_jump");
             popupMC.bJump.addEventListener(MouseEvent.CLICK, Jump);
             popupMC.x = 450;
@@ -366,11 +396,12 @@ package com.monsters.maproom_advanced {
                 if (!param1._damage && param1._base < 1) {
                     mcInfo.tStatus.htmlText = KEYS.Get("newmap_re");
                 }
-                mcInfo.tOwner.htmlText = param1._name;
+                // Tribes are shown under their devil names on the map; the panel has to say the same.
+                mcInfo.tOwner.htmlText = param1._base == 1 ? TRIBES.DisplayName(param1._name) : param1._name;
                 mcInfo.tUserId.text = KEYS.Get("label_userid", {"v1": param1._userID});
                 mcInfo.tUserId.visible = true;
             }
-            mcInfo.tLocation.htmlText = param1.X + " x " + param1.Y;
+            mcInfo.tLocation.htmlText = GLOBAL.ioCoord(param1.X) + " x " + GLOBAL.ioCoord(param1.Y);
             mcInfo.visible = true;
         }
 
@@ -436,6 +467,9 @@ package com.monsters.maproom_advanced {
                     break;
                 case "Abunakki":
                     ImageCache.GetImageWithCallBack("monsters/tribe_abunakki_50.v2.jpg", imageComplete);
+                    break;
+                case "Moloch":
+                    ImageCache.GetImageWithCallBack("monsters/tribe_moloch_50.jpg", imageComplete);
             }
         }
 
@@ -652,8 +686,12 @@ package com.monsters.maproom_advanced {
                 this._cellCountX = 16;
                 this._cellCountY = 14;
             }
+            this._cellContainer.scaleX = this._cellContainer.scaleY = 1;
+            if (s_ioZoomedOut) {
+                this.ioGenerateZoomedCells(param1);
+            }
             stageHeight = 0;
-            while (stageHeight < this._cellCountX) {
+            while (stageHeight < this._cellCountX && !s_ioZoomedOut) {
                 rowIndex = 0;
                 while (rowIndex < this._cellCountY) {
                     (mapRoomCell = new MapRoomCell()).x = int(stageHeight * (this._cellWidth * 0.75) - this._cellWidth * 0.75 * 4);
@@ -709,6 +747,159 @@ package com.monsters.maproom_advanced {
             this.mcMask.mcBG.addChild(this._cellContainer);
         }
 
+        /**
+         * The four resource bars in the map's left panel have the overworld icons (twig, pebble, putty,
+         * goo) drawn straight into them: unnamed shapes, no Inferno frame to switch to. The top bar's
+         * Inferno frame ("ibuild") holds bars built exactly the same way with the bone / coal / sulfur /
+         * magma art, so that art is borrowed: a throwaway copy of the top bar clip is sent to its
+         * Inferno frame and each bar's icon is moved into the matching map bar, whose own icon is
+         * hidden. In both clips the first unnamed shape is the bar's background and the rest is the
+         * icon, anchored at the same point. The map keeps its own background: the top bar's is 25 px
+         * wider, to make room for a "+" button the map does not have. If the art is not laid out as
+         * expected nothing is moved and the overworld icons simply stay.
+         */
+        private function ioInfernoResourceBars():void {
+            var source:UI_TOP_CLIP = null;
+            var from:MovieClip = null;
+            var to:MovieClip = null;
+            var child:DisplayObject = null;
+            var borrowed:Array = null;
+            var seenBackground:Boolean = false;
+            var i:int = 1;
+            var k:int = 0;
+            try {
+                source = new UI_TOP_CLIP();
+                source.gotoAndStop("ibuild");
+                while (i < 5) {
+                    from = source.mc ? source.mc["mcR" + i] as MovieClip : null;
+                    to = this["mcR" + i] as MovieClip;
+                    if (from && to) {
+                        borrowed = [];
+                        k = 0;
+                        while (k < from.numChildren) {
+                            child = from.getChildAt(k);
+                            if (child.name.indexOf("instance") == 0) {
+                                borrowed.push(child);
+                            }
+                            k++;
+                        }
+                        if (borrowed.length >= 2) {
+                            // Hide the map bar's own icon: every unnamed shape after its background.
+                            seenBackground = false;
+                            k = 0;
+                            while (k < to.numChildren) {
+                                child = to.getChildAt(k);
+                                if (child.name.indexOf("instance") == 0) {
+                                    if (seenBackground) {
+                                        child.visible = false;
+                                    }
+                                    seenBackground = true;
+                                }
+                                k++;
+                            }
+                            // The Inferno icon(s) go on top of the bar and its number.
+                            k = 1;
+                            while (k < borrowed.length) {
+                                to.addChild(borrowed[k]);
+                                k++;
+                            }
+                        }
+                    }
+                    i++;
+                }
+            }
+            catch (e:Error) {
+                LOGGER.Log("err", "MapRoomPopup.ioInfernoResourceBars: " + e.message);
+            }
+        }
+
+        /**
+         * Builds the cell grid for the zoomed-out view. Same layout rules as the stock loop (columns
+         * 0.75 cell widths apart, every other column half a cell lower, odd map X on the lowered
+         * columns), but with enough cells to fill the window at IO_ZOOM_SCALE, and with the requested
+         * cell placed where the stock view puts it: in the middle of the window.
+         */
+        private function ioGenerateZoomedCells(param1:Point):void {
+            var column:int = 0;
+            var row:int = 0;
+            var cell:MapRoomCell = null;
+            var scale:Number = IO_ZOOM_SCALE;
+            var columnWidth:Number = this._cellWidth * 0.75;
+            var full:Boolean = GLOBAL.isFullScreen;
+            // Where the stock view shows the centre of the focused cell, in the mask's coordinates.
+            var centreX:Number = full ? 402 : 288.5;
+            var centreY:Number = full ? 317.5 : 227.5;
+            this._cellCountX = Math.ceil((full ? 18 : 16) / scale);
+            if (this._cellCountX % 2 == 1) {
+                // Columns alternate, so the grid has to wrap after an even number of them.
+                ++this._cellCountX;
+            }
+            this._cellCountY = Math.ceil((full ? 15 : 14) / scale);
+            // Which column / row of the grid holds the focused cell, so the grid starts just inside the
+            // recycling bounds used by Update().
+            var focusColumn:int = Math.floor((centreX + columnWidth * 5 - scale * this._cellWidth * 0.5) / (scale * columnWidth)) - 1;
+            if ((int(param1.x) - focusColumn) % 2 == 0) {
+                --focusColumn;
+            }
+            var focusRow:int = Math.floor((centreY + this._cellHeight * 5 - scale * this._cellHeight) / (scale * this._cellHeight));
+            column = 0;
+            while (column < this._cellCountX) {
+                row = 0;
+                while (row < this._cellCountY) {
+                    cell = new MapRoomCell();
+                    cell.x = int(column * columnWidth - columnWidth * 4);
+                    cell.y = int(row * this._cellHeight - this._cellHeight * 5);
+                    if (column % 2 == 0) {
+                        cell.y += this._cellHeight * 0.5;
+                    }
+                    cell.X = column + int(param1.x) - focusColumn;
+                    cell.Y = row + int(param1.y) - focusRow;
+                    cell.cacheAsBitmap = true;
+                    cell.mc.gotoAndStop(1);
+                    cell.mc.mcPlayer.visible = false;
+                    cell.depth = cell.y * 1000 + cell.x;
+                    this._cells.push(cell);
+                    this._sortArray.push(cell);
+                    this._cellContainer.addChild(cell);
+                    this._cellLookup[cell.X * 10000 + cell.Y] = cell;
+                    row++;
+                }
+                column++;
+            }
+            this._cellContainer.scaleX = this._cellContainer.scaleY = scale;
+            this._cellContainer.x = centreX - scale * ((focusColumn - 4) * columnWidth + this._cellWidth * 0.5);
+            this._cellContainer.y = centreY - scale * (focusRow * this._cellHeight - this._cellHeight * 5 + (focusColumn % 2 == 0 ? this._cellHeight * 0.5 : 0) + this._cellHeight * 0.5);
+        }
+
+        /** The map cell currently nearest the middle of the window. */
+        private function ioCentreCell():Point {
+            var cell:MapRoomCell = null;
+            var best:MapRoomCell = null;
+            var bestDistance:Number = Number.MAX_VALUE;
+            var dx:Number = NaN;
+            var dy:Number = NaN;
+            var scale:Number = this._cellContainer.scaleX;
+            var centreX:Number = GLOBAL.isFullScreen ? 402 : 288.5;
+            var centreY:Number = GLOBAL.isFullScreen ? 317.5 : 227.5;
+            for each (cell in this._cells) {
+                dx = this._cellContainer.x + scale * (cell.x + this._cellWidth * 0.5) - centreX;
+                dy = this._cellContainer.y + scale * (cell.y + this._cellHeight * 0.5) - centreY;
+                if (dx * dx + dy * dy < bestDistance) {
+                    bestDistance = dx * dx + dy * dy;
+                    best = cell;
+                }
+            }
+            return best ? new Point(best.X, best.Y) : MapRoom._homePoint;
+        }
+
+        private function ioToggleZoom(param1:MouseEvent = null):void {
+            var centre:Point = this.ioCentreCell();
+            s_ioZoomedOut = !s_ioZoomedOut;
+            this._ioZoomButton.Setup(s_ioZoomedOut ? "Zoom in" : "Zoom out");
+            // Rebuilds the grid around the cell that was in the middle, exactly like a jump.
+            this.JumpTo(centre);
+        }
+
         private function ContainerClick(param1:MouseEvent):void {
             this._dragged = false;
             this._containerClickPoint = new Point(this._cellContainer.x, this._cellContainer.y);
@@ -734,12 +925,21 @@ package com.monsters.maproom_advanced {
                 this._dragged = true;
                 this.HideBubble();
             }
-            this.Update();
+            // The mouse can report many moves per frame, and Update() walks every cell (480 when zoomed
+            // out). The layer itself has already moved above; recycling cells can wait for the next
+            // 25 ms slot, and the release handler runs a final pass so nothing is left unrecycled.
+            if (getTimer() - this._ioLastDragUpdate >= 25) {
+                this._ioLastDragUpdate = getTimer();
+                this.Update();
+            }
         }
 
         private function ContainerRelease(param1:MouseEvent):void {
             if (this._cellContainer) {
                 this._cellContainer.removeEventListener(MouseEvent.MOUSE_MOVE, this.ContainerMove);
+                if (this._dragged) {
+                    this.Update();
+                }
             }
             this._dragged = false;
         }
@@ -786,10 +986,14 @@ package com.monsters.maproom_advanced {
             this._sortArray = [];
 
             var cellWidthFactor:Number = this._cellWidth * 0.75;
-            var rightBound:Number = this._cellCountX * cellWidthFactor - cellWidthFactor * 5;
+            // At normal zoom viewScale is 1 and all of this is the stock arithmetic. Zoomed out, a cell's
+            // on-screen position is its own position times the layer's scale, and the recycling window
+            // is the scaled width / height of the whole grid, so cells still wrap seamlessly.
+            var viewScale:Number = this._cellContainer.scaleX;
             var leftBound:Number = -(cellWidthFactor * 5);
-            var bottomBound:Number = this._cellCountY * this._cellHeight - this._cellHeight * 5;
+            var rightBound:Number = leftBound + this._cellCountX * cellWidthFactor * viewScale;
             var topBound:Number = -(this._cellHeight * 5);
+            var bottomBound:Number = topBound + this._cellCountY * this._cellHeight * viewScale;
             var xWrapAmount:Number = this._cellCountX * cellWidthFactor;
             var yWrapAmount:Number = this._cellCountY * this._cellHeight;
             var containerX:Number = this._cellContainer.x;
@@ -805,7 +1009,7 @@ package com.monsters.maproom_advanced {
                 oldCellKey = cell.X * 10000 + cell.Y;
 
                 // Check right boundary
-                if (containerX + cell.x > rightBound) {
+                if (containerX + cell.x * viewScale > rightBound) {
                     cell.x -= xWrapAmount;
                     cell.X -= this._cellCountX;
 
@@ -815,7 +1019,7 @@ package com.monsters.maproom_advanced {
                 }
 
                 // Check bottom boundary
-                if (containerY + cell.y > bottomBound) {
+                if (containerY + cell.y * viewScale > bottomBound) {
                     cell.y -= yWrapAmount;
                     cell.Y -= this._cellCountY;
 
@@ -824,7 +1028,7 @@ package com.monsters.maproom_advanced {
                     cellMoved = true;
                 }
                 // Check left boundary
-                if (containerX + cell.x < leftBound) {
+                if (containerX + cell.x * viewScale < leftBound) {
                     cell.x += xWrapAmount;
                     cell.X += this._cellCountX;
 
@@ -833,7 +1037,7 @@ package com.monsters.maproom_advanced {
                     cellMoved = true;
                 }
                 // Check top boundary
-                if (containerY + cell.y < topBound) {
+                if (containerY + cell.y * viewScale < topBound) {
                     cell.y += yWrapAmount;
                     cell.Y += this._cellCountY;
 
@@ -871,9 +1075,18 @@ package com.monsters.maproom_advanced {
                     delete this._cellLookup[oldCellKey];
                     this._cellLookup[cell.X * 10000 + cell.Y] = cell;
                 }
+                if (GLOBAL.INFERNO_ONLY && !cell._updated) {
+                    // Until its block of map data arrives a cell shows the art's first frame: green grass.
+                    InfernoMapTheme.applyUnloaded(cell.mc);
+                }
                 if ((!cell._updated || param1) && cell._dataAge <= 0) {
                     cellData = MapRoom.GetCell(cell.X, cell.Y);
-                    if (cellData) {
+                    // Every block of map data that arrives forces this pass over every cell on screen, and
+                    // the stock code set each one up again from scratch: text, icon, flags, a full redraw of
+                    // its cached picture. A block replaces its cells' data objects, so a cell whose object
+                    // is the one it already shows has nothing new to draw.
+                    if (cellData && (!cell._updated || cellData !== cell._ioShownData)) {
+                        cell._ioShownData = cellData;
                         cell.Setup(cellData);
                     }
                 }
@@ -881,7 +1094,10 @@ package com.monsters.maproom_advanced {
                 this._sortArray.push(cell);
 
                 if (notDragged) {
-                    cell.mc.mcGlow.alpha = cell._over ? 0.5 : 0;
+                    // Only when it changes: a property write invalidates the cell's cached bitmap.
+                    if (cell.mc.mcGlow.alpha != (cell._over ? 0.5 : 0)) {
+                        cell.mc.mcGlow.alpha = cell._over ? 0.5 : 0;
+                    }
                     cell._inRange = false;
                 }
 
@@ -1277,8 +1493,14 @@ package com.monsters.maproom_advanced {
         public function JumpToCoordinate(param1:String, param2:String):String {
             var _loc5_:int = 0;
             var _loc6_:int = 0;
-            var _loc3_:Number = Number(param1);
-            var _loc4_:Number = Number(param2);
+            if (GLOBAL.INFERNO_ONLY) {
+                // Coordinates are shown as negatives here, so players type them that way. Everything that
+                // is not a digit is dropped before the numbers are read: minus signs, spaces, brackets.
+                param1 = param1 ? param1.replace(/[^0-9]/g, "") : "";
+                param2 = param2 ? param2.replace(/[^0-9]/g, "") : "";
+            }
+            var _loc3_:Number = param1 == "" ? NaN : Number(param1);
+            var _loc4_:Number = param2 == "" ? NaN : Number(param2);
             if (!isNaN(_loc3_) && !isNaN(_loc4_)) {
                 _loc5_ = int(_loc3_);
                 _loc6_ = int(_loc4_);

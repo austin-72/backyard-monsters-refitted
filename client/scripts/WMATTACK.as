@@ -177,6 +177,17 @@ package {
                         _queued.warned = 0;
                     }
                 }
+                if (GLOBAL.INFERNO_ONLY && Boolean(_queued) && Boolean(_queued.attack)) {
+                    // A raid planned before the fix above may be waiting in the save: drop it if it brings
+                    // anything but Inferno monsters, and a new one is planned in its place.
+                    for (var ioKey:String in _queued.attack) {
+                        if (!BASE.isInfernoCreep(ioKey)) {
+                            _queued = null;
+                            delete _history.queued;
+                            break;
+                        }
+                    }
+                }
                 if (Boolean(_queued) && Boolean(_queued.attack)) {
                     if (_queued.attack.C100) {
                         _queued.attack.C12 = _queued.attack.C100;
@@ -477,6 +488,15 @@ package {
                             break;
                         }
                     }
+                }
+                else if (BASE.isInfernoMainYardOrOutpost) {
+                    // Map Room 2 has no list of neighbouring tribe bases, so the stock game falls through
+                    // to "pick one of the four overworld tribes at random" and an Inferno yard was being
+                    // raided by Pokeys and Octo-oozes. An Inferno yard is raided from the Inferno: the
+                    // planner the original Inferno used, under Moloch's name.
+                    _type = WMATTACK.TYPE_SWARM;
+                    _loc3_ = PROCESS_INFERNO1;
+                    _attackersBaseID = TRIBES.M_IDS[0];
                 }
                 else {
                     _loc5_ = int(Math.random() * 4) + 1;

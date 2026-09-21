@@ -178,7 +178,7 @@ package com.monsters.effects {
                     if (Boolean(this.targets[_loc2_][0]._visible) && !this.targets[_loc2_][0].dead) {
                         if (this.targets[_loc2_][0] is MonsterBase) {
                             if (!(_loc8_ = this.targets[_loc2_][0] as MonsterBase).getComponentByName(k_PUTTY_BOMB_ENRAGE)) {
-                                _loc8_.addComponent(new TemporaryComponent(new Enrage(this.bomb.speed, this.bomb.damageMult), this.bomb.speedlength), k_PUTTY_BOMB_ENRAGE);
+                                _loc8_.addComponent(new TemporaryComponent(new Enrage(this.bomb.speed, this.bomb.damageMult, this.bomb.kind == "sulfur" ? "IO_SULFUR" : null), this.bomb.speedlength), k_PUTTY_BOMB_ENRAGE);
                             }
                         }
                     }

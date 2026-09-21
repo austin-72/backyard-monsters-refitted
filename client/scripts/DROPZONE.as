@@ -139,7 +139,7 @@ package {
                 case SIEGEWEAPON_GROUND_SPECIAL:
                     _loc4_ = int(this._targetedBuildings.length - 1);
                     while (_loc4_ >= 0) {
-                        if (!(this._targetedBuildings[_loc4_] is BUILDING22)) {
+                        if (!(this._targetedBuildings[_loc4_] is BUILDING22) && !(this._targetedBuildings[_loc4_] is HOUSINGBUNKER)) {
                             this._targetedBuildings.splice(_loc4_, 1);
                         }
                         _loc4_--;
@@ -174,6 +174,10 @@ package {
                     if (BASE.BuildingOverlap(new Point(x, y), this._size, true, true, true)) {
                         break;
                     }
+                    if (ResourceBombs._state == 1) {
+                        ResourceBombs.BombDrop();
+                        break;
+                    }
                     _loc1_ = UI2._top._siegeweapon;
                     if (Boolean(_loc1_) && _loc1_._state == 1) {
                         _loc1_.Fire(x, y);
@@ -183,6 +187,11 @@ package {
                     if (!BASE.BuildingOverlap(new Point(x, y), this._size, true, true, true)) {
                         break;
                     }
+                    // The Inferno Catapult aims Candy Jars and Marilyn Monstroe with these same circles.
+                    if (ResourceBombs._state == 1) {
+                        ResourceBombs.BombDrop();
+                        break;
+                    }
                     _loc1_ = UI2._top._siegeweapon;
                     if (Boolean(_loc1_) && _loc1_._state == 1) {
                         _loc1_.Fire(x, y);
@@ -190,6 +199,10 @@ package {
                     break;
                 case SIEGEWEAPON_GROUND_SPECIAL:
                     if (BASE.BuildingOverlap(new Point(x, y), SIEGEWEAPON_GROUND_SPECIAL_RADIUS, true, true, true)) {
+                        break;
+                    }
+                    if (ResourceBombs._state == 1) {
+                        ResourceBombs.BombDrop();
                         break;
                     }
                     _loc1_ = UI2._top._siegeweapon;

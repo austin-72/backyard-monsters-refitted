@@ -169,7 +169,7 @@ package com.monsters.siege.weapons {
         }
 
         public function get durability():int {
-            return getProperty(DURABILITY).getValueForLevel(level);
+            return ioValue("durability", getProperty(DURABILITY).getValueForLevel(level));
         }
 
         public function get activeDurability():Number {
@@ -185,6 +185,23 @@ package com.monsters.siege.weapons {
                 _loc3_++;
             }
             return _loc1_ / (_loc2_ * this.durability) * this.durability;
+        }
+
+        /**
+         * Inferno-only Catapult: drop the jars and leave. Every tower owns its jar from here on (health,
+         * cracking, breaking: BTOWER.TickJar), so nothing has to stay active, and the weapon slot is
+         * free for Marilyn Monstroe.
+         */
+        public function ioDrop(param1:Number, param2:Number):int {
+            var towers:Vector.<BTOWER> = null;
+            var i:int = 0;
+            SPRITES.SetupSprite(JAR_GRAPHIC);
+            towers = this.getValidTargets(param1, param2);
+            while (i < towers.length) {
+                towers[i].ApplyJar(this.durability);
+                i++;
+            }
+            return towers.length;
         }
 
         override public function onActivation(param1:Number, param2:Number):void {

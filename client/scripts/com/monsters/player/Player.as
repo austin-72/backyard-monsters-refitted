@@ -281,7 +281,11 @@ package com.monsters.player {
                         _loc7_.add(_loc6_);
                         _loc8_ = 0;
                         while (_loc8_ < _loc6_) {
-                            if (_loc4_) {
+                            if (_loc4_ && GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                                // The owner is home: whoever survived the raids is nursed back to full health.
+                                _loc7_.m_creeps[_loc8_].health = int.MAX_VALUE;
+                            }
+                            else if (_loc4_) {
                                 _loc7_.m_creeps[_loc8_].health = param1[creatureID][_loc8_].health > 0 ? Number(param1[creatureID][_loc8_].health) : 1;
                                 _loc7_.m_creeps[_loc8_].ownerID = param1[creatureID][_loc8_].ownerID;
                                 _loc7_.m_creeps[_loc8_].queued = !!param1[creatureID][_loc8_].q ? uint(param1[creatureID][_loc8_].q) : 0;
@@ -315,6 +319,41 @@ package com.monsters.player {
             }
         }
 
+        /**
+         * Inferno-only. A yard under attack is saved with the health of every defender that is still
+         * alive, so monsters wounded in one attack are still wounded in the next. Map Room 2 only kept
+         * how many there were, which sent every survivor back to full health the moment the attack ended.
+         *
+         * The format is the one Map Room 3 already uses and fillMonsterData() already reads: a list per
+         * monster, one { health } per survivor. An unhurt monster is written as the largest int, which
+         * spawning clamps to whatever its full health is by then.
+         * This is only ever the defender's list: GLOBAL.player is the owner of the yard on screen.
+         */
+        private function ioExportDefenders(param1:Vector.<MonsterData>):Object {
+            var list:MonsterData = null;
+            var info:CreepInfo = null;
+            var survivors:Array = null;
+            var health:Number = NaN;
+            var out:Object = {};
+            for each (list in param1) {
+                survivors = [];
+                for each (info in list.m_creeps) {
+                    health = info.self ? info.self.health : info.health;
+                    if (info.self && health <= 0) {
+                        continue;
+                    }
+                    if (info.self && health >= info.self.maxHealth) {
+                        health = int.MAX_VALUE;
+                    }
+                    survivors.push({"health": Math.max(1, Math.ceil(health)), "ownerID": info.ownerID, "q": 0});
+                }
+                if (survivors.length > 0) {
+                    out[list.m_creatureID] = survivors;
+                }
+            }
+            return out;
+        }
+
         public function exportMonsters():Object {
             var _loc8_:Array = null;
             var _loc9_:int = 0;
@@ -325,6 +364,9 @@ package com.monsters.player {
             var _loc5_:int = 0;
             var _loc6_:int = 0;
             var _loc7_:int = 0;
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.isInAttackMode) {
+                return this.ioExportDefenders(_loc1_);
+            }
             if (MapRoomManager.instance.isInMapRoom3) {
                 _loc6_ = 0;
                 while (_loc6_ < _loc4_) {

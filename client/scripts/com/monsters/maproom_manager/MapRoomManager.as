@@ -221,6 +221,10 @@ package com.monsters.maproom_manager {
         }
 
         public function UpgradeToMapRoom3():void {
+            if (GLOBAL.INFERNO_ONLY) {
+                // There is no Map Room 3 on an inferno-only server.
+                return;
+            }
             if (ALLIANCES._myAlliance != null) {
                 GLOBAL.Message(KEYS.Get("map_alliance_upgrade", {"v1": ALLIANCES._myAlliance.name}));
                 return;

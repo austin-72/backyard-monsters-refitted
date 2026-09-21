@@ -1,4 +1,5 @@
 package com.monsters.maproom_advanced {
+    import com.monsters.ai.TRIBES;
 
     import com.monsters.display.ImageCache;
     import com.monsters.enums.EnumYardType;
@@ -70,14 +71,14 @@ package com.monsters.maproom_advanced {
             }
             else if (this._cell._base == 1) {
                 if (!this._cell._destroyed) {
-                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": this._cell._name}) + "</b>";
+                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": TRIBES.DisplayName(this._cell._name)}) + "</b>";
                 }
                 else {
-                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": this._cell._name}) + " (" + KEYS.Get("newmap_inf_destroyed") + ")</b>";
+                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": TRIBES.DisplayName(this._cell._name)}) + " (" + KEYS.Get("newmap_inf_destroyed") + ")</b>";
                 }
                 this.ProfilePic();
             }
-            tLocation.htmlText = this._cell.X + "x" + this._cell.Y;
+            tLocation.htmlText = GLOBAL.ioCoord(this._cell.X) + " x " + GLOBAL.ioCoord(this._cell.Y);
             tHeight.htmlText = this._cell._height - 100 + "m";
             if (this._cell._base == 2) {
                 _loc3_ = 0;
@@ -156,6 +157,9 @@ package com.monsters.maproom_advanced {
                         break;
                     case "Abunakki":
                         ImageCache.GetImageWithCallBack("monsters/tribe_abunakki_50.v2.jpg", imageComplete);
+                        break;
+                    case "Moloch":
+                        ImageCache.GetImageWithCallBack("monsters/tribe_moloch_50.jpg", imageComplete);
                 }
             }
         }

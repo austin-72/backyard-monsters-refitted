@@ -34,6 +34,13 @@ package {
             if (MapRoomManager.instance.isInMapRoom3) {
                 GLOBAL.StatSet("mrl", 3);
             }
+            else if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only: the account is on Map Room 2 from its very first load, whatever level
+                // this building is. There is no MR1 to fall back to and no world to move to.
+                if (GLOBAL.StatGet("mrl") != 2) {
+                    GLOBAL.StatSet("mrl", 2);
+                }
+            }
             else {
                 if (GLOBAL.StatGet("mrl") == 2 && !MapRoomManager.instance.isInMapRoom2or3) {
                     GLOBAL.StatSet("mrl", 1);
@@ -129,7 +136,7 @@ package {
 
         override public function Constructed():void {
             GLOBAL._bMap = this;
-            if (_lvl.Get() < 2) {
+            if (_lvl.Get() < 2 && !GLOBAL.INFERNO_ONLY) {
                 new URLLoaderApi().load(GLOBAL._mapURL + "setmapversion", [["version", 1]], null, null);
             }
             super.Constructed();
@@ -176,7 +183,7 @@ package {
 
         override public function Upgraded():void {
             var Brag:Function;
-            if (!MapRoomManager.instance.isInMapRoom3) {
+            if (!MapRoomManager.instance.isInMapRoom3 && !GLOBAL.INFERNO_ONLY) {
                 Brag = function():void {
                     GLOBAL.CallJS("sendFeed", ["upgrade-mr", KEYS.Get("newmap_upgraded3"), KEYS.Get("newmap_upgraded1"), "build-maproom.png"]);
                     POPUPS.Next();
@@ -196,7 +203,7 @@ package {
                 GLOBAL.Message(KEYS.Get("map_alliance_recycle", {"v1": ALLIANCES._myAlliance.name}));
                 return;
             }
-            if (MapRoomManager.instance.isInMapRoom2) {
+            if (MapRoomManager.instance.isInMapRoom2 && !GLOBAL.INFERNO_ONLY) {
                 GLOBAL._mapOutpostIDs.length = 0;
                 GLOBAL.Message(KEYS.Get("newmap_recycle1"), KEYS.Get("btn_recycle"), this.RecycleD);
             }
@@ -213,6 +220,14 @@ package {
         }
 
         private function RecycleD():void {
+            if (GLOBAL.INFERNO_ONLY) {
+                // Recycling the building does not leave the world: the yard keeps its cell and its
+                // outposts, the map just cannot be opened until a Map Room is built again.
+                GLOBAL._bMap = null;
+                RecycleB();
+                GLOBAL.eventDispatcher.dispatchEvent(new BuildingEvent(BuildingEvent.DESTROY_MAPROOM, this));
+                return;
+            }
             if (GLOBAL.mode != GLOBAL._loadmode) {
                 return;
             }

@@ -490,6 +490,9 @@ package com.monsters.maproom_advanced {
                         break;
                     case "Abunakki":
                         ImageCache.GetImageWithCallBack("monsters/tribe_abunakki_50.v2.jpg", imageComplete);
+                        break;
+                    case "Moloch":
+                        ImageCache.GetImageWithCallBack("monsters/tribe_moloch_50.jpg", imageComplete);
                 }
             }
         }

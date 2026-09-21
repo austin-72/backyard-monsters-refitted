@@ -173,7 +173,7 @@ package {
                                 // player should upgrade the Map Room 1 -> 2 first rather than skip to MR3, and
                                 // entering MR3 mid-upgrade force-promotes the Map Room to its max level with a
                                 // still-pending countdown.
-                                if (MapRoomManager.instance.isInMapRoom2 && Boolean(GLOBAL._flags.maproom2) && GLOBAL.townHall != null && GLOBAL.townHall._lvl.Get() >= 6 && (GLOBAL._bMap == null || GLOBAL._bMap._countdownUpgrade.Get() == 0)) {
+                                if (!GLOBAL.INFERNO_ONLY && MapRoomManager.instance.isInMapRoom2 && Boolean(GLOBAL._flags.maproom2) && GLOBAL.townHall != null && GLOBAL.townHall._lvl.Get() >= 6 && (GLOBAL._bMap == null || GLOBAL._bMap._countdownUpgrade.Get() == 0)) {
                                     _loc1_.push(["btn_joinnwm", 30, _loc12_]);
                                     _loc12_ = false;
                                 }
@@ -181,7 +181,7 @@ package {
                                 if (!MapRoomManager.instance.isInMapRoom2or3 && Boolean(GLOBAL._flags.maproom2) && _props.id == MAPROOM.TYPE) {
                                     _loc1_.push(["btn_upgrade", 30]);
                                 }
-                                if (_props.id == MAPROOM.TYPE) {
+                                if (_props.id == MAPROOM.TYPE && GLOBAL.alliancesEnabled) {
                                     _loc1_.push(["btn_alliances", 30, false]);
                                 }
                             }
@@ -482,7 +482,7 @@ package {
             if (param1.target.labelKey == "btn_openlab") {
                 (_loc4_ = GLOBAL._bLab as MONSTERLAB).Show();
             }
-            if (param1.target.labelKey == "btn_joinnwm") {
+            if (param1.target.labelKey == "btn_joinnwm" && !GLOBAL.INFERNO_ONLY) {
                 MapRoom3ConfirmMigrationPopup.instance.Show();
             }
             if (param1.target.labelKey == "btn_viewhatchery" || param1.target.labelKey == "btn_viewincubator") {

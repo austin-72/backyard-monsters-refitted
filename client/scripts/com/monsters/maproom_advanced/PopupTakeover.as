@@ -81,7 +81,8 @@ package com.monsters.maproom_advanced {
             i = 1;
             while (i < 5) {
                 costMC = this.mcResources["mcR" + i];
-                costMC.gotoAndStop(i);
+                // Frames 1-4 are twig / pebble / putty / goo; 7-10 are bone / coal / sulfur / magma.
+                costMC.gotoAndStop(GLOBAL.INFERNO_ONLY ? i + 6 : i);
                 costMC.tTitle.htmlText = "<b>" + KEYS.Get(GLOBAL._resourceNames[i - 1]) + "</b>";
                 colorString = "000000";
                 if (GLOBAL._resources["r" + i].Get() <= this._resourceCost) {

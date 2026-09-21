@@ -1,5 +1,7 @@
 package com.monsters.effects {
 
+    import com.monsters.siege.weapons.Decoy;
+    import com.monsters.siege.SiegeWeapons;
     import com.cc.utils.SecNum;
     import com.monsters.alliances.ALLIANCES;
     import com.monsters.display.ImageCache;
@@ -224,6 +226,146 @@ package com.monsters.effects {
                         "catapultLevel": 3
                     }
                 };
+            if (GLOBAL.INFERNO_ONLY) {
+                ioInfernoAmmo();
+            }
+        }
+
+        /**
+         * Inferno-only: the Catapult fires Chaos weapons instead of twigs and pebbles.
+         *
+         *   row 1  Marilyn Monstroe  lures defenders (also out of bunkers and Compounds), then explodes
+         *   row 2  Candy Jars        jar every tower in range until the tower shoots its way out
+         *   row 3  Sulfur Bomb       Putty Rage under another name: speed and armour for your monsters
+         *
+         * Four sizes each, one per Catapult level. The slot ids are the stock ones (tw / pb / pu) because
+         * the popup art is laid out by them; tw3 is new, the stock twig row only had three.
+         * `costs` replaces the stock single resource + cost (r1 bone, r2 coal, r3 sulfur, r4 magma);
+         * `resource` and `cost` are kept, as the main resource and the total, for the code that still
+         * reads them. Each row can be fired once per attack, like the stock rows.
+         * The server can override any number here: flag io_catapult, a JSON object keyed by slot id.
+         */
+        private static function ioInfernoAmmo():void {
+            var sizes:Array = [KEYS.Get("bomb_pb0_name"), KEYS.Get("bomb_pb1_name"), KEYS.Get("bomb_pb2_name"), KEYS.Get("bomb_pb3_name")];
+            var decoy:Array = [[500, 300, 8, 100000, 50000], [1500, 300, 12, 500000, 250000], [4000, 300, 16, 2500000, 1250000], [8000, 300, 20, 5000000, 2500000]];
+            var jars:Array = [[200, 2000, 100000], [250, 4000, 250000], [300, 6000, 2000000], [350, 8000, 5000000]];
+            var sulfur:Array = [[150, 1.2, 0.2, 10, 100000], [200, 1.4, 0.4, 15, 500000], [300, 1.8, 0.6, 30, 2500000], [500, 2, 0.8, 40, 5000000]];
+            var i:int = 0;
+            _bombs = {};
+            while (i < 4) {
+                _bombs["tw" + i] = {
+                        "used": false, "group": 0, "kind": "decoy", "particles": 0, "name": sizes[i], "col": i,
+                        "damage": decoy[i][0], "radius": decoy[i][1], "fuse": decoy[i][2],
+                        "costs": {"r4": decoy[i][3], "r3": decoy[i][4]}, "resource": 4, "cost": decoy[i][3] + decoy[i][4],
+                        "image": "siegebuttons/decoy.png", "dropTarget": DROPZONE.SIEGEWEAPON_GROUND_SPECIAL, "catapultLevel": i + 1
+                    };
+                _bombs["pb" + i] = {
+                        "used": false, "group": 1, "kind": "jars", "particles": 0, "name": sizes[i], "col": i,
+                        "damage": 0, "radius": jars[i][0], "durability": jars[i][1],
+                        "costs": {"r1": jars[i][2], "r2": jars[i][2]}, "resource": 1, "cost": jars[i][2] * 2,
+                        "image": "siegebuttons/jars.png", "dropTarget": DROPZONE.SIEGEWEAPON_BUILDINGS, "catapultLevel": i + 1
+                    };
+                _bombs["pu" + i] = {
+                        "used": false, "group": 2, "kind": "sulfur", "particles": 50, "name": sizes[i], "col": i,
+                        "damage": 0, "radius": sulfur[i][0], "speed": sulfur[i][1], "damageMult": sulfur[i][2], "speedlength": sulfur[i][3],
+                        "costs": {"r3": sulfur[i][4]}, "resource": 3, "cost": sulfur[i][4],
+                        "image": "bombbuttons/sulfur" + (i + 1) + ".png", "dropTarget": DROPZONE.MONSTERS, "catapultLevel": i + 1
+                    };
+                i++;
+            }
+            ioApplyServerAmmo();
+        }
+
+        /** Numbers sent by the server win over the built-in ones (flag io_catapult). */
+        private static function ioApplyServerAmmo():void {
+            var sent:Object = null;
+            var id:String = null;
+            var field:String = null;
+            if (!GLOBAL._flags || !GLOBAL._flags.io_catapult) {
+                return;
+            }
+            try {
+                sent = JSON.parse(String(GLOBAL._flags.io_catapult));
+            }
+            catch (e:Error) {
+                return;
+            }
+            for (id in sent) {
+                if (_bombs[id]) {
+                    for (field in sent[id]) {
+                        _bombs[id][field] = sent[id][field];
+                    }
+                    if (sent[id].costs) {
+                        _bombs[id].cost = 0;
+                        for (field in sent[id].costs) {
+                            _bombs[id].cost += Number(sent[id].costs[field]);
+                        }
+                    }
+                }
+            }
+        }
+
+        /** What a shot costs, as {rN: amount}. Stock ammunition has one resource, Inferno ammunition may have two. */
+        public static function costsOf(param1:Object):Object {
+            var single:Object = null;
+            if (param1.costs) {
+                return param1.costs;
+            }
+            single = {};
+            single["r" + param1.resource] = param1.cost;
+            return single;
+        }
+
+        public static function canAfford(param1:Object):Boolean {
+            var key:String = null;
+            var costs:Object = costsOf(param1);
+            if (!GLOBAL._attackersResources) {
+                return false;
+            }
+            for (key in costs) {
+                if (!GLOBAL._attackersResources[key] || GLOBAL._attackersResources[key].Get() < costs[key]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** The first resource the attacker is short of (1-4), or 0. */
+        public static function shortOf(param1:Object):int {
+            var key:String = null;
+            var costs:Object = costsOf(param1);
+            for (key in costs) {
+                if (!GLOBAL._attackersResources || !GLOBAL._attackersResources[key] || GLOBAL._attackersResources[key].Get() < costs[key]) {
+                    return int(key.substr(1));
+                }
+            }
+            return 0;
+        }
+
+        /** "500K Magma + 250K Sulfur" */
+        public static function costText(param1:Object):String {
+            var key:String = null;
+            var parts:Array = [];
+            var costs:Object = costsOf(param1);
+            var names:Array = GLOBAL._resourceNames;
+            for each (key in ["r1", "r2", "r3", "r4"]) {
+                if (costs[key]) {
+                    parts.push(CATAPULTPOPUP.Format(costs[key]) + " " + KEYS.Get(names[int(key.substr(1)) - 1]));
+                }
+            }
+            return parts.join(" + ");
+        }
+
+        private static function charge(param1:Object):void {
+            var key:String = null;
+            var costs:Object = costsOf(param1);
+            for (key in costs) {
+                GLOBAL._resources[key].Add(-costs[key]);
+                GLOBAL._hpResources[key] -= costs[key];
+                // Several shots in one attack can draw on the same resource: add to what is already owed.
+                GLOBAL._attackersDeltaResources[key] = new SecNum((GLOBAL._attackersDeltaResources[key] ? GLOBAL._attackersDeltaResources[key].Get() : 0) - costs[key]);
+            }
+            GLOBAL._attackersDeltaResources.dirty = true;
         }
 
         public static function Setup():void {
@@ -232,7 +374,11 @@ package com.monsters.effects {
             ImageCache.GetImageWithCallBack("effects/twigs.png", onAssetLoaded, true, 6);
             ImageCache.GetImageWithCallBack("effects/pebble.png", onAssetLoaded, true, 6);
             ImageCache.GetImageWithCallBack("effects/pebblehit.png", onAssetLoaded, true, 6);
-            ImageCache.GetImageWithCallBack("effects/putty.png", onAssetLoaded, true, 6);
+            ImageCache.GetImageWithCallBack(GLOBAL.INFERNO_ONLY ? "effects/sulfur.png" : "effects/putty.png", onAssetLoaded, true, 6);
+            if (GLOBAL.INFERNO_ONLY) {
+                ioApplyServerAmmo();
+                SiegeWeapons.ioClearOverrides();
+            }
             var _loc1_:int = 0;
             var _loc2_:String = "tw0";
             _bombid = "tw0";
@@ -240,7 +386,7 @@ package com.monsters.effects {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK) {
                 for (_loc4_ in _bombs) {
                     _loc3_ = _bombs[_loc4_];
-                    if (GLOBAL._attackersResources["r" + _loc3_.resource].Get() >= _loc3_.cost && GLOBAL._attackersCatapult >= _loc3_.catapultLevel && _loc3_.cost <= 2000000) {
+                    if (canAfford(_loc3_) && GLOBAL._attackersCatapult >= _loc3_.catapultLevel && _loc3_.cost <= 2000000) {
                         if (_loc3_.cost > _loc1_) {
                             _loc1_ = int(_loc3_.cost);
                             _loc2_ = _loc4_;
@@ -266,7 +412,7 @@ package com.monsters.effects {
             else if (param1 == "effects/twigs.png") {
                 bmd_twigs = param2;
             }
-            else if (param1 == "effects/putty.png") {
+            else if (param1 == "effects/putty.png" || param1 == "effects/sulfur.png") {
                 bmd_putty = param2;
             }
         }
@@ -298,45 +444,85 @@ package com.monsters.effects {
                 return;
             }
             ATTACK.RemoveDropZone();
-            if (GLOBAL._attackersResources) {
-                if (GLOBAL._attackersResources["r" + _loc2_.resource].Get() >= _loc2_.cost) {
-                    GLOBAL._resources["r" + _loc2_.resource].Add(-_loc2_.cost);
-                    GLOBAL._hpResources["r" + _loc2_.resource] -= _loc2_.cost;
-                    GLOBAL._attackersDeltaResources["r" + _loc2_.resource] = new SecNum(-_loc2_.cost);
-                    GLOBAL._attackersDeltaResources.dirty = true;
+            if (GLOBAL._attackersResources && canAfford(_loc2_)) {
+                // A Chaos weapon needs the weapon slot to be free (Marilyn holds it until she explodes).
+                if (!(_loc2_.kind == "decoy" && SiegeWeapons.activeWeapon)) {
+                    charge(_loc2_);
                     _loc3_ = true;
                 }
             }
             if (_loc3_) {
                 for each (_loc4_ in _bombs) {
-                    if (_loc4_.resource == _loc2_.resource) {
+                    if (_loc4_.group == _loc2_.group) {
                         _loc4_.used = true;
                     }
                 }
-                Trigger(MAP._BUILDINGBASES, new Point(MAP._GROUND.mouseX, MAP._GROUND.mouseY), _loc2_, 2);
+                if (_loc2_.kind == "decoy" || _loc2_.kind == "jars") {
+                    ioLaunchChaosWeapon(_loc2_, MAP._GROUND.mouseX, MAP._GROUND.mouseY);
+                }
+                else {
+                    Trigger(MAP._BUILDINGBASES, new Point(MAP._GROUND.mouseX, MAP._GROUND.mouseY), _loc2_, 2);
+                }
             }
             if (_bombid == "pu3") {
                 ACHIEVEMENTS.Check("hugerage", 1);
             }
-            ATTACK.Log("bomb" + ResourceBombs._bombid, "<font color=\"#A800FF\">" + KEYS.Get("attack_log_catapulted", {
-                            "v1": GLOBAL.FormatNumber(_loc2_.cost),
-                            "v2": GLOBAL._resourceNames[_loc2_.resource - 1]
-                        }) + "</font>");
+            if (_loc2_.kind) {
+                if (_loc3_) {
+                    ATTACK.Log("bomb" + ResourceBombs._bombid, "<font color=\"#A800FF\">" + _loc2_.name + " " + ioRowName(_loc2_) + " was catapulted in (" + costText(_loc2_) + ")</font>");
+                }
+            }
+            else {
+                ATTACK.Log("bomb" + ResourceBombs._bombid, "<font color=\"#A800FF\">" + KEYS.Get("attack_log_catapulted", {
+                                "v1": GLOBAL.FormatNumber(_loc2_.cost),
+                                "v2": GLOBAL._resourceNames[_loc2_.resource - 1]
+                            }) + "</font>");
+            }
             _state = 0;
             if (_mc) {
                 _mc.Update();
             }
         }
 
+        public static function ioRowName(param1:Object):String {
+            if (param1.kind == "decoy") {
+                return KEYS.Get("#w_decoy#");
+            }
+            if (param1.kind == "jars") {
+                return KEYS.Get("#w_jars#");
+            }
+            return "Sulfur Bomb";
+        }
+
+        /**
+         * Marilyn Monstroe and Candy Jars are the stock Chaos weapons, given this shot's numbers instead
+         * of a level's. Marilyn takes the weapon slot until she explodes: monsters, bunkers and the attack
+         * timer all look her up there. Jars do not need it: once dropped, each tower looks after its own
+         * jar, so Marilyn can still be fired while towers are jarred.
+         */
+        private static function ioLaunchChaosWeapon(param1:Object, param2:Number, param3:Number):void {
+            if (param1.kind == "decoy") {
+                SiegeWeapons.ioActivate(Decoy.ID, {"damage": param1.damage, "range": param1.radius, "duration": param1.fuse}, param2, param3);
+            }
+            else {
+                SiegeWeapons.ioDropJars({"range": param1.radius, "durability": param1.durability}, param2, param3);
+            }
+            _launchedBomb = true;
+            if (_mc) {
+                _mc.fired();
+            }
+            LOGGER.Stat([27, param1.resource, param1.col, param1.cost]);
+        }
+
         public static function Trigger(param1:MovieClip, param2:Point, param3:Object, param4:int = 2):void {
             _activeBombs[bombcounter] = new ResourceBomb(param1, param2, param3, param4);
-            if (param3.resource == 1) {
+            if (param3.group == 0) {
                 SOUNDS.Play("twigbomb");
             }
-            else if (param3.resource == 2) {
+            else if (param3.group == 1) {
                 SOUNDS.Play("pebblebomb");
             }
-            else if (param3.resource == 3) {
+            else if (param3.group == 2) {
                 SOUNDS.Play("puttybomb");
             }
             ++bombcounter;

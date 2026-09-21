@@ -403,6 +403,23 @@ package com.monsters.player {
             return _loc2_;
         }
 
+        /**
+         * Removes the record of this very creep. add(-1) drops the last record in the list, whoever it
+         * belongs to, which was fine while records were only counted; now that each carries a health it
+         * would leave the dead monster's record behind and delete a living one's.
+         */
+        public function ioRemoveCreep(param1:MonsterBase):Boolean {
+            var i:int = int(this.m_creeps.length) - 1;
+            while (i >= 0) {
+                if (this.m_creeps[i].self == param1) {
+                    this.m_creeps.splice(i, 1);
+                    return true;
+                }
+                i--;
+            }
+            return false;
+        }
+
         public function linkCreepToData(param1:MonsterBase, param2:int = 0):void {
             var _loc3_:int = int(this.m_creeps.length);
             var _loc4_:int = 0;

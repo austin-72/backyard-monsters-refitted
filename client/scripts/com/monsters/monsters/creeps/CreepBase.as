@@ -1003,7 +1003,12 @@ package com.monsters.monsters.creeps {
                 if (_homeBunker) {
                     if (Boolean(_homeBunker._monsters) && !this._defenderRemoved) {
                         if (BASE.isInfernoMainYardOrOutpost) {
-                            _homeBunker.RemoveCreature(_creatureID);
+                            if (_homeBunker is HOUSINGBUNKER) {
+                                HOUSINGBUNKER(_homeBunker).RemoveCreature(_creatureID, this);
+                            }
+                            else {
+                                _homeBunker.RemoveCreature(_creatureID);
+                            }
                             if (MapRoomManager.instance.isInMapRoom3) {
                                 GLOBAL.player.monsterListByID(_creatureID).unlinkCreepFromData(this);
                             }
@@ -1429,6 +1434,10 @@ package com.monsters.monsters.creeps {
                 if (_homeBunker) {
                     if (MapRoomManager.instance.isInMapRoom3 && BASE.isMainYardOrInfernoMainYard) {
                         GLOBAL.player.monsterListByID(_creatureID).unlinkCreepFromData(this);
+                    }
+                    if (GLOBAL.INFERNO_ONLY && _homeBunker is BUILDING22 && !(this.m_bInfernoCreep && BASE.isInfernoMainYardOrOutpost)) {
+                        // This defender goes back inside and its creep is removed: the bunker keeps its wounds.
+                        BUILDING22(_homeBunker).ioStoreHealth(_creatureID, health, maxHealth);
                     }
                     _homeBunker._monstersDispatched[_creatureID] = int(_homeBunker._monstersDispatched[_creatureID]) - 1;
                     if (_homeBunker._monstersDispatched[_creatureID] < 0) {

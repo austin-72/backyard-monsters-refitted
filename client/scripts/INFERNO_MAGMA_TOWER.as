@@ -1,6 +1,7 @@
 package {
     import com.monsters.interfaces.IAttackable;
     import com.monsters.monsters.MonsterBase;
+    import com.monsters.monsters.components.statusEffects.CStatusEffect;
     import com.monsters.monsters.components.statusEffects.FlameEffect;
     import flash.display.BitmapData;
     import flash.display.MovieClip;
@@ -82,8 +83,17 @@ package {
             _loc2_.removeEventListener(FIREBALL.COLLIDED, this.onProjectileCollision);
             var _loc3_:Array = Targeting.getCreepsInRange(_splash, new Point(_loc2_._targetCreep.x, _loc2_._targetCreep.y), Targeting.getOldStyleTargets(0));
             var _loc4_:int = 0;
+            var _loc5_:CStatusEffect = null;
             while (_loc4_ < _loc3_.length) {
-                MonsterBase(_loc3_[_loc4_].creep).addStatusEffect(new FlameEffect(MonsterBase(_loc3_[_loc4_].creep), damage * 0.5));
+                // addStatusEffect() only renews a flame the monster already has, and threw the freshly built
+                // one away: a new bitmap for every monster in every splash. Renew without building it.
+                _loc5_ = MonsterBase(_loc3_[_loc4_].creep).getComponentByType(FlameEffect) as CStatusEffect;
+                if (_loc5_) {
+                    _loc5_.renew();
+                }
+                else {
+                    MonsterBase(_loc3_[_loc4_].creep).addStatusEffect(new FlameEffect(MonsterBase(_loc3_[_loc4_].creep), damage * 0.5));
+                }
                 _loc4_++;
             }
         }

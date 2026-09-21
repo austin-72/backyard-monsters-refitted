@@ -67,6 +67,46 @@ package com.monsters.siege {
             return true;
         }
 
+        /**
+         * Inferno-only Catapult: activate a Chaos weapon with this shot's numbers. The same as
+         * activateWeapon() without the stockpile: nothing is owned, so nothing is used up.
+         */
+        public static function ioActivate(param1:String, param2:Object, param3:Number, param4:Number):Boolean {
+            var weapon:SiegeWeapon = getWeapon(param1);
+            if (!weapon || activeWeapon) {
+                return false;
+            }
+            weapon.ioOverride = param2;
+            if (!weapon.activate(param3, param4)) {
+                return false;
+            }
+            activeWeaponID = param1;
+            if (weapon.duration > 0) {
+                activeWeaponTimer = new Timer(1000, weapon.duration);
+                activeWeaponTimer.addEventListener(TimerEvent.TIMER_COMPLETE, onDurationTimerComplete);
+                activeWeaponTimer.start();
+            }
+            didActivatWeapon = true;
+            return true;
+        }
+
+        public static function ioDropJars(param1:Object, param2:Number, param3:Number):int {
+            var jars:Jars = getWeapon(Jars.ID) as Jars;
+            if (!jars) {
+                return 0;
+            }
+            jars.ioOverride = param1;
+            didActivatWeapon = true;
+            return jars.ioDrop(param2, param3);
+        }
+
+        public static function ioClearOverrides():void {
+            var weapon:SiegeWeapon = null;
+            for each (weapon in _weaponsList) {
+                weapon.ioOverride = null;
+            }
+        }
+
         public static function onDurationTimerComplete(param1:TimerEvent):void {
             deactivateWeapon();
         }

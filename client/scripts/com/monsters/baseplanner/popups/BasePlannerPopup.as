@@ -338,7 +338,7 @@ package com.monsters.baseplanner.popups {
                 this.toolMenu.mcStore.addEventListener(MouseEvent.CLICK, this.onToolClick);
                 this.toolMenu.mcStore.addEventListener(MouseEvent.ROLL_OVER, this.onToolOver);
                 this.toolMenu.mcStore.addEventListener(MouseEvent.ROLL_OUT, this.onToolOut);
-                if (Boolean(STORE._storeData.ENL) && STORE._storeData.ENL.q == 6) {
+                if (GLOBAL.yardExpansionsBought >= GLOBAL.yardExpansionsMax) {
                     this.toolMenu.mcExpand.enabled = false;
                     this.toolMenu.mcExpand.mouseEnabled = false;
                     this.toolMenu.mcExpand.gotoAndStop("off");
@@ -434,7 +434,7 @@ package com.monsters.baseplanner.popups {
             else if (this.designView.currentTool == PlannerDesignView.TOOL_STORE) {
                 this.toolMenu.mcStore.gotoAndStop("over");
             }
-            if (Boolean(STORE._storeData.ENL) && STORE._storeData.ENL.q == 6) {
+            if (GLOBAL.yardExpansionsBought >= GLOBAL.yardExpansionsMax) {
                 this.toolMenu.mcExpand.enabled = false;
                 this.toolMenu.mcExpand.mouseEnabled = false;
                 this.toolMenu.mcExpand.gotoAndStop("off");
@@ -483,7 +483,7 @@ package com.monsters.baseplanner.popups {
 
         public function onStoreOpen(param1:MouseEvent = null):void {
             if (BASE.isMainYardOrInfernoMainYard) {
-                STORE.ShowB(1, 1, ["ENL"]);
+                STORE.ShowB(1, 1, [GLOBAL.yardExpansionItem]);
                 if (STORE._mc) {
                     STORE._mc.addEventListener(Event.REMOVED_FROM_STAGE, this.onStoreClosed);
                 }

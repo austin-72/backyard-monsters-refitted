@@ -666,7 +666,7 @@ package {
             if (url) {
                 new URLLoaderApi().load(url + "load", requestData, handleBaseLoadSuccessful, handleBaseLoadError);
             }
-            else if (isInfernoMainYardOrOutpost || isEventBaseId(_baseID) && GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
+            else if (usesInfernoBackend || isEventBaseId(_baseID) && GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
                 new URLLoaderApi().load(GLOBAL._infBaseURL + "load", requestData, handleBaseLoadSuccessful, handleBaseLoadError);
             }
             else {
@@ -750,6 +750,9 @@ package {
                     }
                     MapRoomManager.instance.worldID = 0;
                     GLOBAL.SetFlags(serverData.flags);
+                    // Loot caps the yard brings with it (Moloch strongholds); none for every other yard.
+                    GLOBAL.ioLootCapSilo = serverData.io_lootcap ? Number(serverData.io_lootcap.silo) : 0;
+                    GLOBAL.ioLootCapHall = serverData.io_lootcap ? Number(serverData.io_lootcap.hall) : 0;
                     QUESTS.Setup();
                     GLOBAL._reloadonerror = false;
                     if (TUTORIAL.hasFinished) {
@@ -835,7 +838,7 @@ package {
                         MapRoomManager.instance.mapHeight = serverData.worldsize[1];
                     }
                     if (serverData.usemap) {
-                        if (isInfernoMainYardOrOutpost) {
+                        if (usesInfernoBackend) {
                             MapRoomManager.instance.mapRoomVersion = MapRoomManager.instance.currentMapRoom is MapRoom3 ? MapRoomManager.MAP_ROOM_VERSION_3 : MapRoomManager.MAP_ROOM_VERSION_1;
                         }
                         else {
@@ -1842,7 +1845,7 @@ package {
             GLOBAL.t = _lastProcessed;
             _lastProcessedB = _lastProcessed;
             _catchupTime = _currentTime - _lastProcessed;
-            if (!isInfernoMainYardOrOutpost && !MapRoomManager.instance.isInMapRoom3) {
+            if (!usesInfernoBackend && !MapRoomManager.instance.isInMapRoom3) {
                 AutoBankManager.autobank(MapRoomManager.instance.isInMapRoom3 ? _currentTime : _currentTime - _lastProcessedGIP, true);
             }
             hatqueue2 = [];
@@ -2538,7 +2541,7 @@ package {
             }
             if (GLOBAL.Timestamp() % 10 == 0) {
                 CHECKER.Check();
-                if (!isInfernoMainYardOrOutpost) {
+                if (!usesInfernoBackend) {
                     AutoBankManager.autobank();
                 }
             }
@@ -2609,7 +2612,7 @@ package {
             if (param3 || _pendingPurchase.length > 0) {
                 SaveB();
             }
-            if (isInfernoMainYardOrOutpost || param4 || GLOBAL._loadmode != GLOBAL.mode) {
+            if (usesInfernoBackend || param4 || GLOBAL._loadmode != GLOBAL.mode) {
                 _infernoSaveLoad = true;
             }
         }
@@ -2631,7 +2634,7 @@ package {
             _loc1_.other = GLOBAL._otherStats;
             _loc1_.achievements = ACHIEVEMENTS.Export();
             _loc1_.popupdata = NewPopupSystem.instance.Export();
-            if (BASE.isInfernoMainYardOrOutpost && GLOBAL._otherStats.descentLvl >= MAPROOM_DESCENT._descentLvlMax) {
+            if (BASE.usesInfernoBackend && GLOBAL._otherStats.descentLvl >= MAPROOM_DESCENT._descentLvlMax) {
                 _loc1_.inferno = 1;
             }
             else {
@@ -3263,7 +3266,7 @@ package {
                 saveData.protect = _saveProtect;
                 saveData.attackid = _attackID;
                 saveData.lootreport = JSON.stringify(getLootReportSaveData());
-                if (!MapRoomManager.instance.isInMapRoom2or3 || BASE.isInfernoMainYardOrOutpost) {
+                if (!MapRoomManager.instance.isInMapRoom2or3 || BASE.usesInfernoBackend) {
                     saveData.attackcreatures = JSON.stringify(GLOBAL.attackingPlayer.exportMonsters());
                 }
                 saveData.attackloot = JSON.stringify(getAttackerDeltaResourcesSaveData());
@@ -3306,7 +3309,7 @@ package {
             else if (isOutpostOrInfernoOutpost && GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
                 saveData.destroyed = _percentDamaged >= 90 ? 1 : 0;
             }
-            else if (isInfernoMainYardOrOutpost || GLOBAL._loadmode != GLOBAL.mode) {
+            else if (usesInfernoBackend || GLOBAL._loadmode != GLOBAL.mode) {
                 saveData.type = "inferno";
             }
             saveData.damage = _percentDamaged;
@@ -3327,7 +3330,7 @@ package {
                 _lastSaved = GLOBAL.Timestamp();
                 return false;
             }
-            if (isInfernoMainYardOrOutpost || _infernoSaveLoad && saveData.type == "inferno" || isEventBaseId(_baseID) && GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
+            if (usesInfernoBackend || _infernoSaveLoad && saveData.type == "inferno" || isEventBaseId(_baseID) && GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
                 new URLLoaderApi().load(GLOBAL._infBaseURL + "save", saveDataList, handleLoadSuccessful, handleLoadError);
             }
             else {
@@ -3350,7 +3353,7 @@ package {
                     ATTACK.CleanLoot();
                 }
                 if (_returnHome && serverData.over == 1) {
-                    if (isInfernoMainYardOrOutpost) {
+                    if (usesInfernoBackend) {
                         LoadBase(null, 0, 0, "ibuild", false, EnumYardType.INFERNO_YARD);
                     }
                     else {
@@ -3543,10 +3546,10 @@ package {
                                             for each (_loc7_ in _loc5_) {
                                                 if (_loc7_.t >= 1 && _loc7_.t <= 4) {
                                                     if (_loc7_.l) {
-                                                        _loc8_ = int(OUTPOST_YARD_PROPS._outpostProps[_loc7_.t - 1].produce[_loc7_.l - 1]);
+                                                        _loc8_ = int(GLOBAL.outpostPropsTable[_loc7_.t - 1].produce[_loc7_.l - 1]);
                                                     }
                                                     else {
-                                                        _loc8_ = int(OUTPOST_YARD_PROPS._outpostProps[_loc7_.t - 1].produce[0]);
+                                                        _loc8_ = int(GLOBAL.outpostPropsTable[_loc7_.t - 1].produce[0]);
                                                     }
                                                     _loc8_ = Math.max(int(_loc8_ * GLOBAL._averageAltitude.Get() / _loc6_), 1);
                                                     _processedGIP[_loc4_]["r" + _loc7_.t].Add(_loc8_);
@@ -3629,7 +3632,7 @@ package {
             }
             _paging = true;
             var mapVersion:int = MapRoomManager.instance.mapRoomVersion;
-            if (isInfernoMainYardOrOutpost || isEventBaseId(_baseID) && GLOBAL.mode == "wmattack") {
+            if (usesInfernoBackend || isEventBaseId(_baseID) && GLOBAL.mode == "wmattack") {
                 new URLLoaderApi().load(GLOBAL._infBaseURL + "updatesaved", [["baseid", BASE._loadedBaseID], ["version", GLOBAL._version.Get()], ["lastupdate", UPDATES._lastUpdateID], ["type", tmpMode], ["mapversion", mapVersion]], handleLoadSuccessful, handleLoadError);
             }
             else {
@@ -4814,7 +4817,7 @@ package {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 _loc8_ = 1;
                 while (_loc8_ < 5) {
-                    if (MapRoomManager.instance.isInMapRoom2 && !BASE.isInfernoMainYardOrOutpost) {
+                    if (MapRoomManager.instance.isInMapRoom2 && !BASE.usesInfernoBackend) {
                         GLOBAL._resources["r" + _loc8_ + "max"] = GLOBAL._yardResources["r" + _loc8_ + "max"] + GLOBAL._mapOutpost.length * GLOBAL._outpostCapacity.Get();
                         _resources["r" + _loc8_ + "max"] = GLOBAL._resources["r" + _loc8_ + "max"];
                     }
@@ -4844,7 +4847,8 @@ package {
                     if (_loc5_ <= 0) {
                         _loc5_ = 1;
                     }
-                    if (Boolean(_loc6_ = GLOBAL._buildingProps[_loc3_._type - 1]) && Boolean(_loc6_.costs[_loc5_ - 1])) {
+                    // Some prop entries have no cost table at all (the Inferno table's mushroom, for one).
+                    if (Boolean(_loc6_ = GLOBAL._buildingProps[_loc3_._type - 1]) && Boolean(_loc6_.costs) && Boolean(_loc6_.costs[_loc5_ - 1])) {
                         _loc7_ = _loc6_.costs[_loc5_ - 1];
                         _loc4_ += _loc7_.time.Get() + _loc7_.r1.Get() + _loc7_.r2.Get() + _loc7_.r3.Get() + _loc7_.r4.Get();
                     }
@@ -5378,8 +5382,21 @@ package {
             return s_eventBases.indexOf(param1) != -1;
         }
 
+        /**
+         * PRESENTATION: should this yard look and play like the Inferno (lava, Inferno props,
+         * bone/coal/sulfur/magma, Inferno monsters, stone UI)? Always true on inferno-only builds.
+         */
         public static function get isInfernoMainYardOrOutpost():Boolean {
-            return m_yardType == EnumYardType.INFERNO_OUTPOST || m_yardType == EnumYardType.INFERNO_YARD;
+            return GLOBAL.INFERNO_ONLY || m_yardType == EnumYardType.INFERNO_OUTPOST || m_yardType == EnumYardType.INFERNO_YARD;
+        }
+
+        /**
+         * ROUTING: is this yard served by the legacy Inferno backend (separate inferno save,
+         * api/bm/base endpoints, MR1-style inferno map, "inferno" save type)? Never true on
+         * inferno-only builds, where the Inferno yard is the regular Map Room 2 main yard.
+         */
+        public static function get usesInfernoBackend():Boolean {
+            return !GLOBAL.INFERNO_ONLY && (m_yardType == EnumYardType.INFERNO_OUTPOST || m_yardType == EnumYardType.INFERNO_YARD);
         }
 
         public static function get isMainYard():Boolean {
@@ -5496,6 +5513,11 @@ package {
         }
 
         public static function isInfernoCreep(param1:String):Boolean {
+            // Rezghul (C19) is part of the Inferno roster on inferno-only servers: he is housed in the
+            // Compound, listed with the Inferno monsters and hatched with magma like the rest of them.
+            if (param1 == CREATURELOCKER.REZGHUL_ID && GLOBAL.ioRezghul) {
+                return true;
+            }
             return param1.substring(0, 1) == "I";
         }
 

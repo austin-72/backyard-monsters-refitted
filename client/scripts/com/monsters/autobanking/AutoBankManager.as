@@ -110,10 +110,10 @@ package com.monsters.autobanking {
                                 for each (_loc9_ in _loc7_) {
                                     if (_loc9_.t >= 1 && _loc9_.t < k_MAX_RESOURCES) {
                                         if (_loc9_.l) {
-                                            _loc10_ = int(OUTPOST_YARD_PROPS._outpostProps[_loc9_.t - 1].produce[_loc9_.l - 1]);
+                                            _loc10_ = int(GLOBAL.outpostPropsTable[_loc9_.t - 1].produce[_loc9_.l - 1]);
                                         }
                                         else {
-                                            _loc10_ = int(OUTPOST_YARD_PROPS._outpostProps[_loc9_.t - 1].produce[0]);
+                                            _loc10_ = int(GLOBAL.outpostPropsTable[_loc9_.t - 1].produce[0]);
                                         }
                                         _loc10_ = Math.max(int(_loc10_ * GLOBAL._averageAltitude.Get() / _loc8_), 1);
                                         param3[_loc6_]["r" + _loc9_.t].Add(_loc10_);

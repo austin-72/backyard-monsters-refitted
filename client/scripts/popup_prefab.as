@@ -8,9 +8,23 @@ package {
     import flash.events.Event;
     import flash.events.MouseEvent;
     import com.monsters.kits.Kit;
+    import com.monsters.kits.InfernoKits;
 
     public class popup_prefab extends popup_prefab_CLIP {
         private var _KITS:Vector.<Kit>;
+
+        // Inferno-only: six kits over two pages, sharing the popup's three columns.
+        private var _ioPage:int = 0;
+
+        private var _ioToken:int = 0;
+
+        private var _ioListeners:Array = [];
+
+        private var _ioThumbs:Array = [null, null, null, null];
+
+        private var _ioPrev:Button_CLIP = null;
+
+        private var _ioNext:Button_CLIP = null;
 
         private var _triggered:Boolean = false;
 
@@ -19,12 +33,17 @@ package {
             super();
             var _loc1_:Array = [];
             var _loc2_:int = 1;
-            while (_loc2_ < 4) {
+            if (GLOBAL.INFERNO_ONLY) {
+                // Draw straight away with whatever is known, then again once the kit file has arrived.
+                this.ioRenderPage();
+                InfernoKits.load(this.ioRenderPage);
+            }
+            while (_loc2_ < 4 && !GLOBAL.INFERNO_ONLY) {
                 ImageCache.GetImageWithCallBack("ui/prefab-" + (_loc2_ + 1) + ".v5.jpg", this.ThumbnailLoaded, true, 1, "", [_loc2_]);
                 this["img" + _loc2_].addEventListener(MouseEvent.CLICK, this.Enlarge(_loc2_));
                 this["img" + _loc2_].buttonMode = true;
                 _loc1_ = this.GetBuildings(_loc2_).costs;
-                this["c" + _loc2_].htmlText = "<b>" + GLOBAL.FormatNumber(_loc1_[0].Get()) + " " + KEYS.Get("#r_twigs#") + "<br>" + GLOBAL.FormatNumber(_loc1_[1].Get()) + " " + KEYS.Get("#r_pebbles#") + "<br>" + GLOBAL.FormatNumber(_loc1_[2].Get()) + " " + KEYS.Get("#r_putty#") + "</b>";
+                this["c" + _loc2_].htmlText = "<b>" + GLOBAL.FormatNumber(_loc1_[0].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[0]) + "<br>" + GLOBAL.FormatNumber(_loc1_[1].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[1]) + "<br>" + GLOBAL.FormatNumber(_loc1_[2].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[2]) + "</b>";
                 this["b" + _loc2_].SetupKey("btn_useresources");
                 this["b" + _loc2_].addEventListener(MouseEvent.CLICK, this.PreSelect(_loc2_));
                 this["b" + _loc2_ + "s"].Setup(KEYS.Get("btn_useshiny", {"v1": _loc1_[3].Get()}));
@@ -36,10 +55,14 @@ package {
                 this.t3.htmlText = "<b>" + KEYS.Get("str_ultrakit") + "</b>";
                 _loc2_++;
             }
-            this.tCol1.htmlText = KEYS.Get("popup_prefab_col1");
-            this.tCol2.htmlText = KEYS.Get("popup_prefab_col2");
-            this.tCol3.htmlText = KEYS.Get("popup_prefab_col3");
-            this.tCol4.htmlText = KEYS.Get("popup_prefab_col4");
+            if (!GLOBAL.INFERNO_ONLY) {
+                // The stock text describes the three overworld kits. Inferno-only builds count the real
+                // contents of whichever kits are on the page instead (ioRenderPage).
+                this.tCol1.htmlText = KEYS.Get("popup_prefab_col1");
+                this.tCol2.htmlText = KEYS.Get("popup_prefab_col2");
+                this.tCol3.htmlText = KEYS.Get("popup_prefab_col3");
+                this.tCol4.htmlText = KEYS.Get("popup_prefab_col4");
+            }
             this.tShiny.htmlText = "<b>" + GLOBAL.FormatNumber(BASE._credits.Get()) + " " + KEYS.Get("#r_shiny#") + "</b>";
             this.tInstantNotice.htmlText = KEYS.Get("popup_prefab_instantnotice");
         }
@@ -71,6 +94,108 @@ package {
 
         private static function isBuildingOfValidType(param1:uint):Boolean {
             return param1 != 121;
+        }
+
+        private function ioListen(param1:Object, param2:Function):void {
+            param1.addEventListener(MouseEvent.CLICK, param2);
+            this._ioListeners.push([param1, param2]);
+        }
+
+        /** Fills the three columns with the kits of the current page. Safe to call repeatedly. */
+        private function ioRenderPage():void {
+            var _loc1_:Array = null;
+            var _loc2_:int = 0;
+            var _loc3_:int = 0;
+            var _loc4_:Boolean = false;
+            var _loc5_:Array = null;
+            var _loc6_:int = 0;
+            var _loc7_:Number = NaN;
+            if (this._triggered) {
+                return;
+            }
+            for each (_loc1_ in this._ioListeners) {
+                _loc1_[0].removeEventListener(MouseEvent.CLICK, _loc1_[1]);
+            }
+            this._ioListeners = [];
+            ++this._ioToken;
+            _loc6_ = InfernoKits.pageCount;
+            if (this._ioPage >= _loc6_) {
+                this._ioPage = 0;
+            }
+            _loc2_ = 1;
+            while (_loc2_ < 4) {
+                _loc3_ = this._ioPage * InfernoKits.PER_PAGE + _loc2_;
+                _loc4_ = InfernoKits.hasKit(_loc3_);
+                if (this._ioThumbs[_loc2_]) {
+                    if (this._ioThumbs[_loc2_].parent) {
+                        this._ioThumbs[_loc2_].parent.removeChild(this._ioThumbs[_loc2_]);
+                    }
+                    this._ioThumbs[_loc2_] = null;
+                }
+                this["img" + _loc2_].visible = _loc4_;
+                this["img" + _loc2_].buttonMode = _loc4_;
+                this["t" + _loc2_].visible = _loc4_;
+                this["c" + _loc2_].visible = _loc4_;
+                this["b" + _loc2_].visible = _loc4_;
+                this["b" + _loc2_ + "s"].visible = _loc4_;
+                // tCol1 holds the row labels; tCol2-4 sit under kit columns 1-3.
+                this["tCol" + (_loc2_ + 1)].visible = _loc4_;
+                if (_loc4_) {
+                    this["tCol" + (_loc2_ + 1)].htmlText = InfernoKits.contentsText(this.GetBuildings(_loc3_).buildings);
+                    _loc5_ = this.GetBuildings(_loc3_).costs;
+                    ImageCache.GetImageWithCallBack(InfernoKits.thumbPath(_loc3_), this.ioThumbLoaded, true, 1, "", [_loc2_, this._ioToken]);
+                    this["t" + _loc2_].htmlText = "<b>" + InfernoKits.kitName(_loc3_) + "</b>";
+                    this["c" + _loc2_].htmlText = "<b>" + GLOBAL.FormatNumber(_loc5_[0].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[0]) + "<br>" + GLOBAL.FormatNumber(_loc5_[1].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[1]) + "<br>" + GLOBAL.FormatNumber(_loc5_[2].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[2]) + "</b>";
+                    this["b" + _loc2_].SetupKey("btn_useresources");
+                    this["b" + _loc2_ + "s"].Setup(KEYS.Get("btn_useshiny", {"v1": _loc5_[3].Get()}));
+                    this["b" + _loc2_ + "s"].Highlight = true;
+                    this.ioListen(this["img" + _loc2_], this.Enlarge(_loc3_));
+                    this.ioListen(this["b" + _loc2_], this.PreSelect(_loc3_));
+                    this.ioListen(this["b" + _loc2_ + "s"], this.PreBuyOutright(_loc3_, _loc5_[3].Get()));
+                }
+                _loc2_++;
+            }
+            this.tCol1.htmlText = InfernoKits.rowLabels();
+            this.tSelect.htmlText = "<b>" + KEYS.Get("str_selectsk") + "</b>" + (_loc6_ > 1 ? "<br>Page " + (this._ioPage + 1) + " of " + _loc6_ : "");
+            // Page buttons sit just above the popup, centred over it: Prev left of the middle, Next right.
+            // (The frame's top edge is at y = -245 in the popup's art; its close button is in the corner,
+            // well clear of the middle.)
+            if (_loc6_ > 1 && !this._ioPrev) {
+                this._ioPrev = new Button_CLIP();
+                this._ioNext = new Button_CLIP();
+                addChild(this._ioPrev);
+                addChild(this._ioNext);
+                this._ioPrev.Setup("Prev");
+                this._ioNext.Setup("Next");
+                this._ioPrev.scaleX = this._ioNext.scaleX = 1.4;
+                _loc7_ = this.mcFrame ? this.mcFrame.y : -245;
+                this._ioPrev.x = -this._ioPrev.width - 6;
+                this._ioNext.x = 6;
+                this._ioPrev.y = this._ioNext.y = _loc7_ - this._ioPrev.height - 6;
+                this._ioPrev.addEventListener(MouseEvent.CLICK, this.ioTurnPage(-1));
+                this._ioNext.addEventListener(MouseEvent.CLICK, this.ioTurnPage(1));
+            }
+            if (this._ioPrev) {
+                this._ioPrev.visible = this._ioNext.visible = _loc6_ > 1;
+            }
+        }
+
+        private function ioTurnPage(param1:int):Function {
+            var step:int = param1;
+            return function(param1:MouseEvent = null):void {
+                var pages:int = InfernoKits.pageCount;
+                _ioPage = (_ioPage + step + pages) % pages;
+                ioRenderPage();
+            };
+        }
+
+        public function ioThumbLoaded(param1:String, param2:BitmapData, param3:Array):void {
+            // A slow image from a page that has since been turned must not land in the new page.
+            if (param3[1] != this._ioToken) {
+                return;
+            }
+            this._ioThumbs[param3[0]] = new Bitmap(param2);
+            this["img" + param3[0]].addChild(this._ioThumbs[param3[0]]);
         }
 
         public function Enlarge(param1:int):Function {
@@ -158,17 +283,17 @@ package {
             _loc6_ = Math.min(GLOBAL._resources.r1.Get(), _loc4_[0].Get());
             _loc7_ += _loc4_[0].Get() - _loc6_;
             if (_loc6_ != _loc4_[0].Get()) {
-                _loc5_.push([_loc4_[0].Get() - _loc6_, KEYS.Get("#r_twigs#")]);
+                _loc5_.push([_loc4_[0].Get() - _loc6_, KEYS.Get(GLOBAL._resourceNames[0])]);
             }
             _loc6_ = Math.min(GLOBAL._resources.r2.Get(), _loc4_[1].Get());
             _loc7_ += _loc4_[1].Get() - _loc6_;
             if (_loc6_ != _loc4_[1].Get()) {
-                _loc5_.push([_loc4_[1].Get() - _loc6_, KEYS.Get("#r_pebbles#")]);
+                _loc5_.push([_loc4_[1].Get() - _loc6_, KEYS.Get(GLOBAL._resourceNames[1])]);
             }
             _loc6_ = Math.min(GLOBAL._resources.r3.Get(), _loc4_[2].Get());
             _loc7_ += _loc4_[2].Get() - _loc6_;
             if (_loc6_ != _loc4_[2].Get()) {
-                _loc5_.push([_loc4_[2].Get() - _loc6_, KEYS.Get("#r_putty#")]);
+                _loc5_.push([_loc4_[2].Get() - _loc6_, KEYS.Get(GLOBAL._resourceNames[2])]);
             }
             if (_loc5_.length > 0) {
                 _loc8_ = Math.ceil(Math.pow(Math.sqrt(_loc7_ / 2), 0.75));
@@ -232,6 +357,25 @@ package {
             b2.Enabled = false;
             b3.Enabled = false;
             var _loc3_:Object = this.GetBuildings(param1).buildings;
+            if (GLOBAL.INFERNO_ONLY) {
+                // The server wipes the outpost and writes the kit into it; the yard is then loaded again
+                // from that save. Nothing is edited locally, so nothing old can be saved back.
+                for each (_loc6_ in _loc3_) {
+                    if (_loc6_.t != 112) {
+                        if (!_loc6_.prefab) {
+                            _loc6_.prefab = 1;
+                        }
+                        if (param2) {
+                            _loc6_.l = _loc6_.prefab;
+                            delete _loc6_.prefab;
+                        }
+                    }
+                }
+                ACHIEVEMENTS.Check("starterkit", 1);
+                POPUPS.Next();
+                GLOBAL.ioApplyKit(_loc3_);
+                return;
+            }
             CREATURES.Clear();
             CREEPS.Clear();
             var _loc5_:Vector.<Object> = InstanceManager.getInstancesByClass(BFOUNDATION);
@@ -279,6 +423,10 @@ package {
             var _loc2_:Object = null;
             var _loc3_:Array = [];
             var _loc4_:Array = [0, 0, 0, 0];
+            if (GLOBAL.INFERNO_ONLY && !InfernoKits.usingCustom) {
+                // Paging test: slots 4-6 are the three stock kits again.
+                param1 = InfernoKits.stockId(param1);
+            }
             if (param1 == 1) {
                 _loc2_ = JSON.parse("{\"0\":{\"Y\":-105,\"t\":112,\"id\":0,\"X\":-65},\"1\":{\"Y\":-165,\"t\":21,\"prefab\":5,\"id\":1,\"X\":-155},\"2\":{\"Y\":25,\"t\":21,\"prefab\":5,\"id\":2,\"X\":-15},\"3\":{\"Y\":-175,\"t\":21,\"prefab\":5,\"id\":3,\"X\":125},\"4\":{\"Y\":15,\"t\":20,\"prefab\":5,\"id\":4,\"X\":-155},\"5\":{\"Y\":25,\"t\":20,\"prefab\":5,\"id\":5,\"X\":125},\"6\":{\"Y\":-175,\"t\":20,\"prefab\":5,\"id\":6,\"X\":-15},\"7\":{\"Y\":-75,\"t\":25,\"id\":7,\"X\":-155},\"8\":{\"Y\":115,\"t\":15,\"prefab\":2,\"id\":8,\"X\":35},\"9\":{\"Y\":-295,\"t\":13,\"prefab\":2,\"id\":9,\"X\":-35},\"10\":{\"Y\":115,\"t\":13,\"prefab\":2,\"id\":10,\"X\":-65},\"11\":{\"Y\":-285,\"t\":5,\"prefab\":2,\"id\":11,\"X\":-125},\"13\":{\"Y\":-85,\"t\":22,\"id\":13,\"X\":85},\"14\":{\"rCP\":1,\"Y\":-175,\"t\":1,\"prefab\":8,\"id\":14,\"X\":-85},\"15\":{\"rCP\":10,\"Y\":25,\"t\":1,\"prefab\":8,\"id\":15,\"X\":55},\"16\":{\"rCP\":9,\"Y\":-175,\"t\":2,\"prefab\":8,\"id\":16,\"X\":55},\"17\":{\"rCP\":2,\"Y\":25,\"t\":2,\"prefab\":8,\"id\":17,\"X\":-85},\"18\":{\"Y\":-195,\"t\":17,\"prefab\":2,\"id\":18,\"X\":165},\"19\":{\"rCP\":3,\"Y\":-40,\"t\":3,\"prefab\":8,\"id\":19,\"X\":-255},\"20\":{\"rCP\":10,\"Y\":-35,\"t\":4,\"prefab\":8,\"id\":20,\"X\":225},\"21\":{\"rCP\":7,\"Y\":-110,\"t\":4,\"prefab\":8,\"id\":21,\"X\":-255},\"22\":{\"Y\":-75,\"t\":17,\"prefab\":3,\"id\":22,\"X\":185},\"23\":{\"Y\":-65,\"t\":17,\"prefab\":3,\"id\":23,\"X\":-85},\"24\":{\"Y\":-95,\"t\":17,\"prefab\":3,\"id\":24,\"X\":185},\"25\":{\"Y\":-105,\"t\":17,\"prefab\":3,\"id\":25,\"X\":85},\"26\":{\"Y\":-55,\"t\":17,\"prefab\":3,\"id\":26,\"X\":185},\"27\":{\"Y\":-105,\"t\":17,\"prefab\":3,\"id\":27,\"X\":125},\"28\":{\"Y\":-35,\"t\":17,\"prefab\":3,\"id\":28,\"X\":185},\"29\":{\"Y\":-105,\"t\":17,\"prefab\":3,\"id\":29,\"X\":105},\"30\":{\"Y\":-45,\"t\":17,\"prefab\":3,\"id\":30,\"X\":-85},\"31\":{\"Y\":-105,\"t\":17,\"prefab\":3,\"id\":31,\"X\":145},\"32\":{\"Y\":-25,\"t\":17,\"prefab\":3,\"id\":32,\"X\":-85},\"33\":{\"Y\":5,\"t\":17,\"prefab\":3,\"id\":33,\"X\":165},\"34\":{\"Y\":-105,\"t\":17,\"prefab\":3,\"id\":34,\"X\":65},\"35\":{\"Y\":5,\"t\":17,\"prefab\":3,\"id\":35,\"X\":145},\"36\":{\"Y\":-105,\"t\":17,\"prefab\":3,\"id\":36,\"X\":165},\"37\":{\"Y\":5,\"t\":17,\"prefab\":3,\"id\":37,\"X\":125},\"38\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":38,\"X\":-185},\"39\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":39,\"X\":65},\"40\":{\"Y\":-85,\"t\":17,\"prefab\":3,\"id\":40,\"X\":65},\"41\":{\"Y\":5,\"t\":17,\"prefab\":3,\"id\":41,\"X\":85},\"42\":{\"Y\":-65,\"t\":17,\"prefab\":3,\"id\":42,\"X\":65},\"43\":{\"Y\":5,\"t\":17,\"prefab\":3,\"id\":43,\"X\":105},\"44\":{\"Y\":-45,\"t\":17,\"prefab\":3,\"id\":44,\"X\":65},\"45\":{\"Y\":-85,\"t\":17,\"prefab\":3,\"id\":45,\"X\":-185},\"46\":{\"Y\":-25,\"t\":17,\"prefab\":3,\"id\":46,\"X\":65},\"47\":{\"Y\":-45,\"t\":17,\"prefab\":3,\"id\":47,\"X\":-185},\"48\":{\"Y\":-95,\"t\":17,\"prefab\":3,\"id\":48,\"X\":-145},\"49\":{\"Y\":-95,\"t\":17,\"prefab\":3,\"id\":49,\"X\":-165},\"50\":{\"Y\":-95,\"t\":17,\"prefab\":3,\"id\":50,\"X\":-105},\"51\":{\"Y\":-95,\"t\":17,\"prefab\":3,\"id\":51,\"X\":-125},\"52\":{\"Y\":-85,\"t\":17,\"prefab\":3,\"id\":52,\"X\":-85},\"53\":{\"Y\":-65,\"t\":17,\"prefab\":3,\"id\":53,\"X\":-185},\"54\":{\"Y\":-25,\"t\":17,\"prefab\":3,\"id\":54,\"X\":-185},\"55\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":55,\"X\":-165},\"56\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":56,\"X\":-105},\"57\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":57,\"X\":-145},\"58\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":58,\"X\":-125},\"59\":{\"Y\":-15,\"t\":17,\"prefab\":3,\"id\":59,\"X\":185},\"60\":{\"Y\":-5,\"t\":17,\"prefab\":3,\"id\":60,\"X\":-85},\"61\":{\"Y\":5,\"t\":17,\"prefab\":3,\"id\":61,\"X\":185},\"62\":{\"Y\":-195,\"t\":17,\"prefab\":2,\"id\":62,\"X\":185},\"63\":{\"Y\":-185,\"t\":17,\"prefab\":2,\"id\":63,\"X\":-115},\"64\":{\"Y\":95,\"t\":17,\"prefab\":2,\"id\":64,\"X\":165},\"65\":{\"Y\":95,\"t\":17,\"prefab\":2,\"id\":65,\"X\":145},\"66\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":66,\"X\":125},\"67\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":67,\"X\":105},\"68\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":68,\"X\":85},\"69\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":69,\"X\":65},\"70\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":70,\"X\":45},\"71\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":71,\"X\":25},\"72\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":72,\"X\":5},\"73\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":73,\"X\":-15},\"74\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":74,\"X\":-35},\"75\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":75,\"X\":-55},\"76\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":76,\"X\":-75},\"77\":{\"Y\":95,\"t\":17,\"prefab\":3,\"id\":77,\"X\":-95},\"78\":{\"Y\":95,\"t\":17,\"prefab\":2,\"id\":78,\"X\":-115},\"79\":{\"Y\":95,\"t\":17,\"prefab\":2,\"id\":79,\"X\":-135},\"80\":{\"Y\":85,\"t\":17,\"prefab\":2,\"id\":80,\"X\":-155},\"81\":{\"Y\":15,\"t\":17,\"prefab\":3,\"id\":81,\"X\":-185},\"82\":{\"Y\":35,\"t\":17,\"prefab\":2,\"id\":82,\"X\":-185},\"83\":{\"Y\":55,\"t\":17,\"prefab\":2,\"id\":83,\"X\":-185},\"84\":{\"Y\":75,\"t\":17,\"prefab\":2,\"id\":84,\"X\":-175},\"85\":{\"Y\":95,\"t\":17,\"prefab\":2,\"id\":85,\"X\":185},\"86\":{\"Y\":75,\"t\":17,\"prefab\":2,\"id\":86,\"X\":195},\"87\":{\"Y\":55,\"t\":17,\"prefab\":2,\"id\":87,\"X\":195},\"88\":{\"Y\":35,\"t\":17,\"prefab\":2,\"id\":88,\"X\":205},\"89\":{\"Y\":15,\"t\":17,\"prefab\":3,\"id\":89,\"X\":205},\"90\":{\"Y\":-115,\"t\":17,\"prefab\":3,\"id\":90,\"X\":-175},\"91\":{\"Y\":-135,\"t\":17,\"prefab\":2,\"id\":91,\"X\":-175},\"92\":{\"Y\":-155,\"t\":17,\"prefab\":2,\"id\":92,\"X\":-175},\"93\":{\"Y\":-175,\"t\":17,\"prefab\":2,\"id\":93,\"X\":-175},\"94\":{\"Y\":-185,\"t\":17,\"prefab\":2,\"id\":94,\"X\":-155},\"95\":{\"Y\":-185,\"t\":17,\"prefab\":2,\"id\":95,\"X\":-135},\"96\":{\"Y\":-195,\"t\":17,\"prefab\":2,\"id\":96,\"X\":145},\"97\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":97,\"X\":-95},\"98\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":98,\"X\":-75},\"99\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":99,\"X\":-55},\"100\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":100,\"X\":-35},\"101\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":101,\"X\":-15},\"102\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":102,\"X\":5},\"103\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":103,\"X\":25},\"104\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":104,\"X\":45},\"105\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":105,\"X\":65},\"106\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":106,\"X\":85},\"107\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":107,\"X\":105},\"108\":{\"Y\":-115,\"t\":17,\"prefab\":3,\"id\":108,\"X\":195},\"110\":{\"Y\":-135,\"t\":17,\"prefab\":2,\"id\":110,\"X\":195},\"111\":{\"Y\":-155,\"t\":17,\"prefab\":2,\"id\":111,\"X\":195},\"112\":{\"Y\":-175,\"t\":17,\"prefab\":2,\"id\":112,\"X\":195},\"113\":{\"Y\":-195,\"t\":17,\"prefab\":3,\"id\":113,\"X\":125},\"114\":{\"rCP\":6,\"Y\":-105,\"t\":3,\"prefab\":8,\"id\":114,\"X\":225}}");
                 _loc3_[0] = new SecNum(12000000);
@@ -300,8 +448,16 @@ package {
                 _loc3_[2] = new SecNum(100000000);
                 _loc3_[3] = new SecNum(1500);
             }
-            else {
+            else if (!(GLOBAL.INFERNO_ONLY && InfernoKits.hasKit(param1))) {
                 LOGGER.Log("err", "popup_prefab.GetBuildings " + param1);
+            }
+            if (GLOBAL.INFERNO_ONLY && _loc2_) {
+                _loc2_ = InfernoKits.convert(_loc2_);
+                _loc3_ = InfernoKits.costs(param1);
+            }
+            if (GLOBAL.INFERNO_ONLY && InfernoKits.usingCustom && InfernoKits.hasKit(param1)) {
+                _loc2_ = InfernoKits.customBuildings(param1);
+                _loc3_ = InfernoKits.customCosts(param1);
             }
             return {
                     "buildings": _loc2_,

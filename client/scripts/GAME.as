@@ -41,6 +41,16 @@ package {
             if (flashVarServerUrl != undefined && flashVarServerUrl != "") {
                 GLOBAL.serverUrl = String(flashVarServerUrl);
             }
+            else {
+                // Started from a web address (flashplayer.exe https://host/bymr-stable.swf): the server
+                // that handed out this client is the server to play on, whatever address was compiled
+                // in. A client opened from disk keeps the compiled address.
+                var ioOrigin:Array = String(loaderInfo.url).match(/^https?:\/\/[^\/?#]+/i);
+                if (ioOrigin && ioOrigin.length > 0) {
+                    GLOBAL.serverUrl = ioOrigin[0] + "/";
+                    GLOBAL.cdnUrl = ioOrigin[0] + "/";
+                }
+            }
 
             var serverUrl:String = GLOBAL.serverUrl;
             var apiVersionSuffix:String = GLOBAL.apiVersionSuffix + "/";
@@ -50,26 +60,48 @@ package {
             GLOBAL._local = !ExternalInterface.available;
             ReferencedExposedStructures.Include();
             if (this.parent) {
-                urls = {};
-                if (serverUrl) {
-                    urls._baseURL = serverUrl + "base/";
-                    urls._apiURL = serverUrl + "api/" + apiVersionSuffix;
-                    urls.infbaseurl = urls._apiURL + "bm/base/";
-                    urls._statsURL = serverUrl + "recordstats.php";
-                    urls._mapURL = serverUrl + "worldmapv2/";
-                    urls.map3url = serverUrl + "worldmapv3/";
-                    urls._allianceURL = serverUrl + "alliance/";
-                    urls.languageurl = cdnUrl + "gamestage/assets/";
-                    urls._storageURL = cdnUrl + "assets/";
-                    urls._soundPathURL = cdnUrl + "assets/sounds/";
-                    urls._gameURL = serverUrl + "";
-                    urls._appid = serverUrl + "";
-                    urls._tpid = serverUrl + "";
-                    urls._currencyURL = serverUrl + "";
-                    urls._countryCode = serverUrl + "us";
-                }
-                this.Data(urls, loaderInfo.parameters);
+                this.ioStart();
             }
+            else {
+                // Loaded by the launcher (client/launcher/IOLauncher.as): a loaded SWF's constructor runs
+                // before it is anywhere, so there is no stage to start on yet. Start when there is one.
+                addEventListener(Event.ADDED_TO_STAGE, this.ioStartWhenOnStage);
+            }
+        }
+
+        private var _ioStarted:Boolean = false;
+
+        private function ioStartWhenOnStage(param1:Event):void {
+            removeEventListener(Event.ADDED_TO_STAGE, this.ioStartWhenOnStage);
+            this.ioStart();
+        }
+
+        private function ioStart():void {
+            var urls:Object = {};
+            var serverUrl:String = GLOBAL.serverUrl;
+            var apiVersionSuffix:String = GLOBAL.apiVersionSuffix + "/";
+            var cdnUrl:String = GLOBAL.cdnUrl;
+            if (this._ioStarted) {
+                return;
+            }
+            if (serverUrl) {
+                urls._baseURL = serverUrl + "base/";
+                urls._apiURL = serverUrl + "api/" + apiVersionSuffix;
+                urls.infbaseurl = urls._apiURL + "bm/base/";
+                urls._statsURL = serverUrl + "recordstats.php";
+                urls._mapURL = serverUrl + "worldmapv2/";
+                urls.map3url = serverUrl + "worldmapv3/";
+                urls._allianceURL = serverUrl + "alliance/";
+                urls.languageurl = cdnUrl + "gamestage/assets/";
+                urls._storageURL = cdnUrl + "assets/";
+                urls._soundPathURL = cdnUrl + "assets/sounds/";
+                urls._gameURL = serverUrl + "";
+                urls._appid = serverUrl + "";
+                urls._tpid = serverUrl + "";
+                urls._currencyURL = serverUrl + "";
+                urls._countryCode = serverUrl + "us";
+            }
+            this.Data(urls, loaderInfo.parameters);
         }
 
         public static function disableWindowScroll(param1:Event = null):void {
@@ -101,6 +133,10 @@ package {
         }
 
         public function Data(urls:Object, loaderParams:Object):void {
+            if (this._ioStarted) {
+                return;
+            }
+            this._ioStarted = true;
             loaderInfo.uncaughtErrorEvents.addEventListener(UncaughtErrorEvent.UNCAUGHT_ERROR, this.uncaughtErrorThrown);
             setLauncherVars(loaderParams);
             SWFProfiler.init(stage, this);

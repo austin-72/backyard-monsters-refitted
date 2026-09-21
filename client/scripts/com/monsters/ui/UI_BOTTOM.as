@@ -95,7 +95,7 @@ package com.monsters.ui {
                     _mc.bStore.Enabled = true;
                 }
                 else {
-                    _mc.bStore.Enabled = BASE.isMainYardInfernoOnly;
+                    _mc.bStore.Enabled = BASE.isMainYardInfernoOnly || GLOBAL.INFERNO_ONLY && BASE.isMainYard;
                 }
             }
             if (Boolean(GLOBAL._bMap) || !BASE.isMainYard) {

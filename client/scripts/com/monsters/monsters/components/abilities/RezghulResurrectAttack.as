@@ -33,7 +33,10 @@ package com.monsters.monsters.components.abilities {
                 if (!targets) {
                     targets = new Vector.<ITargetable>();
                 }
-                if ((currentCreep = allDeadCreeps[idx].creep) is CreepBase && k_UNRESURRECTABLE_CREATURES.indexOf(CreepBase(currentCreep)._creatureID) == -1) {
+                // Rezghul only ever raises his own side's dead. The team flags passed in already say so; this
+                // checks the corpse itself as well, so an enemy's Compound or bunker defenders can never
+                // come back, whatever flags a monster ended up with.
+                if ((currentCreep = allDeadCreeps[idx].creep) is CreepBase && CreepBase(currentCreep)._friendly == owner._friendly && k_UNRESURRECTABLE_CREATURES.indexOf(CreepBase(currentCreep)._creatureID) == -1) {
                     targets.push(currentCreep);
                 }
                 idx++;
@@ -60,7 +63,7 @@ package com.monsters.monsters.components.abilities {
             if (deadCreepsInRange) {
                 idx = 0;
                 while (idx < deadCreepsInRange.length) {
-                    if ((currentCreep = deadCreepsInRange[idx]) is CreepBase && k_UNRESURRECTABLE_CREATURES.indexOf(CreepBase(currentCreep)._creatureID) == -1) {
+                    if ((currentCreep = deadCreepsInRange[idx]) is CreepBase && CreepBase(currentCreep)._friendly == owner._friendly && k_UNRESURRECTABLE_CREATURES.indexOf(CreepBase(currentCreep)._creatureID) == -1) {
                         this.resurrect(currentCreep as CreepBase);
                     }
                     idx++;

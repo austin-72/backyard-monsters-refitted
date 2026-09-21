@@ -136,12 +136,22 @@ package com.monsters.siege.weapons {
         public function onDeactivation():void {
         }
 
+        /**
+         * Inferno-only: numbers for one Catapult shot ({damage, range, duration, durability}). While set,
+         * they replace the values the weapon's level would give, so the stock weapon code runs unchanged.
+         */
+        public var ioOverride:Object = null;
+
+        protected function ioValue(param1:String, param2:*):* {
+            return this.ioOverride && this.ioOverride.hasOwnProperty(param1) ? this.ioOverride[param1] : param2;
+        }
+
         public function get range():int {
-            return this.getProperty(RANGE).getValueForLevel(this.level);
+            return this.ioValue("range", this.getProperty(RANGE).getValueForLevel(this.level));
         }
 
         public function get duration():int {
-            return this.getProperty(DURATION).getValueForLevel(this.level);
+            return this.ioValue("duration", this.getProperty(DURATION).getValueForLevel(this.level));
         }
 
         public function getProperties():Vector.<SiegeWeaponProperty> {

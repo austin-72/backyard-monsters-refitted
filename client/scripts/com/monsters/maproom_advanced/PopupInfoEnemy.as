@@ -1,4 +1,5 @@
 package com.monsters.maproom_advanced {
+    import com.monsters.ai.TRIBES;
 
     import com.cc.utils.SecNum;
     import com.monsters.alliances.*;
@@ -146,7 +147,7 @@ package com.monsters.maproom_advanced {
             }
             GLOBAL._attackerCellsInRange = MapRoom._mc.GetCellsInRange(this._cell.X, this._cell.Y, 10 + _loc4_);
             MapRoom._flingerInRange = param2;
-            this.bAlliance.visible = true;
+            this.bAlliance.visible = GLOBAL.alliancesEnabled;
             for each (_loc5_ in GLOBAL._attackerCellsInRange) {
                 _loc10_ = _loc5_.cell as MapRoomCell;
                 _loc11_ = _loc5_.range;
@@ -250,10 +251,10 @@ package com.monsters.maproom_advanced {
                 this.bAlliance.Enabled = false;
                 this.bAlliance.visible = false;
                 if (!this._cell._destroyed) {
-                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": this._cell._name}) + "</b>";
+                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": TRIBES.DisplayName(this._cell._name)}) + "</b>";
                 }
                 else {
-                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": this._cell._name}) + " (" + KEYS.Get("newmap_inf_destroyed") + ")</b>";
+                    tName.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": TRIBES.DisplayName(this._cell._name)}) + " (" + KEYS.Get("newmap_inf_destroyed") + ")</b>";
                 }
                 this.ProfilePic();
                 if (this._cell._level) {
@@ -271,7 +272,7 @@ package com.monsters.maproom_advanced {
                     this.mcRelations.visible = false;
                 }
             }
-            tLocation.htmlText = this._cell.X + "x" + this._cell.Y;
+            tLocation.htmlText = GLOBAL.ioCoord(this._cell.X) + " x " + GLOBAL.ioCoord(this._cell.Y);
             tHeight.htmlText = this._cell._height - 100 + "m";
             if (this._cell._base == 2) {
                 _loc6_ = 0;
@@ -428,6 +429,9 @@ package com.monsters.maproom_advanced {
                         break;
                     case "Abunakki":
                         ImageCache.GetImageWithCallBack("monsters/tribe_abunakki_50.v2.jpg", imageComplete);
+                        break;
+                    case "Moloch":
+                        ImageCache.GetImageWithCallBack("monsters/tribe_moloch_50.jpg", imageComplete);
                 }
             }
         }

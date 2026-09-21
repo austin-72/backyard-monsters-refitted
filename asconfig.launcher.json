@@ -1,0 +1,27 @@
+{
+  "config": "flex",
+  "type": "app",
+  "mainClass": "IOLauncher",
+  "compilerOptions": {
+    "output": "server/public/client/launcher.swf",
+    "target-player": "11.0",
+    "swf-version": 13,
+    "default-frame-rate": 40,
+    "default-background-color": "#FFFFFF",
+    "default-size": {
+      "width": 760,
+      "height": 670
+    },
+    "optimize": true,
+    "strict": true,
+    "warnings": false,
+    "use-network": true,
+    "static-link-runtime-shared-libraries": true,
+    "source-path": [
+      "client/launcher"
+    ],
+    "library-path": [
+      "./playerglobal.swc"
+    ]
+  }
+}

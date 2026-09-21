@@ -48,7 +48,7 @@ package {
 
         override public function Destroyed(param1:Boolean = true):void {
             super.Destroyed(param1);
-            if ((!MapRoomManager.instance.isInMapRoom2or3 || BASE.isInfernoMainYardOrOutpost) && GLOBAL.mode == "wmattack") {
+            if ((!MapRoomManager.instance.isInMapRoom2or3 || BASE.usesInfernoBackend) && GLOBAL.mode == "wmattack") {
                 WMBASE._destroyed = true;
             }
         }

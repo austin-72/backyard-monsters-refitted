@@ -1,4 +1,5 @@
 package {
+    import com.monsters.siege.SiegeWeapons;
     import com.monsters.display.ImageCache;
     import com.monsters.effects.ResourceBombs;
     import flash.display.Bitmap;
@@ -69,7 +70,8 @@ package {
             this._locked = this._props.catapultLevel > GLOBAL._attackersCatapult;
             if (!this._props.used) {
                 if (!this._locked) {
-                    this.Enabled = this._props.cost <= GLOBAL._attackersResources["r" + this._props.resource].Get();
+                    // Marilyn needs the Chaos weapon slot, which she holds until she explodes.
+                    this.Enabled = ResourceBombs.canAfford(this._props) && !(this._props.kind == "decoy" && SiegeWeapons.activeWeapon);
                 }
                 else {
                     this.Enabled = false;
@@ -82,26 +84,41 @@ package {
 
         public function ShowOver():void {
             var _loc1_:* = "<b>" + this._props.name + "</b>";
-            if (this._props.description) {
+            if (this._props.kind) {
+                _loc1_ = "<b>" + this._props.name + " " + ResourceBombs.ioRowName(this._props) + "</b><br>" + this.ioStats();
+            }
+            else if (this._props.description) {
                 _loc1_ += "<br>" + KEYS.Get(this._props.description, {
                             "v1": this._props.speed * 100 + "%",
                             "v2": Math.round((1 - this._props.damageMult) * 100) + "%",
                             "v3": this._props.speedlength
                         });
             }
-            _loc1_ += "<br>" + KEYS.Get("bomb_cost_resources", {
-                        "v1": CATAPULTPOPUP.Format(this._props.cost),
-                        "v2": KEYS.Get(GLOBAL._resourceNames[this._props.resource - 1])
-                    }) + "<br>";
+            _loc1_ += "<br><b>Cost: </b>" + ResourceBombs.costText(this._props) + "<br>";
             if (this._props.catapultLevel > GLOBAL._attackersCatapult) {
                 _loc1_ += "<br>" + "<b><font color = \"#FF0000\">" + KEYS.Get("bomb_catapult_level", {"v1": this._props.catapultLevel}) + "</font></b>";
             }
-            else if (this._props.cost > GLOBAL._attackersResources["r" + this._props.resource].Get() && !this._props.used) {
-                _loc1_ += "<br><b><font color = \"#FF0000\">" + KEYS.Get("bomb_need_resources", {"v1": KEYS.Get(GLOBAL._resourceNames[this._props.resource - 1])}) + "</font></b>";
+            else if (!this._props.used && ResourceBombs.shortOf(this._props) > 0) {
+                _loc1_ += "<br><b><font color = \"#FF0000\">" + KEYS.Get("bomb_need_resources", {"v1": KEYS.Get(GLOBAL._resourceNames[ResourceBombs.shortOf(this._props) - 1])}) + "</font></b>";
+            }
+            else if (!this._props.used && this._props.kind == "decoy" && SiegeWeapons.activeWeapon) {
+                _loc1_ += "<br><b><font color = \"#FF0000\">Another Chaos weapon is still active</font></b>";
             }
             this._popup.mouseEnabled = false;
             this._popup.Setup(this._popX, this._popY, _loc1_);
             this._popup.visible = true;
+        }
+
+        /** The numbers that matter for this kind of Inferno ammunition. */
+        private function ioStats():String {
+            var p:Object = this._props;
+            if (p.kind == "decoy") {
+                return "Lures defending monsters, then explodes.<br><b>Damage: </b>" + GLOBAL.FormatNumber(p.damage) + "<br><b>Lure range: </b>" + p.radius + "<br><b>Fuse: </b>" + p.fuse + " seconds";
+            }
+            if (p.kind == "jars") {
+                return "Jars every tower in range until it shoots its way out.<br><b>Range: </b>" + p.radius + "<br><b>Durability: </b>" + GLOBAL.FormatNumber(p.durability);
+            }
+            return "Enrages your monsters.<br><b>Radius: </b>" + p.radius + "<br><b>Speed: </b>" + Math.round(p.speed * 100) + "%<br><b>Armor: </b>" + Math.round((1 - p.damageMult) * 100) + "%<br><b>Lasts: </b>" + p.speedlength + " seconds";
         }
 
         public function Hide():void {

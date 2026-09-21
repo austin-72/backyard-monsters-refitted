@@ -249,7 +249,7 @@ package {
                 }
                 BASE.Load(GLOBAL._openBase.url, GLOBAL._openBase.userid, GLOBAL._openBase.baseid);
             }
-            else if (_inferno != 0) {
+            else if (_inferno != 0 && !GLOBAL.INFERNO_ONLY) {
                 MapRoomManager.instance.mapRoomVersion = MapRoomManager.MAP_ROOM_VERSION_1;
                 BASE.yardType = EnumYardType.INFERNO_YARD;
                 BASE.LoadBase(GLOBAL._infBaseURL, 0, 0, "ibuild", false, EnumYardType.INFERNO_YARD);

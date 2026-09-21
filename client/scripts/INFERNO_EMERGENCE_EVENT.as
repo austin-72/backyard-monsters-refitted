@@ -59,6 +59,9 @@ package {
         }
 
         public static function Initialize():Boolean {
+            if (GLOBAL.INFERNO_ONLY) {
+                return false;
+            }
             if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
                 return false;
             }

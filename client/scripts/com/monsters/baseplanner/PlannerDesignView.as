@@ -185,8 +185,16 @@ package com.monsters.baseplanner {
             var _loc4_:Point = new Point();
             _loc3_ = this.YARD_EXPANSIONS[_loc2_];
             _loc4_ = this.YARD_EXPANSIONS[Math.min(_loc2_ + 1, this.YARD_EXPANSIONS.length - 1)];
+            if (GLOBAL.INFERNO_ONLY) {
+                // Draw the yard the game is really using (STORE.ProcessPurchases works it out from the
+                // expansions bought, ENLI included) and, while one is left to buy, the next size up,
+                // worked out the same way: 10% more, rounded up to whole 20s.
+                _loc2_ = GLOBAL.yardExpansionsBought;
+                _loc3_ = new Point(GLOBAL._mapWidth, GLOBAL._mapHeight);
+                _loc4_ = new Point(Math.ceil(GLOBAL._mapWidth * 1.1 / 20) * 20, Math.ceil(GLOBAL._mapHeight * 1.1 / 20) * 20);
+            }
             _loc5_ = new Rectangle(-_loc3_.x / 2, -_loc3_.y / 2, _loc3_.x, _loc3_.y);
-            if (Math.min(_loc2_ + 1, this.YARD_EXPANSIONS.length - 1) > _loc2_) {
+            if (GLOBAL.INFERNO_ONLY ? _loc2_ < GLOBAL.yardExpansionsMax : Math.min(_loc2_ + 1, this.YARD_EXPANSIONS.length - 1) > _loc2_) {
                 _loc6_ = new Rectangle(-_loc4_.x / 2, -_loc4_.y / 2, _loc4_.x, _loc4_.y);
             }
             if (Boolean(_loc6_) && !BASE.isOutpost) {

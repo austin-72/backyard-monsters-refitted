@@ -8,6 +8,7 @@ package com.monsters.chat {
     import flash.utils.Timer;
     import gs.TweenLite;
     import com.monsters.chat.ChatData;
+    import com.monsters.chat.impl.http.HttpChatSystem;
     import com.monsters.chat.impl.ws.WSChatSystem;
 
     public class BYMChat extends Sprite {
@@ -147,7 +148,14 @@ package com.monsters.chat {
 
         public function initServer():void {
             try {
-                _chat = new WSChatSystem(this._chatHost, this._chatPort);
+                // Server flag io_chathttp: chat rides on ordinary web requests instead of a socket, which is
+                // the only way it can work through a web-only tunnel (no chat port, no Flash socket policy).
+                if (GLOBAL._flags && GLOBAL._flags.io_chathttp == 1) {
+                    _chat = new HttpChatSystem(GLOBAL.serverUrl);
+                }
+                else {
+                    _chat = new WSChatSystem(this._chatHost, this._chatPort);
+                }
                 _chat.connect();
                 _chat.addEventListener(ChatEvent.CONNECT, this.onConnect);
                 _chat.addEventListener(ChatEvent.LOGIN, this.onLogin);

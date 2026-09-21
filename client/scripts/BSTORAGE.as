@@ -109,13 +109,14 @@ package {
                     if (_type == 6) {
                         _loc4_ = Math.min(_loc4_, _LOOT_MAX_SILO);
                         if (MapRoomManager.instance.isInMapRoom2 && GLOBAL._currentCell && GLOBAL._currentCell.baseType == EnumYardType.OUTPOST) {
-                            _loc4_ = Math.min(_loc4_, _LOOT_MAX_WM_SILO);
+                            // A yard can bring its own cap (Moloch strongholds do): see GLOBAL.ioLootCapSilo.
+                            _loc4_ = Math.min(_loc4_, GLOBAL.ioLootCapSilo > 0 ? GLOBAL.ioLootCapSilo : _LOOT_MAX_WM_SILO);
                         }
                     }
                     if (_type == 14) {
                         _loc4_ = Math.min(_loc4_, _LOOT_MAX_TH);
                         if (MapRoomManager.instance.isInMapRoom2 && GLOBAL._currentCell && GLOBAL._currentCell.baseType == EnumYardType.OUTPOST) {
-                            _loc4_ = Math.min(_loc4_, _LOOT_MAX_WM_TH);
+                            _loc4_ = Math.min(_loc4_, GLOBAL.ioLootCapHall > 0 ? GLOBAL.ioLootCapHall : _LOOT_MAX_WM_TH);
                         }
                     }
                     if (_type == 112) {

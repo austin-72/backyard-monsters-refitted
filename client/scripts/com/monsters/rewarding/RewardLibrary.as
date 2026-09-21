@@ -56,6 +56,11 @@ package com.monsters.rewarding {
 
         public static function getRewardByID(param1:String):Reward {
             var _loc3_:Reward = null;
+            // RewardHandler.initialize() is what normally fills this table, and it is skipped in
+            // Inferno yards. Anything else that asks for a reward must not crash on a null table.
+            if (!rewardTypes) {
+                initialize();
+            }
             var _loc2_:Class = rewardTypes[param1];
             if (_loc2_) {
                 _loc3_ = new _loc2_() as Reward;

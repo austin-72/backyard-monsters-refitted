@@ -1,0 +1,31 @@
+INFERNO MR2
+===========
+
+1. Unzip this folder anywhere (Desktop or Documents is fine). Do not run it from inside the zip.
+2. Double-click  Launch-inferno-mr2
+3. Register an account in the game and play.
+
+That is all. Every time you start it, the game checks the server for a new version and downloads
+it if there is one. There is nothing to update by hand.
+
+Keep Launch-inferno-mr2 and flashplayer.exe together in the same folder. You can move the whole
+folder wherever you like.
+
+
+IF SOMETHING GOES WRONG
+
+Windows asks whether to run it / says it protected your PC
+    The files came from the internet, so Windows asks once. Choose "More info" and then
+    "Run anyway", or right-click the zip before unzipping, choose Properties, tick "Unblock".
+
+Nothing happens, or the window stays white
+    Start the game by hand instead: double-click flashplayer.exe, choose File > Open, paste
+        https://inferno-mr2.maproom2.com/play.swf
+    and press OK. (No quotes around the address.)
+
+"A newer version of the game has been published"
+    Close the game and start it again. If it keeps saying so, you are opening an old address or a
+    saved copy of the game: use Launch-inferno-mr2, or the address above.
+
+"Failed to connect to the server" / "Could not reach the server"
+    The server is down or restarting. Try again in a few minutes.

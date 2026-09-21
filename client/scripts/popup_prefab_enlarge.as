@@ -1,5 +1,6 @@
 package {
     import com.monsters.display.ImageCache;
+    import com.monsters.kits.InfernoKits;
     import flash.display.Bitmap;
     import flash.display.BitmapData;
     import flash.events.MouseEvent;
@@ -11,7 +12,7 @@ package {
         }
 
         public function Setup(param1:int):void {
-            ImageCache.GetImageWithCallBack("ui/prefab-large-" + (param1 + 1) + ".v5.jpg", this.ShowImage, true, 1);
+            ImageCache.GetImageWithCallBack(GLOBAL.INFERNO_ONLY ? InfernoKits.largePath(param1) : "ui/prefab-large-" + (param1 + 1) + ".v5.jpg", this.ShowImage, true, 1);
         }
 
         public function ShowImage(param1:String, param2:BitmapData):void {

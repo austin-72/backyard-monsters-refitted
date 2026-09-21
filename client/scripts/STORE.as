@@ -195,7 +195,16 @@ package {
             var reourceMax:Number = NaN;
             var iResourceMax:Number = NaN;
             var _loc23_:String = null;
-            if (BASE.isOutpost) {
+            if (GLOBAL.INFERNO_ONLY) {
+                // The stock code picks the store's contents by yard type, and an inferno-only main yard
+                // counts as an overworld main yard there: it listed twig / pebble / putty / goo top-ups,
+                // stone and metal walls, and the overworld overdrives next to the Inferno ones.
+                // Main yard: the original Inferno store, minus the Incubator Overdrives: monsters hatch in
+                // one second here, so they could never be bought and sat greyed out. Outposts: the same
+                // minus yard expansion.
+                _grouping = [[BASE.isOutpost ? ["BLK2I", "BLK3I"] : ["ENLI", "BLK2I", "BLK3I"]], [["BR11I", "BR12I", "BR13I", "BR21I", "BR22I", "BR23I", "BR31I", "BR32I", "BR33I", "BR41I", "BR42I", "BR43I", "BIP"]], [["SP1", "SP2", "SP3", "SP4", "FIX"]], [["PRO1", "PRO2", "PRO3", "EXHI", "TODI"]]];
+            }
+            else if (BASE.isOutpost) {
                 _grouping = [[MapRoomManager.instance.isInMapRoom3 ? [] : ["BST", "BLK2", "BLK3", "BLK4", "BLK5"]], [MapRoomManager.instance.isInMapRoom3 ? [] : ["BR11", "BR12", "BR13", "BR21", "BR22", "BR23", "BR31", "BR32", "BR33", "BR41", "BR42", "BR43"]], [MapRoomManager.instance.isInMapRoom3 ? ["SP1", "SP2", "SP3", "SP4", "FIX"] : ["SP1", "SP2", "SP3", "SP4", "POD", "FIX", "HOD", "HOD2", "HOD3"]], [MapRoomManager.instance.isInMapRoom3 ? [] : ["PRO1", "PRO2", "PRO3", "TOD", "EXH"]]];
             }
             else if (BASE.isMainYard) {

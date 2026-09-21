@@ -43,8 +43,8 @@ package com.monsters.baseplanner.components {
             this.node = param1;
             mc = new BasePlannerPopup_DisplayItem_Building();
             addChild(mc);
-            if (YARD_PROPS._yardProps[this.node.type - 1].type == "decoration") {
-                size = new Rectangle(0, 0, YARD_PROPS._yardProps[this.node.type - 1].size, YARD_PROPS._yardProps[this.node.type - 1].size);
+            if (GLOBAL._buildingProps[this.node.type - 1].type == "decoration") {
+                size = new Rectangle(0, 0, GLOBAL._buildingProps[this.node.type - 1].size, GLOBAL._buildingProps[this.node.type - 1].size);
             }
             else {
                 size = new Rectangle(0, 0, this.node.building._footprint[0].width, this.node.building._footprint[0].height);
@@ -64,14 +64,28 @@ package com.monsters.baseplanner.components {
             if (this.category == TYPE_TRAP && this.node.type == 117) {
                 mc.mcBG.gotoAndStop("htrap");
             }
-            mc.mcIcon.gotoAndStop(this.node.type);
+            mc.mcIcon.gotoAndStop(iconFrameFor(this.node.type));
             mc.mcInvalid.visible = false;
             this.toggleMoreInfo(false);
         }
 
+        /**
+         * The icon clip has one frame per building id, but only the overworld buildings were ever
+         * drawn: the frames of the Inferno-only ids are blank. They borrow the icon of the overworld
+         * building they correspond to.
+         */
+        private static const ICON_ALIASES:Object = {
+                130: 20,  // Blast Tower -> Cannon Tower
+                128: 15   // Compound    -> Housing
+            };
+
+        public static function iconFrameFor(param1:int):int {
+            return ICON_ALIASES.hasOwnProperty(param1) ? int(ICON_ALIASES[param1]) : param1;
+        }
+
         public function rangeCategory():uint {
-            if (YARD_PROPS._yardProps[this.node.type - 1].attackType) {
-                return YARD_PROPS._yardProps[this.node.type - 1].attackType;
+            if (GLOBAL._buildingProps[this.node.type - 1].attackType) {
+                return GLOBAL._buildingProps[this.node.type - 1].attackType;
             }
             return 0;
         }

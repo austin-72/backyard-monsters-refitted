@@ -109,7 +109,7 @@ package com.monsters.maproom_advanced {
             else {
                 tName.htmlText = KEYS.Get("map_yardowner", {"v1": this._cell._name});
             }
-            tLocation.htmlText = param1.X + "x" + param1.Y;
+            tLocation.htmlText = GLOBAL.ioCoord(param1.X) + " x " + GLOBAL.ioCoord(param1.Y);
             tHeight.htmlText = this._cell._height - 100 + "m";
             if (this._cell._base == 2) {
                 _loc3_ = 0;

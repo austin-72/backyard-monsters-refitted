@@ -56,13 +56,30 @@ package {
             this._groupsMC.x = -337;
             this._groupsMC.y = -195;
             var _loc1_:int = 0;
+            var _loc6_:int = 0;
+            var _loc7_:Boolean = false;
             while (_loc1_ < QUESTS._questGroups.length) {
                 _loc2_ = QUESTS._questGroups[_loc1_];
+                if (GLOBAL.INFERNO_ONLY) {
+                    // The Inferno has no Attacking or Evil quests; a tab with nothing in it is left out.
+                    _loc7_ = false;
+                    for each (_loc5_ in QUESTS._quests) {
+                        if (_loc5_.group == _loc1_) {
+                            _loc7_ = true;
+                            break;
+                        }
+                    }
+                    if (!_loc7_) {
+                        _loc1_++;
+                        continue;
+                    }
+                }
                 _loc3_ = this._groupsMC.addChild(new QUESTGROUP()) as QUESTGROUP;
                 _loc3_.tLabel.htmlText = KEYS.Get(_loc2_.name);
                 _loc3_.name = _loc1_.toString();
                 _loc3_.x = 10;
-                _loc3_.y = 10 + 30 * _loc1_;
+                _loc3_.y = 10 + 30 * _loc6_;
+                _loc6_++;
                 _loc3_.mouseChildren = false;
                 _loc3_.buttonMode = true;
                 _loc3_.addEventListener(MouseEvent.CLICK, this.ListQuests);
@@ -250,7 +267,7 @@ package {
                     if (q.monster_reward != undefined) {
                         qq = 0;
                         while (qq < 5) {
-                            if (GLOBAL.mode == GLOBAL._loadmode) {
+                            if (GLOBAL.mode == GLOBAL._loadmode && !GLOBAL.INFERNO_ONLY) {
                                 this._infoMC["R" + (qq + 1)].gotoAndStop(qq + 1);
                             }
                             else {
@@ -279,7 +296,7 @@ package {
                     else {
                         c = 0;
                         while (c < 5) {
-                            if (GLOBAL.mode == GLOBAL._loadmode) {
+                            if (GLOBAL.mode == GLOBAL._loadmode && !GLOBAL.INFERNO_ONLY) {
                                 this._infoMC["R" + (c + 1)].gotoAndStop(c + 1);
                             }
                             else {

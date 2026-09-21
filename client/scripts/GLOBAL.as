@@ -181,6 +181,26 @@ package {
 
         public static var _loadmode:String;
 
+        /**
+         * INFERNO-ONLY BUILD
+         * When true the whole game is the Inferno: every yard (main yard, outposts, wild
+         * monster tribes) is rendered and played with Inferno terrain, buildings, resources
+         * and monsters, while networking, saving and the world map stay on the regular
+         * Map Room 2 code paths. See BASE.isInfernoMainYardOrOutpost (presentation) versus
+         * BASE.usesInfernoBackend (routing). Must match `infernoOnlyConfig.enabled` on the server.
+         */
+        public static const INFERNO_ONLY:Boolean = true;
+
+        private static var _ioPendingKit:Object = null;
+
+        private static var _ioKitRequestSent:Boolean = false;
+
+        private static var _ioKitDeadline:int = 0;
+
+        private static var _ioOutpostProps:Array = null;
+
+        private static var _ioPropsTuned:Boolean = false;
+
         public static const e_BASE_MODE:EnumBaseMode = new EnumBaseMode();
 
         public static var _mapWidth:int;
@@ -361,6 +381,13 @@ package {
 
         public static var _maxLoops:int = 800;
 
+        /** Milliseconds of simulation allowed per rendered frame, and the most steps ever run in one. */
+        private static const IO_STEP_BUDGET_MS:Number = 30;
+
+        private static const IO_MAX_CATCHUP:int = 12;
+
+        private static var _ioStepCost:Number = 0;
+
         public static var _loopsBanked:int = 0;
 
         public static var lastTime:Number;
@@ -461,7 +488,7 @@ package {
        * @return void
        */
         public static function init():void {
-            new URLLoaderApi().load(serverUrl + "init", [["apiVersion", apiVersionSuffix]], function(serverData:Object):void {
+            new URLLoaderApi().load(serverUrl + "init", [["apiVersion", apiVersionSuffix], ["build", String(IOBuild.stamp)]], function(serverData:Object):void {
                     var stage:Stage = GAME._instance.stage;
 
                     if (serverData.hasOwnProperty("error")) {
@@ -551,7 +578,10 @@ package {
             KEYS._storageURL = GLOBAL.languageUrl;
             KEYS.GetSupportedLanguages();
 
-            if (token) {
+            // A token can be left in the local shared object by an earlier launcher session without a
+            // language next to it. Asking the server for "null.json" fails silently and leaves the
+            // login screen on "Connecting to the server" forever, so fall back to English.
+            if (token && language) {
                 KEYS.Setup(language);
             }
             else {
@@ -713,7 +743,333 @@ package {
             _buildingProps[4].capacity = [500, 1000, 1750, 2250, 3000, 4000];
         }
 
+        private static function ioFlag(param1:String, param2:Number):Number {
+            if (_flags && _flags.hasOwnProperty(param1) && Number(_flags[param1]) > 0) {
+                return Number(_flags[param1]);
+            }
+            return param2;
+        }
+
+        /** Bone / coal / sulfur harvester output multiplier (server flag io_resmult). */
+        public static function get ioResourceMultiplier():Number {
+            return ioFlag("io_resmult", 2);
+        }
+
+        /** Magma harvester output multiplier (server flag io_magmamult). */
+        public static function get ioMagmaMultiplier():Number {
+            return ioFlag("io_magmamult", 4);
+        }
+
+        /** Build and upgrade timers are divided by this (server flag io_timediv). */
+        public static function get ioTimeDivisor():Number {
+            return ioFlag("io_timediv", 4);
+        }
+
+        /**
+         * Inferno-only: world map coordinates are shown as depths below the surface - negative,
+         * except 0. Display only: cells, bookmarks, requests and the server keep the real values.
+         */
+        public static function ioCoord(param1:int):String {
+            if (INFERNO_ONLY && param1 != 0) {
+                return "-" + Math.abs(param1);
+            }
+            return String(param1);
+        }
+
+        /**
+         * Stock outposts cannot recycle buildings or cancel construction. The server can lift that
+         * (flag io_outpostrecycle = 1), which is what makes designing outpost kits practical.
+         * The outpost hall itself can never be recycled either way.
+         */
+        public static function get outpostRecycling():Boolean {
+            return Boolean(_flags) && _flags.hasOwnProperty("io_outpostrecycle") && int(_flags.io_outpostrecycle) == 1;
+        }
+
+        /**
+         * Test switch (server flag io_kitpagetest = 1): while no custom kits exist, the kit popup
+         * shows the three stock kits on two pages, so paging can be checked before any kit is made.
+         */
+        public static function get kitPagingTest():Boolean {
+            return Boolean(_flags) && _flags.hasOwnProperty("io_kitpagetest") && int(_flags.io_kitpagetest) == 1;
+        }
+
+        /**
+         * Outpost kits are applied by the server (POST worldmapv2/applykit): it wipes the outpost and
+         * writes the kit's buildings into it. Called once the kit has been paid for; GLOBAL.Tick waits
+         * for that payment to be saved, sends the request with saving blocked, and ioKitApplied then
+         * loads the outpost again from the server.
+         */
+        public static function ioApplyKit(param1:Object):void {
+            _ioPendingKit = param1;
+            _ioKitRequestSent = false;
+            _ioKitDeadline = Timestamp() + 30;
+            PLEASEWAIT.Show("Building kit...");
+            BASE.Save();
+        }
+
+        private static function ioKitApplied(param1:Object):void {
+            _ioPendingKit = null;
+            _ioKitRequestSent = false;
+            if (param1 && param1.error == 0) {
+                // _blockSave stays on: BASE.Setup clears it once the fresh yard is loading.
+                BASE.LoadBase(null, 0, BASE._loadedBaseID, e_BASE_MODE.BUILD, false, BASE.yardType);
+            }
+            else {
+                ioKitFailed(null);
+            }
+        }
+
+        private static function ioKitFailed(param1:* = null):void {
+            _ioPendingKit = null;
+            _ioKitRequestSent = false;
+            BASE._blockSave = false;
+            PLEASEWAIT.Hide();
+            LOGGER.Log("err", "applykit failed");
+            Message("The kit could not be built. Nothing was changed in this outpost; reload the game and try again.");
+        }
+
+        /** Rezghul in the Inferno (server flag io_rezghul = 1). */
+        public static function get ioRezghul():Boolean {
+            return INFERNO_ONLY && Boolean(_flags) && _flags.hasOwnProperty("io_rezghul") && int(_flags.io_rezghul) == 1;
+        }
+
+        /** What one Rezghul costs to hatch, in magma (server flag io_rezghulcost). */
+        public static function get ioRezghulCost():int {
+            return int(ioFlag("io_rezghulcost", 500000));
+        }
+
+        /**
+         * Which store item enlarges this yard, and how often it has been bought. The overworld uses ENL
+         * (6 steps); the Inferno, and so every yard of an inferno-only build, uses ENLI (5 steps).
+         * The Yard Planner asked for ENL only, so Inferno expansions never showed up in it.
+         */
+        public static function get yardExpansionItem():String {
+            return BASE.isInfernoMainYardOrOutpost ? "ENLI" : "ENL";
+        }
+
+        public static function get yardExpansionsBought():int {
+            var _loc1_:Object = STORE._storeData ? STORE._storeData[yardExpansionItem] : null;
+            return _loc1_ ? int(_loc1_.q) : 0;
+        }
+
+        public static function get yardExpansionsMax():int {
+            var _loc1_:Object = STORE._storeItems ? STORE._storeItems[yardExpansionItem] : null;
+            return _loc1_ && _loc1_.c ? int(_loc1_.c.length) : 6;
+        }
+
+        /** Whether the server asked for a piece of UI to be hidden (flag io_hideui, comma separated names). */
+        public static function ioUiHidden(param1:String):Boolean {
+            if (!_flags || !_flags.hasOwnProperty("io_hideui") || !_flags.io_hideui) {
+                return false;
+            }
+            return ("," + String(_flags.io_hideui) + ",").indexOf("," + param1 + ",") != -1;
+        }
+
+        /**
+         * Per-building loot caps sent with the yard being attacked (base load field io_lootcap).
+         * 0 means the yard brought none and the stock wild-monster caps apply. Set on every base load.
+         */
+        public static var ioLootCapSilo:Number = 0;
+
+        public static var ioLootCapHall:Number = 0;
+
+        /** Alliances can be switched off by the server (flag io_alliances = 0). On when the flag is absent. */
+        public static function get alliancesEnabled():Boolean {
+            return !(_flags && _flags.hasOwnProperty("io_alliances") && int(_flags.io_alliances) == 0);
+        }
+
+        /** Seconds needed to hatch any monster (server flag io_hatch). */
+        public static function get ioHatchSeconds():Number {
+            return ioFlag("io_hatch", 1);
+        }
+
+        /** Divides a plain array of durations (repairTime) in place. */
+        private static function ioScaleDurations(param1:Array, param2:Number):void {
+            var _loc3_:int = 0;
+            if (!param1 || param2 <= 1) {
+                return;
+            }
+            while (_loc3_ < param1.length) {
+                param1[_loc3_] = Math.max(1, Math.ceil(Number(param1[_loc3_]) / param2));
+                _loc3_++;
+            }
+        }
+
+        private static function ioScaleCosts(param1:Array, param2:Number):void {
+            var _loc3_:Object = null;
+            if (!param1 || param2 <= 1) {
+                return;
+            }
+            for each (_loc3_ in param1) {
+                if (_loc3_ && _loc3_.time is SecNum) {
+                    (_loc3_.time as SecNum).Set(Math.max(1, Math.ceil((_loc3_.time as SecNum).Get() / param2)));
+                }
+            }
+        }
+
+        /**
+         * One-time tuning of the Inferno prop tables: faster build timers, boosted harvesters,
+         * and the Map Room + Yard Planner made buildable. Runs on the first base load, after
+         * the server flags have arrived.
+         */
+        private static function ioTuneProps():void {
+            var _loc1_:Object = null;
+            var _loc2_:int = 0;
+            var _loc3_:Number = NaN;
+            if (_ioPropsTuned) {
+                return;
+            }
+            _ioPropsTuned = true;
+            var _loc4_:Array = INFERNOYARDPROPS._infernoYardProps;
+            // Decorations. The Inferno table carries the overworld decorations but blocks every one of
+            // them. Swap in the overworld entries (same ids, same art, and the same few event-only
+            // pieces still blocked), so the Decorations tab works in the main yard and, because the
+            // outpost table is derived from this one, in outposts too. The server can switch single
+            // decorations off again: flag io_decooff, a comma separated list of building ids.
+            var _loc5_:Array = YARD_PROPS._yardProps;
+            var _loc6_:Array = _flags && _flags.io_decooff ? String(_flags.io_decooff).split(",") : [];
+            _loc2_ = 0;
+            while (_loc2_ < _loc4_.length && _loc2_ < _loc5_.length) {
+                if (_loc4_[_loc2_] && _loc5_[_loc2_] && _loc4_[_loc2_].type == "decoration" && _loc5_[_loc2_].type == "decoration" && _loc4_[_loc2_].id == _loc5_[_loc2_].id) {
+                    _loc4_[_loc2_] = _loc5_[_loc2_];
+                    if (_loc6_.indexOf(String(_loc4_[_loc2_].id)) != -1) {
+                        _loc4_[_loc2_].block = true;
+                    }
+                }
+                _loc2_++;
+            }
+            for each (_loc1_ in _loc4_) {
+                ioScaleCosts(_loc1_.costs, ioTimeDivisor);
+                ioScaleCosts(_loc1_.fortify_costs, ioTimeDivisor);
+                // Repairs: BFOUNDATION heals maxHealth / min(3600, repairTime) per tick, so this
+                // is the single place repair speed comes from. The server keeps no repair table.
+                ioScaleDurations(_loc1_.repairTime, ioTimeDivisor);
+                if (_loc1_.type == "resource" && _loc1_.produce) {
+                    _loc3_ = _loc1_.id == 4 ? ioMagmaMultiplier : ioResourceMultiplier;
+                    _loc2_ = 0;
+                    while (_loc2_ < _loc1_.produce.length) {
+                        _loc1_.produce[_loc2_] = Math.round(_loc1_.produce[_loc2_] * _loc3_);
+                        _loc2_++;
+                    }
+                }
+            }
+            // Flinger (5): Map Room 2 attack range comes from the flinger level (client
+            // BUILDING5.getFlingerRange, server validateRange), so it must be buildable.
+            _loc4_[4].block = false;
+            // General Store (12): on an inferno-only build the yard counts as a main yard, and the
+            // store only opens in a main yard that has one (STORE.ShowB). Buildable from Under Hall 1.
+            _loc4_[11].block = false;
+            // Hatchery Control Center (16): one, from Under Hall 3 (its own requirements also ask for two
+            // level 3 hatcheries). Its monster list comes from CREATURELOCKER.GetSortedCreatures, which
+            // leaves overworld monsters out of Inferno yards, so only Inferno monsters are offered.
+            _loc4_[15].block = false;
+            _loc4_[15].quantity = [0, 0, 0, 1, 1, 1, 1];
+            // Map Room (11): buildable from Under Hall 1. Yard Planner (10): from Under Hall 1.
+            _loc4_[10].block = false;
+            _loc4_[9].block = false;
+            _loc4_[9].quantity = [0, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+            _loc4_[9].costs[0].re = [[14, 1, 1]];
+            // Catapult (51): one, from Under Hall 3 (its own level requirements ask for Under Hall 3-6 and
+            // a Flinger). In the Inferno it fires Chaos weapons and Sulfur Bombs: see ResourceBombs.
+            _loc4_[50].block = false;
+            _loc4_[50].quantity = [0, 0, 0, 1, 1, 1, 1];
+            _loc4_[50].description = "Hurls Marilyn Monstroe, Candy Jars and Sulfur Bombs into enemy yards during an attack. Each upgrade unlocks the next size of all three.";
+            // The cavern exit (127) leads nowhere on an inferno-only server.
+            _loc4_[126].block = true;
+            _loc4_[126].quantity = [0, 0, 0, 0, 0, 0];
+            // Outpost hall, taken from the overworld outpost table (the Inferno table has a stub).
+            ioScaleCosts(OUTPOST_YARD_PROPS._outpostProps[111].costs, ioTimeDivisor);
+            ioScaleDurations(OUTPOST_YARD_PROPS._outpostProps[111].repairTime, ioTimeDivisor);
+        }
+
+        /** What a devil outpost may build, indexed by outpost hall level like OUTPOST_YARD_PROPS. */
+        private static const IO_OUTPOST_QUANTITY:Object = {
+                1: [0, 4], 2: [0, 4], 3: [0, 4], 4: [0, 4], 5: [0, 1],
+                9: [0, 1],      // monster juicer
+                10: [0, 1], 13: [0, 2],
+                16: [0, 1],     // hatchery control center
+                17: [0, 200],   // bone blocks
+                21: [0, 4],     // sharpshooter (sniper) tower
+                24: [0, 40],    // booby traps
+                128: [0, 1],    // compound
+                129: [0, 4],    // quake tower
+                130: [0, 4],    // blast (cannon) tower
+                132: [0, 4]     // magma tower
+            };
+
+        /**
+         * Inferno outposts never existed in the original game, so there is no prop table for
+         * them. This derives one from the Inferno main yard table: same buildings and art, but
+         * requirements point at the outpost hall (112) and quantities follow the overworld
+         * outpost rules. Entries are copied so the main yard table is left untouched.
+         */
+        private static function ioBuildOutpostProps():Array {
+            var _loc2_:int = 0;
+            var _loc3_:Object = null;
+            var _loc4_:Array = null;
+            var _loc5_:Object = null;
+            var _loc6_:Object = null;
+            var _loc1_:Array = INFERNOYARDPROPS._infernoYardProps.slice();
+            _loc2_ = 0;
+            while (_loc2_ < _loc1_.length) {
+                _loc3_ = copyBuildingProps(_loc1_[_loc2_]);
+                if (_loc3_.type != "decoration" && _loc3_.type != "mushroom" && _loc3_.type != "taunt" && _loc3_.type != "immovable" && _loc3_.type != "enemy") {
+                    if (IO_OUTPOST_QUANTITY[_loc3_.id]) {
+                        _loc3_.quantity = IO_OUTPOST_QUANTITY[_loc3_.id];
+                        _loc3_.block = false;
+                    }
+                    else {
+                        _loc3_.quantity = [0, 0];
+                        _loc3_.block = true;
+                    }
+                    if (_loc3_.costs) {
+                        _loc4_ = [];
+                        for each (_loc5_ in _loc3_.costs) {
+                            _loc6_ = copyBuildingProps(_loc5_);
+                            _loc6_.re = [[112, 1, 1]];
+                            _loc4_.push(_loc6_);
+                        }
+                        _loc3_.costs = _loc4_;
+                    }
+                }
+                _loc1_[_loc2_] = _loc3_;
+                _loc2_++;
+            }
+            _loc1_[111] = OUTPOST_YARD_PROPS._outpostProps[111];
+            return _loc1_;
+        }
+
+        /**
+         * Prop table describing outposts, for code that inspects outposts without having one
+         * loaded (auto-banking reads harvester output from it).
+         */
+        public static function get outpostPropsTable():Array {
+            if (!INFERNO_ONLY) {
+                return OUTPOST_YARD_PROPS._outpostProps;
+            }
+            ioTuneProps();
+            if (_ioOutpostProps == null) {
+                _ioOutpostProps = ioBuildOutpostProps();
+            }
+            return _ioOutpostProps;
+        }
+
         public static function SetBuildingProps():void {
+            if (INFERNO_ONLY) {
+                ioTuneProps();
+                CREATURELOCKER.ioScaleTimes(ioTimeDivisor);
+                CREATURELOCKER.ioApplyRezghul();
+                if (BASE.isOutpost) {
+                    if (_ioOutpostProps == null) {
+                        _ioOutpostProps = ioBuildOutpostProps();
+                    }
+                    _buildingProps = _ioOutpostProps;
+                }
+                else {
+                    _buildingProps = INFERNOYARDPROPS._infernoYardProps;
+                }
+                return;
+            }
             switch (BASE.yardType) {
                 case EnumYardType.INFERNO_YARD:
                     _buildingProps = INFERNOYARDPROPS._infernoYardProps;
@@ -860,10 +1216,20 @@ package {
                             _attackersCatapult = _attackerMapResources.catapult.Get();
                         }
                     }
-                    _attackersFlinger = 4;
+                    // Inferno-only: attack capacity follows the Compound level, as it did in the
+                    // original Inferno (the Inferno flinger entry's capacity table is indexed
+                    // by it: 200-1820). Falls back to 4 when no Compound is loaded, e.g. when
+                    // the attack is launched while an outpost is on screen.
+                    if (!(INFERNO_ONLY && GLOBAL._bHousing != null && _attackersFlinger >= 1 && _attackersFlinger <= 6)) {
+                        _attackersFlinger = 4;
+                    }
                 }
             }
-            switch (_loadmode) {
+            var musicMode:String = _loadmode;
+            if (INFERNO_ONLY) {
+                musicMode = _mode == e_BASE_MODE.ATTACK || _mode == e_BASE_MODE.WMATTACK ? e_BASE_MODE.IATTACK : e_BASE_MODE.IBUILD;
+            }
+            switch (musicMode) {
                 case e_BASE_MODE.IATTACK:
                 case e_BASE_MODE.IWMATTACK:
                     SOUNDS.PlayMusic("musiciattack");
@@ -886,7 +1252,7 @@ package {
             _render = false;
             _creepCount = 0;
             _timePlayed = 0;
-            if (_loadmode == _mode) {
+            if (_loadmode == _mode && !INFERNO_ONLY) {
                 _resourceNames = ["#r_twigs#", "#r_pebbles#", "#r_putty#", "#r_goo#", "#r_shiny#", "#r_time#"];
             }
             else {
@@ -1139,6 +1505,21 @@ package {
                         WMBASE.Tick();
                     }
                 }
+                if (INFERNO_ONLY) {
+                    _toggleYardWaiting = 0;
+                }
+                if (_ioPendingKit && !_ioKitRequestSent) {
+                    if (BASE._saveCounterA == BASE._saveCounterB && !BASE._saving && !BASE._loading) {
+                        // The payment has been saved. From here on nothing may be saved until the yard
+                        // has been loaded again, or the old yard would be written over the kit.
+                        _ioKitRequestSent = true;
+                        BASE._blockSave = true;
+                        new URLLoaderApi().load(_mapURL + "applykit", [["baseid", BASE._loadedBaseID], ["buildings", JSON.stringify(_ioPendingKit)]], ioKitApplied, ioKitFailed);
+                    }
+                    else if (Timestamp() > _ioKitDeadline) {
+                        ioKitFailed(null);
+                    }
+                }
                 if (_toggleYardWaiting && BASE._saveCounterA == BASE._saveCounterB && !BASE._saving) {
                     _toggleYardWaiting = 0;
                     _nextOutpostWaiting = 0;
@@ -1236,6 +1617,27 @@ package {
                         if (_loops > _maxLoops) {
                             _loops = _maxLoops;
                         }
+                        // The simulation runs at a fixed 80 steps a second and "banks" the steps a slow
+                        // frame missed, to run them on the next one. With a cap of 800 that feeds on
+                        // itself: a slow frame owes more steps, which makes the next frame slower, which
+                        // owes more again, until the game is showing one frame every few seconds. That is
+                        // the slowdown that builds up during big attacks.
+                        // So: only run as many steps as fit a time budget, judged by what a step has been
+                        // costing lately, and forget debt that could never be repaid. Under heavy load the
+                        // battle runs in slow motion at a steady frame rate instead of seizing up.
+                        _loc5_ = _ioStepCost > 0 ? int(IO_STEP_BUDGET_MS / _ioStepCost) : IO_MAX_CATCHUP;
+                        if (_loc5_ < 2) {
+                            _loc5_ = 2;
+                        }
+                        else if (_loc5_ > IO_MAX_CATCHUP) {
+                            _loc5_ = IO_MAX_CATCHUP;
+                        }
+                        if (_loops > _loc5_) {
+                            _loops = _loc5_;
+                        }
+                        if (_loopsBanked > _loc5_ * 4) {
+                            _loopsBanked = _loc5_ * 4;
+                        }
                     }
                     else {
                         _loops = 2;
@@ -1290,6 +1692,10 @@ package {
                             PROJECTILES.Tick();
                             FIREBALLS.Tick();
                             _loc7_++;
+                        }
+                        if (_loops > 0) {
+                            // Running average of what one simulation step costs, in milliseconds.
+                            _ioStepCost = _ioStepCost * 0.8 + (getTimer() - _loc5_) / _loops * 0.2;
                         }
                         if (BYMConfig.instance.RENDERER_ON) {
                             _ROOT.stage.invalidate();
@@ -1361,7 +1767,7 @@ package {
 
         public static function ShowMap(param1:MouseEvent = null):void {
             if (!BASE._loading) {
-                if (BASE.isInfernoMainYardOrOutpost) {
+                if (BASE.usesInfernoBackend) {
                     BASE._needCurrentCell = false;
                     MAPROOM_INFERNO.Setup();
                     MAPROOM_INFERNO.Show();
@@ -1839,11 +2245,30 @@ package {
                 };
         }
 
+        private static var _ioOutdatedShown:Boolean = false;
+
+        /**
+         * Inferno-only version control, for a game that was already open when a new client was published:
+         * every base load carries the build the server now serves (flag io_build). An older client stops
+         * here, at a yard change, before it sends the new server anything it may not understand.
+         * (A client that is outdated when it starts is refused at /init, on the login screen.)
+         */
+        private static function ioCheckBuild():void {
+            if (!INFERNO_ONLY || _ioOutdatedShown || !_flags || !_flags.io_build) {
+                return;
+            }
+            if (Number(_flags.io_build) > IOBuild.stamp) {
+                _ioOutdatedShown = true;
+                ErrorMessage("A new version of the game has been published.<br><br>Close this window and start the game again to get it.", ERROR_ORANGE_BOX_ONLY);
+            }
+        }
+
         public static function SetFlags(serverFlags:Object):void {
             var _loc2_:int = 0;
             var _loc3_:int = 0;
             var _loc4_:int = 0;
             _flags = serverFlags;
+            ioCheckBuild();
             if (!_flags.viximo && !_flags.kongregate) {
                 _loc2_ = int(LOGIN._digits[LOGIN._digits.length - 1]);
                 _loc3_ = int(LOGIN._digits[LOGIN._digits.length - 2]);
@@ -2120,6 +2545,9 @@ package {
         }
 
         public static function InfernoMode(param1:String = null):Boolean {
+            if (INFERNO_ONLY && !param1) {
+                return true;
+            }
             var _loc2_:String = _loadmode;
             if (param1) {
                 _loc2_ = param1;

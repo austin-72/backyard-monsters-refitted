@@ -253,7 +253,7 @@ package {
             _loc5_ = false;
             for each (_loc6_ in ResourceBombs._bombs) {
                 if (_loc6_.catapultLevel <= GLOBAL._attackersCatapult) {
-                    if (_loc6_.resource == 3) {
+                    if (_loc6_.group == 2) {
                         if (!_loc6_.used && _loc2_ > 0) {
                             _loc5_ = true;
                         }

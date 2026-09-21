@@ -39,6 +39,31 @@ package {
             return _loc1_;
         }
 
+        /**
+         * Every Inferno quest ships in group 0 ("Construction"): the original Inferno never used the
+         * grouped quest window. Sort them the way the overworld sorts the same kinds of quest:
+         * monster unlocks and the locker / incubator / academy / compound under Monsters, banking
+         * under Good, everything else (hall, harvesters, silos, towers) under Construction.
+         */
+        private static function ioGroupInfernoQuests():void {
+            var quest:Object = null;
+            var rule:String = null;
+            var group:int = 0;
+            var monsterBuildings:Array = ["b8lvl", "b13lvl", "b26lvl", "b128lvl"];
+            for each (quest in _infernoQuests) {
+                group = 0;
+                for (rule in quest.rules) {
+                    if (rule == "UNLOCK" || monsterBuildings.indexOf(rule) != -1) {
+                        group = 1;
+                    }
+                    else if (rule == "singleclickbank") {
+                        group = 3;
+                    }
+                }
+                quest.group = group;
+            }
+        }
+
         public static function Setup():void {
             _displayedInstructions = false;
             _global = {
@@ -1583,6 +1608,9 @@ package {
 
         public static function setupInfernoQuests():void {
             _infernoQuests = INFERNO_QUESTS._infernoQuests;
+            if (GLOBAL.INFERNO_ONLY) {
+                ioGroupInfernoQuests();
+            }
         }
 
         public static function Data(param1:Object):void {

@@ -1,6 +1,7 @@
 package {
     import com.monsters.interfaces.ITargetable;
     import com.monsters.maproom_manager.MapRoomManager;
+    import com.monsters.monsters.MonsterBase;
     import com.monsters.monsters.creeps.CreepBase;
     import flash.display.Shape;
     import flash.display.Sprite;
@@ -299,6 +300,27 @@ package {
             }
         }
 
+        /**
+         * Marilyn Monstroe: every monster of this Compound that is at home and within her range comes
+         * out as a defender. She attracts defenders in range every frame, so that is all it takes; the
+         * Compound's own dispatch only ever reacts to attacking monsters.
+         */
+        public function EjectCreeps(param1:Point, param2:Number):void {
+            var creep:CreepBase = null;
+            var waiting:Array = null;
+            if (health <= 0 || _countdownUpgrade.Get() != 0) {
+                return;
+            }
+            waiting = this.getUnusedCreatures();
+            for each (creep in waiting) {
+                if (creep && creep._mc && GLOBAL.QuickDistance(new Point(creep._mc.x, creep._mc.y), param1) <= param2) {
+                    creep.changeModeDefend();
+                    creep._homeBunker = this;
+                    this._dispatchedMonsters.push(creep);
+                }
+            }
+        }
+
         private function getInterceptor(param1:Array, param2:*):* {
             var _loc4_:* = undefined;
             var _loc3_:int = 0;
@@ -415,14 +437,17 @@ package {
             TweenLite.killDelayedCallsTo(this.RangeIndicator);
         }
 
-        public function RemoveCreature(param1:String):void {
+        public function RemoveCreature(param1:String, param2:MonsterBase = null):void {
             if (!MapRoomManager.instance.isInMapRoom3 || !BASE.isMainYardOrInfernoMainYard) {
                 this._monsters[param1] = int(this._monsters[param1]) - 1;
                 if (this._monsters[param1] < 0) {
                     this._monsters[param1] = 0;
                 }
                 if (GLOBAL.player.monsterListByID(param1).numCreeps > 0) {
-                    GLOBAL.player.monsterListByID(param1).add(-1);
+                    // The dead creep's own record when we know it (health is tracked per monster now).
+                    if (!(param2 && GLOBAL.player.monsterListByID(param1).ioRemoveCreep(param2))) {
+                        GLOBAL.player.monsterListByID(param1).add(-1);
+                    }
                 }
             }
             _monstersDispatched[param1] = int(_monstersDispatched[param1]) - 1;

@@ -85,7 +85,7 @@ package com.monsters.missions {
             if (this._missionObject.monster_reward != undefined) {
                 qq = 0;
                 while (qq < 5) {
-                    if (GLOBAL.mode == GLOBAL._loadmode) {
+                    if (GLOBAL.mode == GLOBAL._loadmode && !GLOBAL.INFERNO_ONLY) {
                         this["R" + (qq + 1)].gotoAndStop(c + 1);
                     }
                     else {
@@ -116,7 +116,7 @@ package com.monsters.missions {
             else {
                 c = 0;
                 while (c < 5) {
-                    if (GLOBAL.mode == GLOBAL._loadmode) {
+                    if (GLOBAL.mode == GLOBAL._loadmode && !GLOBAL.INFERNO_ONLY) {
                         this["R" + (c + 1)].gotoAndStop(c + 1);
                     }
                     else {

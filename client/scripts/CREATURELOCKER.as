@@ -63,6 +63,11 @@ package {
             var _loc2_:int = 0;
             _lockerData = param1;
             _lockerData[getFirstCreatureID()] = {"t": 2};
+            if (GLOBAL.ioRezghul) {
+                // Unlocked from the start. The yard's locker data arrives after the prop tables are set
+                // up, so it is applied here as well as in ioApplyRezghul().
+                _lockerData[REZGHUL_ID] = {"t": 2};
+            }
             if (_lockerData.C100) {
                 _lockerData.C12 = _lockerData.C100;
                 delete _lockerData.C100;
@@ -86,6 +91,54 @@ package {
                             break;
                         }
                         _loc2_++;
+                    }
+                }
+            }
+        }
+
+        public static const REZGHUL_ID:String = "C19";
+
+        /**
+         * Inferno-only: brings Rezghul into the Inferno roster. He is unblocked, costs a flat amount of
+         * magma to hatch (server flag io_rezghulcost) and is unlocked from the start, with no locker
+         * research. Runs on every base load, after the server flags are known; all of it is idempotent.
+         */
+        public static function ioApplyRezghul():void {
+            var _loc1_:Object = _creatures ? _creatures[REZGHUL_ID] : null;
+            if (!_loc1_ || !GLOBAL.ioRezghul) {
+                return;
+            }
+            _loc1_.blocked = false;
+            _loc1_.props.cResource = [GLOBAL.ioRezghulCost];
+            if (_lockerData) {
+                _lockerData[REZGHUL_ID] = {"t": 2};
+            }
+        }
+
+        private static var _ioScaledCreatures:Object = null;
+
+        /**
+         * Inferno-only: divides Monster Locker unlock times and Academy training times.
+         * `_creatures` is rebuilt on every base load, so this is re-applied per load (called
+         * from GLOBAL.SetBuildingProps once the server flags are known) and guarded so one
+         * table is never scaled twice.
+         */
+        public static function ioScaleTimes(param1:Number):void {
+            var _loc2_:Object = null;
+            var _loc3_:Array = null;
+            if (param1 <= 1 || !_creatures || _ioScaledCreatures === _creatures) {
+                return;
+            }
+            _ioScaledCreatures = _creatures;
+            for each (_loc2_ in _creatures) {
+                if (_loc2_.time is Number) {
+                    _loc2_.time = Math.max(1, Math.ceil(_loc2_.time / param1));
+                }
+                if (_loc2_.trainingCosts is Array) {
+                    for each (_loc3_ in _loc2_.trainingCosts) {
+                        if (_loc3_ && _loc3_.length > 1) {
+                            _loc3_[1] = Math.max(1, Math.ceil(_loc3_[1] / param1));
+                        }
                     }
                 }
             }
@@ -1113,7 +1166,7 @@ package {
                 case "full":
                 default:
                     for (_loc4_ in _loc2_) {
-                        if (!(_loc4_.substr(0, 1) == "C" && BASE.isInfernoMainYardOrOutpost || _loc4_.substr(0, 1) == "I" && !BASE.isInfernoMainYardOrOutpost || _loc4_ == "C200")) {
+                        if (!(!BASE.isInfernoCreep(_loc4_) && BASE.isInfernoMainYardOrOutpost || BASE.isInfernoCreep(_loc4_) && !BASE.isInfernoMainYardOrOutpost || _loc4_ == "C200")) {
                             _loc3_[_loc4_] = _loc2_[_loc4_];
                         }
                     }
@@ -1166,7 +1219,7 @@ package {
             var _loc1_:Object = CREATURELOCKER._creatures;
             var _loc2_:Object = {};
             for (_loc3_ in _loc1_) {
-                if (_loc3_.substr(0, 1) == "I") {
+                if (BASE.isInfernoCreep(_loc3_)) {
                     _loc2_[_loc3_] = _loc1_[_loc3_];
                 }
             }

@@ -226,7 +226,7 @@ package {
                                 _loc4_ = _loc6_ / 2;
                             }
                         }
-                        _loc8_ = CREATURES.Spawn(_loc2_, MAP._BUILDINGTOPS, "decoy", _position.add(new Point(_loc4_, _loc5_)), Math.random() * 360);
+                        _loc8_ = CREATURES.Spawn(_loc2_, MAP._BUILDINGTOPS, "decoy", _position.add(new Point(_loc4_, _loc5_)), Math.random() * 360, null, null, 0, this.ioTakeHealth(_loc2_));
                         if (_loc8_) {
                             _loc8_._homeBunker = this;
                             var dispatchedCount:int = int(_monstersDispatched[_loc2_]);
@@ -270,6 +270,62 @@ package {
                 _loc4_--;
             }
             return _loc2_;
+        }
+
+        /**
+         * Inferno-only: a bunker only knows how many of each monster it holds, and sent every one out at
+         * full health, every attack. It now also keeps the health of the wounded ones:
+         *   _ioHealth[id]   wounded monsters waiting inside (from the save, or back from a fight)
+         *   "mh" in the save what Export writes while the yard is under attack: the wounded inside plus
+         *                   the wounded still outside, never more entries than there are monsters
+         * The wounded are sent out first, so a half-dead defender does not hide behind fresh ones.
+         */
+        private var _ioHealth:Object = {};
+
+        private function ioTakeHealth(param1:String):int {
+            var waiting:Array = this._ioHealth[param1] as Array;
+            if (GLOBAL.INFERNO_ONLY && waiting && waiting.length > 0) {
+                return int(waiting.shift());
+            }
+            return int.MAX_VALUE;
+        }
+
+        public function ioStoreHealth(param1:String, param2:Number, param3:Number):void {
+            if (param2 > 0 && param2 < param3) {
+                if (!(this._ioHealth[param1] is Array)) {
+                    this._ioHealth[param1] = [];
+                }
+                (this._ioHealth[param1] as Array).push(Math.ceil(param2));
+            }
+        }
+
+        private function ioExportHealth(param1:Object):void {
+            var id:String = null;
+            var creep:* = undefined;
+            var wounded:Array = null;
+            var out:Object = {};
+            var any:Boolean = false;
+            if (!param1.m) {
+                return;
+            }
+            for (id in param1.m) {
+                wounded = this._ioHealth[id] is Array ? (this._ioHealth[id] as Array).concat() : [];
+                for each (creep in CREATURES._creatures) {
+                    if (creep && creep._homeBunker == this && creep._creatureID == id && creep.health > 0 && creep.health < creep.maxHealth) {
+                        wounded.push(Math.ceil(creep.health));
+                    }
+                }
+                if (wounded.length > int(param1.m[id])) {
+                    wounded.length = int(param1.m[id]);
+                }
+                if (wounded.length > 0) {
+                    out[id] = wounded;
+                    any = true;
+                }
+            }
+            if (any) {
+                param1.mh = out;
+            }
         }
 
         private function getNextCreepToRelease(param1:String):CreepInfo {
@@ -410,7 +466,7 @@ package {
                         }
                     }
                     _loc2_ = this.getNextCreepToRelease(_loc5_);
-                    _loc11_ = CREATURES.Spawn(_loc5_, MAP._BUILDINGTOPS, "defend", _position.add(new Point(_loc7_, _loc8_)), Math.random() * 360, null, null, 0, !!_loc2_ ? int(_loc2_.health) : int.MAX_VALUE);
+                    _loc11_ = CREATURES.Spawn(_loc5_, MAP._BUILDINGTOPS, "defend", _position.add(new Point(_loc7_, _loc8_)), Math.random() * 360, null, null, 0, !!_loc2_ ? int(_loc2_.health) : this.ioTakeHealth(_loc5_));
                     if (_loc11_) {
                         _loc11_._targetCreep = _loc6_;
                         _loc11_._homeBunker = this;
@@ -673,6 +729,16 @@ package {
                     this._monsters[_loc2_] = param1.m[_loc2_];
                     _monstersDispatched[_loc2_] = 0;
                 }
+                // Inferno-only: wounds carried over from earlier attacks ("mh", written by Export below).
+                // Not when the owner is home: the survivors are healed then, and the next save drops "mh".
+                this._ioHealth = {};
+                if (GLOBAL.INFERNO_ONLY && param1.mh && GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+                    for (_loc2_ in param1.mh) {
+                        if (param1.mh[_loc2_] is Array) {
+                            this._ioHealth[_loc2_] = (param1.mh[_loc2_] as Array).concat();
+                        }
+                    }
+                }
             }
             if (_lvl.Get() > 0) {
                 this._capacity = GLOBAL._buildingProps[21].capacity[_lvl.Get() - 1];
@@ -701,6 +767,9 @@ package {
                         _loc1_.m[_loc3_.valueOf()] = _loc2_;
                     }
                 }
+            }
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.isInAttackMode) {
+                this.ioExportHealth(_loc1_);
             }
             return _loc1_;
         }

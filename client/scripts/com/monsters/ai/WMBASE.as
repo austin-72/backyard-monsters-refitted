@@ -64,7 +64,7 @@ package com.monsters.ai {
                 GLOBAL._mapHeight = Math.ceil(GLOBAL._mapHeight / 20) * 20;
                 _loc3_++;
             }
-            if (BASE.isInfernoMainYardOrOutpost && BASE._wmID || GLOBAL.InfernoMode(GLOBAL._loadmode)) {
+            if (BASE.usesInfernoBackend && BASE._wmID || GLOBAL.InfernoMode(GLOBAL._loadmode)) {
                 return;
             }
             var _loc4_:Object;
@@ -252,7 +252,7 @@ package com.monsters.ai {
         public static function TownHallDestroyed():void {
             var onImage:Function;
             var shareDown:Function;
-            if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.isInfernoMainYardOrOutpost) {
+            if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.usesInfernoBackend) {
                 GLOBAL.Message(KEYS.Get("msg_yarddestroyed"), KEYS.Get("btn_showmap"), ShowMapAgain);
                 if (MapRoomManager.instance.isInMapRoom2) {
                     MapRoom.ShowInfoEnemy(GLOBAL._currentCell);
@@ -282,7 +282,7 @@ package com.monsters.ai {
                 ImageCache.GetImageWithCallBack(BaseForID(BASE._wmID).tribe.splash, onImage);
                 _mc.b2.addEventListener(MouseEvent.MOUSE_DOWN, shareDown);
                 _destroyed = true;
-                if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.isInfernoMainYardOrOutpost) {
+                if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.usesInfernoBackend) {
                     _mc.b1.SetupKey("btn_openmap");
                 }
                 else {
@@ -330,7 +330,7 @@ package com.monsters.ai {
         public static function AttackFailed():void {
             var onImage:Function;
             var base:Object = null;
-            if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.isInfernoMainYardOrOutpost) {
+            if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.usesInfernoBackend) {
                 GLOBAL.Message(KEYS.Get("msg_notdestroyed"), KEYS.Get("btn_showmap"), ShowMapAgain);
             }
             else {
@@ -354,7 +354,7 @@ package com.monsters.ai {
                     ImageCache.GetImageWithCallBack(base.tribe.splash, onImage);
                     _mc.body_txt.htmlText = BaseForID(BASE._wmID).tribe.fail;
                 }
-                if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.isInfernoMainYardOrOutpost) {
+                if (MapRoomManager.instance.isInMapRoom2or3 && !BASE.usesInfernoBackend) {
                     _mc.b1.SetupKey("btn_openmap");
                 }
                 else {
