@@ -164,6 +164,20 @@ export const allianceJoinRequestLimiter = RateLimit.middleware({
 });
 
 /**
+ * Chat polling: a client polls about every 2.5 seconds (24 a minute). Generous headroom for the
+ * extra poll after each sent line and for several players behind one address.
+ */
+export const chatPollLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 600,
+  prefixKey: "chatpoll",
+  handler: async (ctx: Context) => {
+    ctx.status = Status.TOO_MANY_REQUESTS;
+    ctx.body = { error: 1, message: "Too many chat requests." };
+  },
+});
+
+/**
  * Rate limit for user registration - 3 requests per hour in prod, per minute in dev.
  */
 export const registerLimiter = RateLimit.middleware({

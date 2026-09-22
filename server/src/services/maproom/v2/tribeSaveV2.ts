@@ -1,11 +1,15 @@
 import { Save } from "../../../database/models/save.model.js";
 import { postgres } from "../../../server.js";
 import { Tribe, Tribes } from "../../../enums/Tribes.js";
-import { calculateTribeLevel, minimumTribeLevels } from "./calculateTribeLevel.js";
+import { minimumTribeLevels } from "./calculateTribeLevel.js";
+import { MOLOCH_INDEX, tribeForCell } from "./tribeForCell.js";
+import { molochStronghold } from "../../../game-data/tribes/devil/molochStrongholds.js";
 import { abunaki } from "../../../game-data/tribes/v2/abunaki.js";
 import { dreadnaught } from "../../../game-data/tribes/v2/dreadnaught.js";
 import { kozu } from "../../../game-data/tribes/v2/kozu.js";
 import { legionnaire } from "../../../game-data/tribes/v2/legionnaire.js";
+import { devilify } from "../../../game-data/tribes/devil/devilify.js";
+import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
 
 /**
  * Generates a save for a wild monster on Map Room 2 based on the given base ID.
@@ -21,13 +25,11 @@ export const tribeSaveV2 = (baseid: string, worldid: string | null | undefined) 
   const cellX = parseInt(baseid.slice(-6, -3));
   const cellY = parseInt(baseid.slice(-3));
 
-  const tribeIndex = (cellX + cellY) % Tribes.length;
-  const tribe = Tribes[tribeIndex] as Tribe;
-  const wmid = tribeIndex * 10 + 1;
+  const { tribeIndex, wmid, level, variant } = tribeForCell(worldid, cellX, cellY);
 
-  const level = calculateTribeLevel(cellX, cellY, tribe);
-
-  const { tribeSave } = fetchTribeData(tribeIndex, level);
+  const tribeSave = tribeIndex === MOLOCH_INDEX
+    ? molochStronghold(level, variant)
+    : fetchTribeData(tribeIndex, level).tribeSave;
 
   // Return a new save for the wild monster.
   return postgres.em.create(Save, {
@@ -70,7 +72,10 @@ const fetchTribeData = (tribeIndex: number, level: number) => {
   keyIndex = Math.max(0, Math.min(keyIndex, sortedKeys.length - 1));
 
   const selectedKey = parseInt(sortedKeys[keyIndex]);
-  const tribeSave = selectedTribe[selectedKey];
+  const template = selectedTribe[selectedKey];
+
+  // Inferno-only: wild monsters are the devil versions of the overworld tribes.
+  const tribeSave = infernoOnlyConfig.enabled ? devilify(template) : template;
 
   return { tribeSave };
 };

@@ -112,4 +112,23 @@ export class User {
 
   @Property({ type: "string", nullable: true })
   alliance_role?: AllianceRole | null;
+
+  // Inferno-only referrals (services/user/referrals.ts)
+  @Property({ type: "string", nullable: true, length: 16 })
+  referral_code?: string | null;
+
+  @Property({ type: "number", nullable: true })
+  referred_by?: number | null;
+
+  @Property({ type: "boolean", default: false })
+  referral_credited?: boolean;
+
+  @Property({ type: "string", nullable: true, length: 400 })
+  referral_notice?: string | null;
+
+  @Property({ type: "string", nullable: true, length: 64 })
+  registration_ip?: string | null;
+
+  @Property({ type: "string", nullable: true, length: 64 })
+  last_ip?: string | null;
 }

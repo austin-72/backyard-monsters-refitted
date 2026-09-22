@@ -1,3 +1,5 @@
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+import { logger } from "../../utils/logger.js";
 import { Report } from "../../database/models/report.model.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
@@ -36,11 +38,27 @@ export const logReport = async (user: User, message: string) => {
  * @param {string} message - The detailed message about the attack violation.
  * @returns {Promise<void>}
  */
+/**
+ * An attack payload the server would not accept. The attack is refused by the caller; this records
+ * why. The stock server also banned the account outright, on the first offence, with no way for
+ * the player to know what happened ("Your account has been permanently banned"). A real player was
+ * caught by that on this server, so now: the report is kept, the reason is written to the server
+ * log where an admin will see it, and the account is banned only after
+ * infernoOnlyConfig.attackViolationBanAfter refused attacks (0: never automatically).
+ */
 export const logAttackViolation = async (user: User, message: string) => {
   const incident = await getOrCreateReport(user);
 
   incident.attackViolations += 1;
-  user.banned = true;
+
+  const banAfter = infernoOnlyConfig.enabled ? infernoOnlyConfig.attackViolationBanAfter : 1;
+  const ban = banAfter > 0 && incident.attackViolations >= banAfter;
+  if (ban) user.banned = true;
+
+  logger.warn(
+    `Attack refused for '${user.username}' (ID ${user.userid}): ${message} | refused attacks: ${incident.attackViolations}` +
+      (ban ? " | ACCOUNT BANNED" : "")
+  );
 
   const newReport: ReportEntry = {
     message: `ATTACK VIOLATION: ${message}`,

@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger.js";
 import { Filter as BadWords } from "bad-words";
 
 import { User } from "../database/models/user.model.js";
@@ -173,7 +174,14 @@ export const getChannelHistory = async (channel: string, info: ChannelInfo): Pro
 export const postMessage = async (client: ChatClient, channel: string, body: string) => {
   const info = client.channels.get(channel);
 
+  // Local servers only: say what happened to each chat line, so "my message vanished" can be told
+  // apart (never joined the channel / rate limited / delivered) from the server log.
+  const trace = (outcome: string) => {
+    if (process.env.ENV === "local") logger.info(`Chat: user ${client.userId} -> ${channel}: ${outcome}`);
+  };
+
   if (!info) {
+    trace(`refused, not in that channel (in: ${[...client.channels.keys()].join(", ") || "none"})`);
     send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.NotInChannel });
     return;
   }
@@ -181,6 +189,7 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
   const now = Date.now();
 
   if (now - client.lastMsgAt < RATE_LIMIT_MS) {
+    trace("refused, rate limited");
     send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.RateLimited });
     return;
   }
@@ -220,6 +229,8 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
     ...entry,
     userId: client.userId,
   };
+
+  trace(`delivered (${messageBody.length} characters)`);
 
   publishToChannel(channel, JSON.stringify(outgoing));
 };

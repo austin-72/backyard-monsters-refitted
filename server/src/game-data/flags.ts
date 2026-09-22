@@ -1,4 +1,5 @@
 import { devConfig } from "../config/GameConfig.js";
+import { infernoOnlyConfig } from "../config/InfernoOnlyConfig.js";
 import { getActiveInvasion } from "../services/events/wmi/getActiveInvasion.js";
 import { setupInvasionEvent } from "../services/events/wmi/setupInvasionEvent.js";
 
@@ -26,8 +27,31 @@ export const getFlags = () => ({
   maproom: 1,
   maproom2: 0, // controlled by baseLoad.ts based on town hall level
   mr2upgraded: 0,
-  inferno: devConfig.inferno ? 1 : 0,
+  // In inferno-only mode the portal / descent / legacy inferno map are switched off:
+  // the whole game already is the inferno.
+  inferno: devConfig.inferno && !infernoOnlyConfig.enabled ? 1 : 0,
   infernoMapBlocked: devConfig.infernoMaproom ? 1 : 0,
+
+  // Inferno-only tunables, read by the custom client (GLOBAL.as "io_*" getters).
+  infernoonly: infernoOnlyConfig.enabled ? 1 : 0,
+  io_rezghul: infernoOnlyConfig.enabled && infernoOnlyConfig.rezghul.enabled ? 1 : 0,
+  io_rezghulcost: infernoOnlyConfig.rezghul.magmaCost,
+  io_build: 0,
+  io_invite: "",
+  io_invite_shiny: 0,
+  io_invite_download: "",
+  io_notice: "",
+  io_catapult: infernoOnlyConfig.enabled ? JSON.stringify(infernoOnlyConfig.catapult) : "",
+  io_chathttp: infernoOnlyConfig.enabled && infernoOnlyConfig.chatTransport === "http" ? 1 : 0,
+  io_hideui: infernoOnlyConfig.enabled ? infernoOnlyConfig.hiddenUi.join(",") : "",
+  io_decooff: infernoOnlyConfig.enabled ? infernoOnlyConfig.disabledDecorations.join(",") : "",
+  io_kitpagetest: infernoOnlyConfig.enabled && infernoOnlyConfig.kitPagingTest ? 1 : 0,
+  io_outpostrecycle: infernoOnlyConfig.enabled && infernoOnlyConfig.outpostRecycling ? 1 : 0,
+  io_alliances: !infernoOnlyConfig.enabled || infernoOnlyConfig.alliances ? 1 : 0,
+  io_resmult: infernoOnlyConfig.resourceMultiplier,
+  io_magmamult: infernoOnlyConfig.magmaMultiplier,
+  io_timediv: infernoOnlyConfig.buildTimeDivisor,
+  io_hatch: infernoOnlyConfig.hatchSeconds,
   showProgressBar: 0,
   gamestats: 0,
   logfps: 0,
@@ -53,14 +77,14 @@ export const getFlags = () => ({
   leaderboard: 1,
   fanfriendbookmarkquests: 1,
   ticker: 0,
-  chat: 2, // Enable chat (0=disabled, 1=no display, 2=display)
+  chat: infernoOnlyConfig.enabled && !infernoOnlyConfig.chat ? 0 : 2, // Enable chat (0=disabled, 1=no display, 2=display)
   invites: 0, // Diable friend invites
   gifts: 0, // Disable gifts
   event1: 1,
   event2: 0,
   ...getInvasionFlags(),
   iframestart_override: 0,
-  mushrooms: 1,
+  mushrooms: infernoOnlyConfig.enabled && !infernoOnlyConfig.mushrooms ? 0 : 1,
   chatwhitelist: "",
   chatblacklist: 0,
   welcome_email: 1,
@@ -69,7 +93,7 @@ export const getFlags = () => ({
   radio: 1,
   plinko: 0,
   midgameIncentive: 0,
-  showFBCEarn: 1,
+  showFBCEarn: infernoOnlyConfig.enabled && infernoOnlyConfig.hiddenUi.includes("earn") ? 0 : 1,
   trialpayDealspot: 1,
   showFBCDaily: 0,
   validate_percent: 0,
@@ -77,8 +101,9 @@ export const getFlags = () => ({
   autoban_client: 0,
   yp_version: 2,
   ers: 0, // Used for enabling canScheduleNewEvent() in ReplayableEventHandler.as on client
-  krallen: 1,
-  subscriptions: 1,
+  // King of the Hill (the Krallen event) is an overworld feature; off on inferno-only servers.
+  krallen: infernoOnlyConfig.enabled ? 0 : 1,
+  subscriptions: infernoOnlyConfig.enabled && infernoOnlyConfig.hiddenUi.includes("daveclub") ? 0 : 1,
   krallen_duration: 7,
   subscriptions_ab: 0,
   subscriptions_ab_admin: 0,

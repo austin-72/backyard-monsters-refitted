@@ -1,3 +1,7 @@
+import { getReferralCode, inviteLink, referralsEnabled, takeReferralNotice } from "../../../services/user/referrals.js";
+import { getRequiredBuild } from "../../../services/clientBuild.js";
+import { healDefenders } from "../../../services/base/defenderHealth.js";
+import { MOLOCH_WMID } from "../../../services/maproom/v2/tribeForCell.js";
 import { devConfig } from "../../../config/GameConfig.js";
 import { Save } from "../../../database/models/save.model.js";
 import { postgres, redis } from "../../../server.js";
@@ -40,10 +44,17 @@ import { getAllianceData } from "../../../services/alliance/allianceData.js";
 import { runningPowerups } from "../../../services/alliance/powerups.js";
 import { cellRelationship, findRelationships } from "../../../services/alliance/relationships.js";
 import { INFERNO_CHAT_CHANNEL } from "../../../config/ChatConfig.js";
+import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
+import { permissionErr } from "../../../errors/errors.js";
 
 type Stronghold = { level: number; cell?: { x: number; y: number } | null };
 
 const STRONGHOLD_FIELDS = ["level", "cell.x", "cell.y"] as const;
+
+const LEGACY_INFERNO_MODES = new Set<string>([
+  BaseMode.IBUILD, BaseMode.IATTACK, BaseMode.IWMATTACK, BaseMode.IDESCENT,
+  BaseMode.IVIEW, BaseMode.IHELP, BaseMode.IWMVIEW,
+]);
 
 const INFERNO_SAVE_MODES = new Set<string>([BaseMode.IBUILD, BaseMode.IATTACK, BaseMode.IWMATTACK]);
 
@@ -57,6 +68,10 @@ const INFERNO_SAVE_MODES = new Set<string>([BaseMode.IBUILD, BaseMode.IATTACK, B
 export const baseLoad: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
   const { baseid, type, mapversion, attackData, attackcost } = BaseLoadSchema.parse(ctx.request.body);
+
+  // Inferno-only: the main yard *is* the inferno yard. The legacy inferno realm (separate
+  // save, descent, MR1-style inferno map) does not exist, so its load modes are refused.
+  if (infernoOnlyConfig.enabled && LEGACY_INFERNO_MODES.has(type)) throw permissionErr();
 
   await postgres.em.populate(user, INFERNO_SAVE_MODES.has(type) ? ["save", "infernosave"] : ["save"]);
 
@@ -128,7 +143,9 @@ export const baseLoad: KoaController = async (ctx) => {
   const isInferno = baseSave.type === BaseType.INFERNO;
   const isAttack = ATTACK_MODES.has(type);
 
-  if (type === BaseMode.BUILD && mapversion === MapRoomVersion.V1) {
+  // The client always reports map version 1 on the first load of a session, before the response has
+  // told it otherwise. Inferno-only accounts are never on Map Room 1, so no MR1 tribes for them.
+  if (type === BaseMode.BUILD && mapversion === MapRoomVersion.V1 && !infernoOnlyConfig.enabled) {
     userSave.level = calculateBaseLevel(userSave.points, userSave.basevalue);
     
     const mr1Tribes = await createMR1Tribes(userSave, MR1_TRIBES);
@@ -146,16 +163,37 @@ export const baseLoad: KoaController = async (ctx) => {
     await postgres.em.flush();
   }
 
+  // Inferno-only: the owner coming home heals whoever survived the raids (see defenderHealth.ts).
+  if (infernoOnlyConfig.enabled && isOwner && type === BaseMode.BUILD && healDefenders(baseSave)) {
+    postgres.em.persist(baseSave);
+    await postgres.em.flush();
+  }
+
   const filteredSave = await mapSaveData(baseSave, user);
-  const isTutorialEnabled = devConfig.skipTutorial ? 205 : filteredSave.tutorialstage;
+  // Inferno-only has no tutorial (it is an overworld walkthrough); production would otherwise send stage 0.
+  const isTutorialEnabled = devConfig.skipTutorial || infernoOnlyConfig.enabled ? 205 : filteredSave.tutorialstage;
 
   const flags = getFlags();
+  // Version control: a client that was already running learns here that a newer one was published.
+  flags.io_build = getRequiredBuild();
+  if (referralsEnabled() && isOwner && type === BaseMode.BUILD) {
+    // The player's own invite link, and any one-time referral notice waiting for them.
+    flags.io_invite = inviteLink(await getReferralCode(user));
+    flags.io_invite_shiny = infernoOnlyConfig.referral.shiny;
+    flags.io_invite_download = infernoOnlyConfig.referral.downloadUrl;
+    flags.io_notice = await takeReferralNotice(user);
+  }
   flags.discordOldEnough = Number(ctx.meetsDiscordAgeCheck);
 
   const townHall = extractTownHall(userSave.buildingdata || {});
 
   flags.maproom2 = userSave.mr2upgraded || (townHall && townHall.l >= 6) ? 1 : 0;
   flags.mr2upgraded = userSave.mr2upgraded ? 1 : 0;
+
+  if (infernoOnlyConfig.enabled) {
+    flags.maproom2 = 1;
+    flags.mr2upgraded = 1;
+  }
 
   let totalResourceRate = 0;
   let totalResourceCapacity = 0;
@@ -307,6 +345,9 @@ export const baseLoad: KoaController = async (ctx) => {
     ? EnumBaseRelationship.SELF
     : cellRelationship(user.alliance_id, ownerAllianceId, stances);
 
+  if (infernoOnlyConfig.enabled && filteredSave.stats && typeof filteredSave.stats === "object")
+    (filteredSave.stats as Record<string, unknown>).inferno = 0;
+
   const response: Record<string, unknown> = {
     ...filteredSave,
     relationship,
@@ -336,6 +377,12 @@ export const baseLoad: KoaController = async (ctx) => {
 
   if (defenderReduction > 0) {
     response.player = { buffs: { 1: defenderReduction } };
+  }
+
+  // Inferno-only: a Moloch stronghold tells the client how much its silos and hall may pay out.
+  if (infernoOnlyConfig.enabled && baseSave.type === BaseType.TRIBE && baseSave.wmid === MOLOCH_WMID) {
+    const caps = infernoOnlyConfig.moloch.lootCaps[baseSave.level];
+    if (caps) response.io_lootcap = { silo: caps.silo, hall: caps.hall };
   }
 
   if (type === BaseMode.ATTACK && mapversion === MapRoomVersion.V3) {

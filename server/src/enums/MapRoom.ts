@@ -4,9 +4,10 @@
  * @enum {number}
  */
 export enum MapRoom2 {
-  WIDTH = 800,
-  HEIGHT = 800,
-  MAX_PLAYERS = 2500,
+  WIDTH = 400,
+  HEIGHT = 400,
+  // 2500 players on 800x800 is one per 256 cells; the same density on 400x400 is 625.
+  MAX_PLAYERS = 625,
 }
 
 /**

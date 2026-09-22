@@ -31,20 +31,18 @@ It is built on base commit `6d706bd`.
 The public server is **https://inferno-mr2.maproom2.com**. You need the standalone Adobe Flash Player
 (the "projector"), which is a single program with no install.
 
-**The easy way (Windows)**
-1. Download the player pack, `Inferno-MR2.zip` (on this repository's Releases page), and unzip it anywhere.
-2. Double-click **Launch-inferno-mr2**.
-3. Register an account in the game and play.
-
-**By hand (any system)**
-1. Get a standalone Flash Player projector: there is one in this repository at
-   `client/archived/flashplayers/flashplayer.exe`, and Adobe's are kept in the
-   [Flash Player Archive](https://archive.org/download/flashplayerarchive/).
+1. Get the standalone Flash Player for your system (Windows, Mac or Linux) from this repository's
+   [Releases page](https://github.com/austin-72/backyard-monsters-refitted/releases). It is a single
+   program, nothing to install.
 2. Open it, choose **File > Open**, and enter the address below, without quotes:
    ```
    https://inferno-mr2.maproom2.com/play.swf
    ```
    From a command line: `flashplayer.exe https://inferno-mr2.maproom2.com/play.swf`
+3. Register an account in the game and play.
+
+Windows users can instead download `Inferno-MR2.zip` from the Releases page, unzip it, and double-click
+**Launch-inferno-mr2**: the same thing with the address filled in.
 
 That address is a small launcher. Each time it starts it asks the server which build of the game is
 current and downloads exactly that one, so there is nothing to update by hand. If the game ever says a
@@ -53,6 +51,10 @@ newer version has been published, close it and start it again.
 Accounts are made in the game itself (email and password). They belong to this server only and are not
 shared with the main Backyard Monsters Refitted servers.
 
+**Bring a friend.** The Invite Friends button in the game gives you a personal invite link. A friend who
+starts the game from that link and registers earns you both 250 shiny, paid when their yard is created.
+(Two accounts on the same internet connection don't count.)
+
 <br>
 
 ## What is different from the original game
@@ -60,12 +62,17 @@ shared with the main Backyard Monsters Refitted servers.
 | | Original (Refitted) | This fork |
 |---|---|---|
 | Where you play | Overworld yard; the Inferno is unlocked later | An Inferno yard from the first minute, no tutorial |
-| World map | Map Room 1, 2 or 3 | Map Room 2 only, with a lava theme |
+| World map | Map Room 1, 2 or 3 | Map Room 2 only, with a lava theme, a zoom-out view and jump-to-coordinates |
+| Resources | Twigs, pebbles, putty, goo | Bone, coal, sulfur, magma everywhere: top bar, store, map, quests |
 | Wild monsters | Four overworld tribes | The same four tribes as devils: Inferno buildings and monsters, yards turned around |
 | Bosses on the map | None | Moloch strongholds (levels 46 and 50) built from the last Inferno descent bases |
 | Outpost kits | Three - Regular, Mega, and Ultra | Six - Ember, Brimstone, Demon, Damnnation, Underlord, and Apocalypse |
-| Catapult | Twigs, pebbles, putty | Marilyn Monstroe, Candy Jars and Sulfur Bombs |
+| Catapult | Twigs, pebbles, putty | Marilyn Monstroe, Candy Jars and Sulfur Bombs, four sizes each |
+| Defenders after an attack | Survivors are back at full health | Wounded defenders stay wounded until their owner comes home |
 | Pace | Original build times and production | Faster building/upgrading (4x), doubled production, one-second hatching |
+| Invites | Facebook invites | An invite link that pays both players 250 shiny |
+| Chat | WebSocket on its own ports | Rides on ordinary web requests, so it works behind a web-only tunnel |
+| Getting the game | Download a client, update it yourself | Opened from a web address; checks for and downloads updates at every start |
 
 Also in: Rezghul (bought with magma), the Hatchery Control Center, General Store and Yard
 Planner working in the Inferno, overworld decorations, alliances with their powerups, and a long list of

@@ -9,6 +9,8 @@ export const minimumTribeLevels = {
   [Tribe.KOZU]: 29,
   [Tribe.ABUNAKKI]: 25,
   [Tribe.DREADNAUT]: 25,
+  // Never used for level maths: Moloch levels come from infernoOnlyConfig.moloch.levels.
+  [Tribe.MOLOCH]: 46,
 };
 
 /**

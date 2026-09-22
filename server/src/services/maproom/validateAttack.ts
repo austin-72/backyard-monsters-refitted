@@ -2,6 +2,13 @@ import { User } from "../../database/models/user.model.js";
 import { loadFailureErr } from "../../errors/errors.js";
 import { logAttackViolation } from "../base/reportManager.js";
 import { monsterStats, mr3MonsterStats } from "../../game-data/stats/monsterStats.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+
+// Inferno-only: Rezghul is hatched for a flat magma cost. The client sends its monster stats with
+// every attack and they are compared with this table in production, so the table has to say the same.
+if (infernoOnlyConfig.enabled && infernoOnlyConfig.rezghul.enabled && monsterStats.C19)
+  monsterStats.C19.props.cResource = [infernoOnlyConfig.rezghul.magmaCost];
+
 import type { AttackData } from "../../schemas/AttackSchema.js";
 import { type ChampionProps, championStats } from "../../game-data/stats/championStats.js";
 import { MapRoomVersion } from "../../enums/MapRoom.js";

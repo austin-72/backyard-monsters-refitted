@@ -1,3 +1,4 @@
+import { discordRequired } from "../../config/InfernoOnlyConfig.js";
 import bcrypt from "bcrypt";
 import JWT, { type SignOptions } from "jsonwebtoken";
 
@@ -84,7 +85,7 @@ export const login: KoaController = async (ctx) => {
   let discordId: string | null | undefined;
 
   // Check if the user has verified their Discord account
-  if (process.env.ENV === Env.PROD) {
+  if (process.env.ENV === Env.PROD && discordRequired()) {
     if (!user.discord_verified) throw discordVerifyErr();
     discordId = user.discord_id;
 
@@ -111,6 +112,9 @@ export const login: KoaController = async (ctx) => {
 
   const filteredUser = FilterFrontendKeys(user);
   const userAgent = ctx.get("user-agent") || "none";
+
+  user.last_ip = ctx.ip;
+  await postgres.em.flush();
 
   logger.info("User {username} logged in | ID: {userid} | IP: {ip}", {
     event: "login",

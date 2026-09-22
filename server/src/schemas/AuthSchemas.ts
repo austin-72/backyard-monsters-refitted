@@ -66,6 +66,8 @@ export const UserRegistrationSchema = z.object({
   username: usernameSchema,
   email: emailSchema,
   password: passwordSchema,
+  /** Inferno-only: the invite code the game was started with (services/user/referrals.ts). */
+  ref: z.string().max(32).optional(),
 });
 
 /**

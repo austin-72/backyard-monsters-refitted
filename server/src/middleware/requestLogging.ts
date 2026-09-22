@@ -27,7 +27,12 @@ export const logMissingAssets = async (ctx: Context, next: Next) => {
 /** Options for the LogTape Koa request logger. */
 const requestLoggingOptions: KoaLogTapeOptions = {
   category: ["bymr", "http"],
-  skip: (ctx) => ctx.url.startsWith("/assets") || ctx.path === "/connection",
+  // Chat over HTTP polls every 2.5 seconds per player: left in, those lines bury everything else
+  // (they were nine of every ten lines with a single player online). A poll that fails is still logged.
+  skip: (ctx) =>
+    ctx.url.startsWith("/assets") ||
+    ctx.path === "/connection" ||
+    (ctx.path === "/chat/poll" && ctx.status < 400),
   context: { include: ["requestId", "remoteAddr", "userAgent"] },
   format: "structured-common",
 };

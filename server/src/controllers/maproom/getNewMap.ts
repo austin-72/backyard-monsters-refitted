@@ -1,3 +1,4 @@
+import { mapRoom3Enabled } from "../../config/InfernoOnlyConfig.js";
 import { MapRoom3, MapRoomVersion } from "../../enums/MapRoom.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { User } from "../../database/models/user.model.js";
@@ -29,7 +30,7 @@ export const getNewMap: KoaController = async (ctx) => {
 
   const cell = user.save?.cell;
 
-  if (cell?.map_version === MapRoomVersion.V3) {
+  if (mapRoom3Enabled() && cell?.map_version === MapRoomVersion.V3) {
     ctx.body = {
       newmap: true,
       mapheaderurl: `${BASE_URL}:${PORT}/api/bm/getnewmap`,

@@ -1,3 +1,5 @@
+import { infernoOnlyConfig } from "../../../../config/InfernoOnlyConfig.js";
+import { applyBunkerLosses } from "../../../../services/base/defenderHealth.js";
 import { SaveKeys } from "../../../../enums/SaveKeys.js";
 import { Save } from "../../../../database/models/save.model.js";
 import type { BuildingDataMap } from "../../../../types/BuildingData.js";
@@ -35,6 +37,9 @@ export const buildingDataHandler = (buildingData: Record<string, any> | null, sa
       // Keep the trap only if the client still reports it as present.
       // Absent = triggered during the attack, so we drop it.
       if (buildingData[key]) result[key] = building;
+    } else if (infernoOnlyConfig.enabled && building.t === 22) {
+      // Inferno-only: a Monster Bunker's defenders can die or be wounded in the attack, and stay that way.
+      result[key] = applyBunkerLosses(building, buildingData[key]) as typeof building;
     } else {
       // Non-trap buildings are never modified by attacks - always keep DB value.
       result[key] = building;

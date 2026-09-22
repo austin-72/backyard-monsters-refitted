@@ -1,3 +1,4 @@
+import { discordRequired } from "../config/InfernoOnlyConfig.js";
 import { postgres, redis } from "../server.js";
 import { User } from "../database/models/user.model.js";
 import type { Context, Next } from "koa";
@@ -89,7 +90,19 @@ export const verifyAccountStatus = async (ctx: Context, next: Next) => {
  */
 export const verifyJwtToken = (token: string): AuthTokenPayload => {
   if (process.env.ENV === Env.LOCAL) {
-    const decoded = <AuthTokenPayload>JWT.decode(token);
+    // Local mode used to decode the token without checking its signature, which let anyone who knew
+    // a player's email forge a login for that account. Harmless on a laptop, not on a server that
+    // players can reach, and local mode is what a fresh install runs in. The signature is checked
+    // here too; local mode still skips everything Discord-related.
+    let decoded: AuthTokenPayload;
+
+    try {
+      decoded = <AuthTokenPayload>JWT.verify(token, process.env.SECRET_KEY!);
+    } catch (err) {
+      const { name, message } = err as Error;
+      logger.warn(`JWT verification failed: ${name} - ${message}`);
+      throw tokenAuthFailureErr();
+    }
 
     return {
       user: {
@@ -105,7 +118,7 @@ export const verifyJwtToken = (token: string): AuthTokenPayload => {
     const decoded = <AuthTokenPayload>JWT.verify(token, process.env.SECRET_KEY!);
     
     const { discordId } = decoded.user;
-    const meetsDiscordAgeCheck = discordId ? isDiscordAccountOldEnough(discordId) : false;
+    const meetsDiscordAgeCheck = !discordRequired() || (discordId ? isDiscordAccountOldEnough(discordId) : false);
 
     return {
       user: { ...decoded.user, meetsDiscordAgeCheck },

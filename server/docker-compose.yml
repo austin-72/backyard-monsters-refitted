@@ -49,6 +49,12 @@ services:
       - CHAT_WS_HOST=${CHAT_WS_HOST:-localhost:3010}
     networks:
       - bymr
+    volumes:
+      # Outpost kits made with src/scripts/export-kits.ts. Bound to the host folder so they are
+      # written straight to disk and survive image rebuilds and container re-creation.
+      - ./public/assets/kits:/app/public/assets/kits
+      # The published game client (served at /<name>.swf). Bound so a new build is a file copy.
+      - ./public/client:/app/public/client
     ports:
       - ${API_PORT:-3001}:3001
       - ${CHAT_WS_PORT:-3010}:3010

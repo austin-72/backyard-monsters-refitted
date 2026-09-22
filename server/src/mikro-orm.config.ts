@@ -1,4 +1,5 @@
 import path from "path";
+import { existsSync, readFileSync } from "fs";
 
 import { defineConfig } from "@mikro-orm/postgresql";
 import { Migrator } from "@mikro-orm/migrations";
@@ -22,6 +23,25 @@ import { AlliancePowerup } from "./database/models/alliancepowerup.model.js";
 import { AllianceRelationship } from "./database/models/alliancerelationship.model.js";
 import { AllianceStats } from "./database/models/alliancestats.view.js";
 import { ApiConsumer } from "./database/models/apiconsumer.model.js";
+
+/**
+ * `bun run` loads `.env` on its own, but the MikroORM CLI started through `bun x` (db:init,
+ * migration:up, schema:drop) may not, and then fails with "No database specified". Fill in
+ * whatever is still missing from `.env` so the CLI works without exporting variables by hand.
+ * Values already present in the environment always win.
+ */
+if (existsSync(".env")) {
+  for (const line of readFileSync(".env", "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (!match || process.env[match[1]] !== undefined) continue;
+
+    let value = match[2];
+    const quoted = value.match(/^(['"])(.*)\1/);
+    value = quoted ? quoted[2] : value.replace(/\s+#.*$/, "");
+
+    process.env[match[1]] = value;
+  }
+}
 
 /**
  * List of entities to be used with MikroORM.

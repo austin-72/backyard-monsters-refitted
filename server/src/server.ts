@@ -1,3 +1,5 @@
+import { getPublishedBuild } from "./services/clientBuild.js";
+import "./config/normalizeEnv.js"; // first: every other module reads process.env.ENV as it loads
 import Koa, { type Next } from "koa";
 import bodyParser from "koa-bodyparser";
 import serve from "koa-static";
@@ -26,6 +28,20 @@ app.proxyIpHeader = "CF-Connecting-IP";
 
 export const PORT = process.env.PORT || 3001;
 export const BASE_URL = process.env.BASE_URL;
+
+// A server players can reach must not run on the defaults a laptop install uses.
+{
+  const secret = process.env.SECRET_KEY ?? "";
+  const isPublic = Boolean(BASE_URL) && !/localhost|127\.0\.0\.1/.test(BASE_URL!);
+  const warnings: string[] = [];
+
+  if (secret.length < 24 || secret === "secret")
+    warnings.push("SECRET_KEY is missing, short or the default. Anyone can forge logins. Set a long random value in server/.env.");
+  if (isPublic && process.env.ENV === "local")
+    warnings.push("BASE_URL is public but ENV=local. Set ENV=prod in server/.env: local mode is for testing on your own machine.");
+
+  for (const warning of warnings) console.warn(`\n!!! SECURITY: ${warning}\n`);
+}
 
 export const postgres = {} as {
   orm: MikroORM<PostgreSqlDriver>;
@@ -82,6 +98,9 @@ redis.onclose = (err) => logger.error(`Redis disconnected: ${err.message}`);
 
   await initVersionManifest();
   await initAnticheat();
+
+  // Version control: report what is published at startup (also read again whenever the file changes).
+  getPublishedBuild();
 
   app.listen(PORT, () => {
     console.log(`

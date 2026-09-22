@@ -20,6 +20,8 @@ import { Maproom } from "../../database/models/maproom.model.js";
 import { clearPendingInvites } from "../../services/alliance/allianceInvites.js";
 import { MAX_RESOURCE_CAPACITY } from "../../config/MapRoom2Config.js";
 import { RESOURCE_KEYS } from "../../services/base/updateResources.js";
+import { infernoOnlyConfig, mapRoom3Enabled } from "../../config/InfernoOnlyConfig.js";
+import { permissionErr } from "../../errors/errors.js";
 
 /**
  * Schema for validating the request body when setting the map version.
@@ -49,7 +51,17 @@ export const setMapVersion: KoaController = async (ctx) => {
 
   if (!ctx.meetsDiscordAgeCheck) throw discordAgeErr();
 
-  switch (version) {
+  // Inferno-only: everyone lives on Map Room 2, permanently, from the first load.
+  //  - leaving (0) and Map Room 3 are refused
+  //  - 1 ("I just built a Map Room") and 2 ("I upgraded it") change nothing and simply succeed;
+  //    in particular 2 must not run joinOrCreateWorld again, which could move the yard to another world
+  if (infernoOnlyConfig.enabled && version !== MapRoomVersion.V1 && version !== MapRoomVersion.V2) throw permissionErr();
+  if (version === MapRoomVersion.V3 && !mapRoom3Enabled()) throw permissionErr();
+
+  const alreadyPlaced = save.mapversion === MapRoomVersion.V2 && Boolean(save.worldid);
+  const nothingToDo = infernoOnlyConfig.enabled && (version === MapRoomVersion.V1 || alreadyPlaced);
+
+  switch (nothingToDo ? -1 : version) {
     case MapRoomVersion.NONE: {
       if (user.alliance_id) throw mustLeaveAllianceToChangeWorldErr();
 
@@ -80,7 +92,7 @@ export const setMapVersion: KoaController = async (ctx) => {
 
       const townHall = extractTownHall(save.buildingdata ?? {});
 
-      if (!save.mr2upgraded && (!townHall || townHall.l < 6)) throw townHallLevelErr();
+      if (!infernoOnlyConfig.enabled && !save.mr2upgraded && (!townHall || townHall.l < 6)) throw townHallLevelErr();
       
       await joinOrCreateWorld(user, save);
       save.mr2upgraded = true;

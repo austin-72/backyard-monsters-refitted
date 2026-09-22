@@ -10,6 +10,8 @@ export enum Tribe {
   KOZU = "Kozu",
   ABUNAKKI = "Abunakki",
   DREADNAUT = "Dreadnaut",
+  /** Inferno-only servers: rare fifth tribe. Not part of the `Tribes` rotation. */
+  MOLOCH = "Moloch",
 }
 
 /**

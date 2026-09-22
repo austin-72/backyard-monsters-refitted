@@ -5,6 +5,7 @@ import { Reward } from "../enums/Rewards.js";
 import { BaseType } from "../enums/Base.js";
 import { infernoYardSandbox } from "../utils/sandbox/infernoYard.js";
 import { overworldYardSandbox } from "../utils/sandbox/overworldYard.js";
+import { infernoOnlyConfig, rollStartingShiny } from "../config/InfernoOnlyConfig.js";
 
 /**
  * Generates the default base data object for a new save.
@@ -20,6 +21,10 @@ export const getDefaultBaseData = (user: User, baseType: BaseType) => {
   if (baseType === BaseType.INFERNO && devConfig.infernoSandbox)
     return infernoYardSandbox(user);
 
+  const infernoOnly = infernoOnlyConfig.enabled && baseType === BaseType.MAIN;
+  const startingResources = infernoOnly ? infernoOnlyConfig.startingResources : { r1: 0, r2: 0, r3: 0, r4: 0 };
+  const extraWorkers = Math.max(0, Math.min(4, infernoOnlyConfig.workers - 1));
+
   const currentTime = getCurrentDateTime();
   const sevenDays = 7 * 24 * 60 * 60;
 
@@ -27,16 +32,17 @@ export const getDefaultBaseData = (user: User, baseType: BaseType) => {
     saveuserid: user.userid,
     userid: user.userid,
     name: user.username,
-    credits: devConfig.shiny || 1000,
+    credits: infernoOnly ? rollStartingShiny() : devConfig.shiny || 1000,
+
+    // Inferno-only: every worker is unlocked from the start. The client reads extra workers
+    // from storedata.BEW.q and caps any non-main yard at one worker on its own (QUEUE.Spawn).
+    ...(infernoOnly && extraWorkers > 0 && { storedata: { BEW: { q: extraWorkers } } }),
     createtime: currentTime,
     protected: currentTime + sevenDays,
 
     // Pre-populated Objects
     resources: {
-      r1: 0,
-      r2: 0,
-      r3: 0,
-      r4: 0,
+      ...startingResources,
       r1max: 10000,
       r2max: 10000,
       r3max: 10000,

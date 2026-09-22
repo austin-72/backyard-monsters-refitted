@@ -1,3 +1,6 @@
+import { clientVersion, serveGameClient } from "./controllers/client/serveGameClient.js";
+import { chatPoll } from "./chat/chatHttpBridge.js";
+import { chatPollLimiter } from "./middleware/rateLimiters.js";
 import Router from "@koa/router";
 
 import { logRequest } from "./middleware/logRequest.js";
@@ -20,6 +23,8 @@ import {
   terrainLimiter,
 } from "./middleware/rateLimiters.js";
 import { Status } from "./enums/StatusCodes.js";
+import { alliancesEnabled, mapRoom3Enabled } from "./config/InfernoOnlyConfig.js";
+import { permissionErr } from "./errors/errors.js";
 
 import { init } from "./controllers/init.js";
 import { supportedLangs } from "./controllers/supportedLangs.js";
@@ -48,6 +53,7 @@ import { getSnapshot } from "./controllers/maproom/v2/bulk/getSnapshot.js";
 import { getTerrain } from "./controllers/maproom/v2/bulk/getTerrain.js";
 import { getAlliances } from "./controllers/maproom/v2/bulk/getAlliances.js";
 import { takeoverCell } from "./controllers/maproom/v2/takeoverCell.js";
+import { applyKit } from "./controllers/maproom/v2/applyKit.js";
 import { transferMonsters } from "./controllers/maproom/v2/transferMonsters.js";
 import { saveBookmarks } from "./controllers/maproom/v2/saveBookmarks.js";
 
@@ -98,7 +104,18 @@ const router = new Router();
 * 📦 General
 * ──────────────────────────────────────────────── */
 router.post("/init", logRequest, init);
+
+// Chat over HTTP polling, for servers reachable only through a web tunnel (see chatHttpBridge.ts)
+router.post("/chat/poll", chatPollLimiter, chatPoll);
 router.get("/connection", (ctx) => (ctx.status = Status.OK));
+
+// The game client, for launching the standalone Flash Player from a URL (see serveGameClient.ts)
+// (A plain one-segment pattern: this router version has no inline regular expressions. The handler
+// passes anything that is not "<name>.swf" straight on.)
+router.get("/:file", serveGameClient);
+// The launcher asks which build of the game is current (a POST: never cached). GET works too, for a browser.
+router.post("/client/version", clientVersion);
+router.get("/client/version", clientVersion);
 
 /**  ────────────────────────────────────────────────
 * 📦 Auth
@@ -139,12 +156,19 @@ router.get("/worldmapv2/snapshot", verifyApiConsumer, snapshotLimiter, logReques
 router.get("/worldmapv2/alliances", verifyApiConsumer, alliancesLimiter, logRequest, getAlliances);
 router.post("/worldmapv2/setmapversion", verifyUserAuth, logRequest, setMapVersion);
 router.post("/worldmapv2/takeoverCell", verifyUserAuth, verifyAccountStatus, logRequest, takeoverCell);
+router.post("/worldmapv2/applykit", verifyUserAuth, verifyAccountStatus, logRequest, applyKit);
 router.post("/worldmapv2/transferassets", verifyUserAuth, verifyAccountStatus, logRequest, transferMonsters);
 router.post("/api/:apiVersion/player/savebookmarks", apiVersion, verifyUserAuth, verifyAccountStatus, logRequest, saveBookmarks);
 
 /**  ────────────────────────────────────────────────
 * 📦 Map Room 3
 * ──────────────────────────────────────────────── */
+// Inferno-only: Map Room 3 can be switched off entirely in config/InfernoOnlyConfig.ts
+router.use("/worldmapv3", async (_ctx, next) => {
+  if (!mapRoom3Enabled()) throw permissionErr();
+  await next();
+});
+
 router.post("/worldmapv3/initworldmap", verifyUserAuth, verifyAccountStatus, logRequest, initialPlayerCellData);
 router.get("/worldmapv3/initworldmap", verifyUserAuth, verifyAccountStatus, logRequest, initialPlayerCellData);
 router.post("/worldmapv3/getcells", verifyUserAuth, verifyAccountStatus, getCellsLimiter, logRequest, getMapRoomCells);
@@ -179,6 +203,12 @@ router.get("/api/:apiVersion/attacklogs", verifyUserAuth, getAttackLogs);
 /**  ────────────────────────────────────────────────
 * 📦 Alliances
 * ──────────────────────────────────────────────── */
+// Inferno-only: alliances can be switched off in config/InfernoOnlyConfig.ts
+router.use("/alliance", async (_ctx, next) => {
+  if (!alliancesEnabled()) throw permissionErr();
+  await next();
+});
+
 router.post("/alliance/createalliance", verifyUserAuth, logRequest, createAlliance);
 router.post("/alliance/editalliance", verifyUserAuth, logRequest, editAlliance);
 router.post("/alliance/leavealliance", verifyUserAuth, logRequest, leaveAlliance);

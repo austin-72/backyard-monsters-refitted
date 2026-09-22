@@ -5,6 +5,8 @@ import { EntityManager, PostgreSqlDriver } from "@mikro-orm/postgresql";
 import { logger } from "../../../utils/logger.js";
 import { generateNoise, getTerrainHeight } from "./generateMap.js";
 import { setTimeout } from "timers/promises";
+import { Tribe } from "../../../enums/Tribes.js";
+import { tribeForCell } from "./tribeForCell.js";
 
 /**
  * Interface representing a single cell
@@ -43,6 +45,9 @@ export const findFreeCell = async (world: World, em: EntityManager<PostgreSqlDri
       logger.info(`Tile (${x}, ${y}) is water. Skipping.`);
       continue;
     }
+
+    // Strongholds are rare and valuable: never replace one with a new player's yard
+    if (tribeForCell(world.uuid, x, y).tribe === Tribe.MOLOCH) continue;
 
     // Skip if the cell is already occupied
     const existingCell = await em.findOne(WorldMapCell, { world, x, y });

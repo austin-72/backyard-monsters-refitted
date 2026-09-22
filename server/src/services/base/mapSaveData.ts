@@ -70,8 +70,15 @@ export const buildSaveData = (save: Save, user: User, ownerSave: OwnerSave | nul
 
   if (ownerSave) filteredSave.resources = ownerSave.resources;
 
+  // `credits` always means the shiny of the player looking at the screen. The client overwrites its
+  // own balance with this field on every base load and on every save response, so sending the
+  // yard's own value here (0 for a tribe yard, the victim's shiny for a player's yard) made the
+  // attacker's shiny read 0 from the first moment of an attack until their next visit home:
+  // "You don't have enough Shiny" when claiming the outpost they had just destroyed.
+  if (user.save) filteredSave.credits = visibleCredits(user, user.save.credits);
+
   const shinyLocked = isShinyLocked(user);
-  
+
   if (shinyLocked) filteredSave.credits = 0;
 
   return filteredSave;

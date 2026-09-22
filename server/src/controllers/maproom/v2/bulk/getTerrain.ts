@@ -21,7 +21,7 @@ import type { KoaController } from "../../../../utils/KoaController.js";
  *
  * Body
  *   640,000 bytes of application/octet-stream. One unsigned byte per cell,
- *   indexed x * height + y over the fixed 800 x 800 grid.
+ *   indexed x * height + y over the fixed MapRoom2.WIDTH x MapRoom2.HEIGHT grid.
  *
  * Encoding
  *   brotli, gzip or identity, selected from Accept-Encoding and preferring

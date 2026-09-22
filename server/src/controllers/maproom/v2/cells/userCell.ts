@@ -1,3 +1,4 @@
+import { withHousedCounts } from "../../../../services/base/defenderHealth.js";
 import type { Context } from "koa";
 import type { Loaded } from "@mikro-orm/core";
 import type { User } from "../../../../database/models/user.model.js";
@@ -83,7 +84,9 @@ export const userCell = async (ctx: Context, cell: Cell, cellOwners: Map<number,
     fr: 0,
     p: isProtected ? 1 : 0,
     r: cellSave.resources,
-    m: cellSave.monsters || {},
+    // Counts, always: the map gives a player their own monsters to attack with, and a yard that was
+    // raided stores its survivors with their health (see defenderHealth.ts).
+    m: withHousedCounts(cellSave.monsters) || {},
     l: baseLevel,
     d: damage >= 90 ? 1 : 0,
     lo: locked,
