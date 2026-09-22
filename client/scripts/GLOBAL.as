@@ -406,6 +406,9 @@ package {
 
         public static var _canInvite:Boolean = false;
 
+        /** Inferno-only: the Invite Friends button has been opened this session (its alert ring is off). */
+        public static var _ioInviteSeen:Boolean = false;
+
         public static var _canGift:Boolean = false;
 
         public static var _whatsnewid:int = 0;
@@ -2269,6 +2272,11 @@ package {
             var _loc4_:int = 0;
             _flags = serverFlags;
             ioCheckBuild();
+            if (INFERNO_ONLY && _flags.io_notice) {
+                // A one-time notice from the server (a referral paid out, for instance).
+                Message(String(_flags.io_notice));
+                _flags.io_notice = "";
+            }
             if (!_flags.viximo && !_flags.kongregate) {
                 _loc2_ = int(LOGIN._digits[LOGIN._digits.length - 1]);
                 _loc3_ = int(LOGIN._digits[LOGIN._digits.length - 2]);

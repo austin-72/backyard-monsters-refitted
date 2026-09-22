@@ -210,6 +210,9 @@ package {
                         });
             }
 
+            if (GLOBAL.INFERNO_ONLY) {
+                CREATURELOCKER.ioApplyRezghul(); // never send stats the server does not expect
+            }
             // Loop through attack monsters
             for (var creatureID:String in _curCreaturesAvailable) {
                 attackPayload.monsters.push({

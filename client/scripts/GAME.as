@@ -125,6 +125,10 @@ package {
                     token = params.token;
                     sharedObj.data.token = token;
                 }
+                if (params && params.ref) {
+                    // Started from a friend's invite link: kept until an account is registered with it.
+                    sharedObj.data.ioReferral = String(params.ref);
+                }
                 sharedObj.flush();
             }
             catch (e:Error) {

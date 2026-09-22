@@ -884,6 +884,14 @@ package {
             }
             modifyCreepData();
             CreepTypeManager.instance.AddExposedCreepTypes(_mainCreatures);
+            if (GLOBAL.INFERNO_ONLY) {
+                // Setup() runs at the start of every base load and has just rebuilt the tables with
+                // the stock values, and an attack load sends the attacker's monster stats to the server
+                // in that same request, before SetBuildingProps() would have applied the Inferno cost
+                // again. Sent with the stock cost, Rezghul is refused by the server as a modified
+                // client (it happened). So the cost is applied the moment the table exists.
+                ioApplyRezghul();
+            }
         }
 
         private static function modifyCreepData():void {

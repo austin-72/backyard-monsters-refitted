@@ -1,4 +1,5 @@
 package com.auth {
+    import flash.net.SharedObject;
     import flash.display.Sprite;
     import flash.text.TextField;
     import flash.text.TextFormatAlign;
@@ -673,6 +674,7 @@ package com.auth {
                 if (isRegisterForm) {
                     if (isUsernameValid) {
                         var newUser:Array = [["username", usernameValue], ["email", emailValue], ["password", passwordValue], ["last_name", ""], ["pic_square", ""]];
+                        newUser.push(["ref", ioReferralCode()]);
 
                         new URLLoaderApi().load(GLOBAL._apiURL + "player/register", newUser, registerNewUser, function(event:IOErrorEvent):void {
                                 GLOBAL.Message("An error occurred during registration on the server.");
@@ -701,12 +703,31 @@ package com.auth {
             }
         }
 
+        /** The invite code this game was started with (GAME.setLauncherVars), or "". */
+        private function ioReferralCode():String {
+            try {
+                var so:SharedObject = SharedObject.getLocal("bymr_data", "/");
+                return so.data.ioReferral ? String(so.data.ioReferral) : "";
+            }
+            catch (e:Error) {
+            }
+            return "";
+        }
+
         private function registerNewUser(serverData:Object):void {
             if (serverData.hasOwnProperty("error")) {
                 GLOBAL.Message(serverData.error);
                 return;
             }
             GLOBAL.Message("You have successfully registered an account. Please login to continue.");
+            try {
+                // The invite has been used: it must not be sent with a second account from this machine.
+                var so:SharedObject = SharedObject.getLocal("bymr_data", "/");
+                delete so.data.ioReferral;
+                so.flush();
+            }
+            catch (e:Error) {
+            }
             isRegisterForm = false;
             updateState();
         }

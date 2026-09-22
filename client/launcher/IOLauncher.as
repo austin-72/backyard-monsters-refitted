@@ -43,11 +43,16 @@ package {
 
         private var _tries:int = 0;
 
+        private var _ref:String = "";
+
         public function IOLauncher() {
             super();
             Security.allowDomain("*");
             var origin:Array = String(loaderInfo.url).match(/^https?:\/\/[^\/?#]+/i);
             _server = origin && origin.length > 0 ? origin[0] : DEFAULT_SERVER;
+            // An invite link is play.swf?ref=<code>: the code goes on to the game with the game's address.
+            var ref:Array = String(loaderInfo.url).match(/[?&]ref=([A-Za-z0-9]{1,32})/);
+            _ref = ref && ref.length > 1 ? ref[1] : "";
 
             _status = new TextField();
             _status.defaultTextFormat = new TextFormat("Verdana", 14, 0x333333, true, null, null, null, null, "center");
@@ -99,7 +104,7 @@ package {
                 say(answer && answer.error ? String(answer.error) : "The game has not been published on this server yet.");
                 return;
             }
-            loadGame(_server + "/" + answer.file + "?v=" + encodeURIComponent(String(answer.v)));
+            loadGame(_server + "/" + answer.file + "?v=" + encodeURIComponent(String(answer.v)) + (_ref ? "&ref=" + _ref : ""));
         }
 
         private function loadGame(address:String):void {

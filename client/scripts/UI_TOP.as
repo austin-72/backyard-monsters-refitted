@@ -1,4 +1,5 @@
 package {
+    import flash.system.System;
     import com.monsters.baseBuffs.BaseBuff;
     import com.monsters.baseBuffs.BaseBuffHandler;
     import com.monsters.baseBuffs.buffs.AutoBankBaseBuff;
@@ -878,7 +879,14 @@ package {
                     _loc1_++;
                 }
                 _loc7_ = 0;
-                if (GLOBAL._canInvite && !GLOBAL._flags.kongregate) {
+                if (GLOBAL.INFERNO_ONLY && GLOBAL._flags.io_invite) {
+                    // Inferno-only referrals: the button is always there, and it wears the alert ring
+                    // (the same spinner the notification button uses) until the player has opened it
+                    // this session. Every login starts with the ring on.
+                    mc.bInvite.visible = !GLOBAL.ioUiHidden("invite");
+                    mc.bInvite.mcSpinner.visible = mc.bInvite.visible && !GLOBAL._ioInviteSeen;
+                }
+                else if (GLOBAL._canInvite && !GLOBAL._flags.kongregate) {
                     if (GLOBAL._sessionCount >= 2 && !GLOBAL._canGift && GLOBAL.Timestamp() - GLOBAL.StatGet("pi") > 60 * 60 * 36) {
                         mc.bInvite.mcSpinner.visible = true;
                     }
@@ -890,7 +898,7 @@ package {
                 else {
                     mc.bInvite.visible = false;
                 }
-                if (mc.bInvite.visible) {
+                if (mc.bInvite.visible && !(GLOBAL.INFERNO_ONLY && GLOBAL._flags.io_invite)) {
                     mc.bInvite.visible = BYMConfig.instance.INVITE_BUTTON;
                 }
                 _loc8_ = this.extraResourceRows * this._RESOURCEBAR_HEIGHT;
@@ -1139,6 +1147,34 @@ package {
             }
         }
 
+        /**
+         * Inferno-only Invite Friends: the player's own invite link and a Copy button. A friend who
+         * starts the game from the link and registers earns both players shiny (server: referrals.ts).
+         */
+        private static function ioShowInvite():void {
+            var link:String = String(GLOBAL._flags.io_invite);
+            var shiny:String = GLOBAL.FormatNumber(Number(GLOBAL._flags.io_invite_shiny));
+            var download:String = String(GLOBAL._flags.io_invite_download || "");
+            var message:String = "Join me in the inferno maproom 2, a custom bymr server!\n"
+                + "Joining with this link rewards you " + shiny + " shiny.\n"
+                + "Step 1: Download adobe flash player (link: " + download + ")\n"
+                + "Step 2: Open flash player > File > Open\n"
+                + "Step 3: Paste this link and hit Enter: " + link + "\n"
+                + "Step 4: Register and sign in!";
+            var popupMC:popup_generic = new popup_generic();
+            var CopyMessage:Function = function(param1:MouseEvent):void {
+                System.setClipboard(message);
+                popupMC.bAction.Setup("Copied!");
+            };
+            popupMC.tA.htmlText = "Invite a friend";
+            popupMC.tB.htmlText = "Copy the invite below and send it to a friend. When they start the game from your link and register, you <b>both</b> get <b>" + shiny + " shiny</b>.<br><br>"
+                + "<font color=\"#FFFFFF\">" + message.split("\n").join("<br>") + "</font><br><br>"
+                + "The shiny arrives when your friend's yard is created. Two accounts on the same connection do not count.";
+            popupMC.bAction.Setup("Copy invite");
+            popupMC.bAction.addEventListener(MouseEvent.CLICK, CopyMessage);
+            POPUPS.Push(popupMC, null, null, null, null, true, "now");
+        }
+
         public function ButtonClick(param1:String):Function {
             var label:String = param1;
             return function(param1:MouseEvent):void {
@@ -1162,7 +1198,12 @@ package {
                     POPUPS.Show("alerts");
                 }
                 else if (label == "invite") {
-                    if (GLOBAL._flags.invites == 1) {
+                    if (GLOBAL.INFERNO_ONLY && GLOBAL._flags.io_invite) {
+                        GLOBAL._ioInviteSeen = true;
+                        mc.bInvite.mcSpinner.visible = false;
+                        ioShowInvite();
+                    }
+                    else if (GLOBAL._flags.invites == 1) {
                         POPUPS.Invite();
                     }
                     else {
