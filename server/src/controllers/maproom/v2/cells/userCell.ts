@@ -6,7 +6,10 @@ import type { WorldMapCell } from "../../../../database/models/worldmapcell.mode
 import { calculateBaseLevel } from "../../../../services/base/calculateBaseLevel.js";
 import { getCurrentDateTime } from "../../../../utils/getCurrentDateTime.js";
 import { MapRoomCell } from "../../../../enums/MapRoom.js";
+import { infernoOnlyConfig } from "../../../../config/InfernoOnlyConfig.js";
+import { pendingInviteThread } from "../../../../services/maproom/v2/relocateInvites.js";
 import { isAttackActive } from "../../../../services/base/isAttackActive.js";
+import { isUnder, underworldOn } from "../../../../services/maproom/v2/underworld.js";
 
 export type UserCellFields =
   | "*"
@@ -38,7 +41,7 @@ type Cell = Loaded<WorldMapCell, "save", UserCellFields>;
  */
 export const userCell = async (ctx: Context, cell: Cell, cellOwners: Map<number, UserCellOwner>) => {
   const currentUser: User = ctx.authUser;
-  const { lastSeen, truces } = ctx.state;
+  const { lastSeen } = ctx.state;
 
   const mine = currentUser.userid === cell.uid;
   const cellOwner = mine ? currentUser : cellOwners.get(cell.uid);
@@ -66,20 +69,29 @@ export const userCell = async (ctx: Context, cell: Cell, cellOwners: Map<number,
 
   const damage = protectionExpired ? 0 : cellSave.damage;
 
-  const truceExpiry = mine ? undefined : truces.get(cellOwner.userid)?.expires_at;
+  // The owner's map shows a pending relocation invite on their outpost (and can revoke it from there).
+  const pendingInvite =
+    infernoOnlyConfig.enabled && mine && cell.base_type === MapRoomCell.OUTPOST
+      ? ctx.state.pendingInvites instanceof Map
+        ? (ctx.state.pendingInvites as Map<string, number>).get(cell.baseid ?? "") ?? 0
+        : await pendingInviteThread(cell.baseid, currentUser.userid)
+      : 0;
+
+  // Inferno-only: an underworld outpost has no Flinger and a range of 1 (the game works it out from u: 1).
+  const under = underworldOn() && isUnder(cell.x, cell.y);
 
   return {
+    ...(under && { u: 1 }),
     uid: cellOwner.userid,
     b: cell.base_type,
-    pi: 0,
+    pi: pendingInvite,
     bid: cell.baseid,
     aid: cellOwner.alliance_id,
     i: cell.terrainHeight,
     v: cellSave.empirevalue,
     mine: mine ? 1 : 0,
-    f: cellSave.flinger,
+    f: under ? 1 : cellSave.flinger,
     c: cellSave.catapult,
-    t: truceExpiry,
     n: cellOwner.username,
     fr: 0,
     p: isProtected ? 1 : 0,

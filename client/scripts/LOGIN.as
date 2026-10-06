@@ -1,4 +1,5 @@
 package {
+    import com.auth.IoSavedAccounts;
     import com.auth.AuthForm;
     import com.cc.utils.SecNum;
     import com.monsters.configs.BYMDevConfig;
@@ -63,17 +64,45 @@ package {
             AuthenticateUser(authInfo);
         }
 
+        /**
+         * Inferno-only: a login is on its way (or has succeeded and the game is loading). The login button
+         * clicked again (or Enter pressed twice) sent a second login: two yards were loaded at once and the first
+         * one's bottom bar was taken down under it (bug reports #56, #58).
+         */
+        private static var _ioLoginPending:Boolean = false;
+
         public static function AuthenticateUser(authInfo:Array):void {
             var handleLoadSuccessful:Function;
             var handleLoadError:Function;
             if (GLOBAL._local) {
+                if (GLOBAL.INFERNO_ONLY) {
+                    if (_ioLoginPending) {
+                        return;
+                    }
+                    _ioLoginPending = true;
+                }
                 handleLoadSuccessful = function(serverData:Object):void {
                     if (serverData.hasOwnProperty("error") && serverData.error != 0) {
+                        _ioLoginPending = false;
                         GLOBAL.Message(serverData.error);
                         return;
                     }
 
                     if (serverData.error == 0) {
+                        if (GLOBAL.INFERNO_ONLY) {
+                            // Remember this account (email and name only, never the password) for the
+                            // login page's account list.
+                            // The server sends the email back with every login (password or saved token).
+                            var ioEmail:String = serverData.email ? String(serverData.email) : null;
+                            for each (var ioPair:Array in authInfo) {
+                                if (!ioEmail && ioPair && ioPair[0] == "email") {
+                                    ioEmail = String(ioPair[1]);
+                                }
+                            }
+                            if (ioEmail) {
+                                IoSavedAccounts.remember(ioEmail, serverData.username ? String(serverData.username) : "");
+                            }
+                        }
                         if (GLOBAL._local) {
                             // Set token
                             token = serverData.token;
@@ -82,7 +111,11 @@ package {
                                     function(mapData:Object):void {
                                         MapRoomManager.instance.init(mapData.newmap, mapData.mapheaderurl);
                                         LOGIN.Process(serverData);
-                                    });
+                                    }, GLOBAL.INFERNO_ONLY ? function(param1:Object = null):void {
+                                        // (Inferno-only: the login can be tried again)
+                                        _ioLoginPending = false;
+                                        GLOBAL.Message("An error occurred during login on the server.");
+                                    } : null);
                         }
                         else {
                             // ToDo: Implement if we are running in a browser.
@@ -91,6 +124,7 @@ package {
                     }
                 };
                 handleLoadError = function(error:IOErrorEvent):void {
+                    _ioLoginPending = false;
                     GLOBAL._layerTop.addChild(GLOBAL.Message("An error occurred during login on the server."));
                 };
                 new URLLoaderApi().load(GLOBAL._apiURL + "player/getinfo", [["version", GLOBAL._version.Get()]].concat(authInfo), handleLoadSuccessful, handleLoadError);

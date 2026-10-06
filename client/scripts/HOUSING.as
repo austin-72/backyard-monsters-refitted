@@ -52,6 +52,8 @@ package {
             }
         }
 
+        public static const IO_TEST_CAPACITY:int = 9999999;
+
         public static function HousingSpace():void {
             var _loc3_:BFOUNDATION = null;
             var _loc4_:int = 0;
@@ -75,6 +77,10 @@ package {
                 if (_loc3_._countdownBuild.Get() + _loc3_._countdownUpgrade.Get() > 0) {
                     _housingBuildingUpgrading = true;
                 }
+            }
+            // Admin test mode: the Compound holds any number of monsters.
+            if (GLOBAL.ioTestMode()) {
+                _housingCapacity.Set(IO_TEST_CAPACITY);
             }
             _loc4_ = int(GLOBAL.player.monsterList.length);
             _loc5_ = 0;
@@ -175,6 +181,10 @@ package {
                     }
                     _housingCapacity.Add(_loc6_);
                 }
+            }
+            // Admin test mode: the Compound holds any number of monsters.
+            if (GLOBAL.ioTestMode()) {
+                _housingCapacity.Set(IO_TEST_CAPACITY);
             }
             _loc4_ = int(GLOBAL.player.monsterList.length);
             _loc5_ = 0;

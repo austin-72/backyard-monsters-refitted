@@ -71,7 +71,8 @@ package {
             _showProtected = false;
             _showWarning = false;
             UI_BOTTOM.Setup();
-            if (BASE.isMainYardOrInfernoMainYard) {
+            // (Inferno-only: an outpost's one worker is shown too, 3 October)
+            if (BASE.isMainYardOrInfernoMainYard || GLOBAL.INFERNO_ONLY && BASE.isOutpostOrInfernoOutpost) {
                 UI_WORKERS.Setup();
             }
             _top.Setup();

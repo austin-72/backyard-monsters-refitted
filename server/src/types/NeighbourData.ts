@@ -22,8 +22,6 @@ export interface NeighbourData {
   basename?: string;
   ownerName?: string;
   pic?: string;
-  trucestate?: string;
-  truceexpire?: number;
   destroyed?: number;
   description?: string;
   type?: number;

@@ -2,6 +2,7 @@ package com.monsters.effects {
     import com.monsters.managers.InstanceManager;
     import com.monsters.monsters.MonsterBase;
     import com.monsters.monsters.components.abilities.Enrage;
+    import com.monsters.monsters.components.abilities.IoSulfurShield;
     import com.monsters.monsters.components.abilities.TemporaryComponent;
     import com.monsters.pathing.PATHING;
     import flash.display.DisplayObject;
@@ -139,7 +140,13 @@ package com.monsters.effects {
             --this.particleCount;
         }
 
+        /** Inferno-only: a replay's shot (IoReplayPlayer): only its picture, it hurts nothing. */
+        public var ioPicture:Boolean = false;
+
         public function Damage(param1:Point):void {
+            if (this.ioPicture) {
+                return;
+            }
             var _loc2_:int = 0;
             var _loc4_:int = 0;
             var _loc5_:Array = null;
@@ -175,10 +182,17 @@ package com.monsters.effects {
             else {
                 _loc2_ = 0;
                 while (_loc2_ < _loc3_) {
-                    if (Boolean(this.targets[_loc2_][0]._visible) && !this.targets[_loc2_][0].dead) {
+                    // (Inferno-only: a burrowed monster is not drawn, but a Sulfur Bomb still reaches it underground)
+                    if ((Boolean(this.targets[_loc2_][0]._visible) || GLOBAL.INFERNO_ONLY && this.targets[_loc2_][0] is MonsterBase && MonsterBase(this.targets[_loc2_][0])._movement == "burrow" && MonsterBase(this.targets[_loc2_][0]).health > 0) && !this.targets[_loc2_][0].dead) {
                         if (this.targets[_loc2_][0] is MonsterBase) {
                             if (!(_loc8_ = this.targets[_loc2_][0] as MonsterBase).getComponentByName(k_PUTTY_BOMB_ENRAGE)) {
-                                _loc8_.addComponent(new TemporaryComponent(new Enrage(this.bomb.speed, this.bomb.damageMult, this.bomb.kind == "sulfur" ? "IO_SULFUR" : null), this.bomb.speedlength), k_PUTTY_BOMB_ENRAGE);
+                                if (this.bomb.kind == "sulfur" && GLOBAL.INFERNO_ONLY) {
+                                    // Inferno Sulfur Bomb: speed, invulnerable at first, then armour fading to 0
+                                    _loc8_.addComponent(new IoSulfurShield(this.bomb.speed, Number(this.bomb.invuln) || 0, this.bomb.speedlength, this.bomb.hasOwnProperty("armor") ? Number(this.bomb.armor) : 99), k_PUTTY_BOMB_ENRAGE);
+                                }
+                                else {
+                                    _loc8_.addComponent(new TemporaryComponent(new Enrage(this.bomb.speed, this.bomb.damageMult, this.bomb.kind == "sulfur" ? "IO_SULFUR" : null), this.bomb.speedlength), k_PUTTY_BOMB_ENRAGE);
+                                }
                             }
                         }
                     }
@@ -189,6 +203,19 @@ package com.monsters.effects {
 
         public function Tick():Boolean {
             return !this.particleCount;
+        }
+
+        /** Inferno-only (a replay going back to its start): the bomb and what it left on the ground, gone. */
+        public function ioRemove():void {
+            for (var id:String in this.particles) {
+                this.RemoveParticle(id);
+            }
+            if (this.mctop && this.mctop.parent) {
+                this.mctop.parent.removeChild(this.mctop);
+            }
+            if (this.mcbottom && this.mcbottom.parent) {
+                this.mcbottom.parent.removeChild(this.mcbottom);
+            }
         }
 
         public function Freeze():void {

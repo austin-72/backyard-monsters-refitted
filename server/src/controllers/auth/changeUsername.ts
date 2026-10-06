@@ -2,6 +2,7 @@ import type { KoaController } from "../../utils/KoaController.js";
 import { User } from "../../database/models/user.model.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { ChangeUsernameSchema } from "../../schemas/AuthSchemas.js";
+import { parseInput } from "../../schemas/parseInput.js";
 import { usernameCooldownErr } from "../../errors/errors.js";
 import { getUsernameCooldown, renameUser } from "../../services/user/renameUser.js";
 
@@ -17,7 +18,7 @@ import { getUsernameCooldown, renameUser } from "../../services/user/renameUser.
  */
 export const changeUsername: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
-  const { username } = ChangeUsernameSchema.parse(ctx.request.body);
+  const { username } = parseInput(ChangeUsernameSchema, ctx.request.body);
 
   const cooldown = getUsernameCooldown(user);
 

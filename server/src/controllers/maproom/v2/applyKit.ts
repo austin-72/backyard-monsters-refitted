@@ -1,5 +1,6 @@
 import z from "zod";
 
+import { isUnder } from "../../../services/maproom/v2/underworld.js";
 import { Save } from "../../../database/models/save.model.js";
 import type { User } from "../../../database/models/user.model.js";
 import { BaseType } from "../../../enums/Base.js";
@@ -9,6 +10,7 @@ import { postgres } from "../../../server.js";
 import { isAttackActive } from "../../../services/base/isAttackActive.js";
 import type { KoaController } from "../../../utils/KoaController.js";
 import { logger } from "../../../utils/logger.js";
+import { questBump } from "../../../services/quests/questProgress.js";
 
 /**
  * Outpost kits, applied by the server
@@ -27,6 +29,9 @@ import { logger } from "../../../utils/logger.js";
  * per-building loot state, stored decorations, siege and effect data are all reset here.
  * ====================================================================
  */
+
+/** The Flinger (BUILDING5). */
+const FLINGER = 5;
 
 const OUTPOST_HALL = 112;
 const MAX_BUILDINGS = 600;
@@ -65,6 +70,9 @@ export const applyKit: KoaController = async (ctx) => {
   const kit: Record<string, Record<string, number>> = {};
   let nextId = 1;
 
+  // Inferno-only: an underworld outpost has no Flinger (services/maproom/v2/underworld.ts): a kit's is left out.
+  const underworld = (userSave.outposts ?? []).some(([x, y, id]) => String(id) === String(baseid) && isUnder(Number(x), Number(y)));
+
   for (const building of entries) {
     const type = toInt(building?.t);
     const x = toInt(building?.X);
@@ -72,6 +80,7 @@ export const applyKit: KoaController = async (ctx) => {
 
     if (type === null || type <= 0 || x === null || y === null) throw new Error("applyKit: malformed building.");
     if (FORBIDDEN_TYPES.has(type)) continue;
+    if (underworld && type === FLINGER) continue;
 
     if (type === OUTPOST_HALL) {
       kit["0"] = { t: OUTPOST_HALL, X: x, Y: y, id: 0, l: Math.max(1, toInt(standingHall?.l) ?? 1) };
@@ -82,7 +91,8 @@ export const applyKit: KoaController = async (ctx) => {
     const level = toInt(building.l);
     const prefab = toInt(building.prefab);
 
-    // Bought with shiny: finished at its kit level. Bought with resources: `prefab` makes the client build it up.
+    // Finished at its kit level (the Inferno's client sends every kit so, bought with resources or with shiny).
+    // A building sent with only `prefab` is left for the client to build up, as the stock game did with resources.
     if (level !== null && level >= 1) entry.l = Math.min(level, 50);
     else entry.prefab = Math.min(Math.max(1, prefab ?? 1), 50);
 
@@ -125,6 +135,8 @@ export const applyKit: KoaController = async (ctx) => {
   await postgres.em.flush();
 
   logger.info(`Kit applied to outpost ${baseid} of user ${user.userid}: ${Object.keys(kit).length} buildings.`);
+
+  void questBump(user.userid, "kit_built");
 
   ctx.status = Status.OK;
   ctx.body = { error: 0, buildings: Object.keys(kit).length };

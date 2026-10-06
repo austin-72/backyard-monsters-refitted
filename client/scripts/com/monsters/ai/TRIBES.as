@@ -196,6 +196,11 @@ package com.monsters.ai {
                 return _infernotribes.d;
             }
             if (B_IDS.length && param1 >= B_IDS[0] || param1 === 0) {
+                // Inferno-only: no Brukkarg event here; a yard with no tribe id (Moloch's Gauntlet's) is Moloch's
+                // (the Brukkarg's name and a missing picture showed before, 29 September)
+                if (GLOBAL.INFERNO_ONLY && _tribes.m) {
+                    return _tribes.m;
+                }
                 return _eventtribes.b;
             }
             for (_loc3_ in _assoc) {

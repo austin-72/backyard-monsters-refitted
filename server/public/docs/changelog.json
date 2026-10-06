@@ -1,0 +1,1291 @@
+{
+  "title": "Changelog",
+  "updated": "2026-10-06",
+  "entries": [
+    {
+      "date": "2026-10-06",
+      "headline": "Kits built at once with resources, and deleting accounts",
+      "items": [
+        {
+          "area": "Outposts",
+          "title": "Kits built at once",
+          "text": "A kit bought with resources is now built straight away at its full levels, just like one bought with shiny. Nothing is left to build up, and your own kits work the same way."
+        },
+        {
+          "area": "Admins",
+          "title": "Delete an account",
+          "text": "Admins can delete an account from the admin panel: the player's yards, outposts, map cells, mail and the account itself. The username has to be typed again to confirm, a reason goes in the admin log, and an alliance they led passes to its next member."
+        }
+      ]
+    },
+    {
+      "date": "2026-10-05",
+      "headline": "Korath's Fortune, live bets, two workers in every outpost and fixes",
+      "items": [
+        {
+          "area": "Buildings",
+          "title": "Two workers in every outpost",
+          "text": "Every outpost now has 2 workers, so it can build or upgrade two things at once. On the map, an outpost with an idle worker shows one beside it, and a second stacked behind when both are idle."
+        },
+        {
+          "area": "Buildings",
+          "title": "A fourth Magma Tower",
+          "text": "At Under Hall 6 your main yard can build 4 Magma Towers (it was 3). Outposts keep their 4."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Korath's Fortune",
+          "text": "A second slot machine opens at Brimstone Pit level 6, with Korath looming over it and the champions on its reels: three Korath win the jackpot, then Krallen, Fomor, Drull, Gorgo, Young Korath and Baby Korath. It shares the Magma Slots' jackpot but pays on 5 lines (the three rows and both diagonals), each a fifth of your bet. It pays back the same, up to 99.99%. More spins win something, and about 1 spin in 4 pays more than its bet (1 in 18 on the Magma Slots)."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Brimstone Pit level 6",
+          "text": "The Pit can be upgraded once more, to level 6. That costs 5M, 5M, 2.5M and 1M resources, takes 4 days and needs Under Hall 6. It opens Korath's Fortune."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Live bets",
+          "text": "A new Live tab shows everyone's bets as they happen, today's 10 biggest wins and the last jackpots."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Moloch's Favor",
+          "text": "Once a day you get a free 10 Shiny Magma Slots spin. It's a real spin, so it can hit the jackpot. Use it from the lobby; after that the button counts down to the next one."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Stop and Auto on the slots",
+          "text": "Click SPIN, the lever or the reels while they spin to stop on the result at once. AUTO plays 10, 25, 50 or 100 spins in a row. It stops on a jackpot, a big win, or when you can't afford the next spin."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Close calls",
+          "text": "When the first two reels show a pair on a line, the pair lights up and the last reel spins a little longer. The result is already decided when the reels start, so this changes nothing about your chances."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Big wins",
+          "text": "A win of 10 times your bet or more now fills the window: BIG WIN, MEGA WIN at 50x, EPIC WIN at 200x. It works on every game, and when it pays more than 500 Shiny it's announced in Global chat."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Magma Derby: who's betting",
+          "text": "While bets are open, the track lists who is betting and how much, and each runner on the board shows how much is on it."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Balthazar's Ascent",
+          "text": "The sky no longer runs out during a long flight. Balthazar is now shot down by a Sharpshooter Tower, which turns to follow him."
+        },
+        {
+          "area": "Fixes",
+          "title": "Alliances opens on its first tab",
+          "text": "Opening the Alliances window a second time showed an empty Overview until you clicked another tab. It now opens with the Overview (or Browse, without an alliance) drawn every time."
+        },
+        {
+          "area": "Fixes",
+          "title": "Pointing at the Depths' edge",
+          "text": "Pointing at the empty cells round the Depths of Hell stopped the game. It no longer does."
+        },
+        {
+          "area": "Fixes",
+          "title": "Refused attacks",
+          "text": "An attack the server refuses (the yard just got damage protection, its player is online, or it's out of range) is now a message, and you go home. It was an error window that needed a reload."
+        },
+        {
+          "area": "Fixes",
+          "title": "Speed-ups with nothing selected",
+          "text": "Buying a speed-up after its building was finished or deselected stopped the game. Now nothing is bought and nothing is spent."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Fast Magma Drops",
+          "text": "Dropping a lot of balls very quickly could slow the whole server down for everyone. Each player's bets now take their turn, and the server stays quick."
+        }
+      ]
+    },
+    {
+      "date": "2026-10-04",
+      "headline": "The Depths of Hell, cheaper speed-ups and truces removed",
+      "items": [
+        {
+          "area": "Interface",
+          "title": "Top bar shortcuts",
+          "text": "Right of your Shiny: Alliances, Attack Log, Leaderboard and Change Log, each with a picture drawn like the level star and the Shiny coins, and its name on a bar like the Shiny counter. Alliances is a new shortcut. When the names don't fit, as on a phone, just the pictures show."
+        },
+        {
+          "area": "Interface",
+          "title": "Changelog button",
+          "text": "A new Change Log lists every change ever made to the Inferno, newest first, day by day. Click a day on the left to go to it."
+        },
+        {
+          "area": "Economy",
+          "title": "Cheaper speed-ups",
+          "text": "Speeding up building, upgrading, fortifying or repairing is free with 10 minutes or less left, as the original game's last 5 minutes were. Under an hour it now costs 1 Shiny at 11 minutes up to 9 Shiny at 59 minutes, instead of a flat 10."
+        },
+        {
+          "area": "Yard",
+          "title": "More bone blocks",
+          "text": "Wall limits on your main yard are raised: 10 at Under Hall 1, 50 at 2, 90 at 3, 160 at 4, 260 at 5 and 300 at 6, and walls can now be built from Under Hall 1. Outposts keep their 200."
+        },
+        {
+          "area": "Map",
+          "title": "Truces removed",
+          "text": "Truces are gone from the game: no more truce requests, truce icons on the map or truce lines. Old truce mail has been cleared out."
+        },
+        {
+          "area": "Events",
+          "title": "Gauntlet catapult shots cost resources",
+          "text": "Catapult shots in Moloch's Gauntlet were free by mistake. They now cost their resources, as in any other attack."
+        },
+        {
+          "area": "Depths",
+          "title": "The Depths of Hell",
+          "text": "A small land of 10 x 10 cells lies below every world, shared by everyone on it. Its portals, at the centres of the biggest lava pools, join places far apart on the map, so it's mostly a shortcut. Going through is free and instant."
+        },
+        {
+          "area": "Depths",
+          "title": "Moloch's Depths",
+          "text": "Every cell down there is a Moloch stronghold until a player takes it, at levels 38, 42, 46 and 50, the easiest next to the portals. Taking one over costs twice as much, and strongholds heal 12 hours after their last attack."
+        },
+        {
+          "area": "Depths",
+          "title": "Range through the portals",
+          "text": "A yard with a portal in its Flinger range can attack the cells next to where that portal comes out. An outpost below has no Flinger and reaches its neighbours; one next to a portal can attack anything within 5 cells of the portal above."
+        },
+        {
+          "area": "Depths",
+          "title": "Outposts in the Depths",
+          "text": "Outposts down there work like any other and count on the leaderboards. Main yards can't move there, and nobody can be invited to move onto one."
+        },
+        {
+          "area": "Depths",
+          "title": "Portals on the world map",
+          "text": "Portals show as light purple dots on the zoomed-out world map and the minimap. Hover one to see it, and click it to go straight down."
+        },
+        {
+          "area": "Depths",
+          "title": "Look through any portal",
+          "text": "Any portal can now be entered just to look around. To attack down there you still need the portal in one of your yards' Flinger range, or an outpost below already."
+        },
+        {
+          "area": "Depths",
+          "title": "A new look below",
+          "text": "Every cell is a red-and-black brimstone platform standing in lava, in four kinds, joined to its neighbours by wooden plank bridges. The lava sea around the island now lies level with the lava between the platforms."
+        },
+        {
+          "area": "Depths",
+          "title": "Darker lava, bigger bridges",
+          "text": "The lava below is a deeper, smouldering red, drawn with all nine lava textures so it repeats far less. The wooden bridges are twice the size."
+        },
+        {
+          "area": "Depths",
+          "title": "Neutral ground",
+          "text": "Every cell in the Depths is +0% for resources and +0% for defence, and the portals below stand on a platform like the other cells."
+        },
+        {
+          "area": "Map",
+          "title": "Plain coordinates",
+          "text": "Coordinates are plain numbers now: the world goes from 0 to 399 each way, with no more minus signs, and the Depths from 0 to 9, shown as Depths of Hell 4, 5 or D4 x D5 in Location boxes. Typing an old minus sign still works."
+        },
+        {
+          "area": "Events",
+          "title": "Hell Freezes Over",
+          "text": "[ CLASSIFIED ]"
+        },
+        {
+          "area": "Pets",
+          "title": "Five pets out at once",
+          "text": "Up to 5 pets can be out in your yard at once (it was 2), and you can own up to 5 of each monster."
+        },
+        {
+          "area": "Pets",
+          "title": "Name your pets",
+          "text": "Each pet can have a name of up to 16 letters, shown over it in your yard, for visitors and attackers too. Leave it empty for no name."
+        },
+        {
+          "area": "Pets",
+          "title": "Pets step aside",
+          "text": "A pet resting where something new appears, such as a fresh wart, walks off at once."
+        },
+        {
+          "area": "Replays",
+          "title": "Catapult shots in replays",
+          "text": "Replays now show the Catapult's shots: Sulfur Bombs, Candy Jars dropping on the towers, and Marilyn dropping in and blowing up."
+        },
+        {
+          "area": "Replays",
+          "title": "Monster glows in replays",
+          "text": "Monsters keep their glows in replays: war-cries, rage, the Sulfur Bomb's shield and the champions' glows. Older recordings still play as before."
+        },
+        {
+          "area": "Browser",
+          "title": "Smoother everywhere",
+          "text": "A frame-rate pass made the busiest places much smoother: a full yard, the Yard Planner, chat, the Quest Book, the Alliances window, the map and big battles, where a 500-monster attack now runs about twice as fast."
+        },
+        {
+          "area": "Battles",
+          "title": "No more pathfinding stutter",
+          "text": "Monsters find their way without the long pauses that made big battles stutter. They take exactly the same paths as before."
+        },
+        {
+          "area": "Browser",
+          "title": "Frame interpolation",
+          "text": "New in the page settings under Display: Frame interpolation adds 1 to 4 in-between frames for smoother movement. It is off by default, and the game itself still runs at 40 frames a second."
+        },
+        {
+          "area": "Fixes",
+          "title": "Missing pictures added",
+          "text": "A check of every picture and sound the game asks for found a few missing monster pictures, now added."
+        },
+        {
+          "area": "Interface",
+          "title": "What's different? updated",
+          "text": "The What's different? guide on the login page now covers everything up to today: 19 chapters, with new ones for the Depths of Hell, Pets, and Attack Logs and replays."
+        }
+      ]
+    },
+    {
+      "date": "2026-10-03",
+      "headline": "Attack Logs, replays, pets and the Wart Bloom",
+      "items": [
+        {
+          "area": "Battles",
+          "title": "Attack Logs",
+          "text": "The crossed swords next to the leaderboards' trophy open your Attack Logs: My attacks and Attacks on me, the newest 60 of each, with when, who, the yard, the damage and the loot. Attacks on tribes are logged too."
+        },
+        {
+          "area": "Battles",
+          "title": "Attack reports",
+          "text": "Report opens an attack's details: the yard and where it is, the damage, the buildings knocked down, the loot taken or lost and the battle log. Jump opens the map on the yard."
+        },
+        {
+          "area": "Replays",
+          "title": "Attack replays",
+          "text": "Every attack between players, on main yards and outposts, is recorded. Attacker and defender can both watch it from the Attack Logs, with Pause, speeds from a quarter to 4x, and Restart."
+        },
+        {
+          "area": "Replays",
+          "title": "Share and download replays",
+          "text": "Share a replay in Global or Alliance chat for anyone to watch, or download it and play the file later from the Attack Logs. Replays are kept 7 days, and you always keep the 10 newest attacks on you."
+        },
+        {
+          "area": "Pets",
+          "title": "Pets arrive",
+          "text": "Small copies of the Inferno's monsters can wander your main yard, just for looks: nothing fights them and they fight nothing. Buy them for 500 Shiny each in Buildings, Decorations, Pets. Never in outposts."
+        },
+        {
+          "area": "Events",
+          "title": "The Wart Bloom",
+          "text": "Every weekend, from Friday 6 pm to Sunday midnight US Central time, warts grow three times as fast in your main yard, up to 10. Offline time counts, and Global chat announces when the bloom starts and ends."
+        },
+        {
+          "area": "Map",
+          "title": "Previous, Home and Next outpost",
+          "text": "The Outposts list has Previous, Home and Next outpost buttons that step through your outposts in the order you took them, round and round."
+        },
+        {
+          "area": "Interface",
+          "title": "Outpost worker icon",
+          "text": "An outpost shows its worker at the top, as your main yard does."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Magma Drop: 20 at once",
+          "text": "Magma Drop now lets you have up to 20 Spurtz bouncing at once (it was 6)."
+        },
+        {
+          "area": "Buildings",
+          "title": "Upgrade All walls for resources",
+          "text": "A wall's menu has Upgrade All (Resources): every wall goes up to the level you pick at once, for exactly what they still cost. The Shiny Upgrade All is still there."
+        },
+        {
+          "area": "Buildings",
+          "title": "Traps stay after going off",
+          "text": "Traps that went off stay in your yard, faded and disarmed, instead of vanishing. Re-arm All on one sets them all again for their build costs."
+        },
+        {
+          "area": "Buildings",
+          "title": "Hold to hatch",
+          "text": "In the Incubator, hold a monster down to keep adding it until the queue is full or the magma runs out. The Incubation Control Station has small arrows to move a queued monster left or right."
+        },
+        {
+          "area": "Yard",
+          "title": "Yard Planner Export and Import",
+          "text": "Export copies your layout as a code to share; Import puts your buildings where a code says, and those it has no place for stay put. A code that would put buildings outside your yard, or on top of each other, is refused."
+        },
+        {
+          "area": "Buildings",
+          "title": "Instant decorations, bigger Under Hall",
+          "text": "Decorations are built the moment you place them, and the Under Hall is now 130 x 130, the same size as the Town Hall."
+        },
+        {
+          "area": "Monsters",
+          "title": "Every monster to level 6",
+          "text": "Every Inferno monster can now be trained to level 6 in a level 5 Academy."
+        },
+        {
+          "area": "Map",
+          "title": "Tribe yards heal themselves",
+          "text": "Tribe and Moloch yards go back to fresh 12 hours after their last attack, on the map too, instead of staying damaged until someone opened them."
+        },
+        {
+          "area": "Quests",
+          "title": "Every quest reachable",
+          "text": "All 140 quests were checked to be doable. Quests not every player can do (leaders and officers only, or down to luck) are optional and don't hold up chests, and daily quests are picked only from what your yard can do."
+        },
+        {
+          "area": "Interface",
+          "title": "Every window checked",
+          "text": "Every window was looked at in all four languages and on small screens. Numbers, buttons and headings that didn't fit are drawn smaller, cut-off popups grow to fit, and 488 lines still in English were translated."
+        },
+        {
+          "area": "Interface",
+          "title": "Clearer messages",
+          "text": "Tribe dialogs use the Inferno tribes' names, a failed attack says how much was destroyed and that a yard falls at 90%, a greyed-out Attack button says the yard is out of range, and takeovers explain their price."
+        },
+        {
+          "area": "Battles",
+          "title": "Attacking from off-screen yards",
+          "text": "Attacking from your main yard while it's off the map's screen now works: the Attack window waits for its monsters, and they come out of that yard."
+        },
+        {
+          "area": "Interface",
+          "title": "Building names centred",
+          "text": "A building's name is centred over its menu, and long names like Infernal Academy are drawn smaller to fit."
+        },
+        {
+          "area": "Fixes",
+          "title": "Bug fixes",
+          "text": "Fixed: the Quest Book not drawing in the Flash version, an error going into an attack right after hovering a tower, Close Enough refusing jobs under 10 minutes, and the idle invite popup turning up during attacks."
+        },
+        {
+          "area": "Fixes",
+          "title": "More fixes",
+          "text": "Fixed: long battle reports losing their loot line, end-of-attack and takeover notes running out of their boxes, the mailbox's empty headings, the Compound's bar with no room, and the Alliances window going off small screens."
+        },
+        {
+          "area": "Fixes",
+          "title": "Server restarts handled",
+          "text": "A yard load with no answer while the server restarts is tried again, saying the server may be restarting instead of Oops, something broke! A chat line that never arrives goes back in the box."
+        },
+        {
+          "area": "Browser",
+          "title": "Readable selected text",
+          "text": "Selected text in the browser version is white on its highlight, as in Flash, instead of black on black."
+        },
+        {
+          "area": "Interface",
+          "title": "What's different? refreshed",
+          "text": "The login page's guide has new pictures from the current game, a Quest Book chapter, Moloch's real loot figures and the site's address, inferno.maproom2.com."
+        }
+      ]
+    },
+    {
+      "date": "2026-10-02",
+      "headline": "Leaderboards, the Quest Book, chat and alliances rebuilt",
+      "items": [
+        {
+          "area": "Leaderboards",
+          "title": "Leaderboards arrive",
+          "text": "The gold trophy next to your Shiny opens the leaderboards: Outposts, Alliances and Gamblers, for every world or just one. Every player is listed, with Find me and Jump to their yard."
+        },
+        {
+          "area": "Leaderboards",
+          "title": "Every 5 minutes",
+          "text": "The leaderboards and the whole-world map are refreshed on a steady 5-minute clock, spread out so the server never gets a rush."
+        },
+        {
+          "area": "Quests",
+          "title": "The Quest Book",
+          "text": "The Quests button opens a book of 140 quests in 10 categories, each drawn as a tree: collect a quest and the ones under it open. What you've already done counts straight away."
+        },
+        {
+          "area": "Quests",
+          "title": "Chests and rewards",
+          "text": "Every category has a chest, and the whole book has its own: about 1,170 Shiny in all, plus resources. The Brimstone Pit's quests pay resources only."
+        },
+        {
+          "area": "Quests",
+          "title": "Daily quests",
+          "text": "Three daily quests, different for every player and new at midnight UTC, each paying resources and 1 Shiny, with a bonus for finishing all three."
+        },
+        {
+          "area": "Quests",
+          "title": "Quest dock and notices",
+          "text": "The dock at the bottom right shows quests ready to collect and those closest to done, and a notice slides in when one is ready. Go there takes you where a quest is done, and Collect all collects everything ready."
+        },
+        {
+          "area": "Chat",
+          "title": "Chat bugs fixed",
+          "text": "Fixed: your last message coming back in front of the next, Alliance chat dying after a lost connection, history shown twice, ignores forgotten on reload, refused lines vanishing, and the Alliance tab not following a new alliance."
+        },
+        {
+          "area": "Chat",
+          "title": "Times and the name menu",
+          "text": "Each line shows how long ago it was sent. Click a player's name to message them, ignore them, jump to their yard or find them on the leaderboards."
+        },
+        {
+          "area": "Chat",
+          "title": "Mentions and commands",
+          "text": "A line with your name in it is drawn in gold and counted on its tab. New commands: ignore, unignore, list, clear and help."
+        },
+        {
+          "area": "Chat",
+          "title": "Announcements in chat",
+          "text": "News from the admins (gold), big Brimstone Pit wins and jackpots (purple) and milestones like conquering Moloch's Gauntlet (light blue) show as banners in chat."
+        },
+        {
+          "area": "Chat",
+          "title": "Longer messages, smoother chat",
+          "text": "Messages can be 200 characters, in a box that grows as you type. Alliance news has its own colours, scrolling is smooth, and new lines don't pull you down while you read back."
+        },
+        {
+          "area": "Chat",
+          "title": "Chat moderators",
+          "text": "[Admin] and [Mod] badges show who runs the chat. Moderators can remove a message from everyone's screen and mute a player for a while; a muted player is told for how long."
+        },
+        {
+          "area": "Alliances",
+          "title": "Alliances window redesigned",
+          "text": "A header shows your alliance's emblem, rank, leader, members online, outposts and empire value, over new tabs: Overview, Board, Outposts, Members, Power-Ups, Recruit, Invites and Browse. Alliance chat lives in the chat's Alliance tab."
+        },
+        {
+          "area": "Alliances",
+          "title": "The alliance board",
+          "text": "Leaders and officers pin up to 50 messages, each with an optional place on the map and kept 30 days. Board (2) counts the pins you haven't read, and Share on the map can pin a place for you."
+        },
+        {
+          "area": "Alliances",
+          "title": "Outposts history",
+          "text": "The Outposts tab lists every outpost your members gained or lost in the last 90 days, from players or tribes, with filters, weekly and monthly totals, and Jump."
+        },
+        {
+          "area": "Alliances",
+          "title": "Alliance officers",
+          "text": "Leaders can make officers, who can pin to the board, invite and recruit, answer join requests and kick members (not the leader or other officers)."
+        },
+        {
+          "area": "Alliances",
+          "title": "Ranked by empire value",
+          "text": "Alliances are ranked by empire value (every member's main yard and outposts) instead of empire points, in Browse, the header and the member lists, the same as the leaderboards."
+        },
+        {
+          "area": "Interface",
+          "title": "What's different?",
+          "text": "A What's different? button on the login page opens a guide to everything that differs from the original game, written for players."
+        },
+        {
+          "area": "Admins",
+          "title": "Moderators and default layouts",
+          "text": "Admins make or remove chat moderators from a player's card, live. The tribe and Moloch layouts made in the Designer are now the built-in defaults, and Reset goes back to them."
+        }
+      ]
+    },
+    {
+      "date": "2026-10-01",
+      "headline": "An overnight bug hunt, Yard Planner walls and invite rewards",
+      "items": [
+        {
+          "area": "Events",
+          "title": "Hell Freezes Over",
+          "text": "[ CLASSIFIED ]"
+        },
+        {
+          "area": "Yard",
+          "title": "Wall lines fixed",
+          "text": "The Yard Planner's Walls tool no longer places some walls twice with gaps in the line. It takes exactly the walls it places from storage and leaves nothing on the mouse."
+        },
+        {
+          "area": "Economy",
+          "title": "No more buy-Shiny prompts",
+          "text": "Shiny isn't sold here, so not having enough now tells you where to earn it (Daily Reward, golden warts, inviting friends) instead of showing a shop button that did nothing."
+        },
+        {
+          "area": "Yard",
+          "title": "Warts only in your own yard",
+          "text": "Warts no longer grow on wild monster yards you view or attack."
+        },
+        {
+          "area": "Fixes",
+          "title": "Texts in four languages",
+          "text": "French, Spanish and Portuguese now have every text English has: no more raw codes such as the Spanish names of Korath and Drull, missing numbers in sentences, or text that turned bold to the end."
+        },
+        {
+          "area": "Fixes",
+          "title": "Overnight bug hunt",
+          "text": "Fixed: a crash loading a yard from outside the map, errors around the map tutorial and the bottom bar, Rezghul's juice showing as goo, the attack bar's Flinger label, and empty pictures in the welcome and defence popups."
+        },
+        {
+          "area": "Fixes",
+          "title": "Far-out buildings kept",
+          "text": "Buildings placed far out in tribe and Moloch yards are no longer moved to the top corner when the yard loads."
+        },
+        {
+          "area": "Fixes",
+          "title": "Login sent once",
+          "text": "Clicking Login or Register twice no longer loads two yards at once or says the account already exists."
+        },
+        {
+          "area": "Fixes",
+          "title": "More reported bugs fixed",
+          "text": "Fixed: the main yard stopping on load after a run of outposts, a stop after Open Map at the end of a wild attack, an error from a death splat after leaving a yard, and Relocate pressed twice giving a confusing message."
+        },
+        {
+          "area": "Fixes",
+          "title": "A more patient connection",
+          "text": "The game tries to reach the server three more times before saying it failed, and a dropped request is no longer treated as an error."
+        },
+        {
+          "area": "Buildings",
+          "title": "Stuck Strongbox unlocks",
+          "text": "A Strongbox unlock that showed no time left and never finished gets its time back, or finishes, on the next load."
+        },
+        {
+          "area": "Map",
+          "title": "Flatter bone fields",
+          "text": "Outposts and wild yards on the bone fields stand on new, flatter dark rock with fewer, smaller bones."
+        },
+        {
+          "area": "Admins",
+          "title": "Invite reward abuse",
+          "text": "Admins can bar a player from invite rewards, with a reason, and sort the player list by invites accepted. Warts no longer sprout in Designer drafts."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "headline": "Balance pass, Inferno map art and warts",
+      "items": [
+        {
+          "area": "Battles",
+          "title": "Balance pass",
+          "text": "Towers, yards and monsters were rebalanced so an attack on a yard of your own strength is easy at Under Hall 1 and a hard fight at Under Hall 6."
+        },
+        {
+          "area": "Buildings",
+          "title": "Tower damage retuned",
+          "text": "Each tower level's damage was tuned to the Under Hall that unlocks it. The Quake Tower now falls to a fifth of its blow at the edge, the Obsidian Mortar's blast is smaller, and the Blast Tower reaches 20 further."
+        },
+        {
+          "area": "Buildings",
+          "title": "Yard health and Compound space",
+          "text": "Resource buildings at levels 8 to 10 and the Resource Pod have less health, and the Compound holds more at the top: 1,000, 1,800 and 2,000 at its last three levels."
+        },
+        {
+          "area": "Monsters",
+          "title": "Monster balance",
+          "text": "Small monsters grow stronger at levels 4 to 6. King Wormzer, Valgos and Balthazar are toned down at low levels, the Emberghoul heals less, Sabnox takes 65 room with more health, and Ashkarr has more health."
+        },
+        {
+          "area": "Monsters",
+          "title": "Rezghul retuned",
+          "text": "Rezghul takes 200 room (was 250). Monsters he raises come back with 75% of their health, champions with 25%."
+        },
+        {
+          "area": "Map",
+          "title": "The map drawn as the Inferno",
+          "text": "The map has its own Inferno art: lava seas, bone shores, netherrack darkening as it rises and black rock with glowing magma at the peaks. Each ground has four looks, so the map never looks tiled."
+        },
+        {
+          "area": "Map",
+          "title": "Inferno bases on the map",
+          "text": "Main yards are drawn as the Under Hall and outposts as the Inferno outpost hall, and free outposts have the Inferno worker beside them. The Map Room's tutorial pictures were redone too."
+        },
+        {
+          "area": "Map",
+          "title": "Yard grounds by height",
+          "text": "Outposts and wild yards stand on ground that matches their place on the map: bone fields by the shore, darker rock higher up. Main yards stay on lava."
+        },
+        {
+          "area": "Yard",
+          "title": "Warts replace mushrooms",
+          "text": "Mushrooms are now crimson, lava-cracked warts, six kinds of them, with their own worker lines and a golden wart picture. One in four is still golden, worth 3 or 8 Shiny."
+        },
+        {
+          "area": "Buildings",
+          "title": "Strongbox one thing at a time",
+          "text": "The Strongbox unlocks one monster at a time, always animates while working, and can't be upgraded while unlocking. A stuck Rezghul unlock finishes by itself."
+        },
+        {
+          "area": "Buildings",
+          "title": "Academy one thing at a time",
+          "text": "Each Academy trains one monster at a time (two Academies train two) and can't be upgraded while training. Double-clicking instant buttons no longer charges you twice."
+        },
+        {
+          "area": "Admins",
+          "title": "Friends invited card",
+          "text": "A player's card in the admin panel lists everyone who joined through their invite link, and whether each invite paid."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-29",
+      "headline": "Build menu art, padlocks and every missing picture",
+      "items": [
+        {
+          "area": "Buildings",
+          "title": "The build menu shows real buildings",
+          "text": "The build menu draws each building as it stands in your yard: towers turn towards your mouse and animated buildings move. Locked buildings show dark silhouettes."
+        },
+        {
+          "area": "Buildings",
+          "title": "Animated outpost hall",
+          "text": "The outpost hall has new Inferno art, with a burning brazier and a waving banner."
+        },
+        {
+          "area": "Buildings",
+          "title": "Incubation Control Station",
+          "text": "The Hatchery Control Center is now the Incubation Control Station, with its monsters four across and a wider description. It and the Juicer say Magma instead of Goo."
+        },
+        {
+          "area": "Monsters",
+          "title": "Padlocks on locked monsters",
+          "text": "Monsters you haven't unlocked show a gold padlock in the Incubator, the Control Station, the Compound, the Academy and the Strongbox."
+        },
+        {
+          "area": "Monsters",
+          "title": "New portraits and order",
+          "text": "The Emberghoul and Ashkarr have new portraits, and Rezghul now sits between King Wormzer and the Emberghoul in every list."
+        },
+        {
+          "area": "Buildings",
+          "title": "The Juicer takes Inferno monsters",
+          "text": "The Monster Juicer turns Inferno monsters into magma (60, 80 or 100% of their hatch cost by level), with a restyled look of basalt, bronze and skulls."
+        },
+        {
+          "area": "Buildings",
+          "title": "Resource buildings by level",
+          "text": "The Bone Cruncher and the Coal, Sulfur and Magma Extractors change look as they level up, in four steps all the way to level 10."
+        },
+        {
+          "area": "Buildings",
+          "title": "Missing art made",
+          "text": "Missing pictures were made: the Monster Locker's shadow and damage, the Academy's training animations, quest icons and pictures, monster popups and Rezghul's soul orb."
+        },
+        {
+          "area": "Map",
+          "title": "Tribe pictures in the map room",
+          "text": "A wild tribe's large picture shows in the map room's information panel."
+        },
+        {
+          "area": "Events",
+          "title": "The Gauntlet shows Moloch",
+          "text": "Moloch's Gauntlet yards now show Moloch's name and picture instead of an overworld event tribe."
+        },
+        {
+          "area": "Interface",
+          "title": "Kit table and pictures",
+          "text": "The kit table has a row for the Cinder Coil and Obsidian Mortar, and kit pictures are drawn again with the new art."
+        },
+        {
+          "area": "Chat",
+          "title": "Chat follows new lines",
+          "text": "The chat stays on its newest line when one arrives or you switch tabs, and its tabs use the game's title font."
+        },
+        {
+          "area": "Fixes",
+          "title": "Yard switch crash fixed",
+          "text": "Fixed a crash when switching yards quickly, and another when viewing a yard with a Map Room being built."
+        },
+        {
+          "area": "Browser",
+          "title": "Outlines drawn right",
+          "text": "Black outlines over pictures, such as the upgrade window's resource boxes and the kit table, are drawn in the right order in the browser version."
+        },
+        {
+          "area": "Admins",
+          "title": "Designs export, outpost recycling",
+          "text": "Admins can export everything made in the Designer. Recycling and stopping construction in outposts is for Designer kits only, never a player's outpost."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-28",
+      "headline": "The Fusebug and the Emberghoul",
+      "items": [
+        {
+          "area": "Monsters",
+          "title": "New monster: Fusebug",
+          "text": "A bomber on Strongbox page 1 (housing 10): it runs at your defences, creeps into the building and explodes."
+        },
+        {
+          "area": "Monsters",
+          "title": "New monster: Emberghoul",
+          "text": "A bruiser on Strongbox page 4 (housing 100) that heals itself with every hit it lands."
+        },
+        {
+          "area": "Monsters",
+          "title": "Monsters stand still properly",
+          "text": "The new monsters walk only while they move: at their target they stand or play their attack instead of walking on the spot. Korath, Drull and Ashkarr stand when held still too."
+        },
+        {
+          "area": "Monsters",
+          "title": "Flickerfiend's shimmer slowed",
+          "text": "The Flickerfiend's vanishing and reappearing now takes long enough to see, and it stands still while it blinks."
+        },
+        {
+          "area": "Buildings",
+          "title": "Cinder Coil spins up",
+          "text": "The Cinder Coil now spins up, slows to aim, shocks and rests, one shot a second."
+        },
+        {
+          "area": "Buildings",
+          "title": "Obsidian Mortar lobs",
+          "text": "The Obsidian Mortar's shells fly in a real high lob, turning over with embers trailing."
+        },
+        {
+          "area": "Monsters",
+          "title": "Korath and Drull retuned",
+          "text": "Korath and Drull cost what Ashkarr does to hatch (2.2 to 5.2 million magma), cost less to heal, have more even health by level, and are drawn with the champions' bigger art."
+        },
+        {
+          "area": "Monsters",
+          "title": "Ashkarr's glows",
+          "text": "Monsters sped up by Ashkarr's war-cry glow pink and the defenders she roots glow faintly white."
+        },
+        {
+          "area": "Fixes",
+          "title": "Monster names always shown",
+          "text": "The new monsters always have their names and descriptions, even when your browser kept an old copy of the language file."
+        },
+        {
+          "area": "Admins",
+          "title": "Designer: defending monsters",
+          "text": "Tribe and Moloch designs can set the monsters in their Compounds and their levels."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-27",
+      "headline": "The Brimstone Pit, new towers, new monsters",
+      "items": [
+        {
+          "area": "Brimstone Pit",
+          "title": "The Brimstone Pit opens",
+          "text": "A casino building, one per yard from Under Hall 1, where you play against the house for Shiny. The server draws every result, and Shiny can never be bought, cashed out or traded."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Magma Drop and Scratchers",
+          "text": "Magma Drop bounces a Spurtz down 10 rows of pegs into a cup, at low, medium or high risk. Brimstone Scratchers are 5, 25 or 100 Shiny tickets you scratch with the mouse."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Wormzer Roulette and Magma Slots",
+          "text": "From Pit level 2, Wormzer Roulette spins 29 segments of monsters, Lava and Ash. From level 3, Magma Slots has three reels, and three King Wormzer win a jackpot that grows with every spin."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Bone Pile",
+          "text": "From Pit level 2: 25 piles hiding 1 to 20 Sabnox. Every safe pile raises your multiplier, and you cash out whenever you like. A game left for a day is settled for you."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Balthazar's Ascent and Magma Derby",
+          "text": "Rounds everyone plays together: cash out before a Magma Tower shoots Balthazar down (Pit level 4), or bet on six monsters in a race every five minutes (level 5)."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Fair and checkable",
+          "text": "Before you bet you see a code that locks in the results, and afterwards the key to check it in the Fairness tab. Every game pays back just under 100% on average, and History lists every bet."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "Brimstone Pit fixes",
+          "text": "Fixed: a Pit that stayed invisible when one of its pictures was missing, Slots showing three Spurtz on other wins, and an error opening Roulette."
+        },
+        {
+          "area": "Buildings",
+          "title": "Cinder Coil",
+          "text": "A new tower from Under Hall 3 with 6 levels: its arc shocks a monster and leaps on to up to 6 more nearby, a little weaker each time. Hits ground and air."
+        },
+        {
+          "area": "Buildings",
+          "title": "Obsidian Mortar",
+          "text": "A new long-range tower from Under Hall 3 with 6 levels: it lobs shells that hit everything in the blast, hardest in the middle, but can't hit monsters right next to it."
+        },
+        {
+          "area": "Monsters",
+          "title": "New monster: Clinkerjaw",
+          "text": "Strongbox page 2 (housing 40): when it dies it splits into small Spurtz and leaves a magma pool that heals monsters nearby."
+        },
+        {
+          "area": "Monsters",
+          "title": "New monster: Flickerfiend",
+          "text": "Strongbox page 3 (housing 35): every third strike it vanishes and reappears by another building. Too nimble to set traps off."
+        },
+        {
+          "area": "Monsters",
+          "title": "Ashkarr, the Ember Herald",
+          "text": "A champion on Strongbox page 5 (housing 600): every 10 seconds her war-cry speeds up her side and roots the defenders around her. Several Ashkarrs don't stack."
+        },
+        {
+          "area": "Buildings",
+          "title": "Inferno art for seven buildings",
+          "text": "The General Store, Hatchery Control Center, Flinger, Catapult, Map Room, Monster Juicer and Yard Planner got Inferno art, and three more buildings got their missing damaged pictures."
+        },
+        {
+          "area": "Interface",
+          "title": "Click what you see",
+          "text": "Buildings are clicked by their pictures, the one drawn on top gets the click, and the building under your mouse glows."
+        },
+        {
+          "area": "Battles",
+          "title": "Balthazar and Sulfur Bombs",
+          "text": "Balthazar no longer sets off traps and Quake Towers ignore him. Sulfur Bombs now reach burrowed monsters."
+        },
+        {
+          "area": "Events",
+          "title": "Gauntlet button moved",
+          "text": "The Moloch's Gauntlet button now sits under your fifth worker."
+        },
+        {
+          "area": "Interface",
+          "title": "Register warning",
+          "text": "The register form recommends a made-up email and a password you don't use anywhere else."
+        },
+        {
+          "area": "Admins",
+          "title": "The Designer",
+          "text": "Admins can edit the outpost kits, every wild tribe level and Moloch's 13 bases as free, instant draft yards. Saved layouts are used for new yards on the map."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-26",
+      "headline": "Moloch's Gauntlet, Relocate and smoother building",
+      "items": [
+        {
+          "area": "Events",
+          "title": "Moloch's Gauntlet",
+          "text": "A monthly event for the first 7 days (UTC): a ladder of 13 Moloch gates fought in order. A gate breaks at 90% destroyed, with 3 tries each, and damage stays between tries."
+        },
+        {
+          "area": "Events",
+          "title": "Gauntlet rewards",
+          "text": "5 Shiny a gate and 150 more for the last, plus resources rising to 30 million bone, coal and sulfur and 15 million magma at gate 13. Each prize is paid once."
+        },
+        {
+          "area": "Map",
+          "title": "Relocate your yard",
+          "text": "A Relocate button in the map room moves your main yard the way a new player is placed. Your resources go to 0 and your outposts return to the wild; not possible while you are under attack."
+        },
+        {
+          "area": "Battles",
+          "title": "Candy Jars by time",
+          "text": "Candy Jars trap every tower in range for 15, 25, 40 or 55 seconds, and its shots hit the glass, which cracks, shakes, then breaks. They cost 100k, 500k, 2M or 5M bone and coal."
+        },
+        {
+          "area": "Battles",
+          "title": "Sulfur Bomb sizes",
+          "text": "Under a Sulfur Bomb your monsters are faster the whole time, can't be hurt at all for the first 0, 4, 8 or 12 seconds, then take much less damage until it wears off. They glow red, orange, then yellow."
+        },
+        {
+          "area": "Battles",
+          "title": "Shielded monsters can die",
+          "text": "Small hits now add up properly, and Quake Towers hit through a Sulfur Bomb's shield as they should, so a monster on its last points can be finished off."
+        },
+        {
+          "area": "Battles",
+          "title": "Blast Tower and Candy Jars",
+          "text": "The Blast Tower now hits a Candy Jar's glass like every other tower instead of firing through it."
+        },
+        {
+          "area": "Yard",
+          "title": "Smoother moving and placing",
+          "text": "Moving and placing buildings is much smoother, most of all on phones: shadows hide while a building is held, and the yard is drawn again only where something changed."
+        },
+        {
+          "area": "Fixes",
+          "title": "Glow trails fixed",
+          "text": "Fixed glowing monsters, such as those under a Sulfur Bomb, leaving coloured trails across the ground."
+        },
+        {
+          "area": "Fixes",
+          "title": "Ascend Monsters removed",
+          "text": "The Ascend Monsters button, which tried to send monsters up from a separate Inferno yard that doesn't exist here, is gone."
+        },
+        {
+          "area": "Fixes",
+          "title": "Battle crash fixes",
+          "text": "Fixed: an error when a Balthazar was cleared twice, a tower stopping an attack while looking for targets, a broken save after an attack, and the map tutorial's picture arriving after its window closed."
+        },
+        {
+          "area": "Browser",
+          "title": "Older iPhones and iPads",
+          "text": "The browser version plays sound on older Safari, and runs silent instead of stopping where there is no sound support."
+        },
+        {
+          "area": "Interface",
+          "title": "No dead-end popups",
+          "text": "The idle Having fun? and Anyone home? popups and Connection Lost now offer Invite Friends or Reload, and Connection Lost shows once instead of piling up."
+        },
+        {
+          "area": "Admins",
+          "title": "Admin panel security",
+          "text": "The admin panel got stricter sessions, one-time sign-in codes and rate limits, and admin names are exact and reserved so nobody else can register them."
+        },
+        {
+          "area": "Admins",
+          "title": "Better bug reports",
+          "text": "Automatic bug reports now say which account and client, what the player clicked, and which popups and requests came before, and a server failure and the game's report of it are one entry."
+        },
+        {
+          "area": "Admins",
+          "title": "Gauntlet controls",
+          "text": "Admins can open or close the Gauntlet early, see a player's progress and start their ladder again, and test mode has a practice ladder of its own."
+        },
+        {
+          "area": "Admins",
+          "title": "Daily backups",
+          "text": "All game data is backed up every day, and any backup can be put back."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-25",
+      "headline": "The new map room, wild attacks and admin test mode",
+      "items": [
+        {
+          "area": "Map",
+          "title": "The map room rebuilt",
+          "text": "Five zoom steps (World, World 2x, World 4x, Far and Close) by buttons, wheel or pinch, filters for whose yards and ranges show, a sidebar with Home, Jump and Find a player, and a minimap with everything about the place under your pointer."
+        },
+        {
+          "area": "Map",
+          "title": "Unlimited bookmarks",
+          "text": "Bookmarks have no limit any more (it was 8), in a list you can scroll, rename and remove from."
+        },
+        {
+          "area": "Map",
+          "title": "The whole world at once",
+          "text": "The three widest zoom steps show the whole world, every main yard and outpost as a coloured dot. Hover one to see who it is, and click to go there."
+        },
+        {
+          "area": "Map",
+          "title": "Faster map loading",
+          "text": "The map opens with the whole world known at once and fills in what's on screen in one go, so it loads in a fraction of the time."
+        },
+        {
+          "area": "Map",
+          "title": "Share a place in chat",
+          "text": "From an empty place or a yard's popup, post a place to Global or Alliance chat. Anyone can click it to open the map there."
+        },
+        {
+          "area": "Battles",
+          "title": "Wild monster attacks reworked",
+          "text": "At most one wild attack a day, on your main yard only, never in your first minute after logging in, from yard level 3. Any of the four tribes, or now and then Moloch, sends a set army for your level."
+        },
+        {
+          "area": "Battles",
+          "title": "A clearer attack warning",
+          "text": "The Wild Monster Alert shows the strongest three kinds of monster coming and how many more kinds follow."
+        },
+        {
+          "area": "Battles",
+          "title": "Catapult ammunition",
+          "text": "The Catapult can be built in your main yard from Under Hall 3, with Marilyn Monstroe, Candy Jars and the Sulfur Bomb in place of Putty Rage: four sizes each, one shot of each kind per attack."
+        },
+        {
+          "area": "Monsters",
+          "title": "Strongbox and Academy level 5",
+          "text": "The Strongbox gets a fifth level (needs Under Hall 5) with a page 5 for Korath and Drull, and the Infernal Academy a fifth level that trains them and Rezghul to level 6."
+        },
+        {
+          "area": "Monsters",
+          "title": "Unlocked the fair way",
+          "text": "Korath, Drull and Rezghul must now be unlocked in the Strongbox like every other monster: Rezghul on page 4 after King Wormzer, Korath and Drull on page 5. Monsters already hatched stay."
+        },
+        {
+          "area": "Chat",
+          "title": "Global and Alliance tabs",
+          "text": "The chat has two tabs, Global and Alliance, with unread messages counted on the one you're not looking at. Click a name to send that player a message."
+        },
+        {
+          "area": "Map",
+          "title": "Big empires welcome",
+          "text": "The Outposts list stays smooth with 1,500 outposts: it opens in about a third of a second instead of 2."
+        },
+        {
+          "area": "Fixes",
+          "title": "Clear login errors",
+          "text": "Logging in with an unusual email or a short password now says what is wrong instead of Something went wrong."
+        },
+        {
+          "area": "Fixes",
+          "title": "Fixes from bug reports",
+          "text": "Fixed: a Compound being built crashing attacks, wild yards being rebuilt under the attacker, attacks that never ended when Rezghul died mid-shot, resources dipping below zero, and quickly typed chat lines being refused."
+        },
+        {
+          "area": "Fixes",
+          "title": "Safer saves",
+          "text": "Fixed: a purchase made while the map was open saving your yard with no buildings, Next outpost crashing from a main yard without a Map Room, and Compounds not sending every defender at ground attackers."
+        },
+        {
+          "area": "Fixes",
+          "title": "Fairer attacks",
+          "text": "An attack out of your Flingers' range is refused before anything is recorded, and only the player whose attack it is can change the yard attacked."
+        },
+        {
+          "area": "Fixes",
+          "title": "Lighter on your connection",
+          "text": "The game's regular updates and saves send far less data, which helps big yards on slow connections."
+        },
+        {
+          "area": "Admins",
+          "title": "Admin test mode",
+          "text": "Admins can switch on a test mode with unlimited resources, instant everything and practice attacks that change nothing, then switch off to get their account back exactly as it was."
+        },
+        {
+          "area": "Admins",
+          "title": "Test tools",
+          "text": "Test mode has tools to start a wild attack, send attackers or defenders, repair, set protection, fast-forward time, and take or free map cells of their own."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-24",
+      "headline": "Admin panel, bug reports, Yard Planner tools and tribe art",
+      "items": [
+        {
+          "area": "Yard",
+          "title": "Yard Planner Undo and Redo",
+          "text": "The Yard Planner gets Undo and Redo, up to 100 steps, and Store now puts away just what you selected."
+        },
+        {
+          "area": "Yard",
+          "title": "A faster Yard Planner",
+          "text": "The Yard Planner is much faster on phones: from 4 to 23 frames a second while open, and smooth when moving many buildings at once."
+        },
+        {
+          "area": "Map",
+          "title": "New tribe pictures",
+          "text": "All five tribes have new pictures on the map, in popups, at the top while you view or attack them, and in the attack warning."
+        },
+        {
+          "area": "Map",
+          "title": "Where new players land",
+          "text": "New players land within 20 cells of another player, but not right next to a main yard or a Moloch stronghold."
+        },
+        {
+          "area": "Map",
+          "title": "The Outposts list",
+          "text": "The outpost arrow at the top opens a list of every outpost with its position, value, production per hour, protection and monsters. Sort by any column; View visits it, Map shows it."
+        },
+        {
+          "area": "Map",
+          "title": "Bookmarks kept when you move",
+          "text": "Your bookmarks stay when your main yard moves within the same world, and the map no longer flashes green when it opens."
+        },
+        {
+          "area": "Alliances",
+          "title": "Members and power-ups",
+          "text": "Browse shows any alliance's members, and alliance power-ups recharge in 4 days instead of 5 to 7."
+        },
+        {
+          "area": "Interface",
+          "title": "Reload on every stop",
+          "text": "Every stop has a Reload button that restarts the game still logged in: away too long, logged in elsewhere, an error or a new version."
+        },
+        {
+          "area": "Interface",
+          "title": "Music stays off",
+          "text": "Music you switch off stays off when the song starts over."
+        },
+        {
+          "area": "Browser",
+          "title": "Sound effects keep working",
+          "text": "Fixed sound effects stopping for good in the browser version after about 32 clicks."
+        },
+        {
+          "area": "Browser",
+          "title": "Full screen on iPhone",
+          "text": "On iPhones, where Safari has no full screen, the page explains Add to Home Screen instead of failing."
+        },
+        {
+          "area": "Fixes",
+          "title": "First bug fixes",
+          "text": "Fixed: errors in the Yard Planner and a map popup, music errors, a message window crash, and an outpost not saving after an attack launched from it."
+        },
+        {
+          "area": "Admins",
+          "title": "Admin panel",
+          "text": "Admins get an Admin button opening a web panel: status, maintenance mode and announcements, players with bans, Shiny and resource changes and chat mutes, refused attacks, invites, map tools and a log of every action."
+        },
+        {
+          "area": "Admins",
+          "title": "Automatic bug reports",
+          "text": "Every error the game hits is quietly reported to the admins' Bugs tab, grouped by problem. Players see nothing."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-23",
+      "headline": "Daily Reward, your own kits, a new login and the browser version",
+      "items": [
+        {
+          "area": "Events",
+          "title": "Daily Reward",
+          "text": "10 Shiny every day you log in, 100 on every 7th day of a streak and 200 on every 14th. The Daily Reward button takes the gift button's place and spins while today's reward waits. It replaces the monthly 500 Shiny."
+        },
+        {
+          "area": "Map",
+          "title": "Your own kits",
+          "text": "Page 3 of the kit popup has three slots of your own: save an outpost's layout, then build it in another outpost for resources, no Shiny."
+        },
+        {
+          "area": "Map",
+          "title": "Relocation invites",
+          "text": "From one of your outposts, invite an alliance member to move their main yard onto it, for 150 Shiny or 30 million of each resource. A move from another world warns how many outposts would be lost."
+        },
+        {
+          "area": "Monsters",
+          "title": "Korath and Drull as monsters",
+          "text": "Korath and Drull are monsters you hatch with magma, house in the Compound (600 each) and fling like any other. Korath burns what he hits, throws fireballs at flyers from level 4 and stomps from level 5."
+        },
+        {
+          "area": "Monsters",
+          "title": "Rezghul in the Inferno",
+          "text": "Rezghul fights in the Inferno, 500,000 magma to hatch, raising your fallen monsters during a battle."
+        },
+        {
+          "area": "Battles",
+          "title": "Defenders remember the last attack",
+          "text": "Compound defenders and Monster Bunker losses stay as the last attack left them until the owner visits the yard, which heals them."
+        },
+        {
+          "area": "Interface",
+          "title": "A new login page",
+          "text": "An Inferno look with saved accounts: up to 5 accounts remembered on your computer under WHO'S PLAYING?, and a click fills in the email. Passwords are never saved."
+        },
+        {
+          "area": "Interface",
+          "title": "Switch account",
+          "text": "A Switch account button saves your yard and takes you back to the login page."
+        },
+        {
+          "area": "Interface",
+          "title": "Confirm before spending Shiny",
+          "text": "The game asks before spending Shiny anywhere: the store, speed-ups, finish now, instant builds and upgrades, unlocks, healing, kits, moves and takeovers."
+        },
+        {
+          "area": "Interface",
+          "title": "Pinch to zoom",
+          "text": "Pinch with two fingers to zoom in your yard and on the map."
+        },
+        {
+          "area": "Yard",
+          "title": "Yard Planner toolbar",
+          "text": "A new toolbar: Move, Store, Select an area, Clear, Walls (drag a wall line at any angle), Flip, Rotate and Expand yard."
+        },
+        {
+          "area": "Yard",
+          "title": "Layouts per yard",
+          "text": "Each yard keeps its own planner layouts, so an outpost's no longer overwrites your main yard's. Clear slot works, and every tower shows its range circle."
+        },
+        {
+          "area": "Browser",
+          "title": "Play in your browser",
+          "text": "The whole game runs in a browser with nothing to install, playing exactly like the Flash game, with settings for resolution, frame rate, window size, volume and full screen."
+        },
+        {
+          "area": "Browser",
+          "title": "Phones and tablets",
+          "text": "On phones and tablets the game fills the screen, touch works as the mouse, typing uses the phone's keyboard, and you can add it to your home screen."
+        },
+        {
+          "area": "Browser",
+          "title": "Always up to date",
+          "text": "When a new version is out, the game tells you to reload."
+        }
+      ]
+    },
+    {
+      "date": "2026-09-22",
+      "headline": "Everyone lives in the Inferno",
+      "items": [
+        {
+          "area": "Interface",
+          "title": "Inferno Maproom 2",
+          "text": "A custom server built on the open-source Backyard Monsters Refitted, where everyone lives in the Inferno from their first minute."
+        },
+        {
+          "area": "Yard",
+          "title": "Your main yard is your Inferno yard",
+          "text": "Lava ground, the Inferno buildings, bone, coal, sulfur and magma and the Inferno monsters, on your main yard and every outpost. There is no separate Inferno yard to travel to."
+        },
+        {
+          "area": "Map",
+          "title": "An Inferno world",
+          "text": "Map Room 2 is an Inferno world of 400 x 400 cells for up to 625 players, and the only map: no move to Map Room 3, no going back to Map Room 1."
+        },
+        {
+          "area": "Map",
+          "title": "The devil tribes",
+          "text": "The four tribes became devil tribes: Hellionnaire, Kozmodeus, Abaddonakki and Beelzenaut. Their yards are Inferno yards with Compounds, bone walls, Inferno towers and booby traps."
+        },
+        {
+          "area": "Map",
+          "title": "Tribe territories",
+          "text": "Every piece of land belongs to a tribe, in territories around a seat where the levels are highest. A world's tribes never move."
+        },
+        {
+          "area": "Map",
+          "title": "Moloch's strongholds",
+          "text": "Moloch joins as a fifth tribe, with about 310 strongholds per world at levels 46 and 50, rich in loot and never where a new player lands."
+        },
+        {
+          "area": "Economy",
+          "title": "A head start",
+          "text": "No tutorial: you start in the Inferno with 5 workers (an outpost has 1), a stock of Shiny, 60,000 bone, coal and sulfur and 55,000 magma."
+        },
+        {
+          "area": "Economy",
+          "title": "Everything faster",
+          "text": "Resources come twice as fast (magma four times), building, upgrading, fortifying, repairing, unlocking and training are 4 times faster, and hatching takes 1 second."
+        },
+        {
+          "area": "Economy",
+          "title": "Shiny is earned, not sold",
+          "text": "Shiny isn't sold here: you earn it. The Earn Shiny button and the D.A.V.E. Club are gone."
+        },
+        {
+          "area": "Economy",
+          "title": "The server's own prices",
+          "text": "Packing, protection, housing, overdrive, moves, takeovers, power-ups, kits, walls, top-ups, repairs and speed-ups have the server's own Shiny prices. Moving your main yard costs 150 Shiny or 30 million of each resource."
+        },
+        {
+          "area": "Map",
+          "title": "Bigger outpost storage",
+          "text": "Each captured outpost adds 5 million storage of each resource (it was 2 million)."
+        },
+        {
+          "area": "Buildings",
+          "title": "Flinger, planner and decorations",
+          "text": "The Flinger is back in the Inferno, since your attack range comes from its level, and the Yard Planner and most decorations can be built in your main yard and outposts."
+        },
+        {
+          "area": "Buildings",
+          "title": "Outpost limits",
+          "text": "Outposts have their own limits: 4 of each harvester, 1 Flinger, 1 Yard Planner, 2 hatcheries, 200 blocks, 40 traps, 4 of each tower, 1 Compound, 1 Control Station and 1 Juicer."
+        },
+        {
+          "area": "Events",
+          "title": "Invite your friends",
+          "text": "Invite Friends gives you a link: when a friend signs up with it, you both get 250 Shiny, once per friend and not for accounts on the same connection."
+        },
+        {
+          "area": "Interface",
+          "title": "Easy login",
+          "text": "No Discord check to log in, and a welcome message each time you do."
+        },
+        {
+          "area": "Admins",
+          "title": "Refused attacks judged by admins",
+          "text": "An attack the server refuses is logged for an admin to judge, instead of banning the account at once."
+        }
+      ]
+    }
+  ]
+}

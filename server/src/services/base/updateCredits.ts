@@ -5,6 +5,7 @@ import { mushroomCredits, purchaseKeys, rewardCredits } from "../../game-data/st
 import { User } from "../../database/models/user.model.js";
 import { isShinyLocked } from "../user/shinyLock.js";
 import type { Context } from "koa";
+import { questBump } from "../quests/questProgress.js";
 
 /**
  *  Keeps track of shiny (credits) spent and obtained.
@@ -29,6 +30,8 @@ export const updateCredits = (ctx: Context, save: Save, item: string, quantity: 
   // Handle mushrooms
   if (item in mushroomCredits) {
     userSave.credits += mushroomCredits[item];
+    // Inferno-only quest book: a golden wart picked
+    void questBump(user.userid, "golden_wart");
     return;
   }
 
@@ -46,7 +49,7 @@ export const updateCredits = (ctx: Context, save: Save, item: string, quantity: 
 
   // Handle purchases not in the store
   if (purchaseKeys.has(item)) {
-    userSave.credits -= quantity;
+    userSave.credits = Math.max(0, userSave.credits - quantity);
     return;
   }
 
@@ -67,5 +70,6 @@ export const updateCredits = (ctx: Context, save: Save, item: string, quantity: 
     itemCost = storeItem.c[currentQuantity];
   }
 
-  userSave.credits -= itemCost * quantity;
+  // Never below 0: the database refuses a negative balance, which would fail the whole save.
+  userSave.credits = Math.max(0, userSave.credits - itemCost * quantity);
 };

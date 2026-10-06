@@ -17,7 +17,10 @@ import {
   leaveChannel,
   postMessage,
 } from "./chatRooms.js";
-import { clients, type SocketData } from "./chatState.js";
+import { clients, type ChatClient, type SocketData } from "./chatState.js";
+import { refreshDisplayName } from "./chatIdentity.js";
+import { deleteLine, muteFromChat } from "./chatModeration.js";
+import { ALLIANCE_CHANNEL_ALIAS } from "../config/ChatConfig.js";
 import { initTransport, subscribeControl } from "./chatTransport.js";
 import { ChannelType, ChatControlType } from "../enums/Chat.js";
 
@@ -47,14 +50,46 @@ const handleControlMessage = (payload: string) => {
     return;
   }
 
+  // (announcements are written into Global by chat/chatBroadcasts.ts now, history and all: nothing to do)
+  if (message.type === ChatControlType.RefreshUser) {
+    const who = clients.get(message.userId);
+    if (who) void refreshDisplayName(who, true).catch((err) => logger.warn(`Chat: user ${message.userId} could not be refreshed: ${err}`));
+    return;
+  }
   if (message.type !== ChatControlType.AllianceEvict) return;
 
   const client = clients.get(message.userId);
 
   if (!client) return;
 
-  for (const [channel, info] of [...client.channels]) {
-    if (info.type === ChannelType.Alliance) leaveChannel(client, channel);
+  // At once (a kicked player stops reading straight away), and again a moment later: a join is written in
+  // the caller's transaction, which may not have landed yet.
+  void reconcileAlliance(client);
+  setTimeout(() => {
+    const again = clients.get(message.userId);
+    if (again) void reconcileAlliance(again);
+  }, 1500);
+};
+
+/**
+ * Puts a connected player in the alliance channel they belong to now: out of one they left or were removed
+ * from (the game is told: alliance_left), into a new one they joined or created (joined, with its history).
+ */
+const reconcileAlliance = async (client: ChatClient) => {
+  try {
+    const resolved = await authorizeJoin(client.userId, ALLIANCE_CHANNEL_ALIAS);
+    for (const [channel, info] of [...client.channels]) {
+      if (info.type !== ChannelType.Alliance || channel === resolved?.key) continue;
+      leaveChannel(client, channel);
+      send(client.ws, { type: ServerMessageType.AllianceLeft, channel });
+    }
+    if (resolved && !client.channels.has(resolved.key)) {
+      joinChannel(client, resolved.key, resolved.info);
+      const history = await getChannelHistory(resolved.key, resolved.info);
+      send(client.ws, { type: ServerMessageType.Joined, channel: resolved.key, history });
+    }
+  } catch (err) {
+    logger.warn(`Chat: alliance channel of user ${client.userId} could not be updated: ${err}`);
   }
 };
 
@@ -124,23 +159,35 @@ const dispatch = async (ws: ServerWebSocket<SocketData>, data: string | Buffer) 
       leaveChannel(client, message.channel);
       return;
 
+    case ClientMessageType.Delete:
+      await deleteLine(client, message.channel, message.id);
+      return;
+
+    case ClientMessageType.Mute:
+      await muteFromChat(client, message.targetId, message.targetName, message.minutes);
+      return;
+
     case ClientMessageType.Say:
       await postMessage(client, message.channel, message.message);
       return;
 
     case ClientMessageType.GetIgnore:
-      await sendIgnoreList(client);
+      await sendIgnoreList(client, message.action === "sync" ? "sync" : "show");
       return;
 
     case ClientMessageType.Ignore:
-      await addIgnore(client, message.targetId);
+      await addIgnore(client, message.targetId, message.targetName);
       return;
 
     case ClientMessageType.Unignore:
-      await removeIgnore(client, message.targetId);
+      await removeIgnore(client, message.targetId, message.targetName);
       return;
 
     case ClientMessageType.UpdateName:
+      // (the game says its yard level changed: the name it is shown with follows)
+      await refreshDisplayName(client);
+      return;
+
     case ClientMessageType.Ping:
       return;
   }

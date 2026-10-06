@@ -5,6 +5,8 @@ import { postgres } from "../../server.js";
 import type { KoaController } from "../../utils/KoaController.js";
 import { BaseType } from "../../enums/Base.js";
 import { Save } from "../../database/models/save.model.js";
+import { ClientSafeError } from "../../middleware/clientSafeError.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 
 const InfernoMonstersSchema = z.object({
   type: z.string(),
@@ -21,7 +23,21 @@ export const infernoMonsters: KoaController = async (ctx) => {
     { fields: ["monsters"] },
   );
 
-  if (!infernoSave) throw new Error("Inferno save not found");
+  // No separate Inferno yard: an inferno-only server's main yard is the Inferno yard, so there is nothing
+  // to send monsters up from (the client no longer offers "Ascend monsters" there). An answer, not a 500.
+  if (!infernoSave) {
+    if (type === BaseType.GET && infernoOnlyConfig.enabled) {
+      ctx.status = Status.OK;
+      ctx.body = { error: 0, imonsters: {} };
+      return;
+    }
+    throw new ClientSafeError({
+      message: infernoOnlyConfig.enabled ? "Monsters can't be sent up from the Inferno on this server." : "Inferno save not found",
+      status: Status.NOT_FOUND,
+      data: {},
+      isClientFriendly: true,
+    });
+  }
 
   if (type === BaseType.GET) imonsters = infernoSave.monsters;
 

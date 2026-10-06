@@ -49,8 +49,6 @@ export const createNeighbourData = (save: NeighbourSave, user: NeighbourUser, le
     attackpermitted: 1,
     type: 0,
     wm: 0,
-    trucestate: "",
-    truceexpire: 0,
     destroyed: 0,
     description: "",
     level,

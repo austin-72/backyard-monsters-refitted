@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inferno admin</title>
+<style>
+  :root { --bg:#1b100c; --panel:#2a1a13; --line:#4a2e22; --text:#f1e4d6; --dim:#b89f8c; --accent:#e0662b; --bad:#e04848; --good:#5fbf6a; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+  header { display:flex; align-items:center; gap:16px; padding:10px 18px; background:#120a07; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:17px; margin:0; color:var(--accent); }
+  nav { display:flex; gap:4px; flex-wrap:wrap; }
+  nav button { background:none; border:1px solid transparent; color:var(--dim); padding:6px 10px; border-radius:6px; cursor:pointer; font:inherit; }
+  nav button.on { color:var(--text); border-color:var(--line); background:var(--panel); }
+  #who { margin-left:auto; color:var(--dim); font-size:13px; }
+  main { padding:18px; max-width:1100px; margin:0 auto; }
+  section { display:none; } section.on { display:block; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:14px; }
+  .card h2 { font-size:15px; margin:0 0 10px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0; }
+  input, textarea, select { background:#140c09; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
+  textarea { width:100%; min-height:70px; }
+  button.act { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
+  button.act.bad { background:var(--bad); } button.act.plain { background:#5a3a2c; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; }
+  .overflow { overflow-x:auto; }
+  .dim { color:var(--dim); } .bad { color:var(--bad); } .good { color:var(--good); }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:10px; }
+  .stat { background:#140c09; border:1px solid var(--line); border-radius:8px; padding:10px; }
+  .stat b { display:block; font-size:20px; }
+  #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#000c; padding:10px 16px; border-radius:8px; display:none; max-width:90%; }
+  a { color:var(--accent); cursor:pointer; }
+  #signin { max-width:520px; margin:80px auto; text-align:center; }
+</style>
+</head>
+<body>
+<div id="signin" class="card" style="display:none">
+  <h2>Inferno admin panel</h2>
+  <p>Open the panel with the <b>Admin</b> button in the game. That signs you in here for 12 hours.</p>
+</div>
+
+<div id="app" style="display:none">
+<header>
+  <h1>Inferno admin</h1>
+  <nav id="tabs"></nav>
+  <span id="who"></span>
+</header>
+<main>
+
+<section data-tab="Status">
+  <div class="card"><h2>Server</h2><div class="grid" id="statusGrid"></div></div>
+  <div class="card">
+    <h2>Maintenance mode</h2>
+    <p class="dim">While on, only admins can log in; everyone else is shown the message. Players already in the game are not thrown out.</p>
+    <div id="maintState" class="row"></div>
+    <textarea id="maintMsg" placeholder="The server is down for maintenance. Back soon!"></textarea>
+    <div class="row"><button class="act bad" onclick="maintOn()">Turn on</button><button class="act plain" onclick="maintOff()">Turn off</button></div>
+  </div>
+  <div class="card">
+    <h2>Moloch's Gauntlet</h2>
+    <p class="dim">The monthly event: open for the first days of each month by itself. Open it early (for the usual number of days from now), close it, or leave it to the calendar.</p>
+    <div id="gauntletState" class="row"></div>
+    <div class="row"><button class="act" onclick="gauntletSet('open')">Open now</button><button class="act bad" onclick="gauntletSet('closed')">Close now</button><button class="act plain" onclick="gauntletSet('auto')">Calendar</button></div>
+  </div>
+  <div class="card">
+    <h2>Hell Freezes Over</h2>
+    <p class="dim">The one-time story event. While it is on, it starts for each player once every monster on Strongbox pages 1-5 is unlocked. Turning it off stops new players starting; players who started keep going. A player's card can start it, move it on a day, or clear it.</p>
+    <div id="hfoState" class="row"></div>
+    <div class="row"><button class="act" onclick="hfoSet('on')">Turn on</button><button class="act bad" onclick="hfoSet('off')">Turn off</button></div>
+  </div>
+  <div class="card">
+    <h2>Announcement</h2>
+    <p class="dim">A popup every player sees once, on their next yard load or within a few seconds if they are playing.</p>
+    <div id="annState" class="dim"></div>
+    <textarea id="annText" maxlength="500" placeholder="Double loot weekend starts now!"></textarea>
+    <div class="row">Show for <input id="annHours" type="number" value="24" min="1" max="336" style="width:80px"> hours
+      <label><input id="annChat" type="checkbox" checked> also post in chat</label></div>
+    <div class="row"><button class="act" onclick="announce()">Send</button><button class="act plain" onclick="announceClear()">Clear</button></div>
+  </div>
+</section>
+
+<section data-tab="Players">
+  <div class="card">
+    <div class="row"><input id="q" placeholder="Filter by username or player id" oninput="filterPlayers()"><button onclick="loadPlayers()">Refresh</button></div>
+    <p id="playerCount" class="dim"></p>
+    <div id="results" class="overflow" style="max-height:420px;overflow-y:auto"></div>
+  </div>
+  <div id="playerCard"></div>
+</section>
+
+<section data-tab="Reports">
+  <div class="card"><h2>Attack-violation reports</h2><p class="dim">Attacks the server refused, per player. Ban, or dismiss to set the count back to 0.</p><div id="reports" class="overflow"></div></div>
+</section>
+
+<section data-tab="Bugs">
+  <div class="card">
+    <h2>Bugs reported by the game</h2>
+    <p class="dim">Errors players' games hit, sent automatically. The same problem is grouped into one row. Mark a bug fixed once a fix is published; if it is reported again it comes back here.</p>
+    <div class="row"><select id="bugStatus" onchange="loadBugs()"><option value="open">Open</option><option value="fixed">Fixed</option></select></div>
+    <div id="bugs" class="overflow"></div>
+  </div>
+</section>
+
+<section data-tab="Invites">
+  <div class="card"><h2>Pending relocation invites</h2><div id="invites" class="overflow"></div></div>
+</section>
+
+<section data-tab="Map">
+  <div class="card">
+    <h2>Inspect a cell</h2>
+    <div class="row"><select id="mapWorld"></select> X <input id="cx" type="number" style="width:80px"> Y <input id="cy" type="number" style="width:80px">
+      <button class="act" onclick="inspect()">Inspect</button><button class="act bad" onclick="resetCell()">Reset this tribe yard</button></div>
+    <div id="cellInfo"></div>
+  </div>
+  <div class="card">
+    <h2>Reset all tribe yards</h2>
+    <p class="dim">Stored tribe yards (damage and all) are deleted and generated fresh when next attacked. Do this after changing tower swaps or tribe layouts. Players and outposts are not touched.</p>
+    <button class="act bad" onclick="resetAll()">Reset every tribe yard</button>
+  </div>
+  <div class="card"><h2>Worlds</h2><div id="worlds" class="overflow"></div></div>
+</section>
+
+<section data-tab="Log">
+  <div class="card">
+    <div class="row"><input id="logQ" placeholder="Filter by admin, player, action or text" onkeydown="if(event.key==='Enter')loadLog()"><button class="act" onclick="loadLog()">Filter</button></div>
+    <div id="log" class="overflow"></div>
+  </div>
+</section>
+
+</main>
+</div>
+<div id="toast"></div>
+
+<script>
+const TABS = ["Status", "Players", "Reports", "Bugs", "Invites", "Map", "Log"];
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const when = (v) => (v ? new Date(v).toLocaleString() : "-");
+const num = (v) => Number(v || 0).toLocaleString();
+
+function toast(text, bad) {
+  const t = $("toast");
+  t.textContent = text; t.style.color = bad ? "#ff9b9b" : "#fff"; t.style.display = "block";
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.style.display = "none"), 3500);
+}
+
+async function api(action, body = {}) {
+  const res = await fetch("/admin/api/" + action, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json", "X-Admin": "1" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({ error: "The server did not answer properly (HTTP " + res.status + ")." }));
+  if (data.error === "signin") { $("app").style.display = "none"; $("signin").style.display = "block"; throw new Error("signin"); }
+  if (data.error) { toast(data.error, true); throw new Error(data.error); }
+  return data;
+}
+
+async function act(action, body, done) {
+  try { await api(action, body); toast("Done."); if (done) await done(); } catch (e) {}
+}
+
+function show(tab) {
+  document.querySelectorAll("section").forEach((s) => s.classList.toggle("on", s.dataset.tab === tab));
+  document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.textContent === tab));
+  ({ Status: loadStatus, Players: loadPlayers, Reports: loadReports, Bugs: loadBugs, Invites: loadInvites, Map: loadWorlds, Log: loadLog }[tab] || (() => {}))();
+}
+
+// ---- Status, maintenance, announcements
+async function loadStatus() {
+  const s = await api("status");
+  $("statusGrid").innerHTML = [
+    ["Players online", s.online], ["Server version", s.version],
+    ["Published client build", s.publishedBuild || "none"], ["Required client build", s.requiredBuild || "any"],
+  ].map(([k, v]) => `<div class="stat"><span class="dim">${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+  $("maintState").innerHTML = s.maintenance ? `<span class="bad">ON</span>: ${esc(s.maintenance)}` : `<span class="good">Off</span>`;
+  $("annState").innerHTML = s.announcement ? `Showing now: "${esc(s.announcement.text)}"` : "No announcement is showing.";
+  const h = s.hfo;
+  $("hfoState").innerHTML = !h ? "" : `${h.enabled ? '<span class="good">On</span>' : '<span class="dim">Off</span>'} · ${Number(h.started)} started · ${Number(h.waves)} on the waves · ${Number(h.done)} freed Rimegrave`;
+  const g = s.gauntlet;
+  $("gauntletState").innerHTML = !g ? "" : g.open
+    ? `<span class="good">Open</span> (${esc(g.month)}) until ${when(g.closesAt * 1000)}${g.forced ? " · opened here" : ""}`
+    : `<span class="dim">Closed</span>${g.forced ? " · closed here" : ""}${g.opensAt ? ` · opens ${when(g.opensAt * 1000)}` : ""}`;
+}
+const hfoSet = (state) => { if (confirm(state === "on" ? "Turn Hell Freezes Over on? Players start once they qualify." : "Turn Hell Freezes Over off? Nobody new starts; players who started keep going.")) act("hfo", { state }, loadStatus); };
+const hfoLine = (h) => {
+  if (!h) return '<span class="dim">not started</span>';
+  const day = h.day < 1 ? `waiting for day 1${h.nextAt ? ` (${when(h.nextAt * 1000)})` : ""}` : h.day < 4 ? `day ${h.day}${h.ready ? " (done; next day " + (h.nextAt ? when(h.nextAt * 1000) : "now") + ")" : ""}` : h.done ? "Rimegrave freed" : `waves: ${Number(h.won)}/13 won, ${Number(h.skipped)} skipped, wave ${Math.min(13, Number(h.current))} next`;
+  return `${esc(day)} · small patches ${esc(h.small)} · big ${esc(h.big)} · towers ${esc(h.towers)} · ${Number(h.paid)} shiny paid`;
+};
+const gauntletSet = (state) => { if (state === "auto" || confirm(state === "open" ? "Open Moloch's Gauntlet now?" : "Close Moloch's Gauntlet now?")) act("gauntlet", { state }, loadStatus); };
+const maintOn = () => { const m = $("maintMsg").value.trim(); if (!m) return toast("Write the message players will see.", true); if (confirm("Turn maintenance mode on?")) act("maintenance", { message: m }, loadStatus); };
+const maintOff = () => act("maintenance", { message: "" }, loadStatus);
+const announce = () => { if (confirm("Send this announcement to every player?")) act("announce", { text: $("annText").value, hours: $("annHours").value, chat: $("annChat").checked }, loadStatus); };
+const announceClear = () => act("announceClear", {}, loadStatus);
+
+// ---- Players: every player by id, filtered as you type
+let allPlayers = [];
+async function loadPlayers() {
+  const { players } = await api("players");
+  allPlayers = players;
+  filterPlayers();
+}
+// sorting: click a column heading (again to reverse). Invites: friends who joined through the player's link.
+let playerSort = { key: "id", desc: false };
+const PLAYER_SORTS = {
+  id: (a, b) => a.id - b.id,
+  username: (a, b) => String(a.username).localeCompare(String(b.username), undefined, { sensitivity: "base" }) || a.id - b.id,
+  invites: (a, b) => (a.invites || 0) - (b.invites || 0) || (a.invitesPaid || 0) - (b.invitesPaid || 0) || b.id - a.id,
+};
+function sortPlayers(key) {
+  // a new column starts with what you most likely want first: most invites, A to Z, oldest id
+  playerSort = playerSort.key === key ? { key, desc: !playerSort.desc } : { key, desc: key === "invites" };
+  filterPlayers();
+}
+function filterPlayers() {
+  const f = $("q").value.trim().toLowerCase();
+  const found = f ? allPlayers.filter((p) => String(p.id).includes(f) || String(p.username).toLowerCase().includes(f)) : allPlayers.slice();
+  const cmp = PLAYER_SORTS[playerSort.key] || PLAYER_SORTS.id;
+  const shown = found.sort((a, b) => (playerSort.desc ? -cmp(a, b) : cmp(a, b)));
+  $("playerCount").textContent = f ? `${shown.length} of ${allPlayers.length} players` : `${allPlayers.length} players`;
+  const rows = shown.slice(0, 1000);
+  const head = (key, label) => `<th><a id="sort_${key}" onclick="sortPlayers('${key}')">${label}${playerSort.key === key ? (playerSort.desc ? " ▼" : " ▲") : ""}</a></th>`;
+  $("results").innerHTML = rows.length
+    ? `<table><tr>${head("id", "Id")}${head("username", "Username")}${head("invites", "Invites accepted")}<th></th></tr>${rows.map((p) => `<tr><td>${p.id}</td><td>${esc(p.username)} ${p.banned ? '<span class="bad">banned</span>' : ""}</td>
+        <td>${p.invites ? `${p.invites} <span class="dim">(${p.invitesPaid || 0} paid)</span>` : '<span class="dim">0</span>'} ${p.inviteBarred ? '<span class="bad">barred</span>' : ""}</td>
+        <td><a onclick="openPlayer(${p.id})">open</a></td></tr>`).join("")}</table>${shown.length > rows.length ? `<p class="dim">Showing the first ${rows.length}; filter to narrow it down.</p>` : ""}`
+    : '<p class="dim">Nobody matches.</p>';
+}
+const search = filterPlayers;
+
+// Invites: what came of a referral (adminApi player.invites)
+const INVITE_STATUS = { paid: ["paid", "good"], "same-ip": ["not paid: same connection", "bad"], "no-inviter": ["not paid: inviter gone", "bad"],
+  barred: ["not paid: inviter barred from invite rewards", "bad"],
+  waiting: ["hasn't loaded the game yet", "dim"], unrecorded: ["decided before 1 Oct (not recorded)", "dim"] };
+const inviteStatus = (s) => { const [text, cls] = INVITE_STATUS[s] || [s, "dim"]; return `<span class="${cls}">${esc(text)}</span>`; };
+function invitesCard(p) {
+  const inv = p.invites || { accepted: [] };
+  const paid = inv.accepted.filter((f) => f.status === "paid").length;
+  return `<div class="card"><h2>Friends invited</h2>
+    <div class="row">Accepted: <b>${inv.accepted.length}</b>${inv.accepted.length ? ` (${paid} paid)` : ""}
+      <span class="dim">· invite code ${inv.code ? esc(inv.code) : "not made yet"}</span>
+      · invited by ${inv.invitedBy ? `<a onclick="openPlayer(${Number(inv.invitedBy.id)})">${esc(inv.invitedBy.username || "#" + inv.invitedBy.id)}</a> (${inviteStatus(inv.invitedBy.status)})` : '<span class="dim">nobody</span>'}</div>
+    ${inv.accepted.length
+      ? `<table><tr><th>Player</th><th>Joined</th><th>Shiny</th></tr>${inv.accepted.map((f) => `<tr>
+          <td><a onclick="openPlayer(${Number(f.id)})">${esc(f.username)}</a> <span class="dim">#${Number(f.id)}</span></td>
+          <td>${when(f.joined)}</td><td>${inviteStatus(f.status)}</td></tr>`).join("")}</table>`
+      : '<p class="dim">Nobody has joined through this player\'s link yet.</p>'}
+    <h3 style="margin:12px 0 6px">Invite rewards</h3>
+    ${inv.barred
+      ? `<div class="row"><span class="bad">Barred</span>: friends who join through this player's link pay nothing, to either side. <span class="dim">Reason: ${esc(inv.barredReason || "(none given)")}</span>
+         <button class="act plain" onclick="act('inviteUnbar',{id:${p.id}},()=>openPlayer(${p.id}))">Lift</button></div>`
+      : `<div class="row"><input id="inviteBarReason" placeholder="Why (for the admin log), e.g. invited own accounts" style="flex:1"><button class="act bad" onclick="doInviteBar()">Bar from invite rewards</button></div>
+         <p class="dim">For abuse of the invite link (inviting their own accounts). Friends who join through the link afterwards pay nothing, to either side; shiny already paid stays paid (take it back under Shiny and resources if needed).</p>`}
+  </div>`;
+}
+function doInviteBar() {
+  const reason = $("inviteBarReason").value.trim();
+  if (!reason) return toast("Give a reason (it goes in the admin log).", true);
+  if (confirm("Bar " + current.username + " from invite rewards?")) act("inviteBar", { id: current.id, reason }, () => openPlayer(current.id));
+}
+
+let current = null;
+async function openPlayer(id) {
+  const p = await api("player", { id });
+  current = p;
+  const r = p.resources || {};
+  const muted = p.mutedUntil && p.mutedUntil > Date.now();
+  $("playerCard").innerHTML = `
+  <div class="card"><h2>${esc(p.username)} <span class="dim">#${p.id}</span> ${p.banned ? '<span class="bad">BANNED</span>' : ""}</h2>
+    <div class="grid">
+      ${[["Registered", when(p.registered)], ["Last seen", when(p.lastSeen)], ["World", p.world ? p.world.slice(0, 8) + "…" : "-"], ["Home", p.home ? p.home.join(", ") : "-"],
+         ["Alliance id", p.allianceId ?? "none"], ["Shiny", num(p.credits)], ["Outposts", p.outposts], ["Refused attacks", p.attackViolations],
+         ["Login streak", p.streak.day + " (last " + (p.streak.lastCollected || "never") + ")"], ["Shiny lock", p.shinyLocked ? "locked" : "no"], ["Chat", muted ? "muted until " + when(p.mutedUntil) : "can talk"]]
+        .map(([k, v]) => `<div class="stat"><span class="dim">${esc(k)}</span><b style="font-size:15px">${esc(v)}</b></div>`).join("")}
+    </div>
+    ${p.banned ? `<p>Ban reason: ${esc(p.banReason || "(none given)")}</p>` : ""}
+  </div>
+  ${invitesCard(p)}
+  <div class="card"><h2>Ban</h2>
+    ${p.banned
+      ? `<button class="act plain" onclick="act('unban',{id:${p.id}},()=>openPlayer(${p.id}))">Unban</button>`
+      : `<div class="row"><input id="banReason" placeholder="Reason the player will see" style="flex:1"><button class="act bad" onclick="doBan()">Ban</button></div>`}
+  </div>
+  <div class="card"><h2>Shiny and resources</h2>
+    <div class="row">Change shiny by <input id="crAmt" type="number" placeholder="+500 or -200" style="width:130px"> note <input id="crNote" placeholder="why (required)" style="flex:1"><button class="act" onclick="doCredits()">Apply</button></div>
+    <div class="row">Set resources: bone <input id="r1" type="number" value="${r.r1 ?? 0}" style="width:120px"> coal <input id="r2" type="number" value="${r.r2 ?? 0}" style="width:120px"> sulfur <input id="r3" type="number" value="${r.r3 ?? 0}" style="width:120px"> magma <input id="r4" type="number" value="${r.r4 ?? 0}" style="width:120px"></div>
+    <div class="row">note <input id="resNote" placeholder="why (required)" style="flex:1"><button class="act" onclick="doResources()">Set</button></div>
+    <p class="dim">Takes effect on the player's next yard load; a player who is online should reload.</p>
+  </div>
+  <div class="card"><h2>Login streak</h2>
+    <div class="row">Days collected in a row <input id="stDay" type="number" min="0" max="6" value="${p.streak.day}" style="width:70px"> <button class="act" onclick="act('streak',{id:${p.id},day:$('stDay').value},()=>openPlayer(${p.id}))">Set</button>
+    <button class="act plain" onclick="act('streak',{id:${p.id},day:0},()=>openPlayer(${p.id}))">Reset to 0</button></div>
+    <p class="dim">Setting N means N days are done and today's reward is still to collect.</p>
+  </div>
+  <div class="card"><h2>Quest book</h2><div id="questCard" class="dim">Loading…</div></div>
+  <div class="card"><h2>Saved kits</h2>
+    <table><tr><th>Slot</th><th>Name</th><th>Buildings</th><th>Saved</th><th></th></tr>
+    ${p.kits.map((k) => k.name
+      ? `<tr><td>${k.slot}</td><td><input id="kn${k.slot}" value="${esc(k.name)}" maxlength="24"></td><td>${k.buildings}</td><td>${when(k.savedAt * 1000)}</td>
+         <td><a onclick="act('kitRename',{id:${p.id},slot:${k.slot},name:$('kn${k.slot}').value},()=>openPlayer(${p.id}))">rename</a> · <a class="bad" onclick="if(confirm('Delete this kit?'))act('kitDelete',{id:${p.id},slot:${k.slot}},()=>openPlayer(${p.id}))">delete</a></td></tr>`
+      : `<tr><td>${k.slot}</td><td class="dim" colspan="4">empty</td></tr>`).join("")}</table>
+  </div>
+  <div class="card"><h2>Chat</h2>
+    <div class="row">Mute for <input id="muteMin" type="number" value="60" min="1" style="width:90px"> minutes <button class="act bad" onclick="act('mute',{id:${p.id},minutes:$('muteMin').value},()=>openPlayer(${p.id}))">Mute</button>
+    <button class="act plain" onclick="act('unmute',{id:${p.id}},()=>openPlayer(${p.id}))">Unmute</button></div>
+    <div class="row">Chat moderator: <b>${p.chatMod ? "yes" : "no"}</b>
+      ${p.chatMod
+        ? `<button class="act plain" onclick="act('chatMod',{id:${p.id},on:0},()=>openPlayer(${p.id}))">Remove moderator</button>`
+        : `<button class="act" onclick="if(confirm('Make this player a chat moderator? They get a [Mod] badge, and can delete chat lines and mute players (up to a day; never admins or other moderators).'))act('chatMod',{id:${p.id},on:1},()=>openPlayer(${p.id}))">Make moderator</button>`}</div>
+    <p class="dim">Moderators now: ${(p.chatMods || []).length ? p.chatMods.map((m) => `<a onclick="openPlayer(${m.id})">${esc(m.username)}</a>`).join(", ") : "none"}. Their deletes and mutes are in the log.</p>
+  </div>
+  <div class="card"><h2>Other</h2>
+    <div class="row"><button class="act plain" onclick="act('shinyUnlock',{id:${p.id}},()=>openPlayer(${p.id}))">Lift shiny lock</button></div>
+    <div class="row">Moloch's Gauntlet (${esc(p.gauntlet ? p.gauntlet.month : "")}): ${p.gauntlet && p.gauntlet.finished ? "finished" : `stage ${p.gauntlet ? Number(p.gauntlet.stage) : 1}`}${p.gauntlet && p.gauntlet.paid ? `, ${Number(p.gauntlet.paid)} reward(s) paid` : ""}${p.gauntlet && p.gauntlet.lost ? `, ${Number(p.gauntlet.lost)} reward(s) lost` : ""}
+      <button class="act plain" onclick="if(confirm('Start this player\\'s Gauntlet again this month? Their yards are healed and their progress cleared. Rewards already paid this month are not paid again.'))act('gauntletReset',{id:${p.id}},()=>openPlayer(${p.id}))">Start again</button></div>
+    <div class="row">Hell Freezes Over: ${hfoLine(p.hfo)}
+      ${p.hfo ? "" : `<button class="act plain" onclick="if(confirm('Start Hell Freezes Over for this player now, whether or not they qualify? Day 1 begins 24 hours later (or use Next day).'))act('hfoStart',{id:${p.id}},()=>openPlayer(${p.id}))">Start now</button>`}
+      ${p.hfo && p.hfo.day < 4 ? `<button class="act plain" onclick="if(confirm('Start the next day on this player\\'s next load of their yard, whatever the time and tasks?'))act('hfoNextDay',{id:${p.id}},()=>openPlayer(${p.id}))">Next day</button>` : ""}
+      ${p.hfo ? `<button class="act bad" onclick="if(confirm('Clear this player\\'s Hell Freezes Over progress? It starts again when they qualify (or Start now). Shiny already paid is not paid again; a Rimegrave unlocked stays.'))act('hfoReset',{id:${p.id}},()=>openPlayer(${p.id}))">Reset</button>` : ""}</div>
+    <div class="row">Move main yard to X <input id="mvX" type="number" style="width:80px"> Y <input id="mvY" type="number" style="width:80px"> <button class="act" onclick="doRelocate()">Move</button></div>
+    <p class="dim">The target must be free land in the player's own world. Their outposts stay where they are.</p>
+  </div>
+  <div class="card"><h2 class="bad">Delete account</h2>
+    <p>Deletes <b>${esc(p.username)}</b> for good: their main yard, outposts and every other yard, their map cells, mail, pets, casino history, quest book and the account itself. An alliance they lead goes to its longest-serving officer (or member), or is deleted if nobody else is in it. This cannot be undone.</p>
+    <div class="row">Type the username <input id="delName" placeholder="${esc(p.username)}" autocomplete="off" style="width:180px"> reason <input id="delReason" placeholder="why (for the log)" style="flex:1"><button class="act bad" id="delBtn" onclick="doDelete()">Delete account</button></div>
+  </div>`;
+  $("playerCard").scrollIntoView({ behavior: "smooth" });
+  loadQuests(p.id);
+}
+async function loadQuests(id) {
+  let q;
+  try { q = await api("quests", { id }); } catch (e) { $("questCard").textContent = "Not available (" + e.message + ")."; return; }
+  const cats = {};
+  for (const x of q.quests) { const c = (cats[x.cat] ??= { done: 0, ready: 0, n: 0 }); c.n++; if (x.state === "claimed") c.done++; if (x.state === "ready") c.ready++; }
+  const open = q.quests.filter((x) => x.state !== "claimed");
+  $("questCard").className = "";
+  $("questCard").innerHTML = `
+    <p>${q.claimed} of ${q.total} quests collected, ${q.ready} ready to collect. Chests: ${q.chests.filter((c) => c.state === "claimed").length} of ${q.chests.length}.</p>
+    <table><tr><th>Category</th><th>Collected</th><th>Ready</th></tr>
+    ${Object.entries(cats).map(([c, v]) => `<tr><td>${esc(c)}</td><td>${v.done} / ${v.n}</td><td>${v.ready}</td></tr>`).join("")}</table>
+    <div class="row">Quest <select id="qSel">${q.quests.map((x) => `<option value="${esc(x.id)}">${esc(x.cat)} · ${esc(x.id)} — ${esc(x.state)} (${num(x.value)}/${num(x.target)})</option>`).join("")}
+      ${q.chests.map((c) => `<option value="${esc(c.id)}">chest · ${esc(c.id)} — ${esc(c.state)}</option>`).join("")}</select>
+      <button class="act" onclick="act('questForce',{id:${id},quest:$('qSel').value},()=>loadQuests(${id}))">Mark done</button>
+      <button class="act plain" onclick="act('questReset',{id:${id},quest:$('qSel').value},()=>loadQuests(${id}))">Not collected</button>
+      <button class="act bad" onclick="if(confirm('Start this player\'s quest book again? Everything collected becomes collectable again (rewards are paid again when collected); counts are kept.'))act('questReset',{id:${id},quest:'all'},()=>loadQuests(${id}))">Start again</button></div>
+    <p class="dim">Mark done: the quest counts as finished (for something that happened before the book counted it); the player still collects it. ${open.length} not collected yet. Forced: ${q.forced.length ? q.forced.map(esc).join(", ") : "none"}.</p>
+    <details><summary class="dim">Counts</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify(q.counters, null, 1))}</pre></details>`;
+}
+function doBan() { const reason = $("banReason").value.trim(); if (!reason) return toast("Give the player a reason.", true); if (confirm("Ban " + current.username + "?")) act("ban", { id: current.id, reason }, () => openPlayer(current.id)); }
+function doCredits() { act("credits", { id: current.id, amount: $("crAmt").value, note: $("crNote").value }, () => openPlayer(current.id)); }
+function doResources() { act("resources", { id: current.id, r1: $("r1").value, r2: $("r2").value, r3: $("r3").value, r4: $("r4").value, note: $("resNote").value }, () => openPlayer(current.id)); }
+function doDelete() {
+  const name = $("delName").value.trim(), reason = $("delReason").value.trim();
+  if (name !== current.username) return toast("Type the username exactly to confirm.", true);
+  if (!reason) return toast("Give a reason (it goes in the log).", true);
+  if (!confirm("Delete " + current.username + " and everything of theirs for good? This cannot be undone.")) return;
+  const gone = current.username;
+  act("deleteAccount", { id: current.id, confirm: name, reason }, () => { $("playerCard").innerHTML = `<div class="card"><h2>${esc(gone)} was deleted.</h2></div>`; current = null; loadPlayers(); });
+}
+function doRelocate() { if (confirm("Move " + current.username + "'s main yard?")) act("relocate", { id: current.id, x: $("mvX").value, y: $("mvY").value }, () => openPlayer(current.id)); }
+
+// ---- Reports
+async function loadReports() {
+  const { reports } = await api("reports");
+  $("reports").innerHTML = reports.length
+    ? `<table><tr><th>Player</th><th>Refused</th><th>Latest</th><th>Updated</th><th></th></tr>${reports.map((r) => `<tr>
+        <td><a onclick="show('Players');openPlayer(${r.id})">${esc(r.username)}</a> ${r.banned ? '<span class="bad">banned</span>' : ""}</td>
+        <td>${r.attackViolations}</td>
+        <td>${r.recent.map((e) => `<div class="dim">${esc(e.timestamp?.slice(0, 16))} ${esc(e.message)}</div>`).join("")}</td>
+        <td>${when(r.updated)}</td>
+        <td><a onclick="act('reportDismiss',{id:${r.id}},loadReports)">dismiss</a></td></tr>`).join("")}</table>`
+    : '<p class="dim">No reports.</p>';
+}
+
+// ---- Bugs
+async function loadBugs() {
+  const status = $("bugStatus").value;
+  const { bugs } = await api("bugs", { status });
+  $("bugs").innerHTML = bugs.length
+    ? `<table><tr><th>#</th><th>Problem</th><th>Times</th><th>Players</th><th>Build</th><th>Last seen</th><th></th></tr>${bugs.map((b) => `<tr>
+        <td>${b.id}</td>
+        <td><b>${esc(b.title)}</b><details><summary class="dim">details</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(b.details)}\n\n${esc(b.context)}</pre></details></td>
+        <td>${num(b.count)}</td><td>${num(b.players)}${(b.reporters || []).length ? `<div class="dim" style="font-size:12px">${b.reporters.map((r) => `<a onclick="show('Players');openPlayer(${Number(r.id)})">${esc(r.username)}</a>`).join(", ")}</div>` : ""}</td>
+        <td>${esc(b.build)}</td><td>${when(b.lastSeen)}<div class="dim" style="font-size:12px">first ${when(b.firstSeen)}</div></td>
+        <td>${status === "open"
+          ? `<a onclick="act('bugStatus',{id:${b.id},status:'fixed'},loadBugs)">mark fixed</a>`
+          : `<a onclick="act('bugStatus',{id:${b.id},status:'open'},loadBugs)">reopen</a>`}
+          · <a class="bad" onclick="if(confirm('Delete this bug report?'))act('bugDelete',{id:${b.id}},loadBugs)">delete</a></td></tr>`).join("")}</table>`
+    : `<p class="dim">${status === "open" ? "No open bugs." : "Nothing marked fixed yet."}</p>`;
+}
+
+// ---- Invites
+async function loadInvites() {
+  const { invites } = await api("invites");
+  $("invites").innerHTML = invites.length
+    ? `<table><tr><th>From</th><th>To</th><th>Outpost</th><th>Sent</th><th></th></tr>${invites.map((i) => `<tr><td>${esc(i.from)}</td><td>${esc(i.to)}</td>
+        <td>${esc((i.coords || []).join(", "))}</td><td>${when(i.sent * 1000)}</td><td><a class="bad" data-invite="${esc(i.id)}" onclick="act('inviteCancel',{id:this.dataset.invite},loadInvites)">cancel</a></td></tr>`).join("")}</table>`
+    : '<p class="dim">No pending invites.</p>';
+}
+
+// ---- Map and worlds
+async function loadWorlds() {
+  const { worlds, maxPlayers } = await api("worlds");
+  $("mapWorld").innerHTML = worlds.map((w) => `<option value="${esc(w.uuid)}">${esc(w.uuid.slice(0, 8))}… (${w.players} players)</option>`).join("");
+  $("worlds").innerHTML = `<table><tr><th>World</th><th>Players</th><th>Moloch strongholds destroyed</th></tr>${worlds.map((w) => `<tr><td>${esc(w.uuid)}</td><td>${w.players} / ${maxPlayers}</td><td>${w.molochsDestroyed}</td></tr>`).join("")}</table>`;
+}
+async function inspect() {
+  const c = await api("cell", { world: $("mapWorld").value, x: $("cx").value, y: $("cy").value });
+  const s = c.stored;
+  $("cellInfo").innerHTML = `<table>
+    <tr><th>Terrain</th><td>${c.water ? "water" : "land"} (height ${c.terrain})</td></tr>
+    <tr><th>Tribe here</th><td>${esc(c.tribe.tribe)} level ${c.tribe.level}</td></tr>
+    <tr><th>Stored base</th><td>${s ? `${esc(s.type)}${s.owner ? ` of <a onclick="show('Players');openPlayer(${s.owner.id})">${esc(s.owner.username)}</a>` : ""}, base ${esc(s.baseid)}, created ${when(s.created)}${s.destroyed ? ', <span class="bad">destroyed</span>' : ""}` : '<span class="dim">none (a tribe yard is generated fresh when attacked)</span>'}</td></tr></table>`;
+}
+const resetCell = () => { if (confirm("Reset the stored tribe yard on this cell?")) act("resetTribes", { world: $("mapWorld").value, x: $("cx").value, y: $("cy").value }, inspect); };
+const resetAll = () => { if (confirm("Reset EVERY stored tribe yard?") && confirm("Really? This cannot be undone.")) act("resetTribes", { all: true }); };
+
+// ---- Log
+async function loadLog() {
+  const { log } = await api("log", { q: $("logQ").value });
+  $("log").innerHTML = log.length
+    ? `<table><tr><th>When</th><th>Admin</th><th>Action</th><th>Player</th><th>Details</th></tr>${log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.admin_name)}</td><td>${esc(l.action)}</td><td>${esc(l.target_name ?? "")}</td><td>${esc(l.details)}</td></tr>`).join("")}</table>`
+    : '<p class="dim">Nothing logged yet.</p>';
+}
+
+// ---- Start
+(async () => {
+  try {
+    const me = await api("whoami");
+    $("app").style.display = "block";
+    $("who").innerHTML = `Signed in as <b>${esc(me.username)}</b> · <a onclick="api('signout').then(()=>location.reload())">sign out</a>`;
+    $("tabs").innerHTML = TABS.map((t) => `<button onclick="show('${t}')">${t}</button>`).join("");
+    show("Status");
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>

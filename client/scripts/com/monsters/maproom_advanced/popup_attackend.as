@@ -50,6 +50,11 @@ package com.monsters.maproom_advanced {
                     else {
                         this.tMessage.htmlText = "";
                     }
+                    // Inferno-only (bug report B6): what it takes, said, as the Under Hall falling is not enough
+                    if (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || BASE.isOutpost)) {
+                        this.tMessage.htmlText = KEYS.Get("io_attackend_needed", {"v1": int(BASE._percentDamaged)});
+                        GLOBAL.ioFitHeight(this.tMessage); // (drawn smaller if it still doesn't fit its box)
+                    }
                 }
                 else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
                     if (BASE.isInfernoMainYardOrOutpost) {
@@ -68,9 +73,17 @@ package com.monsters.maproom_advanced {
                     this.tMessage.htmlText = "";
                 }
             }
+            // Inferno-only Moloch's Gauntlet: its own words, and home (not the map) afterwards.
+            if (IoGauntlet.inAttack()) {
+                this.tTitle.htmlText = IoGauntlet.endTitle(this._success);
+                this.tMessage.htmlText = IoGauntlet.endMessage(this._success);
+            }
             this.tProcessing.htmlText = KEYS.Get("please_wait");
             this.bAction.Enabled = false;
-            if (!MapRoomManager.instance.isInMapRoom2 || BASE.usesInfernoBackend) {
+            if (IoGauntlet.inAttack()) {
+                this.bAction.Setup(KEYS.Get("btn_returnhome"));
+            }
+            else if (!MapRoomManager.instance.isInMapRoom2 || BASE.usesInfernoBackend) {
                 this.bAction.Setup(KEYS.Get("btn_returnhome"));
             }
             else {
@@ -89,6 +102,11 @@ package com.monsters.maproom_advanced {
         }
 
         private function End(param1:MouseEvent):void {
+            if (IoGauntlet.inAttack()) {
+                IoGauntlet.ReturnHome();
+                POPUPS.Next();
+                return;
+            }
             if (MapRoomManager.instance.isInMapRoom2) {
                 MapRoom.showEnemyWait = true;
                 if (this._success && Boolean(GLOBAL._currentCell)) {

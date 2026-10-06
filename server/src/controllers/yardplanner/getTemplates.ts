@@ -1,24 +1,17 @@
 import { Status } from "../../enums/StatusCodes.js";
 import { User } from "../../database/models/user.model.js";
-import { postgres } from "../../server.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { plannerSave } from "./plannerSave.js";
 
-/**
- * Controller to handle the retrieval of Yard Planner slots/templates for the authenticated user.
- * 
- * @param {Context} ctx - The Koa context object, which includes the authenticated user.
- * @returns {Promise<void>} - A promise that resolves when the controller is complete.
- */
+/** GET or POST: the Yard Planner layouts of the yard being planned (baseid; main yard by default). */
 export const getTemplates: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
-  let save = user.save!;
-
-  await postgres.em.populate(user, ["save"], { fields: ["save.savetemplate"] });
-  const template = save.savetemplate;
+  const body = (ctx.request.body ?? {}) as Record<string, unknown>;
+  const save = await plannerSave(user, body.baseid ?? ctx.query.baseid);
 
   ctx.status = Status.OK;
   ctx.body = {
     error: 0,
-    ...template,
+    ...(save.savetemplate ?? []),
   };
 };

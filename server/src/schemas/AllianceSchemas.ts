@@ -98,3 +98,10 @@ export const PurchasePowerupSchema = z.object({
   powerup_id: z.coerce.number().int().positive(),
   purchase_hours: z.coerce.number().int().positive(),
 });
+
+/**
+ * Inferno-only: which alliance's roster to list (Browse -> Actions -> Members).
+ */
+export const AllianceMembersSchema = z.object({
+  alliance_id: z.coerce.number().int().positive(),
+});

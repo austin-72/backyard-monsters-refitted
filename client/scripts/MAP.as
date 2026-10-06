@@ -1,7 +1,9 @@
 package {
+    import flash.utils.getTimer;
     import com.monsters.configs.BYMConfig;
     import com.monsters.input.KeyboardInputHandler;
     import com.monsters.monsters.MonsterBase;
+    import com.monsters.monsters.creeps.inferno.MagmaPuddle;
     import com.monsters.rendering.RasterData;
     import com.monsters.rendering.Renderer;
     import flash.display.Bitmap;
@@ -139,6 +141,9 @@ package {
                 _viewRect.y = GLOBAL._SCREEN.y + MAP_HEIGHT / 2;
                 _viewRect.width = GLOBAL._SCREEN.width;
                 _viewRect.height = GLOBAL._SCREEN.height;
+                // Inferno-only: a yard set up again without MAP.Clear between (two answers to base loads) left the
+                // old ground listening, and its Scroll ran into the next cleared map (bug report #47)
+                ioLetGo(_GROUND);
                 _GROUND = GLOBAL._layerMap.addChild(new Sprite()) as Sprite;
                 if (!BYMConfig.instance.RENDERER_ON) {
                     _BGTILES = _GROUND.addChild(new MovieClip()) as MovieClip;
@@ -211,8 +216,32 @@ package {
                 _EFFECTSTOP.mouseChildren = false;
                 _EFFECTSTOP.tabChildren = false;
                 _dragged = false;
+                // A new yard starts with the camera free: nothing from the last yard may keep it locked.
+                _autoScroll = false;
+                _autoScrollUntil = 0;
+                _dragging = false;
                 _GROUND.addEventListener(MouseEvent.MOUSE_DOWN, Click);
+                // Pinch to zoom on touch screens (installed once, on the stage).
+                IoPinchZoom.Install(_GROUND.stage);
                 _GROUND.addEventListener(Event.ENTER_FRAME, Scroll);
+                // Button-state tracking that lives for the whole game (registered once, capture phase,
+                // top priority: first to see every mouse event). Scroll() ends a drag the moment the
+                // button is known to be up, whatever else went wrong in between.
+                // On some players' setups the mouse-up never reaches the stage at all, in either phase,
+                // while buttons (which need a mouse-up to make a click) work: so the release is also taken
+                // from the ground itself and from the game root, and from a click anywhere. buttonDown on
+                // mouse moves is not used: on those same setups it reads false while the button is held.
+                var ioStage:Stage = _GROUND.stage;
+                ioStage.addEventListener(MouseEvent.MOUSE_DOWN, ioButtonDown, true, int.MAX_VALUE);
+                ioStage.addEventListener(MouseEvent.MOUSE_UP, ioButtonUp, true, int.MAX_VALUE);
+                ioStage.addEventListener(MouseEvent.MOUSE_UP, ioButtonUp);
+                ioStage.addEventListener(MouseEvent.CLICK, ioButtonUp, true, int.MAX_VALUE);
+                ioStage.addEventListener(Event.MOUSE_LEAVE, ioButtonUp);
+                ioStage.addEventListener(Event.DEACTIVATE, ioButtonUp);
+                GLOBAL._ROOT.addEventListener(MouseEvent.MOUSE_UP, ioButtonUp);
+                GLOBAL._ROOT.addEventListener(MouseEvent.CLICK, ioButtonUp);
+                _GROUND.addEventListener(MouseEvent.MOUSE_UP, ioButtonUp);
+                _GROUND.addEventListener(MouseEvent.CLICK, ioButtonUp);
                 _GROUND.stage.addEventListener(KeyboardEvent.KEY_DOWN, KeyboardInputHandler.instance.OnKeyDown);
                 if (GLOBAL.DOES_USE_SCROLL) {
                     _GROUND.stage.addEventListener(MouseEvent.MOUSE_WHEEL, onMouseScroll);
@@ -317,6 +346,8 @@ package {
             if (_GROUND) {
                 _GROUND.removeEventListener(MouseEvent.MOUSE_DOWN, Click);
                 _GROUND.removeEventListener(Event.ENTER_FRAME, Scroll);
+                _GROUND.removeEventListener(MouseEvent.MOUSE_UP, ioButtonUp);
+                _GROUND.removeEventListener(MouseEvent.CLICK, ioButtonUp);
                 while (_GROUND.numChildren) {
                     _GROUND.removeChildAt(0);
                 }
@@ -341,6 +372,7 @@ package {
             _EFFECTSTOP = null;
             _GROUND = null;
             s_texture = null;
+            MagmaPuddle.ClearAll(); // Inferno-only: Clinkerjaw's puddles go with the map
             if (_effectsRasterData) {
                 _effectsRasterData.clear();
             }
@@ -396,11 +428,34 @@ package {
         public static function SortDepth(param1:Boolean = false, param2:Boolean = false):void {
             var _loc3_:DisplayObject = null;
             var _loc6_:int = 0;
-            if (BYMConfig.instance.RENDERER_ON) {
-                return;
-            }
             var _loc4_:Array = [];
             var _loc5_:int = _BUILDINGTOPS.numChildren - 1;
+            var ioDepth:Number = NaN;
+            if (BYMConfig.instance.RENDERER_ON) {
+                if (!GLOBAL.INFERNO_ONLY) {
+                    return;
+                }
+                // Inferno-only: with the bitmap renderer only the buildings' hit clips live here; keep them in
+                // the order the buildings are drawn, so the one in front takes the click.
+                while (_loc5_ >= 0) {
+                    _loc3_ = _BUILDINGTOPS.getChildAt(_loc5_);
+                    ioDepth = BFOUNDATION.ioHitDepth(_loc3_);
+                    _loc4_.push({
+                                "depth": isNaN(ioDepth) ? _loc3_.y * 1000 + _loc3_.x : ioDepth,
+                                "mc": _loc3_
+                            });
+                    _loc5_--;
+                }
+                _loc4_.sortOn("depth", Array.NUMERIC);
+                _loc5_ = 0;
+                while (_loc5_ < _loc4_.length) {
+                    if (_BUILDINGTOPS.getChildIndex(_loc4_[_loc5_].mc) != _loc5_) {
+                        _BUILDINGTOPS.setChildIndex(_loc4_[_loc5_].mc, _loc5_);
+                    }
+                    _loc5_++;
+                }
+                return;
+            }
             while (_loc5_ >= 0) {
                 _loc3_ = _BUILDINGTOPS.getChildAt(_loc5_);
                 _loc6_ = _loc3_.height * 0.5;
@@ -427,6 +482,16 @@ package {
         public static function KeyUp(param1:KeyboardEvent):void {
         }
 
+        private static var _ioButtonDown:Boolean = false;
+
+        private static function ioButtonDown(param1:MouseEvent):void {
+            _ioButtonDown = true;
+        }
+
+        private static function ioButtonUp(param1:Event):void {
+            _ioButtonDown = false;
+        }
+
         public static function Click(param1:MouseEvent = null):void {
             if (UI2._scrollMap) {
                 _dragX = stage.mouseX - _GROUND.x;
@@ -434,14 +499,39 @@ package {
                 _startX = _GROUND.x;
                 _startY = _GROUND.y;
                 _dragging = true;
+                // A drag only starts on a mouse-down, so the button is down now. Don't rely on the stage's
+                // capture-phase listener having seen it: on the setups where mouse events never reach the
+                // stage, _ioButtonDown stayed false and Scroll() ended every drag on its first frame.
+                _ioButtonDown = true;
                 stage.addEventListener(MouseEvent.MOUSE_UP, Release);
+                // A drag only ended on that MOUSE_UP listener. Flash stops delivering an event the moment
+                // any earlier listener throws, so one broken mouse-up handler anywhere in the game left the
+                // yard following the mouse for good ("stuck dragging"): Release never ran. These listeners
+                // are in the capture phase at top priority, which runs before every other listener and
+                // before any of them can throw. The drag also ends when the mouse leaves the window, and on
+                // the first mouse move that reports the button is no longer down.
+                stage.addEventListener(MouseEvent.MOUSE_UP, ioDragEnd, true, int.MAX_VALUE);
+                stage.addEventListener(Event.MOUSE_LEAVE, ioDragLeave);
+                stage.addEventListener(Event.DEACTIVATE, ioDragLeave);
             }
+        }
+
+        private static function ioDragEnd(param1:MouseEvent):void {
+            // The bubbling Release still runs afterwards (harmless twice); this one cannot be skipped.
+            _dragging = false;
+        }
+
+        private static function ioDragLeave(param1:Event):void {
+            Release(null);
         }
 
         public static function Release(param1:MouseEvent):void {
             _dragging = false;
             _dragged = false;
             stage.removeEventListener(MouseEvent.MOUSE_UP, Release);
+            stage.removeEventListener(MouseEvent.MOUSE_UP, ioDragEnd, true);
+            stage.removeEventListener(Event.MOUSE_LEAVE, ioDragLeave);
+            stage.removeEventListener(Event.DEACTIVATE, ioDragLeave);
         }
 
         public static function Focus(param1:Number, param2:Number):void {
@@ -471,6 +561,11 @@ package {
             var callback:Function = param7;
             if (!GLOBAL._catchup) {
                 FocusToDone = function():void {
+                    // Cleared first: this used to return before it when the yard had been unloaded while
+                    // the camera was gliding, and _autoScroll stayed true for the rest of the session, so
+                    // the player could no longer drag the camera on any yard.
+                    _autoScroll = false;
+                    _autoScrollUntil = 0;
                     if (!_GROUND) {
                         return;
                     }
@@ -488,6 +583,8 @@ package {
                     UI2.Hide("bottom");
                 }
                 _autoScroll = true;
+                // Backstop: if the glide never reports finishing (its tween cancelled), give the camera back.
+                _autoScrollUntil = getTimer() + int((time + delay + pause) * 1000) + 2000;
                 tx = 0 - (X - 380);
                 ty = 0 - (Y - 340);
                 w = stage.stageWidth;
@@ -529,7 +626,37 @@ package {
             _following = false;
         }
 
+        /** getTimer() after which a camera glide that never finished no longer blocks dragging. */
+        public static var _autoScrollUntil:int = 0;
+
+        /** Inferno-only: a map ground no longer in use stops listening (its Scroll, clicks and button-ups). */
+        private static function ioLetGo(ground:Sprite):void {
+            if (!ground) {
+                return;
+            }
+            ground.removeEventListener(Event.ENTER_FRAME, Scroll);
+            ground.removeEventListener(MouseEvent.MOUSE_DOWN, Click);
+            ground.removeEventListener(MouseEvent.MOUSE_UP, ioButtonUp);
+            ground.removeEventListener(MouseEvent.CLICK, ioButtonUp);
+        }
+
         public static function Scroll(param1:Event = null):void {
+            // Inferno-only: only the map on screen scrolls. Called from a ground that is not it (one left from an
+            // earlier set-up), or with no map at all while the next yard loads, it lets go and does nothing
+            // (bug report #47: "Cannot read properties of null (reading 'x')", on every frame until the next yard).
+            if (!_GROUND || param1 && param1.currentTarget && param1.currentTarget !== _GROUND) {
+                if (param1 && param1.currentTarget is Sprite && param1.currentTarget !== _GROUND) {
+                    ioLetGo(param1.currentTarget as Sprite);
+                }
+                return;
+            }
+            if (_dragging && !_ioButtonDown) {
+                Release(null);
+            }
+            if (_autoScroll && _autoScrollUntil > 0 && getTimer() > _autoScrollUntil) {
+                _autoScroll = false;
+                _autoScrollUntil = 0;
+            }
             var _loc12_:int = 0;
             var _loc13_:Object = null;
             var _loc14_:MonsterBase = null;
@@ -683,6 +810,9 @@ package {
         }
 
         private function render(param1:Event):void {
+            if (PLANNER.ioCoversYard()) {
+                return; // Inferno-only: hidden behind the Yard Planner (see PLANNER.ioCoversYard)
+            }
             this._renderer.render();
         }
     }

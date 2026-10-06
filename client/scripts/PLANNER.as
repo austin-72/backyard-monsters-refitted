@@ -91,6 +91,16 @@ package {
             return _open;
         }
 
+        /**
+         * Inferno-only: the Yard Planner window covers the yard, so MAP skips drawing the yard while it is
+         * open. The yard's renderer redraws all of it every frame, and that forced the whole planner, with
+         * every building in it, to be drawn again each frame too: slow on phones. It draws everything again
+         * on the first frame after the planner closes.
+         */
+        public static function ioCoversYard():Boolean {
+            return GLOBAL.INFERNO_ONLY && _open && !_useOldPlanner;
+        }
+
         public static function Update():void {
             if (_open) {
                 if (_useOldPlanner) {

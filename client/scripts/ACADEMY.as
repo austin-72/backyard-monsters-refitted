@@ -59,16 +59,32 @@ package {
             var _loc3_:Boolean = false;
             var _loc4_:String = "";
             var _loc5_:String = KEYS.Get("acad_status_level", {"v1": GLOBAL.player.m_upgrades[param1].level});
+            // Inferno-only: a training under way that no Academy claims (its mark was lost) is this one's, so it
+            // counts as busy. Each Academy still trains its own monster: two Academies, two trainings.
+            if (GLOBAL.INFERNO_ONLY && Boolean(_building) && !_building._upgrading && ioUnclaimedTraining() != null) {
+                _building._upgrading = ioUnclaimedTraining();
+            }
+            // Inferno-only: nor while the Academy itself is being built or upgraded
+            if (GLOBAL.INFERNO_ONLY && Boolean(_building) && !_building._upgrading && _building._countdownBuild.Get() + _building._countdownUpgrade.Get() > 0) {
+                return {
+                        "error": true,
+                        "errorMessage": KEYS.Get("io_acad_err_upgrading"),
+                        "status": KEYS.Get("io_acad_err_upgrading")
+                    };
+            }
             if (Boolean(_building) && !_building._upgrading) {
                 if (!GLOBAL.player.m_upgrades[param1].time) {
                     if (Boolean(CREATURELOCKER._lockerData[param1]) && CREATURELOCKER._lockerData[param1].t == 2) {
                         if (GLOBAL.player.m_upgrades[param1].level < CREATURELOCKER._creatures[param1].trainingCosts.length + 1) {
-                            if (GLOBAL.player.m_upgrades[param1].level <= _building._lvl.Get()) {
+                            // Inferno-only: the 5th academy level trains to level 6: Korath, Drull and Rezghul, and
+                            // (3 October) every other Inferno monster with its five training steps (ioReachesLevel6).
+                            if ((GLOBAL.player.m_upgrades[param1].level <= _building._lvl.Get() || GLOBAL.ioTestMode()) && !(GLOBAL.INFERNO_ONLY && BASE.isInfernoMainYardOrOutpost && GLOBAL.player.m_upgrades[param1].level >= 5 && !CREATURELOCKER.ioReachesLevel6(param1))) {
                                 _loc6_ = CREATURELOCKER._creatures[param1].trainingCosts[GLOBAL.player.m_upgrades[param1].level - 1];
                                 if (BASE.Charge(3, _loc6_[0], true) > 0) {
                                     if (!param2) {
                                         BASE.Charge(3, _loc6_[0]);
-                                        GLOBAL.player.m_upgrades[param1].time = new SecNum(GLOBAL.Timestamp() + _loc6_[1]);
+                                        // Admin test mode: trained at once (done on the next tick).
+                                        GLOBAL.player.m_upgrades[param1].time = new SecNum(GLOBAL.Timestamp() + (GLOBAL.ioTestMode() ? 0 : _loc6_[1]));
                                         GLOBAL.player.m_upgrades[param1].duration = _loc6_[1];
                                         _building._upgrading = param1;
                                         BASE.Save();
@@ -85,7 +101,8 @@ package {
                                 _loc3_ = true;
                                 _loc4_ = KEYS.Get("acad_err_upgrade");
                                 _loc5_ = KEYS.Get("acad_err_upgrade");
-                                if (BASE.isInfernoMainYardOrOutpost && GLOBAL.player.m_upgrades[param1].level >= 5) {
+                                // (Inferno-only: every monster goes to 6 now, so 5 is "train the Academy first")
+                                if (BASE.isInfernoMainYardOrOutpost && GLOBAL.player.m_upgrades[param1].level >= (GLOBAL.INFERNO_ONLY && CREATURELOCKER.ioReachesLevel6(param1) ? 6 : 5)) {
                                     _loc3_ = true;
                                     _loc4_ = KEYS.Get("acad_err_fullytrained");
                                     _loc5_ = KEYS.Get("acad_err_lfullytrained", {"v1": GLOBAL.player.m_upgrades[param1].level});
@@ -132,6 +149,12 @@ package {
 
         public static function CancelMonsterUpgrade(param1:String):void {
             var _loc3_:BUILDING26 = null;
+            // Inferno-only: a cancel of a training that isn't running (answered twice, or finished meanwhile)
+            // refunded the sulfur again
+            if (GLOBAL.INFERNO_ONLY && !(GLOBAL.player.m_upgrades[param1] && GLOBAL.player.m_upgrades[param1].time)) {
+                Update();
+                return;
+            }
             delete GLOBAL.player.m_upgrades[param1].time;
             delete GLOBAL.player.m_upgrades[param1].duration;
             var _loc2_:Vector.<Object> = InstanceManager.getInstancesByClass(BUILDING26);
@@ -213,7 +236,81 @@ package {
                     }
                 }
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                ioReconcile();
+            }
             Update();
+        }
+
+        /* Inferno-only: is this monster training (its training time set)? */
+        private static function ioIsTraining(param1:String):Boolean {
+            return Boolean(param1) && Boolean(GLOBAL.player.m_upgrades[param1]) && GLOBAL.player.m_upgrades[param1].time != null;
+        }
+
+        /* Inferno-only: a monster training (training time set) that no Academy in the yard has as its mark, or
+         * null. Normally there is none: every training is started by an Academy, which keeps it as its mark. */
+        public static function ioUnclaimedTraining():String {
+            var id:String = null;
+            var academy:BUILDING26 = null;
+            var claimed:Boolean = false;
+            for (id in GLOBAL.player.m_upgrades) {
+                if (!ioIsTraining(id) || !CREATURELOCKER._creatures[id]) {
+                    continue;
+                }
+                claimed = false;
+                for each (academy in InstanceManager.getInstancesByClass(BUILDING26)) {
+                    if (academy._upgrading == id) {
+                        claimed = true;
+                        break;
+                    }
+                }
+                if (!claimed) {
+                    return id;
+                }
+            }
+            return null;
+        }
+
+        /* Inferno-only: is this Academy training? Its mark, if that monster is still training; or, with no mark,
+         * a training no Academy claims (it gets that mark on the next tick). */
+        public static function ioAcademyBusy(param1:BFOUNDATION):Boolean {
+            if (param1._upgrading) {
+                return ioIsTraining(param1._upgrading);
+            }
+            return ioUnclaimedTraining() != null;
+        }
+
+        /* Inferno-only: keeps each Academy's "training" mark (its `_upgrading`, saved with the building) and
+         * ACADEMY._monsterID (what Speed Up acts on) in line with the training times, once a second. Each
+         * Academy trains one monster at a time, so two Academies (allowed from Under Hall 4) train two. The mark
+         * is what keeps a second training from starting in the same Academy, the Academy from being upgraded and
+         * its animation going: a training whose mark was lost (a save that kept one but not the other) let all
+         * three happen, and a mark left after the training ended kept the Academy busy and Speed Up pointing at
+         * a finished training. A lost mark goes to an Academy that has none. */
+        private static function ioReconcile():void {
+            var academy:BUILDING26 = null;
+            var seen:Object = {};
+            var unclaimed:String = null;
+            for each (academy in InstanceManager.getInstancesByClass(BUILDING26)) {
+                if (academy._upgrading && (!ioIsTraining(academy._upgrading) || seen[academy._upgrading])) {
+                    academy._upgrading = null;
+                }
+                if (academy._upgrading) {
+                    seen[academy._upgrading] = true;
+                }
+            }
+            for each (academy in InstanceManager.getInstancesByClass(BUILDING26)) {
+                if (!academy._upgrading) {
+                    unclaimed = ioUnclaimedTraining();
+                    if (unclaimed == null) {
+                        break;
+                    }
+                    academy._upgrading = unclaimed;
+                }
+            }
+            if (_monsterID && !ioIsTraining(_monsterID)) {
+                _monsterID = null;
+            }
         }
 
         public static function Update():void {

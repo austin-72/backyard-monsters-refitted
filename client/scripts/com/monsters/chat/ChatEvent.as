@@ -30,6 +30,15 @@ package com.monsters.chat {
 
         public static const USER_EXIT:String = "user_exit";
 
+        /** Inferno-only: the server refused something (params: code, name, minutes). */
+        public static const SERVER_ERROR:String = "server_error";
+
+        /** Inferno-only: a line deleted by a moderator (params: channel, id). */
+        public static const DELETED:String = "chat_deleted";
+
+        /** Inferno-only: a line for this player only from the server (params: text). */
+        public static const NOTICE:String = "chat_notice";
+
         private var map:Dictionary;
 
         public function ChatEvent(param1:String, param2:Boolean = true, param3:Dictionary = null, param4:Boolean = false, param5:Boolean = false) {

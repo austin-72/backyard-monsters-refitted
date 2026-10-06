@@ -31,3 +31,10 @@ export const isAttackActive = (save: AttackState) => {
 
   return (getCurrentDateTime() - lastAttack.starttime) < ATTACK_TIMEOUT;
 };
+
+/**
+ * A wild monster (tribe) yard is being attacked: attacks on tribe yards are not listed in `attacks`, but
+ * every attack moves savetime (loading the attack and each of its saves) and the last save sets attackid 0.
+ */
+export const isWildAttackActive = (save: Loaded<Save, never, "attackid" | "savetime">) =>
+  save.attackid !== 0 && getCurrentDateTime() - save.savetime < ATTACK_TIMEOUT;

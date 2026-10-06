@@ -1,4 +1,5 @@
 import type { KoaController } from "../../../utils/KoaController.js";
+import { recordTakeover } from "../../../services/alliance/allianceOutposts.js";
 import { User } from "../../../database/models/user.model.js";
 import { postgres } from "../../../server.js";
 import { invalidateWorldsCache } from "../../../services/maproom/knownWorlds.js";
@@ -13,8 +14,9 @@ import {
 import { getCurrentDateTime } from "../../../utils/getCurrentDateTime.js";
 import { validateRange } from "../../../services/maproom/v2/validateRange.js";
 import { TakeoverCellSchema } from "../../../schemas/TakeoverCellSchema.js";
-import { takeoverCellErr, shinyLockedErr } from "../../../errors/errors.js";
+import { takeoverCellErr, shinyLockedErr, notEnoughShinyErr } from "../../../errors/errors.js";
 import { isShinyLocked } from "../../../services/user/shinyLock.js";
+import { questBump } from "../../../services/quests/questProgress.js";
 
 /**
  * Controller to handle the takeover of a cell on the world map via shiny or resources.
@@ -56,13 +58,20 @@ export const takeoverCell: KoaController = async (ctx) => {
 
   await validateRange(currentUser, userSave, mapversion, { attackCell: cell });
 
-  if (shiny) userSave.credits = userSave.credits - shiny;
+  // Shiny can't go below 0 (the database refuses it, which failed the whole request with a 500).
+  if (shiny) {
+    if (!(shiny > 0) || (userSave.credits ?? 0) < shiny) throw notEnoughShinyErr();
+    userSave.credits -= shiny;
+  }
   if (resources)
     userSave.resources = updateResources(
       resources,
       userSave.resources ?? {},
       Operation.SUBTRACT
     );
+
+  // Inferno-only alliance outpost history: who it was taken from (before the save changes hands)
+  const wasTribe = cellSave.type === BaseType.TRIBE;
 
   // Clean up previous owner's save if the cell was player-owned
   const previousOwner = await postgres.em.findOne(
@@ -124,6 +133,19 @@ export const takeoverCell: KoaController = async (ctx) => {
   await postgres.em.flush();
 
   if (isOriginCell) await invalidateWorldsCache();
+
+  await recordTakeover({
+    worldId: String(userSave.worldid ?? cell.world?.uuid ?? ""),
+    x: cell.x,
+    y: cell.y,
+    baseid: String(baseid),
+    taker: currentUser,
+    previous: !wasTribe && previousOwner && previousOwner.userid !== currentUser.userid ? previousOwner : null,
+  });
+
+  // Inferno-only quest book: an outpost taken (from a player, or a tribe)
+  void questBump(currentUser.userid, "captures");
+  if (!wasTribe && previousOwner && previousOwner.userid !== currentUser.userid) void questBump(currentUser.userid, "captures_player");
 
   ctx.status = Status.OK;
   ctx.body = { error: 0 };

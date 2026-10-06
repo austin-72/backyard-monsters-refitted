@@ -14,7 +14,6 @@ import { Maproom } from "./database/models/maproom.model.js";
 import { Message } from "./database/models/message.model.js";
 import { Thread } from "./database/models/thread.model.js";
 import { AttackLogs } from "./database/models/attacklogs.model.js";
-import { Truce } from "./database/models/truce.model.js";
 import { JobRun } from "./database/models/jobrun.model.js";
 import { Alliance } from "./database/models/alliance.model.js";
 import { AllianceInvite } from "./database/models/allianceinvite.model.js";
@@ -23,6 +22,8 @@ import { AlliancePowerup } from "./database/models/alliancepowerup.model.js";
 import { AllianceRelationship } from "./database/models/alliancerelationship.model.js";
 import { AllianceStats } from "./database/models/alliancestats.view.js";
 import { ApiConsumer } from "./database/models/apiconsumer.model.js";
+import { AdminLog } from "./database/models/adminlog.model.js";
+import { BugReport } from "./database/models/bugreport.model.js";
 
 /**
  * `bun run` loads `.env` on its own, but the MikroORM CLI started through `bun x` (db:init,
@@ -58,7 +59,6 @@ const entities = [
   Message,
   Thread,
   AttackLogs,
-  Truce,
   JobRun,
   Alliance,
   AllianceInvite,
@@ -67,6 +67,8 @@ const entities = [
   AllianceRelationship,
   AllianceStats,
   ApiConsumer,
+  AdminLog,
+  BugReport,
 ];
 
 /**
@@ -87,7 +89,8 @@ export default defineConfig({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  pool: { min: 2, max: 10 },
+  // (20: 10 was easily taken by a few slow requests at once; DB_POOL_MAX to change it)
+  pool: { min: 2, max: Number(process.env.DB_POOL_MAX) || 20 },
   migrations: {
     path: path.join(import.meta.dirname, "./database/migrations"),
     pathTs: path.join(import.meta.dirname, "./database/migrations"),

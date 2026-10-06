@@ -28,7 +28,9 @@ Day to day:
 | Follow the server log | `docker compose logs -f web` |
 | Stop | `docker compose down` |
 | Apply a change to `InfernoOnlyConfig.ts` or any other source file | `docker compose up --build -d` |
-| Wipe the database and start a fresh world | `docker compose down -v` then `docker compose up --build` |
+| Back up the database now | `backup-db.cmd` (nightly backups happen by themselves: see "Backups" below) |
+| Put a backup back | `restore-db.cmd` lists them, `restore-db.cmd <name>` restores one |
+| Wipe the database and start a fresh world | `docker compose down -v` then `docker compose up --build` (back up first: this deletes everything) |
 | Check tribe spawning is repeatable | `docker compose exec db psql -U postgres -d bym -c "select uuid from bym.world;"` then `docker compose exec web bun src/scripts/verify-tribe-spawns.ts <uuid>` |
 
 **Port already in use?** If PostgreSQL or Redis is also installed on Windows and running, Docker
@@ -42,6 +44,47 @@ REDIS_PORT=6380
 Ports 3001 (API), 3010 (chat) and 843 (Flash socket policy) must be free as well.
 
 A `.env` file is optional with Docker: every setting has a default in `docker-compose.yml`.
+
+### Backups
+
+The `backup` service in `docker-compose.yml` backs up the database by itself, as long as the server is
+running (`docker compose up -d` starts it with the rest; nothing to set up in Windows):
+- **When:** every day at 4:00 (Chicago time), and at once when it starts and the newest backup is more
+  than a day old, so a computer that is off at 4:00 still gets its daily backup when it is next on.
+- **Where:** `server\backups`, one compressed file per backup, `bym-2026-09-26_0400.dump`. Each is checked
+  after it is written before it counts.
+- **How many:** every backup of the last 14 days, then one a week for 8 weeks, then one a month for 12
+  months (about 35 files; a few MB each for a small server). The newest is never removed.
+- **If one fails:** `LAST-BACKUP-FAILED.txt` appears in the folder (gone after the next good one), and
+  `backup.log` there says why. `docker compose logs backup` shows the same.
+
+Settings (optional, in `server\.env`):
+```
+BACKUP_DIR=C:/Users/YOU/OneDrive/bymr-backups   # somewhere else; a synced folder keeps a copy off this PC
+BACKUP_HOUR=4          # 0-23
+BACKUP_KEEP_DAYS=14
+BACKUP_KEEP_WEEKS=8
+BACKUP_KEEP_MONTHS=12
+TZ=America/Chicago     # the time zone BACKUP_HOUR is in
+```
+After changing them: `docker compose up -d`. Backups on the same disk as the database don't survive
+that disk failing: pointing `BACKUP_DIR` at a OneDrive / Google Drive folder, or copying the folder
+elsewhere now and then, does.
+
+**Back up now:** `backup-db.cmd` (in `server`). Do it before anything risky: a big update, a migration,
+`docker compose down -v`, Docker Desktop trouble.
+
+**Restore:** `restore-db.cmd` lists the backups; `restore-db.cmd bym-2026-09-26_0400.dump` puts that one
+back. It asks you to type YES, backs up the database as it is first (`bym-before-restore-<time>.dump`,
+kept until you delete it), stops the game server, replaces the whole database, and starts the server
+again. Everything since that backup is gone for every player. Players who are logged in log in again.
+
+On another computer or a fresh install: copy the `.dump` file into its `server\backups`, start the server
+once (`docker compose up -d`), then `restore-db.cmd <name>`.
+
+Without Docker, the same script works on its own (Linux/macOS, `pg_dump` 18 or newer):
+`PGHOST=localhost PGUSER=postgres PGPASSWORD=... PGDATABASE=bym BACKUP_PATH=/some/folder sh server/docker/db-backup.sh once`
+(or `loop` to keep running it daily, e.g. as a systemd service).
 
 ## 1b. Server without Docker
 
@@ -62,18 +105,31 @@ Needs: [Bun](https://bun.sh) 1.x, PostgreSQL 14+, Redis.
    ```
    The server listens on http://localhost:3001. `GET /connection` returns 200 when it is up.
 
+**Updating an existing server:** new versions can add database columns. After pulling, run the
+migrations once. Outside production (`ENV` other than `prod`) the server applies them itself when it
+starts; with `ENV=prod` run `bun run migration:up` in `server/` (in Docker:
+`docker compose exec web bun run migration:up`).
+This version adds `20260923_AddDailyLogin`, `20260923_AddPlayerKits`, `20260924_AddAdminPanel`, `20260925_AddBugReports`, `20260925_RelockChampions`, `20260925_AddAdminTestMode`, `20260926_AddGauntlet` and `20260926_AddGauntletClaims`.
+The admin is `admintester` (`admins` in `server/src/config/InfernoOnlyConfig.ts`; exact, capitals included).
+Admin names are reserved, so nobody can register them from the game: register your account under any name,
+then give it the admin name with `bun run admin:claim <your username> admintester` (with Docker:
+`docker compose exec web bun run admin:claim <your username> admintester`). If a cron job or timer runs
+`scripts/monthly-shiny.ts`, remove it: the daily login reward replaces it and the script now grants nothing.
+
 Use a **fresh database**. Tribe yards that players have attacked are stored, so an old database
 would keep overworld layouts. To start over: drop and recreate `bym`, `redis-cli flushall`,
 `bun run db:init`.
 
-Docker works as upstream documents it (`server/docker-compose.yml`); nothing about it changed.
+Docker works as upstream documents it (`server/docker-compose.yml`). The only change: `public/assets/kits`
+and `public/client` are bound to the host, so exported kits and published clients survive rebuilds.
 
 ### Settings
 
 Everything for this mode is in `server/src/config/InfernoOnlyConfig.ts`: starting shiny, production
 multipliers, timer divisor, hatch seconds, workers, tribe spawning, Moloch rate / levels / loot,
 `requireDiscord`, `alliances`. World size is in `server/src/enums/MapRoom.ts`. Restart the server
-after editing. Changing any `tribeSpawns` or `moloch` value re-rolls the map: wipe the database.
+after editing. Changing any `tribeSpawns` or `moloch` value re-rolls which tribe sits on which cell:
+reset the stored tribe yards (see [Resetting tribe yards](#resetting-tribe-yards)).
 
 `ENV=local` in `.env` is fine for playing with friends on a LAN. For a public host follow upstream's
 "Hosting a production server" wiki page; `requireDiscord: false` keeps Discord out of it.
@@ -148,6 +204,11 @@ The server address is compiled in too: `CONFIG::SERVER_URL` / `CONFIG::CDN_URL` 
 `http://localhost:3001/`. Change them before building if the server runs elsewhere, and give your
 players the SWF you built plus a Flash projector.
 
+**Browser client (no Flash).** `client-web/` converts the same `client/scripts` to JavaScript and
+runs it in a browser; most players use it. `publish-web.cmd` builds it into `server/public/web` and
+makes the site's front page open it; **BYMR - Release** runs it after publishing the SWF. Everything
+about it (settings, phones, watch mode, troubleshooting) is in `WEB-CLIENT.md`.
+
 ## Going public: inferno-mr2.maproom2.com
 
 Three builds exist. **BYMR - Debug** and **BYMR - Local** talk to `http://localhost:3001/` and are for
@@ -191,7 +252,7 @@ The address is compiled into the SWF, so it has to match how the server is reall
 
 - Register in the game's login screen, log in, and you land directly in an Inferno yard: lava
   terrain, Under Hall, two harvesters, two silos. No tutorial, no overworld, no portal.
-- 10,000-25,000 shiny, 5 workers, about 60k of each resource.
+- 2,000-2,025 shiny, 5 workers, 60k bone / coal / sulfur and 55k magma.
 - Build a **Map Room** and a **Flinger** (both are in the build menu at Under Hall 1). The map is
   Map Room 2: every land cell is a devil tribe, coordinates read as negatives, and the flinger
   level sets how far you can attack (level 1 = 4 cells).
@@ -207,3 +268,21 @@ of `INFERNO-ONLY-NOTES.md`), including `bun run db:init` from a clean shell.
 Not tested: the client in Flash. It was type-checked with an ActionScript compiler and has no new
 errors, but no SWF was built with the Flex SDK or opened. Expect to find visual and gameplay issues
 on first play; the notes list the known rough edges and everything parked (art swaps).
+
+## Bans and refused attacks
+
+A player whose attack payload the server would not accept (a monster it does not know, or monster stats
+that differ from its table) has the attack refused, and the reason is logged and kept:
+
+```
+docker compose logs web | Select-String "Attack refused"
+docker compose exec db psql -U postgres -d bym -c "select username, attack_violations, report from bym.report order by userid desc limit 5;"
+```
+
+The account is not banned automatically (`attackViolationBanAfter` in InfernoOnlyConfig.ts). To ban or
+unban by hand:
+
+```
+docker compose exec db psql -U postgres -d bym -c "update bym.\"user\" set banned=true  where username='NAME';"
+docker compose exec db psql -U postgres -d bym -c "update bym.\"user\" set banned=false where username='NAME';"
+```

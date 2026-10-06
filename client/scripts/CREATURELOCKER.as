@@ -1,6 +1,7 @@
 package {
 
     import com.monsters.creep_types.CreepTypeManager;
+    import com.monsters.events.hfo.IoHfo;
     import com.monsters.maproom_manager.MapRoomManager;
     import com.monsters.monsters.creeps.Bandito;
     import com.monsters.monsters.creeps.Bolt;
@@ -11,12 +12,21 @@ package {
     import com.monsters.monsters.creeps.Fink;
     import com.monsters.monsters.creeps.ProjectX;
     import com.monsters.monsters.creeps.Rezghul;
+    import com.monsters.monsters.creeps.IoChampionCreep;
     import com.monsters.monsters.creeps.Slimeattikus;
     import com.monsters.monsters.creeps.Teratorn;
     import com.monsters.monsters.creeps.Vorg;
     import com.monsters.monsters.creeps.Wormzer;
     import com.monsters.monsters.creeps.Zafreeti;
     import com.monsters.monsters.creeps.inferno.Balthazar;
+    import com.monsters.monsters.creeps.inferno.Ashkarr;
+    import com.monsters.monsters.creeps.inferno.Clinkerjaw;
+    import com.monsters.monsters.creeps.inferno.Emberghoul;
+    import com.monsters.monsters.creeps.inferno.Flickerfiend;
+    import com.monsters.monsters.creeps.inferno.Fusebug;
+    import com.monsters.monsters.creeps.inferno.hfo.IoHailspitter;
+    import com.monsters.monsters.creeps.inferno.hfo.IoIceCreep;
+    import com.monsters.monsters.creeps.inferno.hfo.IoRimegrave;
     import com.monsters.monsters.creeps.inferno.KingWormzer;
     import com.monsters.monsters.creeps.inferno.Sabnox;
     import com.monsters.monsters.creeps.inferno.Spurtz;
@@ -63,15 +73,15 @@ package {
             var _loc2_:int = 0;
             _lockerData = param1;
             _lockerData[getFirstCreatureID()] = {"t": 2};
-            if (GLOBAL.ioRezghul) {
-                // Unlocked from the start. The yard's locker data arrives after the prop tables are set
-                // up, so it is applied here as well as in ioApplyRezghul().
-                _lockerData[REZGHUL_ID] = {"t": 2};
-            }
+            // Inferno-only: Rezghul, Korath and Drull used to be unlocked here for everyone; they are now
+            // unlocked in the Strongbox like the others (ioApplyRezghul, ioAddChampionMonsters). The unlocks
+            // from before were taken away from everyone (server migration 20260925_RelockChampions), and the
+            // server refuses an unlock of theirs that was never started (services/base/lockedMonsters.ts).
             if (_lockerData.C100) {
                 _lockerData.C12 = _lockerData.C100;
                 delete _lockerData.C100;
             }
+            ioTestUnlockAll();
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 if (BASE.isInfernoMainYardOrOutpost) {
                     _loc2_ = 2;
@@ -99,9 +109,387 @@ package {
         public static const REZGHUL_ID:String = "C19";
 
         /**
+         * Admin test mode: every Inferno monster unlocked (Korath, Drull and Rezghul too). The unlocks are saved
+         * while testing and taken away again when test mode is switched off (the server puts the account back).
+         */
+        /** Every Inferno monster: IC1-IC8, the Fusebug, Clinkerjaw, Flickerfiend, Emberghoul, Korath, Drull, Ashkarr and Rezghul. */
+        public static function ioTestMonsterIds():Array {
+            var ids:Array = [];
+            for (var n:int = 1; n <= NUM_ICREEP_TYPE; n++) {
+                ids.push("IC" + n);
+            }
+            ids.push(FUSEBUG_ID, CLINKERJAW_ID, FLICKERFIEND_ID, EMBERGHOUL_ID, KORATH_ID, DRULL_ID, ASHKARR_ID, REZGHUL_ID);
+            // Hell Freezes Over: Rimegrave and the ice cretins (admins only: test mode and the Designer)
+            ids.push(RIMEGRAVE_ID);
+            for each (var cretin:String in HFO_CRETINS) {
+                ids.push(cretin);
+            }
+            return ids;
+        }
+
+        /**
+         * Hell Freezes Over: the monsters a player must have unlocked for the event to start (every one on Strongbox
+         * pages 1-5 but Rimegrave; the ice cretins are never a player's). The server's list says the same
+         * (services/events/hfo.ts qualifyMonsters).
+         */
+        public static function ioHfoQualifyIds():Array {
+            var ids:Array = [];
+            for each (var id:String in ioTestMonsterIds()) {
+                if (id != RIMEGRAVE_ID && HFO_CRETINS.indexOf(id) == -1 && (id != REZGHUL_ID || GLOBAL.ioRezghul)) {
+                    ids.push(id);
+                }
+            }
+            return ids;
+        }
+
+        public static function ioTestUnlockAll():void {
+            // The admin's own yards only (a yard viewed or attacked keeps its owner's locker).
+            if (!GLOBAL.ioTestMode() || !_lockerData || (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD && GLOBAL.mode != GLOBAL.e_BASE_MODE.IBUILD)) {
+                return;
+            }
+            for each (var id:String in ioTestMonsterIds()) {
+                if (!_lockerData[id] || _lockerData[id].t != 2) {
+                    _lockerData[id] = {"t": 2};
+                }
+                if (GLOBAL.player && GLOBAL.player.m_upgrades && !GLOBAL.player.m_upgrades[id]) {
+                    GLOBAL.player.m_upgrades[id] = {"level": 1};
+                }
+            }
+        }
+
+        /**
+         * Inferno-only: Korath (IC9) and Drull (IC10), the champions, as ordinary monsters. Unlocked in the
+         * Strongbox on page 5 (Strongbox level 5), for 2.5 times King Wormzer's unlock cost and time;
+         * hatched with magma (2.2M-5.2M, as Ashkarr), 600 housing each, damage, speed and reach per level from their champion tables; health set by the user (28 September: Korath 32,000 to 64,000, Drull 22,000 to 52,000, even steps). Drawn and fought by IoChampionCreep. These numbers must stay identical to the server's
+         * (server/src/game-data/stats/monsterStats.ts), which checks them on every attack.
+         */
+        public static const KORATH_ID:String = "IC9";
+
+        public static const DRULL_ID:String = "IC10";
+
+        /**
+         * Inferno-only: Ashkarr, the Ember Herald (IC24; the user's ASHKARR.md): Strongbox page 5 after Korath and
+         * Drull (Strongbox level 5); unlocked and trained in the Academy (to level 6) for what Korath and Drull
+         * cost. Hatched with magma (her own costs); 600 housing, as Korath and Drull. Her war-cry
+         * is in her class (creeps/inferno/Ashkarr.as, WarCry). The server's table must match
+         * (server/src/game-data/stats/monsterStats.ts).
+         */
+        public static const ASHKARR_ID:String = "IC24";
+
+        /**
+         * Monsters that can be trained to level 6 in the Infernal Academy (level 5 academy). Since 3 October every
+         * monster with five training steps (all the Inferno ones; their stats already went to 6); it was only
+         * Korath, Drull, Rezghul, Ashkarr and Rimegrave.
+         */
+        public static function ioReachesLevel6(param1:String):Boolean {
+            var c:Object = _creatures ? _creatures[param1] : null;
+            return param1 == KORATH_ID || param1 == DRULL_ID || param1 == REZGHUL_ID || param1 == ASHKARR_ID || param1 == RIMEGRAVE_ID || (c && c.trainingCosts is Array && c.trainingCosts.length >= 5);
+        }
+
+        private static function ioAddChampionMonsters():void {
+            // magma to hatch and heal: Ashkarr's (the user's choice, 28 September; it was 2M-20M and 0.6M-6M)
+            var cost:Array = [2200000, 2600000, 3050000, 3600000, 4300000, 5200000];
+            var heal:Array = [660000, 780000, 915000, 1080000, 1290000, 1560000];
+            // (a fresh table for each champion: ioScaleTimes divides each monster's Academy times in place, so
+            // a table they shared was divided once for each of them)
+            var training:Function = function():Array {
+                return [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]];
+            };
+            _mainCreatures[KORATH_ID] = {
+                    "index": 9, "page": 5, "order": 1, "resource": IO_CHAMPION_UNLOCK_COST, "time": IO_CHAMPION_UNLOCK_TIME, "level": 5,
+                    "name": "#m_korath#", "classType": IoChampionCreep, "description": "mon_korathdesc",
+                    "stream": ["", "", ""], "trainingCosts": training(),
+                    "props": {
+                        "speed": [1.4, 1.6, 1.8, 2, 2.3, 2.5],
+                        "health": [32000, 38400, 44800, 51200, 57600, 64000],
+                        "damage": [2000, 2400, 3000, 3800, 5000, 6500],
+                        "range": [35, 45, 55, 60, 65, 65],
+                        "cTime": [3600],
+                        "cResource": cost,
+                        "cStorage": [600],
+                        "bucket": [600],
+                        "targetGroup": [1],
+                        "hTime": [1125],
+                        "hResource": heal
+                    }
+                };
+            _mainCreatures[DRULL_ID] = {
+                    "index": 10, "page": 5, "order": 2, "resource": IO_CHAMPION_UNLOCK_COST, "time": IO_CHAMPION_UNLOCK_TIME, "level": 5,
+                    "name": "#m_drull#", "classType": IoChampionCreep, "description": "mon_drulldesc",
+                    "stream": ["", "", ""], "trainingCosts": training(),
+                    "props": {
+                        "speed": [2, 2.2, 2.5, 2.8, 3.2, 3.6],
+                        "health": [22000, 28000, 34000, 40000, 46000, 52000],
+                        "damage": [3000, 3600, 4200, 5500, 6500, 8000],
+                        "range": [35, 45, 55, 65, 85, 90],
+                        "cTime": [3600],
+                        "cResource": cost,
+                        "cStorage": [600],
+                        "bucket": [600],
+                        "targetGroup": [1],
+                        "hTime": [1125],
+                        "hResource": heal
+                    }
+                };
+            _mainCreatures[ASHKARR_ID] = {
+                    "index": 10.5, "page": 5, "order": 3, "resource": IO_CHAMPION_UNLOCK_COST, "time": IO_CHAMPION_UNLOCK_TIME, "level": 5,
+                    "name": "#m_ashkarr#", "classType": Ashkarr, "description": "mi_Ashkarr_desc",
+                    "stream": ["mi_Ashkarr_stream", "mi_Ashkarr_streambody", ""],
+                    "trainingCosts": training(),
+                    "props": {
+                        "speed": [2, 2.1, 2.2, 2.3, 2.4, 2.5],
+                        "health": [25000, 30000, 35000, 40000, 45000, 50000],
+                        "damage": [3000, 3350, 3750, 4150, 4600, 5100],
+                        "cTime": [4200],
+                        "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000],
+                        "cStorage": [600],
+                        "bucket": [600],
+                        "targetGroup": [1],
+                        "hTime": [1260],
+                        "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000]
+                    }
+                };
+        }
+
+        /**
+         * Inferno-only: two new Inferno monsters (from the Strongbox proposals). Clinkerjaw (IC12): Strongbox
+         * page 2 after Malphus, a bruiser that cracks open into Spurtz when it dies. Flickerfiend (IC14):
+         * page 3 after Sabnox, a skirmisher that blinks to another building every third strike. Unlocked with
+         * Sulfur; the Academy's five steps cost the unlock times 1, 2, 3, 4 and 6 (cost and time); healing is
+         * 30% of hatching. Hatched with magma. These numbers must stay identical to the server's
+         * (server/src/game-data/stats/monsterStats.ts), which checks them on every attack. "index" places
+         * them in the Hatchery's list after Malphus and Sabnox.
+         */
+        public static const CLINKERJAW_ID:String = "IC12";
+
+        public static const FLICKERFIEND_ID:String = "IC14";
+
+        /**
+         * Inferno-only: the Fusebug and the Emberghoul (the user's FUSEBUG_EMBERGHOUL.md, 28 September). The spec
+         * numbered the Fusebug IC19, but the Hatchery passes monsters around as bare numbers and 19 is Rezghul's
+         * (C19, an Inferno monster here): IC19 would have taken his place there. So it is IC15.
+         * Fusebug: Strongbox page 1 after Zagnoid, a bomber that runs at defences, creeps in to the building's
+         * middle and explodes (the game's own "explode", as Eye-ra's; Fusebug.as). Emberghoul: page 4 after King Wormzer and Rezghul,
+         * a bruiser that heals itself for 15-20% of every hit (Emberghoul.as). Numbers as the spec's.
+         */
+        public static const FUSEBUG_ID:String = "IC15";
+
+        public static const EMBERGHOUL_ID:String = "IC20";
+
+        private static function ioTraining(param1:int, param2:int):Array {
+            return [[param1, param2], [param1 * 2, param2 * 2], [param1 * 3, param2 * 3], [param1 * 4, param2 * 4], [param1 * 6, param2 * 6]];
+        }
+
+        private static function ioAddNewMonsters():void {
+            _mainCreatures[FUSEBUG_ID] = {
+                    "index": 2.5, "page": 1, "order": 3, "resource": 19200, "time": 57600, "level": 1,
+                    "name": "#m_fusebug#", "classType": Fusebug, "description": "mi_Fusebug_desc",
+                    "stream": ["mi_Fusebug_stream", "mi_Fusebug_streambody", ""],
+                    "trainingCosts": ioTraining(19200, 57600),
+                    "props": {
+                        "speed": [2.8],
+                        "health": [270, 300, 330, 442, 567, 720],
+                        "damage": [500, 600, 700, 977, 1300, 1680],
+                        "cTime": [20, 18, 16, 14, 12, 10],
+                        "cResource": [1500, 3000, 5000, 8000, 12000, 16000],
+                        "cStorage": [10],
+                        "bucket": [10],
+                        "targetGroup": [4],
+                        "explode": [1],
+                        "hTime": [6, 5, 5, 4, 4, 3],
+                        "hResource": [450, 900, 1500, 2400, 3600, 4800]
+                    }
+                };
+            _mainCreatures[EMBERGHOUL_ID] = {
+                    "index": 8.5, "page": 4, "order": 3, "resource": 5120000, "time": 259200, "level": 4,
+                    "name": "#m_emberghoul#", "classType": Emberghoul, "description": "mi_Emberghoul_desc",
+                    "stream": ["mi_Emberghoul_stream", "mi_Emberghoul_streambody", ""],
+                    "trainingCosts": ioTraining(5120000, 259200),
+                    "props": {
+                        "speed": [2.4, 2.5, 2.6, 2.7, 2.8, 2.9],
+                        "health": [3680, 4140, 4600, 5500, 6000, 6500],
+                        "damage": [920, 1104, 1288, 1600, 1800, 2000],
+                        "cTime": [2700],
+                        "cResource": [420000, 500000, 590000, 710000, 910000, 1210000],
+                        "cStorage": [100],
+                        "bucket": [100],
+                        "targetGroup": [1],
+                        "hTime": [810],
+                        "hResource": [126000, 150000, 177000, 213000, 273000, 363000]
+                    }
+                };
+            _mainCreatures[CLINKERJAW_ID] = {
+                    "index": 4.5, "page": 2, "order": 3, "resource": 96000, "time": 86400, "level": 2,
+                    "name": "#m_clinkerjaw#", "classType": Clinkerjaw, "description": "mi_Clinkerjaw_desc",
+                    "stream": ["mi_Clinkerjaw_stream", "mi_Clinkerjaw_streambody", ""],
+                    "trainingCosts": ioTraining(96000, 86400),
+                    "props": {
+                        "speed": [1.5],
+                        "health": [1800, 2040, 2280, 3096, 4032, 5184],
+                        "damage": [180, 200, 220, 282, 351, 420],
+                        "cTime": [360, 320, 280, 250, 230, 210],
+                        "cResource": [18000, 21000, 24500, 28500, 33000, 38000],
+                        "cStorage": [40],
+                        "bucket": [40],
+                        "targetGroup": [1],
+                        "splits": [2, 2, 2, 3, 3, 3],
+                        "hTime": [108, 96, 84, 75, 69, 63],
+                        "hResource": [5400, 6300, 7350, 8550, 9900, 11400]
+                    }
+                };
+            _mainCreatures[FLICKERFIEND_ID] = {
+                    "index": 7.5, "page": 3, "order": 4, "resource": 819200, "time": 108000, "level": 3,
+                    "name": "#m_flickerfiend#", "classType": Flickerfiend, "description": "mi_Flickerfiend_desc",
+                    "stream": ["mi_Flickerfiend_stream", "mi_Flickerfiend_streambody", ""],
+                    "trainingCosts": ioTraining(819200, 108000),
+                    "props": {
+                        "speed": [2.4, 2.4, 2.5, 2.5, 2.6, 2.7],
+                        "health": [2200, 2450, 2700, 3600, 4620, 5920],
+                        "damage": [420, 460, 505, 638, 793, 952],
+                        "cTime": [900, 900, 840, 840, 780, 780],
+                        "cResource": [60000, 75000, 95000, 120000, 150000, 190000],
+                        "cStorage": [35],
+                        "bucket": [35],
+                        "targetGroup": [1],
+                        "hTime": [270, 270, 252, 252, 234, 234],
+                        "hResource": [18000, 22500, 28500, 36000, 45000, 57000]
+                    }
+                };
+        }
+
+        /**
+         * Hell Freezes Over (the user's hell_freezes_over.md, 1 October; com/monsters/events/IoHfo.as):
+         *  - Rimegrave (IC25), the ice champion: Strongbox page 5 after Ashkarr, unlocked there only once the player
+         *    has won all 13 waves of the event (until then he is in none of the Strongbox, the Compound, the Incubators
+         *    or the Academy: ioHfoRefresh, IoHfo.championFree), then trained
+         *    in the Academy to level 6, for what Korath, Drull and Ashkarr cost. 600 housing. His look follows his
+         *    Academy level (one sprite sheet a level: IoRimegrave). His hits ice towers over and freeze monsters.
+         *  - The ice cretins (IC26-IC31): the event's waves. Never a player's: they are on no Strongbox page and
+         *    always "blocked" (in none of the Strongbox, the Compound, the Incubators or the Academy). Admins have
+         *    them in the Designer and in test mode's attacks (ioTestMonsterIds).
+         * Every number must match the server's (server/src/game-data/stats/monsterStats.ts hellFreezesOverMonsters).
+         */
+        public static const RIMEGRAVE_ID:String = "IC25";
+
+        public static const SHIVLING_ID:String = "IC26";
+
+        public static const SLUSHGUT_ID:String = "IC27";
+
+        public static const RIMECLAW_ID:String = "IC28";
+
+        public static const SLEETWING_ID:String = "IC29";
+
+        public static const HAILSPITTER_ID:String = "IC30";
+
+        public static const PERMAFROST_ID:String = "IC31";
+
+        public static const HFO_CRETINS:Array = ["IC26", "IC27", "IC28", "IC29", "IC30", "IC31"];
+
+        /** Rimegrave or an ice cretin: the monsters with the ice powers (IoIce). */
+        public static function ioIsIceMonster(param1:String):Boolean {
+            return param1 == RIMEGRAVE_ID || HFO_CRETINS.indexOf(param1) != -1;
+        }
+
+        private static function ioCretin(index:Number, name:String, description:String, classType:Class, props:Object, movement:String = null):Object {
+            var storage:int = int(props.cStorage[0]);
+            var full:Object = {
+                    "cTime": [60],
+                    "cResource": [storage * 500],
+                    "bucket": [storage],
+                    "targetGroup": [1],
+                    "hTime": [20],
+                    "hResource": [storage * 150]
+                };
+            for (var k:String in props) {
+                full[k] = props[k];
+            }
+            var entry:Object = {
+                    "index": index, "page": 0, "order": 0, "resource": 0, "time": 0, "level": 1,
+                    "name": name, "classType": classType, "description": description,
+                    "stream": ["", "", ""], "trainingCosts": [],
+                    // (nobody has them: never in the Strongbox, the Compound, the Incubators or the Academy; the
+                    // Designer and admin test mode's attacks take them from ioTestMonsterIds)
+                    "blocked": true,
+                    "props": full
+                };
+            if (movement) {
+                entry.movement = movement;
+            }
+            return entry;
+        }
+
+        /**
+         * Hell Freezes Over: Rimegrave is in the Strongbox, the Compound and the Academy only once the player has won
+         * the event (or an admin is testing): hidden ("blocked") before. The ice cretins never are. Set again
+         * whenever the event's progress may have changed (IoHfo).
+         */
+        public static function ioHfoRefresh():void {
+            if (!GLOBAL.INFERNO_ONLY || !_mainCreatures) {
+                return;
+            }
+            if (_mainCreatures[RIMEGRAVE_ID]) {
+                _mainCreatures[RIMEGRAVE_ID].blocked = !IoHfo.championFree();
+            }
+            for each (var cretin:String in HFO_CRETINS) {
+                if (_mainCreatures[cretin]) {
+                    _mainCreatures[cretin].blocked = true;
+                }
+            }
+        }
+
+        private static function ioAddHfoMonsters():void {
+            _mainCreatures[RIMEGRAVE_ID] = {
+                    "blocked": true,
+                    "index": 10.75, "page": 5, "order": 4, "resource": IO_CHAMPION_UNLOCK_COST, "time": IO_CHAMPION_UNLOCK_TIME, "level": 5,
+                    "name": "#mi_rimegrave#", "classType": IoRimegrave, "description": "mi_Rimegrave_desc",
+                    "stream": ["mi_Rimegrave_stream", "mi_Rimegrave_streambody", ""],
+                    "trainingCosts": [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]],
+                    "props": {
+                        "speed": [1.9, 2, 2.1, 2.2, 2.3, 2.4],
+                        "health": [26000, 31000, 36000, 41000, 46000, 52000],
+                        "damage": [2600, 2950, 3300, 3700, 4100, 4600],
+                        "range": [40, 45, 50, 55, 60, 65],
+                        "attackDelay": [70],
+                        "cTime": [4200],
+                        "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000],
+                        "cStorage": [600],
+                        "bucket": [600],
+                        "targetGroup": [1],
+                        "hTime": [1260],
+                        "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000]
+                    }
+                };
+            // Shivling: the swarm. Slushgut: the tank. Rimeclaw: goes for the defences (targetGroup 4).
+            // Sleetwing: flies over walls. Hailspitter: lobs hailstones from range. Permafrost Hulk: slow and
+            // heavy, shatters into 4 Shivlings when it falls.
+            _mainCreatures[SHIVLING_ID] = ioCretin(30, "#mi_shivling#", "mi_Shivling_desc", IoIceCreep, {"speed": [2.4], "health": [500], "damage": [110], "cStorage": [10]});
+            _mainCreatures[SLUSHGUT_ID] = ioCretin(31, "#mi_slushgut#", "mi_Slushgut_desc", IoIceCreep, {"speed": [1], "health": [9000], "damage": [240], "cStorage": [60]});
+            _mainCreatures[RIMECLAW_ID] = ioCretin(32, "#mi_rimeclaw#", "mi_Rimeclaw_desc", IoIceCreep, {"speed": [2.2], "health": [2600], "damage": [480], "cStorage": [30], "targetGroup": [4]});
+            _mainCreatures[SLEETWING_ID] = ioCretin(33, "#mi_sleetwing#", "mi_Sleetwing_desc", IoIceCreep, {"speed": [3], "health": [1800], "damage": [280], "cStorage": [25]}, "fly");
+            _mainCreatures[HAILSPITTER_ID] = ioCretin(34, "#mi_hailspitter#", "mi_Hailspitter_desc", IoHailspitter, {"speed": [1.4], "health": [1400], "damage": [400], "range": [200], "cStorage": [30], "targetGroup": [4]});
+            _mainCreatures[PERMAFROST_ID] = ioCretin(35, "#mi_permafrosthulk#", "mi_Permafrosthulk_desc", IoIceCreep, {"speed": [0.9], "health": [30000], "damage": [1500], "attackDelay": [100], "splits": [4], "cStorage": [200]});
+        }
+
+        /** King Wormzer's Strongbox unlock (IC8: 4,915,200, 3 days before the server's time divisor). */
+        private static const IO_WORMZER_UNLOCK_COST:int = 4915200;
+
+        private static const IO_WORMZER_UNLOCK_TIME:int = 259200;
+
+        /** Rezghul: 1.5 times King Wormzer's cost and time, page 4 (Strongbox level 4). */
+        private static const IO_REZGHUL_UNLOCK_COST:int = IO_WORMZER_UNLOCK_COST * 3 / 2;
+
+        private static const IO_REZGHUL_UNLOCK_TIME:int = IO_WORMZER_UNLOCK_TIME * 3 / 2;
+
+        /** Korath and Drull: 2.5 times King Wormzer's cost and time, page 5 (Strongbox level 5). */
+        private static const IO_CHAMPION_UNLOCK_COST:int = IO_WORMZER_UNLOCK_COST * 5 / 2;
+
+        private static const IO_CHAMPION_UNLOCK_TIME:int = IO_WORMZER_UNLOCK_TIME * 5 / 2;
+
+        /**
          * Inferno-only: brings Rezghul into the Inferno roster. He is unblocked, costs a flat amount of
-         * magma to hatch (server flag io_rezghulcost) and is unlocked from the start, with no locker
-         * research. Runs on every base load, after the server flags are known; all of it is idempotent.
+         * magma to hatch (server flag io_rezghulcost) and is unlocked in the Strongbox on page 4, after King
+         * Wormzer, for 1.5 times his cost and time. Runs on every base load, after the server flags are
+         * known; all of it is idempotent.
          */
         public static function ioApplyRezghul():void {
             var _loc1_:Object = _creatures ? _creatures[REZGHUL_ID] : null;
@@ -110,8 +498,26 @@ package {
             }
             _loc1_.blocked = false;
             _loc1_.props.cResource = [GLOBAL.ioRezghulCost];
-            if (_lockerData) {
-                _lockerData[REZGHUL_ID] = {"t": 2};
+            if (GLOBAL.INFERNO_ONLY) {
+                // Listed between King Wormzer (IC8, index 8) and the Emberghoul (IC20, 8.5), as in the Strongbox
+                // (the Hatchery, the Incubation Control Station and the Compound sort by index; 29 September)
+                _loc1_.index = 8.25;
+                // Balance pass (30 September): 200 housing (was 250); the monsters he raises come back with 75%
+                // of their health (a champion with 25%: RezghulResurrectAttack) and 1.0-1.2 times their damage
+                // (was 1.0-1.5 times both). The server's table says the same (monsterStats.ts).
+                _loc1_.props.cStorage = [200];
+                _loc1_.props.bucket = [200];
+                _loc1_.props.zombieHealthMultiplier = [0.75];
+                _loc1_.props.zombieDamageMultiplier = [1, 1, 1.05, 1.1, 1.15, 1.2];
+            }
+            if (GLOBAL.INFERNO_ONLY && _loc1_.page != 4) {
+                // Page 4 of the Strongbox, after King Wormzer. The time is scaled with the rest by
+                // ioScaleTimes, which runs after this (GLOBAL.SetBuildingProps).
+                _loc1_.page = 4;
+                _loc1_.order = 2;
+                _loc1_.level = 4;
+                _loc1_.resource = IO_REZGHUL_UNLOCK_COST;
+                _loc1_.time = IO_REZGHUL_UNLOCK_TIME;
             }
         }
 
@@ -668,8 +1074,8 @@ package {
                         "trainingCosts": [[2400, 3600], [4800, 7200], [7200, 10800], [9600, 14400], [14400, 21600]],
                         "props": {
                             "speed": [1.2],
-                            "health": [400, 425, 450, 475, 510, 550],
-                            "damage": [160, 200, 200, 250, 300, 350],
+                            "health": [400, 425, 450, 570, 714, 880],
+                            "damage": [160, 200, 200, 288, 390, 490],
                             "cTime": [15, 10, 8, 7, 6, 5],
                             "cResource": [500, 1000, 2000, 4000, 6000, 10000],
                             "cStorage": [15],
@@ -692,8 +1098,8 @@ package {
                         "trainingCosts": [[4800, 14400], [9600, 28800], [14400, 43200], [19200, 57600], [28800, 86400]],
                         "props": {
                             "speed": [1.8],
-                            "health": [1500, 1820, 2300, 2800, 3350, 3600],
-                            "damage": [80, 85, 90, 95, 100, 110],
+                            "health": [1500, 1820, 2300, 3360, 4690, 5760],
+                            "damage": [80, 85, 90, 109, 130, 154],
                             "cTime": [15, 16, 16, 16, 16, 16],
                             "cResource": [2500, 4000, 8000, 12000, 16000, 20000],
                             "cStorage": [15],
@@ -718,8 +1124,8 @@ package {
                         "pathing": "direct",
                         "props": {
                             "speed": [2, 2, 2, 2, 2, 2],
-                            "health": [2000, 2400, 2800, 3200, 3600, 4000],
-                            "damage": [490, 530, 580, 645, 700, 775],
+                            "health": [1600, 1920, 2380, 3200, 3600, 4000],
+                            "damage": [343, 371, 435, 645, 700, 775],
                             "cTime": [450, 350, 250, 225, 195, 195],
                             "cResource": [31000, 35000, 39000, 44000, 50000, 55000],
                             "cStorage": [30],
@@ -743,8 +1149,8 @@ package {
                         "movement": "jump",
                         "props": {
                             "speed": [3.2],
-                            "health": [450, 470, 500, 540, 580, 620],
-                            "damage": [100, 105, 110, 120, 130, 140],
+                            "health": [585, 611, 650, 842, 1056, 1290],
+                            "damage": [100, 105, 110, 138, 169, 196],
                             "cTime": [100, 100, 90, 90, 90, 90],
                             "cResource": [3000, 3500, 4100, 4800, 5500, 7000],
                             "cStorage": [15],
@@ -770,8 +1176,8 @@ package {
                         "pathing": "direct",
                         "props": {
                             "speed": [4.5],
-                            "health": [3200, 3600, 4000, 4500, 5000, 5600],
-                            "damage": [600, 665, 730, 795, 860, 930],
+                            "health": [2240, 2520, 3200, 4500, 5000, 5600],
+                            "damage": [480, 532, 657, 795, 860, 930],
                             "cTime": [1800, 1920, 2040, 2160, 2280, 2400],
                             "cResource": [88000, 104000, 161000, 249000, 327000, 487000],
                             "cStorage": [40],
@@ -820,12 +1226,12 @@ package {
                         "props": {
                             "range": [240],
                             "speed": [1.7, 1.8, 1.9, 2, 2.1, 2.2],
-                            "health": [1120, 1260, 1400, 1650, 1900, 2200],
+                            "health": [1456, 1638, 1820, 2145, 2470, 2860],
                             "damage": [700, 825, 950, 1075, 1200, 1350],
                             "cTime": [1384, 1384, 1384, 1384, 1384, 1384],
                             "cResource": [60000, 90000, 145000, 200000, 330000, 450000],
-                            "cStorage": [80],
-                            "bucket": [80],
+                            "cStorage": [65],
+                            "bucket": [65],
                             "targetGroup": [4],
                             "hTime": [415],
                             "hResource": [18000, 27000, 43500, 60000, 99000, 135000]
@@ -848,8 +1254,8 @@ package {
                         "pathing": "direct",
                         "props": {
                             "speed": [2.5, 2.6, 2.7, 2.8, 2.9, 3],
-                            "health": [6200, 7600, 8700, 10900, 13100, 16000],
-                            "damage": [1200, 1360, 1630, 1920, 2220, 2500],
+                            "health": [5600, 6300, 7000, 10000, 11800, 14000],
+                            "damage": [1100, 1200, 1300, 1500, 1800, 2000],
                             "cTime": [2700],
                             "cResource": [425000, 476000, 580000, 700000, 910000, 1204000],
                             "cStorage": [100],
@@ -881,6 +1287,12 @@ package {
                     _mainCreatures[_loc1_].props.hResource = [10];
                     _mainCreatures[_loc1_].props.hTime = [2];
                 }
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                ioAddChampionMonsters();
+                ioAddNewMonsters();
+                ioAddHfoMonsters();
+                ioHfoRefresh();
             }
             modifyCreepData();
             CreepTypeManager.instance.AddExposedCreepTypes(_mainCreatures);
@@ -955,12 +1367,15 @@ package {
             _unlocking = null;
             for (i in _lockerData) {
                 if (_lockerData[i].t == 1) {
-                    isInfernoType = i.substring(0, 2) == "IC";
+                    isInfernoType = ioInfernoLockerMonster(i);
                     if (BASE.isInfernoMainYardOrOutpost && isInfernoType || !BASE.isInfernoMainYardOrOutpost && !isInfernoType) {
                         _unlocking = i;
                         break;
                     }
                 }
+            }
+            if (_unlocking != null && GLOBAL.INFERNO_ONLY) {
+                ioRepairUnlock(_unlocking);
             }
             if (_unlocking != null) {
                 if (GLOBAL._lockerOverdrive > 0) {
@@ -968,7 +1383,11 @@ package {
                 }
                 if (_lockerData[_unlocking].e - GLOBAL.Timestamp() <= 0) {
                     _lockerData[_unlocking].t = 2;
-                    GLOBAL.player.m_upgrades[_unlocking] = {"level": 1};
+                    // Inferno-only: a monster unlocked again (Korath, Drull and Rezghul were locked again for
+                    // everyone) keeps the Academy level it was trained to before.
+                    if (!(GLOBAL.INFERNO_ONLY && GLOBAL.player.m_upgrades[_unlocking] && int(GLOBAL.player.m_upgrades[_unlocking].level) > 1)) {
+                        GLOBAL.player.m_upgrades[_unlocking] = {"level": 1};
+                    }
                     ACHIEVEMENTS.Check("unlock_monster", 1);
                     delete _lockerData[_unlocking].s;
                     delete _lockerData[_unlocking].e;
@@ -1028,8 +1447,21 @@ package {
             if (_lockerData[creatureID]) {
                 return false;
             }
-            if (_unlocking != null) {
+            // Hell Freezes Over: Rimegrave is unlocked only once the curse is broken (the server checks too)
+            if (creatureID == RIMEGRAVE_ID && !IoHfo.championFree()) {
+                GLOBAL.Message(KEYS.Get("mon_strongbox_hfo_locked"));
+                return false;
+            }
+            // Inferno-only: asks the locker data, not the copy Tick keeps (an instant unlock cleared that copy until
+            // the next tick, long enough to start a second unlock)
+            if (_unlocking != null || GLOBAL.INFERNO_ONLY && ioUnlockingID() != null) {
                 GLOBAL.Message(KEYS.Get("mon_alreadyunlocking"), KEYS.Get("btn_speedup"), STORE.ShowB, [3, 0, ["SP1", "SP2", "SP3", "SP4"]]);
+                return false;
+            }
+            // Inferno-only: nothing is unlocked while the Strongbox itself is being built or upgraded (as it can't be
+            // upgraded while it unlocks)
+            if (GLOBAL.INFERNO_ONLY && GLOBAL._bLocker && GLOBAL._bLocker._countdownBuild.Get() + GLOBAL._bLocker._countdownUpgrade.Get() > 0) {
+                GLOBAL.Message(KEYS.Get("io_cloc_err_upgrading", {"v1": KEYS.Get(GLOBAL._bLocker._buildingProps.name)}));
                 return false;
             }
             creature = _creatures[creatureID];
@@ -1083,6 +1515,54 @@ package {
                 GLOBAL.Message(KEYS.Get("mon_needsulfur"), KEYS.Get("btn_openstore"), STORE.ShowB, [2, 0.8, ["BR31I", "BR32I", "BR33I"]]);
             }
             return false;
+        }
+
+        /* Inferno-only: is this one of the Inferno locker's monsters? The IC ones, and Rezghul (C19), who is listed
+         * and unlocked in the Strongbox here (GetAppropriateCreatures). Tick used to look at the IC ones only, so
+         * while Rezghul unlocked the Strongbox counted as idle: it didn't animate, another monster could be
+         * unlocked at the same time and the Strongbox could be upgraded, and Rezghul's unlock never finished. */
+        /**
+         * Inferno-only: an unlock with no end time (a player's Sabnox, 1 October: {t: 1} with no "e" left in the
+         * save) could never finish: the Strongbox showed it unlocking forever, with no time left and Speed Up
+         * doing nothing, and no other monster could be unlocked. Its end is worked out again from its start and
+         * the monster's unlock time, or, with no start either, it finishes now (it was paid for when it started).
+         */
+        private static function ioRepairUnlock(param1:String):void {
+            var data:Object = _lockerData[param1];
+            if (!data || data.t != 1 || (data.e != null && isFinite(Number(data.e)))) {
+                return;
+            }
+            var time:int = _creatures[param1] ? int(_creatures[param1].time) : 0;
+            var start:Number = data.s != null ? Number(data.s) : NaN;
+            var was:String = "s " + data.s + ", e " + data.e;
+            if (isFinite(start) && start > 0) {
+                data.e = start + time;
+            }
+            else {
+                data.e = GLOBAL.Timestamp();
+                data.s = data.e - time;
+            }
+            LOGGER.Log("log", "Strongbox unlock of " + param1 + " had no end time (" + was + "): ends at " + data.e);
+            BASE.Save();
+        }
+
+        public static function ioInfernoLockerMonster(param1:String):Boolean {
+            if (param1 == null) {
+                return false;
+            }
+            return param1.substring(0, 2) == "IC" || GLOBAL.INFERNO_ONLY && GLOBAL.ioRezghul && param1 == REZGHUL_ID;
+        }
+
+        /* Inferno-only: the monster this yard's locker is unlocking, read from the locker data (Tick's `_unlocking`
+         * is a copy refreshed once a second). Null when idle. */
+        public static function ioUnlockingID():String {
+            var id:String = null;
+            for (id in _lockerData) {
+                if (_lockerData[id] && _lockerData[id].t == 1 && ioInfernoLockerMonster(id) == Boolean(BASE.isInfernoMainYardOrOutpost)) {
+                    return id;
+                }
+            }
+            return null;
         }
 
         public static function Cancel():void {
@@ -1153,6 +1633,12 @@ package {
             var _loc1_:Object = CREATURELOCKER._creatures;
             var _loc2_:Object = {};
             for (_loc3_ in _loc1_) {
+                // Inferno-only: Rezghul is one of the Inferno monsters here, so he is listed in the Inferno
+                // locker (page 4, with King Wormzer, Korath and Drull).
+                if (GLOBAL.INFERNO_ONLY && GLOBAL.ioRezghul && _loc3_ == REZGHUL_ID && BASE.isInfernoMainYardOrOutpost) {
+                    _loc2_[_loc3_] = _loc1_[_loc3_];
+                    continue;
+                }
                 if (!(_loc3_.substr(0, 1) == "C" && BASE.isInfernoMainYardOrOutpost || _loc3_.substr(0, 1) == "I" && !BASE.isInfernoMainYardOrOutpost || _loc3_ == "C200")) {
                     _loc2_[_loc3_] = _loc1_[_loc3_];
                 }

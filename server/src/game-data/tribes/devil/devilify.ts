@@ -34,6 +34,8 @@ const OVERWORLD_MAX_LEVEL: Record<number, number> = {
  * Anything not listed keeps its id (harvesters, silos, hatcheries, walls and traps share
  * ids between the two prop tables and already pick up Inferno art and stats).
  */
+const MONSTER_BUNKER = 22;
+
 const DEVIL_BUILDING: Record<number, number> = {
   15: 128,  // Housing          -> Compound (housing bunker)
   18: 17,   // Stone blocks     -> Bone walls
@@ -59,7 +61,7 @@ const DEVIL_MONSTER: Record<string, string> = {
  */
 const FOOTPRINT: Record<number, number> = {
   1: 70, 2: 70, 3: 70, 4: 70, 5: 90, 6: 80, 7: 30, 8: 100, 9: 80, 10: 100, 11: 90, 12: 70, 13: 100,
-  14: 160, 16: 100, 17: 20, 19: 80, 21: 70, 22: 90, 24: 20, 26: 80, 51: 90, 52: 40, 113: 80,
+  14: infernoOnlyConfig.enabled ? 130 : 160, 16: 100, // (the Under Hall: 130 since 3 October, the Town Hall's) 17: 20, 19: 80, 21: 70, 22: 90, 24: 20, 26: 80, 51: 90, 52: 40, 113: 80,
   114: 160, 116: 100, 119: 100, 128: 160, 129: 70, 130: 70, 132: 70,
 };
 
@@ -137,8 +139,12 @@ export const devilify = (tribeSave: SaveData): SaveData => {
 
   const buildingdata: Record<string, unknown> = {};
 
-  for (const [id, building] of Object.entries(tribeSave.buildingdata ?? {}))
+  for (const [id, building] of Object.entries(tribeSave.buildingdata ?? {})) {
+    // The Inferno has no Monster Bunker: the ones in the overworld layouts (Abunakki's above all) are
+    // dropped rather than carried over with devil monsters inside.
+    if (Number((building as Record<string, unknown>).t) === MONSTER_BUNKER) continue;
     buildingdata[id] = devilifyBuilding(building as Record<string, unknown>);
+  }
 
   const devil = {
     ...tribeSave,

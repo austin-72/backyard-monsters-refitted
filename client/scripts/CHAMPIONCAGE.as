@@ -711,6 +711,11 @@ package {
                         POPUPS.DisplayGetShiny();
                         return;
                     }
+                    if (!GLOBAL.ioConfirmShiny(_loc16_, "to feed your champion now", function():void {
+                                FeedGuardian(param1, param2, param3, param4);
+                            })) {
+                        return;
+                    }
                     BASE.Purchase("IFD", _loc16_, "cage");
                     CREATURES._guardian._foodBonus.Add(1);
                     if (CREATURES._guardian._foodBonus.Get() > 3) {
@@ -788,6 +793,11 @@ package {
             else if (param3) {
                 if (BASE._credits.Get() < GetGuardianProperty(param1, param2, "feedShiny")) {
                     POPUPS.DisplayGetShiny();
+                    return;
+                }
+                if (!GLOBAL.ioConfirmShiny(GetGuardianProperty(param1, param2, "feedShiny"), "to feed your champion now", function():void {
+                            FeedGuardian(param1, param2, param3, param4);
+                        })) {
                     return;
                 }
                 BASE.Purchase("IFD", GetGuardianProperty(param1, param2, "feedShiny"), "cage");

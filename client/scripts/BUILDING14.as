@@ -16,7 +16,12 @@ package {
             super();
             _type = 14;
             _footprint = BASE.isInfernoMainYardOrOutpost ? [new Rectangle(0, 0, 160, 160)] : [new Rectangle(0, 0, 130, 130)];
-            _gridCost = BASE.isInfernoMainYardOrOutpost ? [[new Rectangle(0, 0, 160, 160), 10], [new Rectangle(10, 10, 140, 140), 200]] : [[new Rectangle(0, 0, 130, 130), 10], [new Rectangle(10, 10, 110, 110), 200]];
+            _gridCost = BASE.isInfernoMainYardOrOutpost && !GLOBAL.INFERNO_ONLY ? [[new Rectangle(0, 0, 160, 160), 10], [new Rectangle(10, 10, 140, 140), 200]] : [[new Rectangle(0, 0, 130, 130), 10], [new Rectangle(10, 10, 110, 110), 200]];
+            if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only (3 October): the Under Hall takes the overworld Town Hall's ground, 130 x 130
+                // (it was 160 x 160). The server's footprint tables match (kitPreview.ts, devilify.ts).
+                _footprint = [new Rectangle(0, 0, 130, 130)];
+            }
             _spoutPoint = new Point(1, -67);
             _spoutHeight = 135;
             SetProps();
@@ -92,7 +97,8 @@ package {
                             _loc1_.push([0, KEYS.Get(_loc4_.name)]);
                         }
                         else if (_loc11_ > 0 && !_loc4_.block) {
-                            _loc2_.push([0, KEYS.Get(_loc4_.name) + "s"]);
+                            // (Inferno-only: the plural ending is the language's; French read "Concasseur d'oss")
+                            _loc2_.push([0, KEYS.Get(_loc4_.name) + (GLOBAL.INFERNO_ONLY ? KEYS.Get("io_plural_suffix") : "s")]);
                         }
                         _loc9_ = 0;
                         _loc10_ = 0;

@@ -1,18 +1,33 @@
 package com.monsters.baseplanner.popups {
+    import com.monsters.kits.IoTextPrompt;
+    import com.hurlant.util.Base64;
+    import flash.utils.ByteArray;
+    import flash.utils.Dictionary;
+    import flash.system.System;
+    import flash.geom.Rectangle;
+    import flash.display.Graphics;
+    import flash.display.Shape;
+    import flash.display.Bitmap;
+    import flash.events.TimerEvent;
+    import flash.utils.Timer;
     import com.monsters.baseplanner.BasePlanner;
     import com.monsters.baseplanner.PlannerDesignView;
     import com.monsters.baseplanner.PlannerExplorer;
     import com.monsters.baseplanner.PlannerNode;
     import com.monsters.baseplanner.PlannerTemplate;
+    import com.monsters.baseplanner.components.IoToolTile;
     import com.monsters.baseplanner.events.BasePlannerEvent;
     import com.monsters.baseplanner.events.BasePlannerNodeEvent;
     import com.monsters.baseplanner.popups.transfer.BasePlannerTransferConfirmation;
     import com.monsters.display.ScrollSetV;
+    import flash.display.BitmapData;
     import flash.display.Sprite;
     import flash.events.Event;
     import flash.events.MouseEvent;
     import flash.geom.Point;
     import flash.text.TextFieldAutoSize;
+    import flash.text.TextFormat;
+    import flash.text.TextField;
 
     public class BasePlannerPopup extends Sprite {
 
@@ -217,7 +232,7 @@ package com.monsters.baseplanner.popups {
                 this.sideBarScrollBar.checkResize();
                 this.sideBarScrollBar.x = this.sideBar.canvas.x + this.sideBar.canvas.width - this.sideBarScrollBar.width + this._PLANNER_LEFT_MARGIN;
                 this.sideBarScrollBar.y = this.sideBar.canvas.y + _layoutSpacing.y + this._PLANNER_TOP_MARGIN + this._PLANNER_HEADER_MARGIN;
-                addChildAt(this.sideBarScrollBar, numChildren);
+                addChild(this.sideBarScrollBar); // on top; addChildAt(x, numChildren) is out of range when x is already a child (the browser runtime throws)
             }
             if (!this.displayCanvas) {
                 this.displayCanvas = new BasePlannerPopup_DisplayViewContainer();
@@ -248,6 +263,8 @@ package com.monsters.baseplanner.popups {
                 this.designView.addEventListener(BasePlannerPopup.PLANNER_HINT_HIDE, this.onToolTipNodeHide);
                 this.designView.addEventListener(BasePlannerPopup.DESIGN_TOOL_UPDATE, this.onToolUpdate);
                 this.designView.addEventListener(PlannerDesignView.STATE_CHANGE, this.onDesignStateChange);
+                // Wall line tool: walls come out of storage one at a time (placing one takes it out).
+                this.designView.ioTakeWall = this.ioTakeWall;
             }
             this.displayCanvas.canvas.addChild(this.designView);
             this.designView.recenter();
@@ -321,6 +338,12 @@ package com.monsters.baseplanner.popups {
                 if (this.bottomMenu.check4_txt) {
                     this.bottomMenu.check4_txt.htmlText = KEYS.Get("basePlanner_moreinfo");
                 }
+                // Inferno-only: on one line, smaller if need be (longer languages wrapped to a hidden second line)
+                for each (var ioCheck:String in ["check1_txt", "check2_txt", "check3_txt", "check4_txt"]) {
+                    if (this.bottomMenu[ioCheck]) {
+                        GLOBAL.ioFitText(this.bottomMenu[ioCheck] as TextField, 7);
+                    }
+                }
             }
             var _loc4_:int = 520;
             this.bottomMenu.x = param1 - (_layoutSpacing.x + _loc4_) + _loc3_.x;
@@ -378,6 +401,8 @@ package com.monsters.baseplanner.popups {
             this._mcFrame.addChild(this.fullscreenButton);
             this.fullscreenButton.x = param1 - (_layoutSpacing.x + 50) + _loc3_.x;
             this.fullscreenButton.y = -10;
+            // Inferno-only: the toolbar replaces the tool icons and holds Full screen (ioAddTools).
+            this.ioAddTools();
             if (!this.toolTipMenu) {
                 this.toolTipMenu = new BasePlannerPopup_ToolTip();
                 this.toolTipMenu.mouseEnabled = false;
@@ -428,6 +453,7 @@ package com.monsters.baseplanner.popups {
 
         public function onToolUpdate(param1:Event = null):void {
             this.onToolReset();
+            this.ioHighlightTools();
             if (this.designView.currentTool == PlannerDesignView.TOOL_SELECTMOVE) {
                 this.toolMenu.mcSelectMove.gotoAndStop("over");
             }
@@ -551,11 +577,24 @@ package com.monsters.baseplanner.popups {
             this.sideBarScrollBar = new ScrollSetV(param1, this.sideBar.canvasmask);
             this.sideBarScrollBar.x = param1.x + param1.width - this.sideBarScrollBar.width + this._PLANNER_LEFT_MARGIN;
             this.sideBarScrollBar.y = param1.y + _layoutSpacing.y + this._PLANNER_TOP_MARGIN;
-            addChildAt(this.sideBarScrollBar, numChildren);
+            addChild(this.sideBarScrollBar); // on top; addChildAt(x, numChildren) is out of range when x is already a child (the browser runtime throws)
         }
 
         protected function onApplyClick(param1:MouseEvent):void {
             if (this._isTemplateApplicable) {
+                // Inferno-only: nor a plan with buildings that overlap or stand past the yard's edge (one saved
+                // from a layout imported before Import checked them)
+                if (GLOBAL.INFERNO_ONLY) {
+                    var rows:Array = [];
+                    for each (var node:PlannerNode in this.ioLayoutNodes(true)) {
+                        rows.push([node.type, node.x, node.y]);
+                    }
+                    var refused:String = this.ioCheckLayout(rows);
+                    if (refused) {
+                        GLOBAL.Message("<b>This plan can't be applied.</b><br><br>" + refused + "<br><br>Move them inside your yard and apart first.");
+                        return;
+                    }
+                }
                 dispatchEvent(new BasePlannerEvent(BasePlannerEvent.APPLY));
             }
             else {
@@ -670,6 +709,7 @@ package com.monsters.baseplanner.popups {
 
         public function onDesignStateChange(param1:Event = null):void {
             this.hasBeenSaved = false;
+            this.ioHistoryChanged();
             GLOBAL.UpdateAFKTimer();
         }
 
@@ -737,6 +777,15 @@ package com.monsters.baseplanner.popups {
         }
 
         public function Resize():void {
+            if (GLOBAL.INFERNO_ONLY) {
+                // Placed by the frame itself, not by everything drawn around it: the frame's corner art and
+                // close X sit above its top edge, and centring on the whole clip pushed them off-screen.
+                // A little shorter than the screen, with the top edge far enough down to show them.
+                this.configPopupTemplate(GLOBAL._SCREEN.width - 30, GLOBAL._SCREEN.height - 60);
+                this.x = GLOBAL._SCREENCENTER.x - this._guideMC.guideBG.width / 2;
+                this.y = GLOBAL._SCREENCENTER.y - this._guideMC.guideBG.height / 2 + 6;
+                return;
+            }
             this.configPopupTemplate(GLOBAL._SCREEN.width - 30, GLOBAL._SCREEN.height - 30);
             this.x = GLOBAL._SCREENCENTER.x + -(this._mcFrame.width / 2) + 10;
             this.y = GLOBAL._SCREENCENTER.y + -(this._mcFrame.height / 2) + 10;
@@ -761,6 +810,779 @@ package com.monsters.baseplanner.popups {
                 this._bSave.enabled = BasePlanner.canSave;
                 this._bSave.mouseEnabled = BasePlanner.canSave;
             }
+        }
+    
+        // ---------------------------------------------------------------------------------------------
+        // Inferno-only toolbar across the top of the plan (PlannerDesignView: "Planner tools"). It holds
+        // every tool, so the old icon menu is hidden. Expand yard sits at its right end; Full screen is a
+        // round button beside the window's close X. Hovering a tool says what it does (the tooltip under
+        // the plan), which is also where the result of an action is shown for a few seconds.
+        // ---------------------------------------------------------------------------------------------
+
+        private var _ioTools:Sprite = null;
+
+        private var _ioButtons:Object = {};
+
+        private var _ioFullscreen:Sprite = null;
+
+        private var _ioBarHeight:int = 0;
+
+        private var _ioStatusTimer:Timer = null;
+
+        private static const IO_GAP:int = 2;
+
+        private static const IO_GROUP_GAP:int = 12;
+
+        /** Tools: [id, caption, icon]; null starts a new group. */
+        private static const IO_LAYOUT:Array = [
+                ["undo", "Undo", "undo"], ["redo", "Redo", "redo"], null,
+                ["move", "Move", "move"], ["store", "Store", "store"], null,
+                ["area", "Select", "select"], ["deselect", "Clear", "clear"], null,
+                ["wall", "Walls", "walls"], null,
+                ["flipx", "Flip L-R", "flipx"], ["flipy", "Flip T-B", "flipy"], ["rotate", "Rotate", "rotate"], null,
+                ["export", "Export", "export"], ["import", "Import", "import"]
+            ];
+
+        /** At the right end of the toolbar. */
+        private static const IO_UTILITY:Array = [["expand", "Expand", "expand"]];
+
+        private static function ioIcon(param1:String, param2:Boolean):BitmapData {
+            switch (param1) {
+                case "undo":
+                    return param2 ? new io_pt_undo_y(0, 0) : new io_pt_undo_w(0, 0);
+                case "redo":
+                    return param2 ? new io_pt_redo_y(0, 0) : new io_pt_redo_w(0, 0);
+                case "move":
+                    return param2 ? new io_pt_move_y(0, 0) : new io_pt_move_w(0, 0);
+                case "store":
+                    return param2 ? new io_pt_store_y(0, 0) : new io_pt_store_w(0, 0);
+                case "select":
+                    return param2 ? new io_pt_select_y(0, 0) : new io_pt_select_w(0, 0);
+                case "walls":
+                    return param2 ? new io_pt_walls_y(0, 0) : new io_pt_walls_w(0, 0);
+                case "clear":
+                    return param2 ? new io_pt_clear_y(0, 0) : new io_pt_clear_w(0, 0);
+                case "flipx":
+                    return param2 ? new io_pt_flipx_y(0, 0) : new io_pt_flipx_w(0, 0);
+                case "flipy":
+                    return param2 ? new io_pt_flipy_y(0, 0) : new io_pt_flipy_w(0, 0);
+                case "rotate":
+                    return param2 ? new io_pt_rotate_y(0, 0) : new io_pt_rotate_w(0, 0);
+            }
+            if (param1 == "export" || param1 == "import") {
+                return ioDrawShareIcon(param1 == "export", param2);
+            }
+            return param2 ? new io_pt_expand_y(0, 0) : new io_pt_expand_w(0, 0);
+        }
+
+        /** Export / Import's pictures, drawn (a tray with an arrow out of it, or into it). */
+        private static function ioDrawShareIcon(out:Boolean, yellow:Boolean):BitmapData {
+            var c:uint = yellow ? 0xFFD24A : 0xFFFFFF;
+            var sh:Shape = new Shape();
+            var g:Graphics = sh.graphics;
+            g.lineStyle(2, c, 1);
+            g.moveTo(4, 15);
+            g.lineTo(4, 22);
+            g.lineTo(22, 22);
+            g.lineTo(22, 15);
+            g.lineStyle(0, 0, 0);
+            g.beginFill(c, 1);
+            if (out) {
+                g.drawRect(11, 9, 4, 9);
+                g.moveTo(7, 10);
+                g.lineTo(13, 3);
+                g.lineTo(19, 10);
+            }
+            else {
+                g.drawRect(11, 3, 4, 9);
+                g.moveTo(7, 11);
+                g.lineTo(13, 18);
+                g.lineTo(19, 11);
+            }
+            g.endFill();
+            var bd:BitmapData = new BitmapData(26, 26, true, 0);
+            bd.draw(sh);
+            return bd;
+        }
+
+        // ---- Inferno-only (3 October): a layout as text, to give to another player (Export) or take one
+        // from them (Import). Only where each building stands, by its type: no levels, no decorations. The
+        // text is "BYML1:" and base64 of [[type, x, y], ...].
+
+        private static const IO_LAYOUT_PREFIX:String = "BYML1:";
+
+        private function ioLayoutNodes(placedOnly:Boolean):Array {
+            var out:Array = [];
+            var node:PlannerNode = null;
+            for each (node in this._plannerTemplate.displayData) {
+                if (node.category != PlannerNode.TYPE_DECORATION) {
+                    out.push(node);
+                }
+            }
+            if (!placedOnly) {
+                for each (node in this._plannerTemplate.inventoryData) {
+                    if (node.category != PlannerNode.TYPE_DECORATION) {
+                        out.push(node);
+                    }
+                }
+            }
+            return out;
+        }
+
+        private function ioExportLayout():void {
+            var rows:Array = [];
+            for each (var node:PlannerNode in this.ioLayoutNodes(true)) {
+                rows.push([node.type, int(node.x), int(node.y)]);
+            }
+            if (!rows.length) {
+                this.ioSetStatus("Nothing on the plan to export.");
+                return;
+            }
+            var code:String = IO_LAYOUT_PREFIX + Base64.encode(JSON.stringify(rows));
+            try {
+                System.setClipboard(code);
+            }
+            catch (e:Error) {
+            }
+            IoTextPrompt.Show("Export layout", "Copied: give this text to another player (it says where each of your " + rows.length + " buildings stands; no levels, no decorations).", code, 0, "OK", function(t:String):void {
+                });
+        }
+
+        private function ioImportLayout():void {
+            IoTextPrompt.Show("Import layout", "Paste a layout another player exported. Your buildings move to where theirs stand on the plan; then Apply it.", "", 0, "Import", this.ioApplyLayout);
+        }
+
+        private function ioApplyLayout(text:String):void {
+            var rows:Array = null;
+            try {
+                text = String(text || "").replace(/\s+/g, "");
+                if (text.indexOf(IO_LAYOUT_PREFIX) != 0) {
+                    throw new Error("prefix");
+                }
+                // (Base64.decode reads nothing back from text ending in "=": the bytes are read from the start here)
+                var bytes:ByteArray = Base64.decodeToByteArray(text.substr(IO_LAYOUT_PREFIX.length));
+                bytes.position = 0;
+                rows = JSON.parse(bytes.readUTFBytes(bytes.length)) as Array;
+            }
+            catch (e:Error) {
+                rows = null;
+            }
+            if (!rows || !rows.length) {
+                GLOBAL.Message("That isn't a layout: it should start with " + IO_LAYOUT_PREFIX + ".");
+                return;
+            }
+            // a layout with buildings that overlap, or past the edge of this yard, isn't taken at all
+            var refused:String = this.ioCheckLayout(rows);
+            if (refused) {
+                GLOBAL.Message("<b>This layout can't be imported.</b><br><br>" + refused + "<br><br>Your plan hasn't changed.");
+                return;
+            }
+            this.designView.ioClearSelection();
+            // (what was already overlapping before is left as it was)
+            var wrongBefore:Array = this.designView.ioInvalidNodes();
+            var mine:Array = this.ioLayoutNodes(false);
+            var used:Dictionary = new Dictionary();
+            var placed:int = 0;
+            var missing:int = 0;
+            var node:PlannerNode = null;
+            var taken:Array = [];
+            for each (var row:Array in rows) {
+                if (!(row is Array) || row.length < 3) {
+                    continue;
+                }
+                var type:int = int(row[0]);
+                var hit:PlannerNode = null;
+                for each (node in mine) {
+                    if (!used[node] && node.type == type) {
+                        hit = node;
+                        break;
+                    }
+                }
+                if (!hit) {
+                    missing++;
+                    continue;
+                }
+                used[hit] = true;
+                hit.x = Number(row[1]);
+                hit.y = Number(row[2]);
+                hit.stored = 0;
+                taken.push(hit);
+                placed++;
+            }
+            // what the layout has no place for stays where it was, and decorations too, unless now in the way:
+            // then it goes to storage (a plan with buildings in storage can't be applied until they're placed)
+            var display:Vector.<PlannerNode> = this._plannerTemplate.displayData;
+            var inventory:Vector.<PlannerNode> = this._plannerTemplate.inventoryData;
+            var keep:Vector.<PlannerNode> = new Vector.<PlannerNode>();
+            var stored:int = 0;
+            var storedBuildings:int = 0;
+            for each (node in display) {
+                if (used[node]) {
+                    keep.push(node);
+                }
+                else if (this.ioOverlapsAny(node, taken)) {
+                    node.store();
+                    inventory.push(node);
+                    stored++;
+                    if (node.category != PlannerNode.TYPE_DECORATION) {
+                        storedBuildings++;
+                    }
+                }
+                else {
+                    keep.push(node);
+                }
+            }
+            for each (node in inventory) {
+                if (node.category != PlannerNode.TYPE_DECORATION && node.category != PlannerNode.TYPE_MISC && taken.indexOf(node) < 0 && storedBuildings == 0) {
+                    storedBuildings = -1; // (some were in storage already)
+                }
+            }
+            for each (node in taken) {
+                if (keep.indexOf(node) < 0) {
+                    keep.push(node);
+                    var at:int = inventory.indexOf(node);
+                    if (at >= 0) {
+                        inventory.splice(at, 1);
+                    }
+                }
+            }
+            display.length = 0;
+            for each (node in keep) {
+                display.push(node);
+            }
+            this.designView.ioRebuild();
+            // what still overlaps something goes to storage too: first what the layout didn't place, then (if
+            // anything still overlaps) the layout's own
+            // (one at a time for the layout's own: of two that overlap, only one has to go)
+            for (var pass:int = 0; pass < 24; pass++) {
+                var wrong:Array = this.designView.ioInvalidNodes();
+                var moved:int = 0;
+                for (var w:int = wrong.length - 1; w >= 0; w--) {
+                    node = wrong[w];
+                    if (taken.indexOf(node) < 0 && wrongBefore.indexOf(node) >= 0) {
+                        continue; // (overlapping already before the import)
+                    }
+                    if (pass > 0 || taken.indexOf(node) < 0) {
+                        var at2:int = display.indexOf(node);
+                        if (at2 < 0) {
+                            continue;
+                        }
+                        display.splice(at2, 1);
+                        node.store();
+                        inventory.push(node);
+                        stored++;
+                        moved++;
+                        if (node.category != PlannerNode.TYPE_DECORATION) {
+                            storedBuildings = storedBuildings < 0 ? 1 : storedBuildings + 1;
+                        }
+                        if (pass > 0) {
+                            break;
+                        }
+                    }
+                }
+                if (moved) {
+                    this.designView.ioRebuild();
+                }
+                else if (pass > 0) {
+                    break;
+                }
+            }
+            this.buildingExplorer.redraw();
+            this.sideBarScrollBar.checkResize();
+            this.changedPlannerData();
+            this.onToolUpdate();
+            this.hasBeenSaved = false;
+            this.ioHistoryRecord();
+            GLOBAL.Message("<b>Layout imported.</b><br><br>" + placed + " of your buildings moved into place" + (missing ? "; " + missing + " of the layout's are buildings you don't have" : "") + (stored ? "; " + stored + " in the way went to storage" : "") + ". " + (storedBuildings != 0 ? "Place the buildings in storage, then Apply it to your yard." : "Look it over, then Apply it to your yard."));
+        }
+
+        /**
+         * Why a layout can't be imported, or null. Refused: any of its buildings past the edge of this yard (its
+         * size now: GLOBAL._mapWidth x _mapHeight, as the planner draws it), or any two of them overlapping
+         * (footprints as the planner's own checks; a type you have none of is sized by the smallest
+         * footprint, 20, for the edge and left out of the overlaps, since it won't be placed).
+         */
+        private function ioCheckLayout(rows:Array):String {
+            var sizes:Object = {};
+            var names:Object = {};
+            var node:PlannerNode = null;
+            for each (node in this.ioLayoutNodes(false)) {
+                if (!sizes[node.type] && node.building && node.building._footprint && node.building._footprint[0]) {
+                    sizes[node.type] = new Point(node.building._footprint[0].width, node.building._footprint[0].height);
+                    names[node.type] = node.name;
+                }
+            }
+            var snap:int = PlannerDesignView.MOUSE_POSITION_SNAP_THRESHHOLD;
+            var halfW:Number = GLOBAL._mapWidth / 2;
+            var halfH:Number = GLOBAL._mapHeight / 2;
+            var rects:Array = [];
+            var rectNames:Array = [];
+            var outside:int = 0;
+            var outsideNames:Array = [];
+            var bad:int = 0;
+            for each (var row:* in rows) {
+                if (!(row is Array) || row.length < 3) {
+                    bad++;
+                    continue;
+                }
+                var type:int = int(row[0]);
+                var x:Number = Number(row[1]);
+                var y:Number = Number(row[2]);
+                if (!isFinite(x) || !isFinite(y)) {
+                    bad++;
+                    continue;
+                }
+                x = int(x / snap) * snap;
+                y = int(y / snap) * snap;
+                var size:Point = sizes[type] as Point;
+                var w:Number = size ? size.x : 20;
+                var h:Number = size ? size.y : 20;
+                var props:Object = type > 0 ? GLOBAL._buildingProps[type - 1] : null;
+                var name:String = names[type] || (props && props.name ? KEYS.Get(props.name) : "building");
+                if (x < -halfW || y < -halfH || x > halfW - w || y > halfH - h) {
+                    outside++;
+                    if (outsideNames.indexOf(name) < 0) {
+                        outsideNames.push(name);
+                    }
+                    continue;
+                }
+                if (size) {
+                    rects.push(new Rectangle(x, y, w, h));
+                    rectNames.push(name);
+                }
+            }
+            var overlaps:int = 0;
+            var overlapPair:String = null;
+            for (var i:int = 0; i < rects.length; i++) {
+                for (var j:int = i + 1; j < rects.length; j++) {
+                    if ((rects[i] as Rectangle).intersects(rects[j] as Rectangle)) {
+                        overlaps++;
+                        overlapPair ||= rectNames[i] + " and " + rectNames[j];
+                    }
+                }
+            }
+            var why:Array = [];
+            if (bad) {
+                why.push(bad + (bad == 1 ? " of its entries isn't" : " of its entries aren't") + " a building and a place.");
+            }
+            if (outside) {
+                why.push(outside + (outside == 1 ? " building stands" : " buildings stand") + " outside your yard (" + outsideNames.slice(0, 3).join(", ") + (outsideNames.length > 3 ? "..." : "") + "): your yard is " + GLOBAL._mapWidth + " x " + GLOBAL._mapHeight + ".");
+            }
+            if (overlaps) {
+                why.push(overlaps + (overlaps == 1 ? " pair of buildings overlaps" : " pairs of buildings overlap") + " (" + overlapPair + (overlaps > 1 ? ", ..." : "") + ").");
+            }
+            return why.length ? why.join("<br>") : null;
+        }
+
+        private static function ioRect(node:PlannerNode):Rectangle {
+            var size:Number = 20;
+            if (node.building && node.building._footprint && node.building._footprint[0]) {
+                size = Math.max(node.building._footprint[0].width, node.building._footprint[0].height);
+            }
+            return new Rectangle(node.x, node.y, size, size);
+        }
+
+        private function ioOverlapsAny(node:PlannerNode, others:Array):Boolean {
+            var r:Rectangle = ioRect(node);
+            for each (var o:PlannerNode in others) {
+                if (r.intersects(ioRect(o))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private function ioAddTools():void {
+            if (!GLOBAL.INFERNO_ONLY || !this.toolMenu || !this.displayCanvas) {
+                return;
+            }
+            this.toolMenu.visible = false;
+            if (this.fullscreenButton) {
+                this.fullscreenButton.visible = false;
+            }
+            var spec:Array = null;
+            if (!this._ioTools) {
+                this._ioTools = new Sprite();
+                this.addChild(this._ioTools);
+                for each (spec in IO_LAYOUT.concat(IO_UTILITY)) {
+                    if (!spec) {
+                        continue;
+                    }
+                    var tile:IoToolTile = new IoToolTile(spec[0], spec[1], ioIcon(spec[2], false), ioIcon(spec[2], true), true);
+                    tile.addEventListener(MouseEvent.CLICK, this.ioToolClick);
+                    tile.addEventListener(MouseEvent.ROLL_OVER, this.onToolTipMouseHint(this.ioShowHint, [ioHint(spec[0])]));
+                    tile.addEventListener(MouseEvent.ROLL_OUT, this.onToolTipHide);
+                    this._ioTools.addChild(tile);
+                    this._ioButtons[spec[0]] = tile;
+                }
+                this._ioFullscreen = new Sprite();
+                this._ioFullscreen.addChild(new Bitmap(new frame1_button_fullscreen(0, 0)));
+                this._ioFullscreen.buttonMode = true;
+                this._ioFullscreen.addEventListener(MouseEvent.CLICK, GLOBAL.goFullScreen);
+                this._ioFullscreen.addEventListener(MouseEvent.ROLL_OVER, this.onToolTipMouseHint(this.ioShowHint, ["Full screen on or off."]));
+                this._ioFullscreen.addEventListener(MouseEvent.ROLL_OUT, this.onToolTipHide);
+                addEventListener(Event.ENTER_FRAME, this.ioHistoryTick);
+            }
+            // Beside the window's close X (the frame is rebuilt by each layout).
+            this.mcFrame.ioAddBesideClose(this._ioFullscreen);
+            var expandable:Boolean = BASE.isMainYardOrInfernoMainYard && GLOBAL.yardExpansionsBought < GLOBAL.yardExpansionsMax;
+            var expand:IoToolTile = this._ioButtons["expand"] as IoToolTile;
+            expand.visible = expandable;
+
+            // Tiles left to right in groups, wrapping to a new row when the plan is narrow. Expand takes
+            // the right end of the first row.
+            var width:int = int(this.displayCanvas.canvasmask.width);
+            var rowEnd:int = expandable ? width - 6 - IoToolTile.W - IO_GROUP_GAP : width - 6;
+            var x:int = 6;
+            var y:int = 4;
+            var pendingGap:Boolean = false;
+            for each (spec in IO_LAYOUT) {
+                if (!spec) {
+                    pendingGap = true;
+                    continue;
+                }
+                var t:IoToolTile = this._ioButtons[spec[0]] as IoToolTile;
+                if (pendingGap && x > 6) {
+                    x += IO_GROUP_GAP;
+                }
+                pendingGap = false;
+                if (x + IoToolTile.W > rowEnd && x > 6) {
+                    x = 6;
+                    y += 44;
+                    rowEnd = width - 6;
+                }
+                t.x = x;
+                t.y = y;
+                x += IoToolTile.W + IO_GAP;
+            }
+            expand.x = width - 6 - IoToolTile.W;
+            expand.y = 4;
+            this._ioBarHeight = y + 44 + 4;
+
+            this._ioTools.graphics.clear();
+            this._ioTools.graphics.lineStyle(1, 0x7A5436, 1);
+            this._ioTools.graphics.beginFill(0x24160F, 0.9);
+            this._ioTools.graphics.drawRect(0, 0, width, this._ioBarHeight);
+            this._ioTools.graphics.endFill();
+            this._ioTools.x = this.displayCanvas.x;
+            this._ioTools.y = this.displayCanvas.y;
+
+            // The zoom control sits under the toolbar instead of behind it.
+            if (this.zoomMenu) {
+                this.zoomMenu.y = this.displayCanvas.y + this._ioBarHeight + 8;
+            }
+            if (this.designView) {
+                this.designView.ioStatus = this.ioSetStatus;
+                this.designView.ioWallsLeft = this.ioWallsLeft;
+            }
+            this.ioHistoryRecord();
+        }
+
+        private static function ioHint(param1:String):String {
+            switch (param1) {
+                case "undo":
+                    return "Undo the last change.";
+                case "redo":
+                    return "Redo the change you undid.";
+                case "move":
+                    return "Move: click a building to pick it up, click again to put it down.";
+                case "store":
+                    return "Store: click a building to put it into storage (or store the whole selection).";
+                case "area":
+                    return "Select: drag a box around buildings. Then click one of them to move them all.";
+                case "wall":
+                    return "Walls: drag across the yard to lay walls from storage. Green fits, red is blocked.";
+                case "deselect":
+                    return "Clear the selection.";
+                case "flipx":
+                    return "Flip the selection (or the whole layout) left to right.";
+                case "flipy":
+                    return "Flip the selection (or the whole layout) top to bottom.";
+                case "rotate":
+                    return "Rotate the selection (or the whole layout) 90 degrees.";
+                case "expand":
+                    return "Buy the next yard expansion.";
+                case "export":
+                    return "Export: this layout as text, for another player to import (building types only).";
+                case "import":
+                    return "Import: paste a layout another player exported.";
+            }
+            return "";
+        }
+
+        /** A hover hint: replaces any action message still showing. */
+        private function ioShowHint(param1:Event, param2:String):void {
+            if (this._ioStatusTimer) {
+                this._ioStatusTimer.stop();
+            }
+            this.onToolTipHint(param1, param2);
+        }
+
+        /** What an action did (from the design view or a tool): shown in the tooltip for a few seconds. */
+        private function ioSetStatus(param1:String):void {
+            if (!this.toolTipMenu) {
+                return;
+            }
+            if (!param1) {
+                this.onToolTipHide();
+                return;
+            }
+            this.onToolTipHint(null, param1);
+            if (!this._ioStatusTimer) {
+                this._ioStatusTimer = new Timer(3500, 1);
+                this._ioStatusTimer.addEventListener(TimerEvent.TIMER_COMPLETE, function(e:TimerEvent):void {
+                        onToolTipHide();
+                    });
+            }
+            this._ioStatusTimer.reset();
+            this._ioStatusTimer.start();
+        }
+
+        private function ioToolClick(param1:MouseEvent):void {
+            var id:String = (param1.currentTarget as IoToolTile).id;
+            if (!this.designView) {
+                return;
+            }
+            SOUNDS.Play("click1");
+            switch (id) {
+                case "undo":
+                    this.ioUndo();
+                    return;
+                case "redo":
+                    this.ioRedo();
+                    return;
+                case "move":
+                    this.designView.setTool(PlannerDesignView.TOOL_SELECTMOVE);
+                    break;
+                case "store":
+                    if (this.designView.ioSelectionCount > 0) {
+                        this.ioConfirmStoreSelection();
+                        return;
+                    }
+                    this.designView.setTool(PlannerDesignView.TOOL_STORE);
+                    break;
+                case "area":
+                    this.designView.setTool(PlannerDesignView.TOOL_AREASELECT);
+                    break;
+                case "wall":
+                    this.designView.setTool(PlannerDesignView.TOOL_WALLLINE);
+                    this.ioSetStatus(ioHint("wall") + " (" + this.ioWallsLeft() + " in storage)");
+                    this.onToolUpdate();
+                    return;
+                case "deselect":
+                    this.designView.ioClearSelection();
+                    this.ioSetStatus("Selection cleared.");
+                    return;
+                case "expand":
+                    this.onStoreOpen(null);
+                    return;
+                case "export":
+                    this.ioExportLayout();
+                    return;
+                case "import":
+                    this.ioImportLayout();
+                    return;
+                default:
+                    this.designView.ioTransform(id);
+                    return;
+            }
+            this.onToolUpdate();
+        }
+
+        /** Store with buildings selected: the whole selection goes to storage, once confirmed. */
+        private function ioConfirmStoreSelection():void {
+            var count:int = this.designView.ioSelectionCount;
+            GLOBAL.Message("Confirm moving " + (count == 1 ? "the selected item" : "the " + count + " selected items") + " to storage?", "Yes", function():void {
+                    if (designView) {
+                        var stored:int = designView.ioStoreSelection();
+                        ioSetStatus(stored + (stored == 1 ? " building" : " buildings") + " moved to storage.");
+                    }
+                }, null, "No", function():void {
+                });
+        }
+
+        private function ioHighlightTools():void {
+            if (!this._ioTools || !this.designView) {
+                return;
+            }
+            var tool:String = this.designView.currentTool;
+            (this._ioButtons["move"] as IoToolTile).active = tool == PlannerDesignView.TOOL_SELECTMOVE;
+            (this._ioButtons["store"] as IoToolTile).active = tool == PlannerDesignView.TOOL_STORE;
+            (this._ioButtons["area"] as IoToolTile).active = tool == PlannerDesignView.TOOL_AREASELECT;
+            (this._ioButtons["wall"] as IoToolTile).active = tool == PlannerDesignView.TOOL_WALLLINE;
+        }
+
+        // ---- Undo / Redo
+        // A snapshot of the plan (which buildings are on it, where, and what is in storage) is kept after
+        // every change (STATE_CHANGE from the design view, Clear). Undo and Redo put a snapshot back and
+        // rebuild the plan and the storage list from it. Loading another layout starts a new history.
+
+        private static const IO_HISTORY_MAX:int = 100;
+
+        private var _ioHistory:Array = [];
+
+        private var _ioHistoryAt:int = -1;
+
+        private var _ioHistoryPending:Boolean = false;
+
+        private var _ioRestoring:Boolean = false;
+
+        private function ioSnapshot():Object {
+            var node:PlannerNode = null;
+            var placed:Array = [];
+            for each (node in this._plannerTemplate.displayData) {
+                placed.push([node, node.x, node.y]);
+            }
+            var stored:Array = [];
+            for each (node in this._plannerTemplate.inventoryData) {
+                stored.push(node);
+            }
+            return {"template": this._plannerTemplate, "placed": placed, "stored": stored};
+        }
+
+        private static function ioSameSnapshot(param1:Object, param2:Object):Boolean {
+            var i:int = 0;
+            if (param1.template != param2.template || param1.placed.length != param2.placed.length || param1.stored.length != param2.stored.length) {
+                return false;
+            }
+            while (i < param1.placed.length) {
+                if (param1.placed[i][0] != param2.placed[i][0] || param1.placed[i][1] != param2.placed[i][1] || param1.placed[i][2] != param2.placed[i][2]) {
+                    return false;
+                }
+                i++;
+            }
+            i = 0;
+            while (i < param1.stored.length) {
+                if (param1.stored[i] != param2.stored[i]) {
+                    return false;
+                }
+                i++;
+            }
+            return true;
+        }
+
+        /** After a change: recorded on the next frame, when every part of the change has landed. */
+        private function ioHistoryChanged():void {
+            if (!this._ioRestoring) {
+                this._ioHistoryPending = true;
+            }
+        }
+
+        private function ioHistoryTick(param1:Event):void {
+            if (this._ioHistoryPending) {
+                this._ioHistoryPending = false;
+                this.ioHistoryRecord();
+            }
+        }
+
+        private function ioHistoryRecord():void {
+            if (!this._plannerTemplate || this._ioRestoring) {
+                return;
+            }
+            var snap:Object = this.ioSnapshot();
+            if (this._ioHistoryAt >= 0 && this._ioHistory[this._ioHistoryAt].template != snap.template) {
+                this._ioHistory = [];
+                this._ioHistoryAt = -1;
+            }
+            if (this._ioHistoryAt >= 0 && ioSameSnapshot(this._ioHistory[this._ioHistoryAt], snap)) {
+                this.ioHistoryButtons();
+                return;
+            }
+            this._ioHistory.splice(this._ioHistoryAt + 1, this._ioHistory.length);
+            this._ioHistory.push(snap);
+            if (this._ioHistory.length > IO_HISTORY_MAX) {
+                this._ioHistory.shift();
+            }
+            this._ioHistoryAt = this._ioHistory.length - 1;
+            this.ioHistoryButtons();
+        }
+
+        private function ioHistoryButtons():void {
+            if (!this._ioButtons["undo"]) {
+                return;
+            }
+            (this._ioButtons["undo"] as IoToolTile).alpha = this._ioHistoryAt > 0 ? 1 : 0.4;
+            (this._ioButtons["redo"] as IoToolTile).alpha = this._ioHistoryAt < this._ioHistory.length - 1 ? 1 : 0.4;
+        }
+
+        public function ioUndo():void {
+            this.ioHistoryTick(null);
+            if (this._ioHistoryAt <= 0) {
+                this.ioSetStatus("Nothing to undo.");
+                return;
+            }
+            this._ioHistoryAt--;
+            this.ioRestore(this._ioHistory[this._ioHistoryAt]);
+            this.ioSetStatus("Undone.");
+        }
+
+        public function ioRedo():void {
+            this.ioHistoryTick(null);
+            if (this._ioHistoryAt >= this._ioHistory.length - 1) {
+                this.ioSetStatus("Nothing to redo.");
+                return;
+            }
+            this._ioHistoryAt++;
+            this.ioRestore(this._ioHistory[this._ioHistoryAt]);
+            this.ioSetStatus("Redone.");
+        }
+
+        private function ioRestore(param1:Object):void {
+            var entry:Array = null;
+            var node:PlannerNode = null;
+            if (param1.template != this._plannerTemplate || !this.designView) {
+                return;
+            }
+            this._ioRestoring = true;
+            try {
+                this.designView.ioClearSelection();
+                this._plannerTemplate.displayData.length = 0;
+                for each (entry in param1.placed) {
+                    node = entry[0] as PlannerNode;
+                    node.x = entry[1];
+                    node.y = entry[2];
+                    this._plannerTemplate.displayData.push(node);
+                }
+                this._plannerTemplate.inventoryData.length = 0;
+                for each (node in param1.stored) {
+                    this._plannerTemplate.inventoryData.push(node);
+                }
+                this.buildingExplorer.redraw();
+                this.designView.ioRebuild();
+                this.sideBarScrollBar.checkResize();
+                this.changedPlannerData();
+                this.onToolUpdate();
+                this.hasBeenSaved = false;
+            }
+            finally {
+                this._ioRestoring = false;
+            }
+            this.ioHistoryButtons();
+        }
+
+        /**
+         * A wall still in storage, or null. Placing it takes it out of storage; one already on the plan
+         * is never handed out again, so the same wall cannot be placed twice.
+         */
+        private function ioTakeWall():PlannerNode {
+            var node:PlannerNode = null;
+            for each (node in this._plannerTemplate.inventoryData) {
+                if (node.category == PlannerNode.TYPE_WALL && this._plannerTemplate.displayData.indexOf(node) == -1) {
+                    return node;
+                }
+            }
+            return null;
+        }
+
+        private function ioWallsLeft():int {
+            var count:int = 0;
+            var node:PlannerNode = null;
+            for each (node in this._plannerTemplate.inventoryData) {
+                if (node.category == PlannerNode.TYPE_WALL && this._plannerTemplate.displayData.indexOf(node) == -1) {
+                    count++;
+                }
+            }
+            return count;
         }
     }
 }

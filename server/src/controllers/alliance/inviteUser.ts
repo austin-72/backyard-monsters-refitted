@@ -1,4 +1,5 @@
 import { AllianceInviteType, AllianceRole } from "../../enums/Alliance.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
@@ -13,6 +14,7 @@ import {
   userAlreadyInAllianceErr,
 } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { questInviteSent } from "../../services/quests/questProgress.js";
 
 const INVITE_FIELDS = ["userid", "username", "alliance_id", "save.worldid"] as const;
 
@@ -40,7 +42,8 @@ export const inviteUser: KoaController = async (ctx) => {
 
   // Not confirmed: The original's map room enabled the button for every member, so members do reach here,
   // so not sure yet if this was a leader-only action.
-  if (user.alliance_role !== AllianceRole.LEADER) throw inviteLeaderOnlyErr();
+  // (Inferno-only: officers invite too)
+  if (user.alliance_role !== AllianceRole.LEADER && !(infernoOnlyConfig.enabled && user.alliance_role === AllianceRole.OFFICER)) throw inviteLeaderOnlyErr();
 
   const player = await postgres.em.findOne(User, { userid }, { fields: INVITE_FIELDS });
   if (!player) throw permissionErr();
@@ -55,7 +58,8 @@ export const inviteUser: KoaController = async (ctx) => {
 
   if (!sameMapVersion) throw inviteMapVersionErr(player.username);
 
-  await openInvite(alliance, player.userid, AllianceInviteType.INVITE);
+  const invite = await openInvite(alliance, player.userid, AllianceInviteType.INVITE);
+  void questInviteSent(invite.id, user.userid);
 
   ctx.status = Status.OK;
   ctx.body = { error: 0 };

@@ -1,4 +1,6 @@
-import { getReferralCode, inviteLink, referralsEnabled, takeReferralNotice } from "../../../services/user/referrals.js";
+import { addPlayerFlags } from "../../../services/user/playerFlags.js";
+import { gauntletAttack, isGauntletBaseId } from "../../../services/events/gauntlet.js";
+import { referralsEnabled, takeReferralNotice } from "../../../services/user/referrals.js";
 import { getRequiredBuild } from "../../../services/clientBuild.js";
 import { healDefenders } from "../../../services/base/defenderHealth.js";
 import { MOLOCH_WMID } from "../../../services/maproom/v2/tribeForCell.js";
@@ -31,6 +33,7 @@ import { BaseLoadSchema } from "../../../schemas/BaseLoadSchema.js";
 import { discordAgeErr } from "../../../errors/errors.js";
 import { EnumBaseRelationship } from "../../../enums/EnumBaseRelationship.js";
 import { canAttack } from "../../../services/base/canAttack.js";
+import { isTestMode } from "../../../services/admin/testMode.js";
 import { createMR1Tribes } from "../../../services/maproom/v1/createMR1Tribes.js";
 import { MR1_TRIBES } from "../../../enums/Tribes.js";
 import { MR1_TRIBE_IDS } from "../../../game-data/tribes/v1/index.js";
@@ -44,8 +47,13 @@ import { getAllianceData } from "../../../services/alliance/allianceData.js";
 import { runningPowerups } from "../../../services/alliance/powerups.js";
 import { cellRelationship, findRelationships } from "../../../services/alliance/relationships.js";
 import { INFERNO_CHAT_CHANNEL } from "../../../config/ChatConfig.js";
+import { underworldConfig } from "../../../config/UnderworldConfig.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
+import { listPets, petsEnabled, petsForGame, petsInfo } from "../../../services/pets/pets.js";
+import { replayYard, startReplay } from "../../../services/replays/replays.js";
 import { permissionErr } from "../../../errors/errors.js";
+import { designInfo, isDesignBaseId, parseDesignBaseId } from "../../../services/admin/designs.js";
+import { isAdmin } from "../../../services/admin/admin.js";
 
 type Stronghold = { level: number; cell?: { x: number; y: number } | null };
 
@@ -68,10 +76,21 @@ const INFERNO_SAVE_MODES = new Set<string>([BaseMode.IBUILD, BaseMode.IATTACK, B
 export const baseLoad: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
   const { baseid, type, mapversion, attackData, attackcost } = BaseLoadSchema.parse(ctx.request.body);
+  // Inferno-only: an attack replay's yard, as it was when the attack began (view mode, the replay's key)
+  const replayKey = infernoOnlyConfig.enabled && type === BaseMode.VIEW ? String((ctx.request.body as Record<string, unknown>)?.replay ?? "").slice(0, 24) : "";
+  let replayView: Awaited<ReturnType<typeof replayYard>> | null = null;
 
   // Inferno-only: the main yard *is* the inferno yard. The legacy inferno realm (separate
   // save, descent, MR1-style inferno map) does not exist, so its load modes are refused.
   if (infernoOnlyConfig.enabled && LEGACY_INFERNO_MODES.has(type)) throw permissionErr();
+
+  // A Moloch's Gauntlet yard is only ever attacked, from the Gauntlet (services/events/gauntlet.ts): no
+  // viewing it, no inferno attack on it (that would skip counting the attempt).
+  if (isGauntletBaseId(baseid) && type !== BaseMode.ATTACK && type !== BaseMode.WMATTACK) throw permissionErr();
+
+  // A Designer draft (services/admin/designs.ts) is only ever opened, in build mode, by the admin it belongs to.
+  if (isDesignBaseId(baseid) && (type !== BaseMode.BUILD || !isAdmin(user) || parseDesignBaseId(baseid)!.userid !== user.userid))
+    throw permissionErr();
 
   await postgres.em.populate(user, INFERNO_SAVE_MODES.has(type) ? ["save", "infernosave"] : ["save"]);
 
@@ -85,6 +104,17 @@ export const baseLoad: KoaController = async (ctx) => {
 
     case BaseMode.VIEW:
     case BaseMode.IVIEW:
+      if (replayKey) {
+        // (any yard the replay was of, wherever it is now: the replay says what it looked like)
+        replayView = await replayYard(user, replayKey).catch(() => null);
+        baseSave = replayView ? await postgres.em.findOne(Save, { baseid: replayView.baseid }) : null;
+        if (!baseSave) {
+          ctx.status = Status.OK;
+          ctx.body = { error: replayView ? "That yard is gone, so its replay can't be shown." : "That replay isn't here any more." };
+          return;
+        }
+        break;
+      }
       baseSave = await baseModeView(baseid, mapversion, user.save!.worldid, user);
       break;
 
@@ -92,7 +122,10 @@ export const baseLoad: KoaController = async (ctx) => {
       if (!ctx.meetsDiscordAgeCheck) throw discordAgeErr();
 
       await validateAttack(user, attackData, mapversion);
-      baseSave = await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
+      // Moloch's Gauntlet (services/events/gauntlet.ts): the player's own ladder yard, not a map cell.
+      baseSave = isGauntletBaseId(baseid)
+        ? await gauntletAttack(user, baseid, await isTestMode(user))
+        : await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
       break;
 
     case BaseMode.IDESCENT:
@@ -129,7 +162,9 @@ export const baseLoad: KoaController = async (ctx) => {
       if (!ctx.meetsDiscordAgeCheck && !MR1_TRIBE_IDS.has(baseid)) throw discordAgeErr();
       
       await validateAttack(user, attackData, mapversion);
-      baseSave = await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
+      baseSave = isGauntletBaseId(baseid)
+        ? await gauntletAttack(user, baseid, await isTestMode(user))
+        : await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
       break;
 
     default:
@@ -176,11 +211,12 @@ export const baseLoad: KoaController = async (ctx) => {
   const flags = getFlags();
   // Version control: a client that was already running learns here that a newer one was published.
   flags.io_build = getRequiredBuild();
+  // Invite link, login streak, admin button, announcement (also sent with every updatesaved poll).
+  // (Hell Freezes Over starts, or moves to its next day, only on the player's own main yard: not an outpost or a design)
+  const mainYard = isOwner && type === BaseMode.BUILD && baseSave.basesaveid === user.save?.basesaveid;
+  await addPlayerFlags(flags, user, isOwner && type === BaseMode.BUILD, mainYard);
   if (referralsEnabled() && isOwner && type === BaseMode.BUILD) {
-    // The player's own invite link, and any one-time referral notice waiting for them.
-    flags.io_invite = inviteLink(await getReferralCode(user));
-    flags.io_invite_shiny = infernoOnlyConfig.referral.shiny;
-    flags.io_invite_download = infernoOnlyConfig.referral.downloadUrl;
+    // Any one-time referral notice waiting for the player.
     flags.io_notice = await takeReferralNotice(user);
   }
   flags.discordOldEnough = Number(ctx.meetsDiscordAgeCheck);
@@ -305,7 +341,8 @@ export const baseLoad: KoaController = async (ctx) => {
     }
   }
 
-  const attackAllowed = canAttack(userSave, baseSave, mapversion);
+  // Admin test mode attacks any yard (practice attacks, services/admin/testMode.ts).
+  const attackAllowed = (await isTestMode(user)) || canAttack(userSave, baseSave, mapversion);
 
   let baseOwner;
 
@@ -381,13 +418,42 @@ export const baseLoad: KoaController = async (ctx) => {
 
   // Inferno-only: a Moloch stronghold tells the client how much its silos and hall may pay out.
   if (infernoOnlyConfig.enabled && baseSave.type === BaseType.TRIBE && baseSave.wmid === MOLOCH_WMID) {
-    const caps = infernoOnlyConfig.moloch.lootCaps[baseSave.level];
+    const caps = infernoOnlyConfig.moloch.lootCaps[baseSave.level] ?? underworldConfig.lootCaps[baseSave.level];
     if (caps) response.io_lootcap = { silo: caps.silo, hall: caps.hall };
   }
 
   if (type === BaseMode.ATTACK && mapversion === MapRoomVersion.V3) {
     if (totalStrongholdBonus > 0) response.attackingplayer = { buffs: { 5: totalStrongholdBonus } };
     if (totalDefenderStrongholdBonus > 0) response.defendingplayer = { buffs: { 6: totalDefenderStrongholdBonus } };
+  }
+
+  // Inferno-only: an attack replay shows the yard as it was when the attack began, with no monsters of its own (the
+  // recording has the battle's), and the attack on another player's yard starts its replay (services/replays).
+  if (replayView) {
+    response.buildingdata = replayView.yard.buildingdata ?? {};
+    response.buildinghealthdata = replayView.yard.buildinghealthdata ?? {};
+    response.mushrooms = replayView.yard.mushrooms ?? {};
+    response.monsters = {};
+    response.champion = null;
+    response.io_replay_view = { key: replayKey };
+  } else if (type === BaseMode.ATTACK && !(await isTestMode(user))) {
+    const key = await startReplay(user, baseSave);
+    if (key) response.io_replay = { key, rec: 1 };
+  }
+
+  // Inferno-only: a main yard's pets (services/pets/pets.ts): all of them for its owner (the Pets tab shows the
+  // stored ones too), the ones out for anyone else (an attacker, a visitor). Never in an outpost. (Not in a replay.)
+  if (petsEnabled() && baseSave.type === BaseType.MAIN && !replayView) {
+    const pets = await listPets(baseSave.userid);
+    response.io_pets = petsForGame(isOwner ? pets : pets.filter((p) => p.out));
+    if (isOwner) response.io_petinfo = await petsInfo(baseSave.userid);
+  }
+
+  // Inferno-only: a Designer draft, so the game shows the design bar and lifts the limits (GLOBAL.ioDesign).
+  if (baseSave.type === "design") {
+    response.io_design = designInfo(baseSave.baseid);
+    // its monsters' levels are the draft's (the Monsters window), not the admin's own Academy's
+    response.academy = baseSave.academy ?? {};
   }
 
   // Only send descent tribe IDs (201-213) to the client

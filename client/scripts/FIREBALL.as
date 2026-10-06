@@ -22,6 +22,19 @@ package {
 
         public static const TYPE_SPURTZ:String = "spurtz";
 
+        /** Hell Freezes Over: the Hailspitter's hailstone (IoHailspitter), drawn from "hailstone". */
+        public static const TYPE_HAIL:String = "hail";
+
+        public static const HAIL_GRAPHIC_NAME:String = "hailstone";
+
+        /** Hell Freezes Over: the ice orb Rimegrave and the Sleetwing throw (IoIce.orb), drawn from "iceorb". */
+        public static const TYPE_ICEORB:String = "iceorb";
+
+        public static const ICEORB_GRAPHIC_NAME:String = "iceorb";
+
+        /** Inferno-only: only a picture (the hit it shows was dealt already): it does no damage when it lands. */
+        public var ioNoDamage:Boolean = false;
+
         public static const COLLIDED:String = "fireballCollided";
 
         public static const ROCKET_GRAPHIC_NAME:String = "rocket";
@@ -61,6 +74,9 @@ package {
             }
             this._type = param1;
             this._acceleration = 0.5;
+            this.ioNoDamage = false;
+            // (a fireball from the pool keeps the picture of what it was last; a plain fireball has none)
+            this._graphicName = null;
             if (this._type == TYPE_FIREBALL || this._type == TYPE_MAGMA) {
                 _graphic = new FIREBALL_CLIP();
                 if (this._type == TYPE_MAGMA) {
@@ -77,6 +93,12 @@ package {
                     case TYPE_SPURTZ:
                         this._graphicName = SpurtzCannon.SPURTZ_PROJECTILE;
                         _targetType = 3;
+                        break;
+                    case TYPE_HAIL:
+                        this._graphicName = HAIL_GRAPHIC_NAME;
+                        break;
+                    case TYPE_ICEORB:
+                        this._graphicName = ICEORB_GRAPHIC_NAME;
                 }
                 _graphic = new MovieClip();
                 if (this.DO_ROCKETS_ACCELERATE) {
@@ -138,7 +160,10 @@ package {
             _distance -= _loc1_;
             if (_distance <= _maxSpeed) {
                 dispatchEvent(new ProjectileEvent(COLLIDED, this._targetCreep, this._targetBuilding));
-                if (_splash > 0) {
+                if (this.ioNoDamage) {
+                    // (a picture of a hit already dealt)
+                }
+                else if (_splash > 0) {
                     this.Splash();
                 }
                 else if (_targetType == 1) {

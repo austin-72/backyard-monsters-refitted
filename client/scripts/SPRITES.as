@@ -43,6 +43,8 @@ package {
             _sprites.C18 = new SpriteData("monsters/slimeattikusmini_anim.png", 30, 20, SpriteData.FUBAR_X - 11, SpriteData.FUBAR_Y - 25);
             _sprites.C19 = new SpriteData("monsters/rezghul.png", 48, 43, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites.IC1 = new SpriteData("monsters/spurtz.png", 24, 28, 12, 14);
+            // Inferno-only: the small Spurtz that hatch from a Clinkerjaw, drawn at 3/4 size (same sheet layout)
+            _sprites.IC1s = new SpriteData("monsters/spurtz_small.png", 18, 21, 9, 7);
             _sprites.IC2 = new SpriteData("monsters/zagnoid.png", 64.4, 46, 26, 28);
             _sprites.IC3 = new SpriteData("monsters/malphus.png", 51, 35, 25, 17);
             _sprites.IC4 = new SpriteData("monsters/valgos.png", 55, 32, 11, 15);
@@ -50,6 +52,18 @@ package {
             _sprites.IC6 = new SpriteData("monsters/grokus.v2.png", 57, 39, 28, 20);
             _sprites.IC7 = new SpriteData("monsters/sabnox.png", 42, 34, 21, 17);
             _sprites.IC8 = new SpriteData("monsters/wormzer.png", 58, 42, 29, 21);
+            // Inferno-only: Clinkerjaw and Flickerfiend. 30 facings (12 degrees apart, 0 facing right) by
+            // rows: 0 idle, 1-8 walking, and Flickerfiend's 9-12 its blink.
+            _sprites.IC12 = new SpriteData("monsters/clinkerjaw.png", 58, 44, 29, 22);
+            _sprites.IC14 = new SpriteData("monsters/flickerfiend.png", 44, 51, 22, 26);
+            // Inferno-only Fusebug (IC15) and Emberghoul (IC20): 30 facings; row 0 standing, 1-8 walk (and the
+            // Emberghoul's 9-16 attack). The Fusebug's feet (26, 28) go on the spot in the usual canvas; the
+            // Emberghoul draws on a canvas of its own (Emberghoul.as), hence no offset for it here.
+            _sprites.IC15 = new SpriteData("monsters/fusebug.png", 52, 38, 26, 28);
+            _sprites.IC20 = new SpriteData("monsters/emberghoul.png", 66, 45, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            // Inferno-only Ashkarr (IC24): 188 x 128 frames copied whole onto her own canvas, which she places
+            // with her feet (94, 102) on the spot (creeps/inferno/Ashkarr.as), hence no offset here.
+            _sprites.IC24 = new SpriteData("monsters/ashkarr.png", 188, 128, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites.G1_1 = new SpriteData("monsters/ape_1.png", 96, 69, 26, 36);
             _sprites.G1_2 = new SpriteData("monsters/ape_2.png", 89, 73, 26, 36);
             _sprites.G1_3 = new SpriteData("monsters/ape_3.png", 103, 88, 26, 36);
@@ -78,6 +92,11 @@ package {
             _sprites.G5_2 = new SpriteData("monsters/krallen_2_rev_65.png", 131, 90, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites.G5_3 = new SpriteData("monsters/krallen_3_rev_65.png", 142, 100, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites.C200 = new SpriteData("monsters/looter.png", 51, 47, 7, 33);
+            // Inferno-only Korath (IC9) and Drull (IC10) as monsters. They are drawn from the champion sheets
+            // (levels 4-6 of the art; IoChampionCreep.ART_LEVEL); these entries only give their own ids a sprite, because
+            // every creep asks for one when it is made (CreepSkinManager.SetupSkins).
+            _sprites.IC9 = _sprites.G4_4;
+            _sprites.IC10 = _sprites.G2_4;
             _sprites.shadow = new SpriteData("monsters/flyingshadow.png", 31, 20, 15, 10);
             _sprites.bigshadow = new SpriteData("monsters/zafreeti-shadow.png", 48, 32, 24, 16);
             _sprites.rocket = new SpriteData("monsters/daverocket.png", 16, 16, 26, 36);
@@ -87,6 +106,26 @@ package {
             _sprites.flame = new SpriteData("effects/flame_icon.png", 16, 25, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites.venom = new SpriteData("effects/venom_icon.v2.png", 16, 26, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites.venomBal = new SpriteData("effects/venomBal_icon.png", 420, 332, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            // Hell Freezes Over (com/monsters/monsters/creeps/inferno/hfo): the ice cretins' sheets and Rimegrave's, one per
+            // Academy level, copied whole (each class draws its own frames and places them by the feet), the
+            // hailstone, the frost icon and the frozen monster's shell.
+            _sprites.IC26 = new SpriteData("monsters/shivling.png", 32, 34, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC27 = new SpriteData("monsters/slushgut.png", 60, 48, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC28 = new SpriteData("monsters/rimeclaw.png", 60, 52, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC29 = new SpriteData("monsters/sleetwing.png", 60, 50, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC30 = new SpriteData("monsters/hailspitter.png", 56, 48, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC31 = new SpriteData("monsters/permafrosthulk.png", 84, 76, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25_1 = new SpriteData("monsters/rimegrave_1.png", 86, 96, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25_2 = new SpriteData("monsters/rimegrave_2.png", 102, 114, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25_3 = new SpriteData("monsters/rimegrave_3.png", 118, 130, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25_4 = new SpriteData("monsters/rimegrave_4.png", 134, 148, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25_5 = new SpriteData("monsters/rimegrave_5.png", 148, 166, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25_6 = new SpriteData("monsters/rimegrave_6.png", 164, 182, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.IC25 = _sprites.IC25_1;
+            _sprites.hailstone = new SpriteData("hfo/extras/hailstone.png", 34, 28, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.iceorb = new SpriteData("hfo/extras/iceorb.png", 22, 22, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.frost = new SpriteData("effects/frost_icon.png", 16, 20, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
+            _sprites.monsterfreeze = new SpriteData("effects/monsterfreeze.png", 64, 64, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites[SpurtzCannon.SPURTZ_PROJECTILE] = new SpriteData("buildings/ispurtz_cannon/spurtz_projectile.png", 34, 27, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites[Jars.JAR_GRAPHIC] = new SpriteData(Jars.JAR_GRAPHIC_URL, Jars.JAR_GRAPHIC_WIDTH, Jars.JAR_GRAPHIC_HEIGHT, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
             _sprites[Decoy.DECOY_WAVE] = new SpriteData("siegeimages/decoy_wave_anim.png", 61, 70, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
@@ -208,9 +247,9 @@ package {
                 }
                 return param4 / 11.25;
             }
-            if (param2 == "IC1") {
+            if (param2 == "IC1" || param2 == "IC1s") {
                 if (param6 != param4 / 11.25) {
-                    GetFrame(param1, _sprites.IC1, param4 / 11.25, param5 / 8 % 2 + 1);
+                    GetFrame(param1, _sprites[param2], param4 / 11.25, param5 / 8 % 2 + 1);
                 }
                 return param4 / 11.25;
             }
@@ -219,6 +258,36 @@ package {
                     GetFrame(param1, _sprites.IC3, param4 / 12, param5 / 8 % 8 + 1);
                 }
                 return param4 / 12;
+            }
+            if (param2 == "IC24") {
+                // Ashkarr draws herself (Ashkarr.getNextSprite); this is for anything else that asks for her:
+                // facings in 22.5 degree columns, rows 0-9 walk, 10-19 attack, 20-29 war-cry, 30-37 idle.
+                _loc10_ = int(param4 / 22.5) % 16;
+                _loc8_ = param3 == "warcry" ? int(param5 / 8) % 10 + 20 : (param3 == GLOBAL.e_BASE_MODE.ATTACK || param3 == "attack" ? int(param5 / 8) % 10 + 10 : (param3 == "idle" ? int(param5 / 8) % 8 + 30 : int(param5 / 8) % 10));
+                _loc9_ = _loc8_ * 16 + _loc10_;
+                if (param6 != _loc9_) {
+                    GetFrame(param1, _sprites.IC24, _loc10_, _loc8_);
+                }
+                return _loc9_;
+            }
+            if (param2 == "IC12" || param2 == "IC14" || param2 == "IC15" || param2 == "IC20") {
+                // (the frame id carries the row, so the walk still animates when the facing stays). Row 0 is
+                // standing, 1-8 the walk; the Flickerfiend's shimmer is rows 9-12, the Emberghoul's attack 9-16,
+                // all a frame every 8 game steps (10 a second).
+                if (param3 == "blink" && param2 == "IC14") {
+                    _loc8_ = int(param5 / 8) % 4 + 9;
+                }
+                else if (param3 == "attack" && param2 == "IC20") {
+                    _loc8_ = int(param5 / 8) % 8 + 9;
+                }
+                else {
+                    _loc8_ = param3 == "idle" ? 0 : int(param5 / 8) % 8 + 1;
+                }
+                _loc9_ = int(param4 / 12) % 30 + _loc8_ * 30;
+                if (param6 != _loc9_) {
+                    GetFrame(param1, _sprites[param2], int(param4 / 12) % 30, _loc8_);
+                }
+                return _loc9_;
             }
             if (param2 == "IC5") {
                 if (param6 != param4 / 12) {
@@ -356,6 +425,16 @@ package {
                 if (param6 != param4 / 11.25) {
                     GetFrame(param1, _sprites.rocket, param4 / 11.25);
                 }
+                return param4 / 11.25;
+            }
+            if (param2 == "iceorb") {
+                // 4 frames, a slow shimmer (the orb looks the same every way)
+                GetFrame(param1, _sprites.iceorb, int(param5 / 4) % 4, 0);
+                return 0;
+            }
+            if (param2 == "hailstone") {
+                // 32 facings x 3 rows, as the Spurtz cannon's projectile; rows 1-2 tumble
+                GetFrame(param1, _sprites.hailstone, int(param4 / 11.25) % 32, param5 / 8 % 2 + 1);
                 return param4 / 11.25;
             }
             if (param2 == SpurtzCannon.SPURTZ_PROJECTILE) {

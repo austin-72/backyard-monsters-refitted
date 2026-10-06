@@ -2,7 +2,7 @@ import { logger } from "../utils/logger.js";
 import { Filter as BadWords } from "bad-words";
 
 import { User } from "../database/models/user.model.js";
-import { postgres } from "../server.js";
+import { postgres, redis } from "../server.js";
 import {
   addAllianceMessage,
   getAllianceMessages,
@@ -27,7 +27,10 @@ import {
   unsubscribeFromChannel,
 } from "./chatTransport.js";
 import { ALLIANCE_CHANNEL_ALIAS } from "../config/ChatConfig.js";
+import { calculateBaseLevel } from "../services/base/calculateBaseLevel.js";
+import { newLineId, rolesOf } from "./chatModeration.js";
 import { ChannelType } from "../enums/Chat.js";
+import { questChat } from "../services/quests/questProgress.js";
 
 interface ResolvedChannel {
   key: string;
@@ -36,7 +39,14 @@ interface ResolvedChannel {
 
 const filter = new BadWords();
 
+/**
+ * Chat flood limit: one line every RATE_LIMIT_MS on average, with a burst of up to RATE_LIMIT_BURST
+ * lines at once. The burst matters for the HTTP chat bridge, which carries every line typed since
+ * its last request in one go: two lines typed a second apart can reach here in the same millisecond.
+ * (client.lastMsgAt is the time the next line would be due if lines kept coming at the average rate.)
+ */
 const RATE_LIMIT_MS = 500;
+const RATE_LIMIT_BURST = 3;
 const MAX_MSG_LEN = 200;
 
 /**
@@ -157,7 +167,37 @@ export const getChannelHistory = async (channel: string, info: ChannelInfo): Pro
   if (info.type !== ChannelType.Alliance) return await getHistory(channel);
 
   const em = postgres.orm.em.fork();
-  return await getAllianceMessages(info.allianceId, em);
+  const entries = await getAllianceMessages(info.allianceId, em);
+  return await withLevels(entries);
+};
+
+/**
+ * Alliance lines carry the author's yard level, "[12] Name", as Global's do (the feed stores only the
+ * author): one query for the authors of the lines in it. Shouts are sentences and stay as they are.
+ */
+const withLevels = async (entries: HistoryEntry[]): Promise<HistoryEntry[]> => {
+  const ids = [...new Set(entries.filter((e) => e.messageType === AllianceMessageType.MESSAGE && e.userId > 0).map((e) => e.userId))];
+  if (!ids.length) return entries;
+  try {
+    const rows = await postgres.em
+      .getConnection()
+      .execute<{ userid: number; username: string; points: string | null; basevalue: string | null }[]>(
+        `SELECT u.userid, u.username, s.points, s.basevalue
+           FROM bym."user" u LEFT JOIN bym.save s ON s.basesaveid = u.save_basesaveid
+          WHERE u.userid IN (${ids.map(() => "?").join(",")})`,
+        ids
+      );
+    const names = new Map(rows.map((r) => [Number(r.userid), `[${calculateBaseLevel(r.points ?? "0", r.basevalue ?? "0")}] ${r.username}`]));
+    const roles = await rolesOf(rows.map((r) => ({ userid: Number(r.userid), username: r.username })));
+    return entries.map((e) => {
+      if (e.messageType !== AllianceMessageType.MESSAGE || !names.has(e.userId)) return e;
+      const role = roles.get(e.userId);
+      return { ...e, displayName: names.get(e.userId)!, ...(role && { role }) };
+    });
+  } catch (err) {
+    logger.warn(`Chat: alliance history levels failed: ${err}`);
+    return entries;
+  }
 };
 
 /**
@@ -188,15 +228,26 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
 
   const now = Date.now();
 
-  if (now - client.lastMsgAt < RATE_LIMIT_MS) {
+  // Muted from the admin panel (services/admin/admin.ts): the line is not posted and only the
+  // speaker is told why.
+  const mutedUntil = Number((await redis.get(`chat:mute:${client.userId}`)) ?? 0);
+  if (mutedUntil > now) {
+    trace("refused, muted");
+    send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.Muted, minutes: Math.ceil((mutedUntil - now) / 60_000) });
+    return;
+  }
+
+  const due = Math.max(now, client.lastMsgAt) + RATE_LIMIT_MS;
+  if (due - now > RATE_LIMIT_MS * RATE_LIMIT_BURST) {
     trace("refused, rate limited");
     send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.RateLimited });
     return;
   }
 
-  client.lastMsgAt = now;
+  client.lastMsgAt = due;
 
-  const messageBody = filter.clean(body.slice(0, MAX_MSG_LEN).trim());
+  // (control characters and line breaks never reach anyone; the game shows the text as text, not markup)
+  const messageBody = filter.clean(String(body ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, MAX_MSG_LEN).trim());
 
   if (!messageBody) return;
 
@@ -206,6 +257,7 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
     allianceImage: null,
     body: messageBody,
     messageType: AllianceMessageType.MESSAGE,
+    ...(client.role && { role: client.role }),
   };
 
   let entry: HistoryEntry;
@@ -216,9 +268,9 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
     const em = postgres.orm.em.fork();
     const stored = await addAllianceMessage(record, em);
 
-    entry = { ...fields, displayName: client.username, ts: stored.created_at.getTime() };
+    entry = { ...fields, displayName: client.displayName, ts: stored.created_at.getTime(), id: `a${stored.id}` };
   } else {
-    entry = { ...fields, displayName: client.displayName, ts: now };
+    entry = { ...fields, displayName: client.displayName, ts: now, id: newLineId() };
 
     await pushMessage(channel, entry);
   }
@@ -233,4 +285,7 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
   trace(`delivered (${messageBody.length} characters)`);
 
   publishToChannel(channel, JSON.stringify(outgoing));
+
+  // Inferno-only quest book (never holds up or fails the line)
+  void questChat(client.userId, info.type === ChannelType.Alliance ? "alliance" : "global", messageBody);
 };

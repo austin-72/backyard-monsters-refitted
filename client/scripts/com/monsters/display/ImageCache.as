@@ -104,7 +104,10 @@ package com.monsters.display {
                 _loc7_ = [];
                 for (_loc5_ in groups[param1].urls) {
                     _loc4_ = groups[param1].urls[_loc5_];
-                    _loc7_.push([_loc5_, _loc4_.bmd]);
+                    // (a picture given up on is left out)
+                    if (_loc4_.bmd) {
+                        _loc7_.push([_loc5_, _loc4_.bmd]);
+                    }
                 }
                 for each (_loc8_ in groups[param1].cbfs) {
                     _loc8_(_loc7_, _loc4_.state);
@@ -175,6 +178,10 @@ package com.monsters.display {
             var l:Loadable = queue;
             l.loadState = LOADING;
             req_str = l.shouldPrepend ? prependImagePath + l.key : l.key;
+            if (l.shouldPrepend) {
+                // Inferno-only: the server's picture version, so a replaced picture is not served from a cache.
+                req_str = GLOBAL.ioVersioned(req_str);
+            }
             l.loader.load(new URLRequest(req_str), new LoaderContext(true));
             l.loader.contentLoaderInfo.addEventListener(Event.COMPLETE, function(param1:Event):void {
                     onAssetComplete(l);
@@ -200,10 +207,24 @@ package com.monsters.display {
                         queue.loadState = GAVE_UP;
                         load.splice(_loc2_, 1);
                         print("ImageCache.onError Failed" + queue);
+                        // Inferno-only: a picture that cannot be had no longer holds up the others of its group
+                        // (a building's top, shadow and animations load as one group: one missing file
+                        // made the whole building invisible); the group goes on without it.
+                        this.giveUpInGroups(queue);
                     }
                     return;
                 }
                 _loc2_++;
+            }
+        }
+
+        private function giveUpInGroups(l:Loadable):void {
+            var cbs:Array = l.callbacks.concat();
+            l.callbacks = [];
+            for each (var cb:Array in cbs) {
+                if (cb[0] === GroupImageLoaded && cb[1] && groups[String(cb[1])]) {
+                    GroupImageLoaded(String(cb[1]), l.key, null);
+                }
             }
         }
 

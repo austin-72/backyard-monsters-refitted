@@ -13,6 +13,7 @@ import {
 } from "./chatProtocol.js";
 import { leaveAllChannels } from "./chatRooms.js";
 import { clients, type ChatClient, type SocketData } from "./chatState.js";
+import { roleOf } from "./chatModeration.js";
 
 type ServerWebSocket<T> = import("bun").ServerWebSocket<T>;
 
@@ -89,6 +90,7 @@ export const authenticate = async (ws: ServerWebSocket<SocketData>, message: Aut
     picSquare: user.pic_square ?? null,
     channels: new Map(),
     lastMsgAt: 0,
+    role: await roleOf(user.userid, user.username),
   };
 
   ws.data.userId = user.userid;
@@ -103,5 +105,31 @@ export const authenticate = async (ws: ServerWebSocket<SocketData>, message: Aut
 
   clients.set(user.userid, client);
 
-  send(ws, { type: ServerMessageType.AuthOk, userId: user.userid, displayName });
+  send(ws, { type: ServerMessageType.AuthOk, userId: user.userid, displayName, role: client.role ?? null });
+};
+
+const lastRefresh = new Map<number, number>();
+
+/**
+ * The game's yard level changed: the name the player is shown with in chat ("[12] Name") is worked out again
+ * from the database (never from what the game sends). At most once every 10 seconds per player.
+ *
+ * @param {ChatClient} client - The client to refresh.
+ */
+export const refreshDisplayName = async (client: ChatClient, force = false) => {
+  const now = Date.now();
+  if (!force && now - (lastRefresh.get(client.userId) ?? 0) < 10_000) return;
+  lastRefresh.set(client.userId, now);
+  const em = postgres.orm.em.fork();
+  const user = await em.findOne(User, { userid: client.userId }, { fields: CHAT_FIELDS });
+  if (!user) return;
+  client.displayName = getDisplayName(user);
+  client.username = user.username;
+  client.ws.data.displayName = client.displayName;
+  const role = await roleOf(user.userid, user.username);
+  if (force && role !== (client.role ?? null)) {
+    // (the admin panel's switch: the game learns its new role as a fresh login would tell it)
+    send(client.ws, { type: ServerMessageType.AuthOk, userId: user.userid, displayName: client.displayName, role, refresh: true });
+  }
+  client.role = role;
 };

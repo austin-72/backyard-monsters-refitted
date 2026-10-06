@@ -4,6 +4,7 @@ package {
     import flash.display.MovieClip;
     import flash.events.MouseEvent;
     import flash.geom.Point;
+    import com.monsters.quests.IoQuests;
 
     public class BUILDING16 extends HatcheryBase {
 
@@ -94,6 +95,9 @@ package {
         }
 
         override public function Tick(param1:int):void {
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+                return; // no hatching in a yard being viewed or attacked (see BUILDING13)
+            }
             var _loc4_:Vector.<Object> = null;
             var _loc5_:BUILDING13 = null;
             var _loc6_:int = 0;
@@ -192,6 +196,9 @@ package {
                 return;
             }
             if (BASE._credits.Get() >= _finishCost.Get()) {
+                if (!GLOBAL.ioConfirmShiny(_finishCost.Get(), "to finish all hatching now", this.FinishNow)) {
+                    return;
+                }
                 _loc1_ = [];
                 _loc2_ = HOUSING._housingSpace.Get();
                 _loc4_ = InstanceManager.getInstancesByClass(BUILDING13);
@@ -200,7 +207,9 @@ package {
                         _loc1_.push(_loc5_);
                         if (_loc5_._inProduction != "" && _loc2_ >= CREATURES.GetProperty(_loc5_._inProduction, "cStorage")) {
                             _loc3_ = new Point(_loc5_._mc.x - 10 + Math.random() * 20, _loc5_._mc.y - 10 + Math.random() * 20);
-                            HOUSING.HousingStore(_loc5_._inProduction, _loc3_);
+                            if (HOUSING.HousingStore(_loc5_._inProduction, _loc3_) && GLOBAL.INFERNO_ONLY) {
+                                IoQuests.hatched(_loc5_._inProduction); // (the quest book)
+                            }
                             _loc2_ -= CREATURES.GetProperty(_loc5_._inProduction, "cStorage");
                             _loc5_._inProduction = "";
                             _loc5_._productionStage.Set(0);
@@ -217,7 +226,9 @@ package {
                                 _loc3_ = new Point(_loc1_[_loc9_]._mc.x - 10 + Math.random() * 20, _loc1_[_loc9_]._mc.y - 10 + Math.random() * 20);
                                 --_monsterQueue[0][1];
                                 _loc2_ -= _loc8_;
-                                HOUSING.HousingStore(_loc7_, _loc3_);
+                                if (HOUSING.HousingStore(_loc7_, _loc3_) && GLOBAL.INFERNO_ONLY) {
+                                    IoQuests.hatched(_loc7_); // (the quest book)
+                                }
                             }
                         }
                         if (_monsterQueue[0][1] <= 0) {

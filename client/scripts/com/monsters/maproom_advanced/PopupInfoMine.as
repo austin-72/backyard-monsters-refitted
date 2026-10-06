@@ -1,4 +1,6 @@
 package com.monsters.maproom_advanced {
+    import com.monsters.ai.TRIBES;
+    import com.monsters.alliances.ALLIANCES;
     import com.monsters.display.ScrollSet;
     import com.monsters.enums.EnumYardType;
     import com.monsters.mailbox.Message;
@@ -109,7 +111,12 @@ package com.monsters.maproom_advanced {
             else {
                 tName.htmlText = KEYS.Get("map_yardowner", {"v1": this._cell._name});
             }
-            tLocation.htmlText = GLOBAL.ioCoord(param1.X) + " x " + GLOBAL.ioCoord(param1.Y);
+            tLocation.htmlText = IoMapUi.location(param1.X, param1.Y);
+            // Inferno-only (bug report B16): kept clear of the Bookmark button beside it
+            if (GLOBAL.INFERNO_ONLY && bBookmark && bBookmark.visible && Math.abs(bBookmark.y - tLocation.y) < tLocation.height + 6 && bBookmark.x > tLocation.x && tLocation.x + tLocation.width > bBookmark.x - 4) {
+                tLocation.width = Math.max(40, bBookmark.x - 4 - tLocation.x);
+                GLOBAL.ioFitText(tLocation);
+            }
             tHeight.htmlText = this._cell._height - 100 + "m";
             if (this._cell._base == 2) {
                 _loc3_ = 0;
@@ -160,7 +167,7 @@ package com.monsters.maproom_advanced {
                     this.bBookmark.Enabled = true;
                 }
             }
-            if (this._cell._base == 3) {
+            if (this._cell._base == 3 && !this._cell._ioUnder) {
                 this.bRelocate.visible = true;
                 this.bInviteMigrate.visible = true;
             }
@@ -311,7 +318,7 @@ package com.monsters.maproom_advanced {
 
         private function ShowInviteMigrate():void {
             if (this._cell._base < 2) {
-                GLOBAL.Message(KEYS.Get("newmap_wmtruce", {"v1": this._cell._name}));
+                GLOBAL.Message(KEYS.Get("newmap_wmtruce", {"v1": TRIBES.DisplayName(this._cell._name)}));
                 return;
             }
             if (!this._cell._updated) {
@@ -319,6 +326,11 @@ package com.monsters.maproom_advanced {
             }
             if (this._cell._invitePendingID) {
                 this.RevokeInvitation();
+                return;
+            }
+            if (GLOBAL.INFERNO_ONLY && !ALLIANCES._myAlliance) {
+                // Invites go to alliance members only (server: services/maproom/v2/relocateInvites.ts).
+                GLOBAL.Message("<b>You need an alliance to invite someone.</b><br><br>Only members of your alliance can be invited to move to your outpost. Create or join an alliance from the Alliances menu, then try again.");
                 return;
             }
             if (Boolean(this._message) && Boolean(this._message.parent)) {

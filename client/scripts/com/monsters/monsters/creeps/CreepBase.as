@@ -387,6 +387,19 @@ package com.monsters.monsters.creeps {
             this.findHealingTargets();
         }
 
+        /**
+         * Inferno-only: draws this monster from another sprite sheet from now on (Clinkerjaw's small Spurtz use
+         * "IC1s"), starting from a clean canvas so nothing of the old frame is left around the new one.
+         */
+        public function ioSkin(param1:String):void {
+            SPRITES.SetupSprite(param1);
+            _currentSkinOverride = param1;
+            this._lastFrame = -1;
+            if (_graphic) {
+                _graphic.fillRect(_graphic.rect, 0);
+            }
+        }
+
         public function changeModeDefend():void {
             _behaviour = k_sBHVR_DEFEND;
             changeMode();
@@ -795,6 +808,11 @@ package com.monsters.monsters.creeps {
                     tmpPointC.x = building._middle;
                     tmpPointC.y = building._middle;
                     tmpPointB.add(tmpPointC);
+                    if (_creatureID == "IC15") {
+                        // Inferno-only: the Fusebug's blast is measured from the building's middle (the stock
+                        // line above drops its result, so Eye-ra's is measured from the building's corner)
+                        tmpPointB = tmpPointB.add(tmpPointC);
+                    }
                     distancePoint = tmpPointA.subtract(tmpPointB);
                     distanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
                     if (distanceSquared < 3600) {
@@ -827,7 +845,8 @@ package com.monsters.monsters.creeps {
                 }
             }
             if (Boolean(damageDealt) && Boolean(_explode)) {
-                ATTACK.Log("creep" + _id, "<font color=\"#0000FF\">" + KEYS.Get("attack_log_eyera") + "</font>");
+                // (Inferno-only: the Fusebug has a line of its own, not Eye-ra's)
+                ATTACK.Log("creep" + _id, "<font color=\"#0000FF\">" + KEYS.Get(_creatureID == "IC15" ? "attack_log_fusebug" : "attack_log_eyera") + "</font>");
                 EFFECTS.Scorch(_tmpPoint);
             }
             setHealth(0);
@@ -1427,7 +1446,9 @@ package com.monsters.monsters.creeps {
                 }
                 return true;
             }
-            if (_frameNumber % 200) {
+            // A defender on its way back to the bunker looks for a new attacker every 10 steps (this ran on
+            // 199 of every 200 steps: a range search per defender per step in a big raid).
+            if (_frameNumber % 10 == 0) {
                 this.findDefenseTargets();
             }
             if (_atTarget && _behaviour == k_sBHVR_BUNKER) {
@@ -1733,8 +1754,44 @@ package com.monsters.monsters.creeps {
                 this._lastFrame = CreepSkinManager.instance.GetSprite(_graphic, _creatureID, "flying", m_rotation, 0, this._lastFrame, _currentSkinOverride);
             }
             else {
-                this._lastFrame = CreepSkinManager.instance.GetSprite(_graphic, _creatureID, spriteAction, m_rotation, _frameNumber, this._lastFrame, _currentSkinOverride);
+                this._lastFrame = CreepSkinManager.instance.GetSprite(_graphic, _creatureID, this.ioAction(), m_rotation, _frameNumber, this._lastFrame, _currentSkinOverride);
             }
+        }
+
+        /**
+         * Inferno-only: the new Inferno monsters don't run on the spot. While they fight (at their target) they
+         * show their attack rows if their sheet has them (the Emberghoul), else their standing frame (row 0);
+         * standing still otherwise (held by a root, waiting) they show the standing frame too. Their own
+         * actions (the Flickerfiend's "blink") are left as they are. Stock monsters are unchanged.
+         */
+        public static const IO_STILL:Object = {"IC12": "idle", "IC14": "idle", "IC15": "idle", "IC20": "attack"};
+
+        private var _ioLastX:Number = NaN;
+
+        private var _ioLastY:Number = NaN;
+
+        private var _ioStillFor:int = 0;
+
+        /** Inferno-only: true once it hasn't moved for a few drawn frames (or is fighting). */
+        public function ioStandingStill():Boolean {
+            var moved:Boolean = _tmpPoint.x != this._ioLastX || _tmpPoint.y != this._ioLastY;
+            this._ioLastX = _tmpPoint.x;
+            this._ioLastY = _tmpPoint.y;
+            this._ioStillFor = moved ? 0 : this._ioStillFor + 1;
+            return this._ioStillFor >= 3;
+        }
+
+        /** The action to draw: see IO_STILL. */
+        protected function ioAction():String {
+            var fight:String = IO_STILL[_creatureID];
+            if (!fight || spriteAction != "walking" || _currentSkinOverride) {
+                return spriteAction;
+            }
+            var still:Boolean = this.ioStandingStill();
+            if (health > 0 && (_attacking || _atTarget)) {
+                return fight;
+            }
+            return still ? "idle" : "walking";
         }
 
         override protected function hackCheck():Boolean {

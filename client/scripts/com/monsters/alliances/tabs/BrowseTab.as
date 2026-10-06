@@ -170,7 +170,8 @@ package com.monsters.alliances.tabs {
                             rank: int(item.rank),
                             name: String(item.name),
                             members: int(item.members),
-                            ep: String(item.ep),
+                            // (Inferno: empire value, with its thousands marked; it runs to hundreds of millions)
+                            ep: GLOBAL.INFERNO_ONLY ? GLOBAL.FormatNumber(Number(item.ep)) : String(item.ep),
                             leader: String(item.leader_name),
                             leader_baseid: Number(item.leader_baseid),
                             relationship: int(item.relationship),
@@ -224,7 +225,7 @@ package com.monsters.alliances.tabs {
          * Recolours one row's shield frame after its relationship changes.
          *
          * A stance write only ever alters the `relationship` field of that one row -
-         * searchAlliances orders by empire points and filters on name and world, so
+         * searchAlliances orders by empire points (Inferno: empire value) and filters on name and world, so
          * nothing can reorder or drop out - which is why this repaints in place
          * rather than refetching the page.
          *
@@ -406,7 +407,7 @@ package com.monsters.alliances.tabs {
             _addLabel(tableMC, KEYS.Get("alliance_col_rank"), C_RANK_X, 0, C_RANK_W, HEADER_H, true, TextFormatAlign.CENTER);
             _addLabel(tableMC, KEYS.Get("alliance_col_name"), C_NAME_X + 5, 0, C_MEM_X - C_NAME_X - 5, HEADER_H, true, TextFormatAlign.LEFT);
             _addLabel(tableMC, KEYS.Get("alliance_col_members"), C_MEM_X, 0, C_MEM_W, HEADER_H, true, TextFormatAlign.CENTER);
-            _addLabel(tableMC, KEYS.Get("alliance_col_ep"), C_EP_X, 0, C_EP_W, HEADER_H, true, TextFormatAlign.CENTER);
+            _addLabel(tableMC, KEYS.Get(GLOBAL.INFERNO_ONLY ? "io_alliance_col_ev" : "alliance_col_ep"), C_EP_X, 0, C_EP_W, HEADER_H, true, TextFormatAlign.CENTER);
             _addLabel(tableMC, KEYS.Get("alliance_col_leader"), C_LDR_X + 5, 0, C_LDR_W - 5, HEADER_H, true, TextFormatAlign.LEFT);
             _addLabel(tableMC, KEYS.Get("alliance_col_actions"), C_ACT_X, 0, C_ACT_W, HEADER_H, true, TextFormatAlign.CENTER);
 

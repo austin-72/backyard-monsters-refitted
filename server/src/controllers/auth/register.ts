@@ -5,9 +5,11 @@ import { postgres } from "../../server.js";
 import { User } from "../../database/models/user.model.js";
 import { FilterFrontendKeys } from "../../utils/FrontendKey.js";
 import { emailUniqueErr, usernameUniqueErr } from "../../errors/errors.js";
+import { isReservedAdminName, usernameTakenIgnoringCase } from "../../services/admin/admin.js";
 import { logger } from "../../utils/logger.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { UserRegistrationSchema } from "../../schemas/AuthSchemas.js";
+import { parseInput } from "../../schemas/parseInput.js";
 import { BYMR_CDN } from "../../services/discord/fetchDiscordAvatar.js";
 
 /**
@@ -28,7 +30,7 @@ const defaultAvatarHost = () => {
 };
 
 export const register: KoaController = async (ctx) => {
-  const { ref, ...registeredUser } = UserRegistrationSchema.parse(ctx.request.body);
+  const { ref, ...registeredUser } = parseInput(UserRegistrationSchema, ctx.request.body);
 
   // Find user by username or email
   const existingUser = await postgres.em.findOne(User, {
@@ -46,6 +48,11 @@ export const register: KoaController = async (ctx) => {
     if (isUsernameTaken) throw usernameUniqueErr();
     if (isEmailTaken) throw emailUniqueErr();
   }
+
+  // A name that differs from an existing one only in capitals is taken too (an admin's name above all).
+  if (registeredUser.username && (await usernameTakenIgnoringCase(registeredUser.username))) throw usernameUniqueErr();
+  // The configured admin names are reserved, in any capitals (services/admin/admin.ts).
+  if (isReservedAdminName(registeredUser.username)) throw usernameUniqueErr();
 
   const hash = await bcrypt.hash(registeredUser.password!, 10);
 

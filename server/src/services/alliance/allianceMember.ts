@@ -28,6 +28,12 @@ export interface AllianceMember {
   last_attacker: string;
   is_leader: boolean;
   status: AllianceMemberStatus;
+  /** Inferno-only: "leader", "officer" or "member". */
+  role?: string;
+  /** Inferno-only: outposts and empire value (main yard and outposts) on the map; when last saved (seconds). */
+  outposts?: number;
+  empire?: number;
+  last_seen?: number;
 }
 
 export type LoadedMember = Loaded<User, never, (typeof ALLIANCE_MEMBER_FIELDS)[number]>;
@@ -42,6 +48,7 @@ export const ALLIANCE_MEMBER_FIELDS = [
   "save.basevalue",
   "save.protected",
   "save.lastattackername",
+  "save.savetime",
 ] as const;
 
 const MEMBER_SUMMARY_FIELDS = [
@@ -86,6 +93,8 @@ export const toAllianceMember = (
     last_attacker: save.lastattackername ?? "",
     is_leader: isLeader,
     status,
+    role: alliance_role ?? "member",
+    last_seen: Number(save.savetime ?? 0),
   };
 };
 

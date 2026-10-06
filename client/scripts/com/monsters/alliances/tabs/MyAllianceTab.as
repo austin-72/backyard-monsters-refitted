@@ -355,6 +355,8 @@ package com.monsters.alliances.tabs {
             if (name == null || name == "") {
                 name = String(user);
             }
+            // (the chat sends "[12] Name"; this window shows the name beside the avatar)
+            name = name.replace(/^\s*\[[^\]]*\]\s*/, "");
             _appendUserRow(name, message, picSquare, ts);
         }
 

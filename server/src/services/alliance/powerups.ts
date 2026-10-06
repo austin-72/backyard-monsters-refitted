@@ -72,6 +72,9 @@ export const alliancePowerup = async (allianceId: number): Promise<Powerup[]> =>
     } else if (status.active && status.end_time <= now) {
       status.active = false;
       status.end_time += rules.recharge_time;
+    } else if (!status.active && status.end_time > now + rules.recharge_time) {
+      // A charge started under a longer recharge time (the rules were shortened): cap it.
+      status.end_time = now + rules.recharge_time;
     }
 
     return { rules, status };
@@ -171,9 +174,16 @@ export const runningPowerups = async (allianceId: User["alliance_id"]): Promise<
   if (!allianceId) return [];
 
   const now = getCurrentDateTime();
-  const powerups = await alliancePowerup(allianceId);
 
-  return powerups
-    .filter(({ status }) => status.active && status.end_time > now)
-    .map(({ status }) => ({ id: status.powerup, endtime: status.end_time }));
+  // Read only: this runs on every base load and every half-minute poll of every member. Running means
+  // started and not ended, whatever state the row's charge is in; the rows are brought up to date (and
+  // written) by the alliance's power-up window, not here. It used to flush the whole unit of work (the
+  // player's full save included) on every poll.
+  const rows = await postgres.em.fork().find(
+    AlliancePowerup,
+    { alliance_id: allianceId, active: true, end_time: { $gt: now } },
+    { fields: ["powerup", "end_time"] }
+  );
+
+  return rows.map((row) => ({ id: row.powerup, endtime: row.end_time }));
 };

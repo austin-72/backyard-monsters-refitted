@@ -84,7 +84,8 @@ package {
                 LOGGER.Log("err", "INFERNOPORTAL.AscendMonsters No inferno monster data");
                 GLOBAL.ErrorMessage("INFERNOPORTAL.AscendMonsters No inferno monster data");
             };
-            if (!BASE.isMainYard) {
+            // Inferno-only: no separate Inferno yard to bring monsters up from (the server has none either).
+            if (!BASE.isMainYard || GLOBAL.INFERNO_ONLY) {
                 return;
             }
             PLEASEWAIT.Show(KEYS.Get("msg_loading"));

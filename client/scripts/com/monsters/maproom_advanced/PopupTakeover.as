@@ -1,4 +1,5 @@
 package com.monsters.maproom_advanced {
+    import com.monsters.ai.TRIBES;
 
     import com.cc.utils.SecNum;
     import com.monsters.display.ImageCache;
@@ -77,7 +78,12 @@ package com.monsters.maproom_advanced {
             if (POWERUPS.CheckPowers(POWERUPS.ALLIANCE_CONQUEST, "NORMAL")) {
                 this._resourceCost.Set(POWERUPS.Apply(POWERUPS.ALLIANCE_CONQUEST, [this._resourceCost.Get()]));
             }
-            this._shinyCost = new SecNum(Math.ceil(Math.pow(Math.sqrt(this._resourceCost.Get() / 2), 0.75) * 4));
+            // Inferno-only: a takeover in the underworld costs twice as much (IoUnderworld)
+            var ioUnder:Boolean = GLOBAL.INFERNO_ONLY && IoUnderworld.isUnder(this._cell.X, this._cell.Y);
+            if (ioUnder) {
+                this._resourceCost.Set(this._resourceCost.Get() * IoUnderworld.costMultiplier);
+            }
+            this._shinyCost = new SecNum((GLOBAL.INFERNO_ONLY ? GLOBAL.ioPrice("takeover", 100) : Math.ceil(Math.pow(Math.sqrt(this._resourceCost.Get() / 2), 0.75) * 4)) * (ioUnder ? IoUnderworld.costMultiplier : 1));
             i = 1;
             while (i < 5) {
                 costMC = this.mcResources["mcR" + i];
@@ -111,6 +117,18 @@ package com.monsters.maproom_advanced {
                 this.tTitle.htmlText = "<b>" + KEYS.Get("takeover_outpost", {"v1": this._cell._name}) + "</b>";
             }
             this.tDescription.htmlText = "<b>" + KEYS.Get("takeover_expand") + (!!bonusStr ? " " + bonusStr : "") + "</b>";
+            if (GLOBAL.INFERNO_ONLY) {
+                // (bug report B12: how the price is worked out, said)
+                var why:String = WMBASE ? KEYS.Get("io_takeover_price_level", {"v1": WMLEVEL}) : KEYS.Get("io_takeover_price_value");
+                if (half) {
+                    why += " " + KEYS.Get("io_takeover_half");
+                }
+                if (ioUnder) {
+                    why += " " + IoUnderworld.NAME + ": " + IoUnderworld.costMultiplier + "x the price.";
+                }
+                this.tDescription.htmlText = "<b>" + KEYS.Get("takeover_expand") + (!!bonusStr ? " " + bonusStr : "") + "</b> " + why;
+                GLOBAL.ioFitHeight(this.tDescription);
+            }
             this.mcResources.mcTime.visible = false;
             this.mcResources.bAction.SetupKey("btn_useresources");
             this.mcResources.bAction.addEventListener(MouseEvent.CLICK, function(param1:MouseEvent):void {
@@ -142,7 +160,7 @@ package com.monsters.maproom_advanced {
                 PLEASEWAIT.Hide();
                 if (serverData.error == 0) {
                     BASE._takeoverFirstOpen = _cell._base == 1 ? 1 : 2;
-                    BASE._takeoverPreviousOwnersName = _cell._name;
+                    BASE._takeoverPreviousOwnersName = TRIBES.DisplayName(_cell._name); // (Inferno-only: a tribe's Inferno name)
                     MapRoom.GetCell(_cell.X, _cell.Y, true);
                     GLOBAL._mapOutpost.push(new Point(_cell.X, _cell.Y));
                     GLOBAL._resources.r1max += GLOBAL._outpostCapacity.Get();
@@ -170,6 +188,11 @@ package com.monsters.maproom_advanced {
             if (useShiny) {
                 if (GLOBAL._credits.Get() < this._shinyCost.Get()) {
                     POPUPS.DisplayGetShiny();
+                    return;
+                }
+                if (!GLOBAL.ioConfirmShiny(this._shinyCost.Get(), "to take over this outpost", function():void {
+                            TakeOverConfirm(param1);
+                        })) {
                     return;
                 }
                 takeoverVars = [["baseid", this._cell._baseID], ["shiny", this._shinyCost.Get()]];

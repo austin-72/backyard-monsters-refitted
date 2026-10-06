@@ -1,4 +1,6 @@
 package {
+    import com.monsters.events.hfo.IoHfo;
+    import com.monsters.events.hfo.IoHfoUi;
     import flash.system.System;
     import com.monsters.baseBuffs.BaseBuff;
     import com.monsters.baseBuffs.BaseBuffHandler;
@@ -10,11 +12,17 @@ package {
     import com.monsters.kingOfTheHill.graphics.KOTHHUDGraphic;
     import com.monsters.managers.InstanceManager;
     import com.monsters.maproom3.MapRoom3Cell;
+    import com.monsters.maproom_advanced.IoOutpostsPopup;
+    import com.monsters.maproom_advanced.IoGauntlet;
+    import com.monsters.display.ImageCache;
+    import flash.display.BitmapData;
+    import flash.display.Shape;
     import com.monsters.maproom_inferno.views.DescentDebuffPopup;
     import com.monsters.maproom_manager.MapRoomManager;
     import com.monsters.monsters.champions.ChampionBase;
     import com.monsters.siege.SiegeWeapons;
     import com.monsters.subscriptions.SubscriptionHandler;
+    import flash.display.Bitmap;
     import flash.display.DisplayObject;
     import flash.display.DisplayObjectContainer;
     import flash.display.Loader;
@@ -24,6 +32,20 @@ package {
     import flash.events.IOErrorEvent;
     import flash.events.MouseEvent;
     import flash.geom.Rectangle;
+    import flash.filters.DropShadowFilter;
+    import flash.geom.Point;
+    import flash.geom.Matrix;
+    import flash.net.navigateToURL;
+    import flash.filters.GlowFilter;
+    import flash.text.TextFormat;
+    import flash.text.TextField;
+    import flash.utils.Dictionary;
+    import com.monsters.admin.IoTestMode;
+    import flash.display.Graphics;
+    import com.monsters.leaderboards.IoLeaderboards;
+    import com.monsters.leaderboards.IoAttackLogs;
+    import com.monsters.leaderboards.IoChangelog;
+    import com.monsters.admin.IoDesigner;
     import flash.net.URLRequest;
     import flash.text.TextFieldAutoSize;
     import gs.*;
@@ -167,9 +189,14 @@ package {
                 });
             mc.mcR5.bAdd.buttonMode = true;
             mc.mcR5.bAdd.mouseChildren = false;
+            if (GLOBAL.INFERNO_ONLY) {
+                // Shiny cannot be bought here, and the button only said so: hide it and fit the counter.
+                mc.mcR5.bAdd.visible = false;
+                mc.mcR5.mcBG.width = 82;
+            }
             mc.mcOutposts.mcHit.addEventListener(MouseEvent.MOUSE_OVER, this.ButtonInfoShow);
             mc.mcOutposts.mcHit.addEventListener(MouseEvent.MOUSE_OUT, this.ButtonInfoHide);
-            mc.mcOutposts.bNext.addEventListener(MouseEvent.CLICK, BASE.LoadNext);
+            mc.mcOutposts.bNext.addEventListener(MouseEvent.CLICK, ioNextClick);
             mc.mcOutposts.bNext.buttonMode = true;
             mc.mcOutposts.bNext.mouseEnabled = true;
             mc.mcOutposts.bNext.mouseChildren = false;
@@ -195,12 +222,18 @@ package {
             mc.bAlert.addEventListener(MouseEvent.MOUSE_OUT, this.ButtonInfoHide);
             this._buttonIcons = [];
             this._buttonIcons = [mc.bInvite, mc.bGift, mc.bInbox, mc.bAlert];
+            if (GLOBAL.INFERNO_ONLY) {
+                // (not in the icon row: it sits in the workers' column, under the fifth, UI_WORKERS)
+                this.ioMakeGauntletButton();
+                this.ioMakeHfoButton();
+            }
             // Server flag io_hideui: a comma separated list of top-bar buttons this server has no use
             // for ("invite", "gift"). The icon row lays itself out from whichever buttons are visible.
             if (GLOBAL.ioUiHidden("invite")) {
                 mc.bInvite.visible = false;
             }
-            if (GLOBAL.ioUiHidden("gift")) {
+            if (GLOBAL.ioUiHidden("gift") && !GLOBAL.INFERNO_ONLY) {
+                // On inferno-only servers the gift button is the Daily Reward button (ioDailyButton).
                 mc.bGift.visible = false;
             }
             addEventListener(Event.ENTER_FRAME, onSpinnerTick);
@@ -241,6 +274,9 @@ package {
                     btn.mcSpinner.rotation += 4;
                 }
             }
+            if (this._ioGauntlet && this._ioGauntlet.mcSpinner && this._ioGauntlet.mcSpinner.visible) {
+                this._ioGauntlet.mcSpinner.rotation += 4;
+            }
         }
 
         private function setupScoutMode():void {
@@ -268,6 +304,11 @@ package {
             var _loc2_:Sprite = null;
             this._creatureButtonsMC = mc.addChild(new flingerLevel()) as flingerLevel;
             this._creatureButtonsMC._mc._txtContainer.flinger_txt.htmlText = KEYS.Get("txt_flinger_capacity");
+            // Inferno-only: the text is "Flinger Capacity: #v1#%" and the number has its own field (tA), so the
+            // unfilled "#v1#%" wrapped onto a second line showing under the label in every attack
+            if (GLOBAL.INFERNO_ONLY) {
+                this._creatureButtonsMC._mc._txtContainer.flinger_txt.htmlText = KEYS.Get("txt_flinger_capacity").split("#v1#")[0].replace(/\s+$/, "");
+            }
             this._creatureButtonsMC._mc._txtContainer.mcBar.visible = true;
             this._creatureButtonsMC._mc._txtContainer.tA.htmlText = "0%";
             this._creatureButtonsMC.y = 180;
@@ -448,6 +489,7 @@ package {
             if (this._descentDebuff) {
                 this._descentDebuff.x = param1.width - 160;
             }
+            this.ioSwitchButton();
             if (this.m_creatureContainer) {
                 _loc2_ = this._creatureButtons.length;
                 if (_loc2_) {
@@ -493,7 +535,7 @@ package {
                 if (Boolean(mc.mcOutposts) && Boolean(mc.mcOutposts.mcHit) && Boolean(mc.mcOutposts.bNext)) {
                     mc.mcOutposts.mcHit.removeEventListener(MouseEvent.MOUSE_OVER, this.ButtonInfoShow);
                     mc.mcOutposts.mcHit.removeEventListener(MouseEvent.MOUSE_OUT, this.ButtonInfoHide);
-                    mc.mcOutposts.bNext.removeEventListener(MouseEvent.CLICK, BASE.LoadNext);
+                    mc.mcOutposts.bNext.removeEventListener(MouseEvent.CLICK, ioNextClick);
                 }
                 if (mc.bInvite) {
                     mc.bInvite.removeEventListener(MouseEvent.CLICK, this.ButtonClick("invite"));
@@ -581,7 +623,7 @@ package {
                 loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, LoadImageError, false, 0, true);
                 loader.contentLoaderInfo.addEventListener(Event.COMPLETE, onImageLoad);
                 if (GLOBAL._loadmode == "wmattack" || GLOBAL._loadmode == "wmview" || GLOBAL._loadmode == "iwmattack" || GLOBAL._loadmode == "iwmview") {
-                    loader.load(new URLRequest(GLOBAL._storageURL + BASE._ownerPic));
+                    loader.load(new URLRequest(GLOBAL.ioVersioned(GLOBAL._storageURL + BASE._ownerPic)));
                 }
                 else if (Boolean(!GLOBAL._flags.viximo) || Boolean(!GLOBAL._flags.kongregate)) {
                     loader.load(new URLRequest(BASE._ownerPic));
@@ -773,12 +815,665 @@ package {
             var _loc6_:Number = NaN;
             var _loc2_:int = param1;
             _loc5_ = Number((_loc4_ = mc["mcR" + _loc2_])._resource);
-            _loc4_.tR.htmlText = "<b>" + GLOBAL.FormatNumber(_loc5_) + "</b>";
+            this.ioSetText(_loc4_.tR, GLOBAL.ioFreeBuild() ? "<b>Unlimited</b>" : "<b>" + GLOBAL.FormatNumber(_loc5_) + "</b>");
             _loc3_ = 90 / BASE._resources["r" + _loc2_ + "max"] * _loc5_;
             if (_loc3_ > 90) {
                 _loc3_ = 90;
             }
-            _loc4_.mcBar.width = _loc3_;
+            if (_loc4_.mcBar.width != _loc3_) {
+                _loc4_.mcBar.width = _loc3_;
+            }
+        }
+
+        /**
+         * Counts a resource up or down to its new amount (half a second). This ran every second for all four
+         * even when nothing had changed, laying the text out again on every frame of it.
+         */
+        private function ioTweenResource(index:int, amount:Number):void {
+            var clip:MovieClip = mc["mcR" + index];
+            if (Number(clip._resource) == amount) {
+                this.UpdateTweenResourceText(index); // the bar still follows a new storage size
+                return;
+            }
+            TweenLite.to(clip, 0.5, {
+                        "_resource": amount,
+                        "onUpdate": this.UpdateTweenResourceText,
+                        "onUpdateParams": [index],
+                        "ease": Linear.easeNone,
+                        "overwrite": 1
+                    });
+        }
+
+        /** Sets a text only when it changes (every set lays the text out again). */
+        private function ioSetText(field:TextField, html:String):void {
+            if (field && this._ioTexts[field] !== html) {
+                field.htmlText = html;
+                this._ioTexts[field] = html;
+                ioFit(field);
+            }
+        }
+
+        /**
+         * Inferno-only: a counter's number kept on its one line. From 50,000,000 the bar's field is too narrow
+         * and its last digit wrapped under it ("50,000,00"); such a number is drawn a little smaller instead.
+         */
+        private static function ioFit(field:TextField):void {
+            GLOBAL.ioFitText(field);
+        }
+
+        /** The text last set on each field (ioSetText). */
+        private var _ioTexts:Dictionary = new Dictionary(true);
+
+        /** The login streak as the server last sent it (flag io_streak), or null. */
+        private static function ioStreak():Object {
+            var raw:String = GLOBAL._flags && GLOBAL._flags.io_streak ? String(GLOBAL._flags.io_streak) : "";
+            if (raw == "") {
+                return null;
+            }
+            try {
+                return JSON.parse(raw);
+            }
+            catch (e:Error) {
+            }
+            return null;
+        }
+
+        /**
+         * Inferno-only: the gift button is the Daily Reward button. Its badge shows the streak day; while
+         * today's reward is waiting the badge shows the day to collect and the alert ring spins, like the
+         * notification buttons. Clicking opens the reward (BASE.ioOpenDaily).
+         */
+        private function ioDailyButton():void {
+            var status:Object = ioStreak();
+            var own:Boolean = GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD;
+            if (!status || !own || TUTORIAL._stage < 200) {
+                mc.bGift.visible = false;
+                return;
+            }
+            var waiting:Boolean = int(status.collected) != 1;
+            mc.bGift.visible = true;
+            mc.bGift.mcSpinner.visible = waiting;
+            mc.bGift.mcCounter.visible = true;
+            mc.bGift.mcCounter.t.htmlText = "<b>" + (waiting ? int(status.offerDay) : int(status.day)) + "</b>";
+        }
+
+        private var _ioSwitch:Sprite = null;
+
+        private var _ioGauntlet:MovieClip = null;
+
+        /**
+         * Inferno-only: Moloch's Gauntlet's button (com/monsters/maproom_advanced/IoGauntlet.as), with the
+         * top bar's icons: Moloch in a gold ring, which turns (like the other buttons' alert ring) while the
+         * event is open and not beaten yet.
+         */
+        private function ioMakeGauntletButton():MovieClip {
+            // Drawn round the same middle as the column's other buttons (Invite, Daily Reward, Mail: their
+            // hit area is 62 pixels from -10, so the middle is at 20.75), the same size.
+            var C:Number = 20.75;
+            var b:MovieClip = new MovieClip();
+            b.name = "ioGauntlet";
+            b.buttonMode = true;
+            b.mouseChildren = false;
+            var hit:Shape = new Shape();
+            hit.graphics.beginFill(0xFFFFFF, 0);
+            hit.graphics.drawCircle(C, C, 31);
+            hit.graphics.endFill();
+            b.addChild(hit);
+            b.graphics.lineStyle(3, 0x6B4A12, 1);
+            b.graphics.beginFill(0xE2B227, 1);
+            b.graphics.drawCircle(C, C, 25);
+            b.graphics.endFill();
+            var picture:Sprite = new Sprite();
+            var round:Shape = new Shape();
+            round.graphics.beginFill(0xFF0000, 1);
+            round.graphics.drawCircle(C, C, 21);
+            round.graphics.endFill();
+            b.addChild(picture);
+            b.addChild(round);
+            picture.mask = round;
+            ImageCache.GetImageWithCallBack("monsters/tribe_moloch_50.jpg", function(key:String, bmd:BitmapData, args:Array = null):void {
+                    var image:Bitmap = new Bitmap(bmd);
+                    image.smoothing = true;
+                    image.width = image.height = 46;
+                    image.x = image.y = C - 23;
+                    picture.addChild(image);
+                });
+            var spinner:Shape = new Shape();
+            spinner.graphics.lineStyle(3, 0xFF3A1A, 1);
+            for (var i:int = 0; i < 8; i++) {
+                var from:Number = i * Math.PI / 4;
+                spinner.graphics.moveTo(Math.cos(from) * 30, Math.sin(from) * 30);
+                for (var s:int = 1; s <= 4; s++) {
+                    spinner.graphics.lineTo(Math.cos(from + s * Math.PI / 20) * 30, Math.sin(from + s * Math.PI / 20) * 30);
+                }
+            }
+            spinner.x = spinner.y = C;
+            spinner.visible = false;
+            b.addChild(spinner);
+            b.mcSpinner = spinner;
+            b.visible = false;
+            b.addEventListener(MouseEvent.CLICK, IoGauntlet.Show);
+            // its tip points left from the right-hand column, like the workers' own
+            b.addEventListener(MouseEvent.MOUSE_OVER, function(e:MouseEvent):void {
+                    UI_WORKERS.ioShowTip(b, ioGauntletTip());
+                });
+            b.addEventListener(MouseEvent.MOUSE_OUT, function(e:MouseEvent):void {
+                    UI_WORKERS.PopupHide();
+                });
+            // In the workers' column on the right, under the fifth worker with a gap (it used to be the last
+            // of the icon row on the left, under Mail).
+            UI_WORKERS.ioAddUnderWorkers(b);
+            this._ioGauntlet = b;
+            return b;
+        }
+
+        private static function ioGauntletTip():String {
+            var ioG:Object = IoGauntlet.flag();
+            return "<b>Moloch's Gauntlet</b><br>" + (!ioG ? "The monthly event." : !ioG.open ? "Closed. It opens on the 1st of the month." : int(ioG.stage) > int(ioG.stages) ? "You beat it this month!" : "Open now! Stage " + int(ioG.stage) + " of " + int(ioG.stages) + ".");
+        }
+
+        private var _ioHfo:MovieClip = null;
+
+        /**
+         * Hell Freezes Over's button (com/monsters/events/hfo): the frozen flame in an ice ring, under Moloch's
+         * Gauntlet's, from Day 3 of the event (hidden before: the ice is still a mystery). It opens the event's
+         * window; its ring turns while a wave waits to be fought.
+         */
+        private function ioMakeHfoButton():MovieClip {
+            var C:Number = 20.75;
+            var b:MovieClip = new MovieClip();
+            b.name = "ioHfo";
+            b.buttonMode = true;
+            b.mouseChildren = false;
+            var hit:Shape = new Shape();
+            hit.graphics.beginFill(0xFFFFFF, 0);
+            hit.graphics.drawCircle(C, C, 31);
+            hit.graphics.endFill();
+            b.addChild(hit);
+            b.graphics.lineStyle(3, 0x1A4A7A, 1);
+            b.graphics.beginFill(0x9ADCFF, 1);
+            b.graphics.drawCircle(C, C, 25);
+            b.graphics.endFill();
+            var picture:Sprite = new Sprite();
+            b.addChild(picture);
+            ImageCache.GetImageWithCallBack("hfo/extras/event_icon_80.png", function(key:String, bmd:BitmapData, args:Array = null):void {
+                    var image:Bitmap = new Bitmap(bmd);
+                    image.smoothing = true;
+                    image.width = image.height = 46;
+                    image.x = image.y = C - 23;
+                    picture.addChild(image);
+                });
+            var spinner:Shape = new Shape();
+            spinner.graphics.lineStyle(3, 0x7FE0FF, 1);
+            for (var i:int = 0; i < 8; i++) {
+                var from:Number = i * Math.PI / 4;
+                spinner.graphics.moveTo(Math.cos(from) * 30, Math.sin(from) * 30);
+                for (var s:int = 1; s <= 4; s++) {
+                    spinner.graphics.lineTo(Math.cos(from + s * Math.PI / 20) * 30, Math.sin(from + s * Math.PI / 20) * 30);
+                }
+            }
+            spinner.x = spinner.y = C;
+            spinner.visible = false;
+            b.addChild(spinner);
+            b.mcSpinner = spinner;
+            b.visible = false;
+            b.addEventListener(MouseEvent.CLICK, IoHfoUi.ShowWindow);
+            b.addEventListener(MouseEvent.MOUSE_OVER, function(e:MouseEvent):void {
+                    UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("hfo_event_title") + "</b>");
+                });
+            b.addEventListener(MouseEvent.MOUSE_OUT, function(e:MouseEvent):void {
+                    UI_WORKERS.PopupHide();
+                });
+            UI_WORKERS.ioAddUnderGauntlet(b);
+            this._ioHfo = b;
+            return b;
+        }
+
+        private function ioHfoButton():void {
+            if (!this._ioHfo) {
+                return;
+            }
+            var f:Object = IoHfo.flag();
+            this._ioHfo.visible = IoHfo.buttonShown() && TUTORIAL._stage >= 200;
+            this._ioHfo.mcSpinner.visible = this._ioHfo.visible && int(f.day) >= 4 && !(Number(f.done) > 0) && int(f.current) <= 13;
+            UI_WORKERS.ioPlaceExtra();
+        }
+
+        /** Shown on the main yard (not outposts, not while attacking or visiting) when the server runs the event. */
+        private function ioGauntletButton():void {
+            this.ioHfoButton();
+            if (!this._ioGauntlet) {
+                return;
+            }
+            var status:Object = IoGauntlet.flag();
+            var own:Boolean = GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && BASE.isMainYardOrInfernoMainYard && !BASE.isOutpost;
+            this._ioGauntlet.visible = Boolean(status) && own && TUTORIAL._stage >= 200;
+            this._ioGauntlet.alpha = status && status.open ? 1 : 0.6;
+            this._ioGauntlet.mcSpinner.visible = this._ioGauntlet.visible && status && status.open && int(status.stage) <= int(status.stages);
+            // (Hell Freezes Over's button moves up into the Gauntlet's place while that one is hidden)
+            UI_WORKERS.ioPlaceExtra();
+        }
+
+        /**
+         * Inferno-only: the Switch account button, a round gold button left of save / zoom / full screen /
+         * sound / music, on the player's own yards (not during attacks). GAME.ioSwitchAccount does the rest.
+         */
+        private function ioSwitchButton():void {
+            var own:Boolean = GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD;
+            if (!GLOBAL.INFERNO_ONLY) {
+                return;
+            }
+            if (!this._ioSwitch) {
+                this._ioSwitch = new Sprite();
+                this._ioSwitch.name = "ioSwitch";
+                this._ioSwitch.addChild(new Bitmap(new io_switch_account(0, 0)));
+                this._ioSwitch.buttonMode = true;
+                this._ioSwitch.mouseChildren = false;
+                this._ioSwitch.addEventListener(MouseEvent.CLICK, function(e:MouseEvent):void {
+                        e.stopPropagation();
+                        try {
+                            GAME.ioSwitchAccount();
+                        }
+                        catch (err:Error) {
+                            LOGGER.Log("err", "Switch account: " + err.message);
+                        }
+                    });
+                this._ioSwitch.addEventListener(MouseEvent.MOUSE_OVER, this.ButtonInfoShow);
+                this._ioSwitch.addEventListener(MouseEvent.MOUSE_OUT, this.ButtonInfoHide);
+                addChild(this._ioSwitch);
+            }
+            this._ioSwitch.visible = own;
+            this._ioSwitch.x = mcSave.x - 30;
+            this._ioSwitch.y = mcSave.y;
+            // Kept on top: clips added to the top bar later (buff and status holders) must not cover it.
+            if (this._ioSwitch.parent == this && getChildIndex(this._ioSwitch) != numChildren - 1) {
+                setChildIndex(this._ioSwitch, numChildren - 1);
+            }
+        }
+
+        // ---- Inferno-only: the top bar's shortcuts (the user's, 4 October, evening)
+        //
+        // Alliances, Attack Log, Leaderboard, Change Log, right of the Shiny counter, each drawn like that counter:
+        // its stone bar behind (the counter's own art, stretched to fit), a picture on the left over the bar's end,
+        // the name over the bar in the counter's lettering. On the player's own yards in build mode. A screen too
+        // narrow for the names (on a phone: one reaching the page's menu button at the top centre) shows them as
+        // badges, just their gold pictures with no names; the Shiny counter keeps its own. (They were small square badges until then, with no names;
+        // there was no Alliances one.)
+
+        private var _ioLeaderboards:Sprite = null;
+
+        private var _ioAttackLogs:Sprite = null;
+
+        private var _ioChangelog:Sprite = null;
+
+        private var _ioAlliances:Sprite = null;
+
+        /** The bars, in their order. */
+        private var _ioBars:Array = null;
+
+        /** The counter's bar at its own size (drawn once), cut in three to stretch the middle only. */
+        private static var _ioBarArt:BitmapData = null;
+
+        private var _ioBarsCompact:int = -1;
+
+        /** Where the top bar's next button goes: right of the last shortcut bar showing, or of the Shiny counter. */
+        private function ioAfterShiny():Number {
+            var right:Number = this.ioShinyRight();
+            for each (var b:Sprite in this._ioBars || []) {
+                if (b && b.visible) {
+                    right = Math.max(right, b.x + this.ioBarWidth(b));
+                }
+            }
+            return right + 8;
+        }
+
+        private function ioShinyRight():Number {
+            var r5:MovieClip = mc.mcR5;
+            // (right of the counter's box: its hidden "+" would leave a gap)
+            return r5.mcBG && r5.bAdd && !r5.bAdd.visible ? r5.x + r5.mcBG.x + r5.mcBG.width : r5.x + r5.width;
+        }
+
+        private function ioBarWidth(b:Sprite):Number {
+            return Number(b["ioW"]) || b.width;
+        }
+
+        /** Hides every shortcut bar (not in build mode). */
+        private function ioHideBars():void {
+            for each (var b:Sprite in this._ioBars || []) {
+                if (b) {
+                    b.visible = false;
+                }
+            }
+        }
+
+        private function ioBarArt():BitmapData {
+            if (_ioBarArt) {
+                return _ioBarArt;
+            }
+            var bg:MovieClip = mc.mcR5 ? mc.mcR5.mcBG : null;
+            var art:DisplayObject = bg && bg.numChildren ? bg.getChildAt(0) : bg;
+            if (!art || art.width < 4 || art.height < 4) {
+                return null;
+            }
+            var r:Rectangle = art.getBounds(art);
+            _ioBarArt = new BitmapData(Math.ceil(r.width), Math.ceil(r.height), true, 0);
+            _ioBarArt.draw(art, new Matrix(1, 0, 0, 1, -r.x, -r.y), null, null, null, true);
+            return _ioBarArt;
+        }
+
+        /** The counter's bar `w` wide (its ends kept, the middle stretched), as high as the counter's. */
+        private function ioDrawBar(holder:Sprite, w:Number):void {
+            while (holder.numChildren) {
+                holder.removeChildAt(0);
+            }
+            var art:BitmapData = this.ioBarArt();
+            var h:Number = mc.mcR5 && mc.mcR5.mcBG ? mc.mcR5.mcBG.height : 33;
+            if (!art) {
+                // (no art to copy: a dark rounded bar)
+                var s:Shape = new Shape();
+                s.graphics.lineStyle(1.5, 0x6A6A6A, 1);
+                s.graphics.beginFill(0x2E2E2E, 0.95);
+                s.graphics.drawRoundRect(0, 0, w, h, 10, 10);
+                s.graphics.endFill();
+                holder.addChild(s);
+                return;
+            }
+            var scale:Number = h / art.height;
+            var cap:int = Math.min(int(art.width / 3), Math.ceil(18 / Math.max(0.1, scale)));
+            var parts:Array = [[0, cap], [cap, art.width - 2 * cap], [art.width - cap, cap]];
+            var capW:Number = cap * scale;
+            var x:Number = 0;
+            for (var i:int = 0; i < 3; i++) {
+                var piece:BitmapData = new BitmapData(int(parts[i][1]), art.height, true, 0);
+                piece.copyPixels(art, new Rectangle(int(parts[i][0]), 0, int(parts[i][1]), art.height), new Point(0, 0));
+                var bm:Bitmap = new Bitmap(piece);
+                bm.smoothing = true;
+                bm.height = h;
+                bm.width = i == 1 ? Math.max(1, w - 2 * capW) : capW;
+                bm.x = x;
+                x += bm.width;
+                holder.addChild(bm);
+            }
+        }
+
+        /** The counter's lettering (font, size, colour, outline) for a bar's name. */
+        private function ioBarLabel(text:String):TextField {
+            var t:TextField = new TextField();
+            var src:TextField = mc.mcR5 ? mc.mcR5.tR : null;
+            var format:TextFormat = src ? src.defaultTextFormat : new TextFormat("Verdana", 12, 0xFFFFFF, true);
+            format.align = "left";
+            t.selectable = false;
+            t.mouseEnabled = false;
+            t.embedFonts = src ? src.embedFonts : false;
+            t.defaultTextFormat = format;
+            t.autoSize = TextFieldAutoSize.LEFT;
+            t.text = text;
+            if (src && src.filters) {
+                t.filters = src.filters;
+            }
+            return t;
+        }
+
+        /**
+         * A shortcut bar: `icon` (a Sprite to draw or load the picture into, about 38 x 38) on the left, `label` on
+         * the bar; `onClick`; a tip of `tipTitle` / `tipText`.
+         */
+        private function ioMakeBar(name:String, label:String, icon:Sprite, onClick:Function, tipTitle:String, tipText:String):Sprite {
+            var b:MovieClip = new MovieClip(); // (a MovieClip: it keeps its sizes as properties)
+            b.name = name;
+            b.buttonMode = true;
+            b.mouseChildren = false;
+            var bar:Sprite = new Sprite();
+            bar.name = "bar";
+            b.addChild(bar);
+            var text:TextField = this.ioBarLabel(label);
+            text.name = "label";
+            b.addChild(text);
+            icon.name = "icon";
+            b.addChild(icon);
+            b["ioLabelW"] = text.width;
+            b.addEventListener(MouseEvent.CLICK, function(e:MouseEvent):void {
+                    e.stopPropagation();
+                    UI_WORKERS.PopupHide();
+                    onClick(e);
+                });
+            b.addEventListener(MouseEvent.MOUSE_OVER, function(e:MouseEvent):void {
+                    b.filters = [new GlowFilter(0xFFC94A, 0.8, 8, 8, 2)];
+                    UI_WORKERS.ioShowTip(b, "<b>" + tipTitle + "</b><br>" + tipText);
+                });
+            b.addEventListener(MouseEvent.MOUSE_OUT, function(e:MouseEvent):void {
+                    b.filters = [];
+                    UI_WORKERS.PopupHide();
+                });
+            mc.addChild(b);
+            return b;
+        }
+
+        /** Lays a bar out: with its name (`compact` false) or as just its picture. */
+        private function ioShapeBar(b:Sprite, compact:Boolean):void {
+            var h:Number = mc.mcR5 && mc.mcR5.mcBG ? mc.mcR5.mcBG.height : 33;
+            var text:TextField = b.getChildByName("label") as TextField;
+            var bar:Sprite = b.getChildByName("bar") as Sprite;
+            var w:Number = compact ? 38 : Math.ceil(30 + Number(b["ioLabelW"]) + 10);
+            if (b["ioShaped"] != w) {
+                b["ioShaped"] = w;
+                bar.visible = !compact;
+                if (!compact) {
+                    this.ioDrawBar(bar, w - 8);
+                    bar.x = 8;
+                }
+                // (the empty parts take the clicks too)
+                b.graphics.clear();
+                b.graphics.beginFill(0, 0);
+                b.graphics.drawRect(0, 0, w, Math.max(h, 38));
+                b.graphics.endFill();
+            }
+            b["ioW"] = w;
+            text.visible = !compact;
+            text.x = 36;
+            text.y = int((h - text.height) / 2) + 1;
+        }
+
+        /**
+         * The picture of a bar: topbar/<name>.png (server/public/assets/topbar, made by sandbox-tools/topbar-icons.py),
+         * gold like the level star and the Shiny coins, 128 px shown at 38.
+         */
+        private static function ioPictureIcon(name:String):Sprite {
+            var icon:Sprite = new Sprite();
+            ImageCache.GetImageWithCallBack("topbar/" + name + ".png", function(key:String, bmd:BitmapData, args:Array = null):void {
+                    var image:Bitmap = new Bitmap(bmd);
+                    image.smoothing = true;
+                    image.width = image.height = 38;
+                    icon.addChild(image);
+                });
+            icon.filters = [new DropShadowFilter(2, 60, 0, 0.55, 3, 3, 1, 2)];
+            return icon;
+        }
+
+        /** Makes, shows or hides, and lays out the shortcut bars. */
+        private function ioTopBars():void {
+            var mine:Boolean = GLOBAL.INFERNO_ONLY && TUTORIAL._stage >= 200 && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD) && !GLOBAL.ioDesignMode();
+            if (!mine) {
+                this.ioHideBars();
+                return;
+            }
+            if (!this._ioBars) {
+                this._ioAlliances = this.ioMakeBar("ioAlliances", KEYS.Get("tb_alliances"), ioPictureIcon("alliances"), function(e:MouseEvent):void {
+                        ALLIANCEWINDOW.Show(e);
+                    }, KEYS.Get("tb_alliances"), KEYS.Get("tb_alliances_tip"));
+                this._ioAttackLogs = this.ioMakeBar("ioAttackLogs", KEYS.Get("tb_attacklog"), ioPictureIcon("attacklog"), function(e:MouseEvent):void {
+                        IoAttackLogs.Show(e);
+                    }, KEYS.Get("al_title"), KEYS.Get("al_tip"));
+                this._ioLeaderboards = this.ioMakeBar("ioLeaderboards", KEYS.Get("tb_leaderboard"), ioPictureIcon("leaderboard"), function(e:MouseEvent):void {
+                        IoLeaderboards.Show(e);
+                    }, KEYS.Get("lb_title"), KEYS.Get("lb_tip"));
+                this._ioChangelog = this.ioMakeBar("ioChangelog", KEYS.Get("tb_changelog"), ioPictureIcon("changelog"), function(e:MouseEvent):void {
+                        IoChangelog.Show(e);
+                    }, KEYS.Get("cl_title"), KEYS.Get("cl_tip"));
+                this._ioBars = [this._ioAlliances, this._ioAttackLogs, this._ioLeaderboards, this._ioChangelog];
+            }
+            this._ioAlliances.visible = true;
+            this._ioAttackLogs.visible = true;
+            this._ioLeaderboards.visible = GLOBAL._flags && int(GLOBAL._flags.io_leaderboards) == 1;
+            this._ioChangelog.visible = true;
+            // with their names when they fit before the buttons on the right of the screen, else just the pictures
+            var shown:Array = [];
+            var full:Number = 0;
+            for each (var b:Sprite in this._ioBars) {
+                if (b.visible) {
+                    shown.push(b);
+                    full += Math.ceil(30 + Number(b["ioLabelW"]) + 10) + 6;
+                }
+            }
+            // (the screen in the stage's terms: on a wide or a phone screen the stage reaches past its 760 both ways)
+            var screen:Rectangle = GLOBAL._SCREEN ? GLOBAL._SCREEN : (GLOBAL._ROOT && GLOBAL._ROOT.stage ? new Rectangle(0, 0, GLOBAL._ROOT.stage.stageWidth, 0) : null);
+            var room:Number = screen ? mc.globalToLocal(new Point(screen.x + screen.width - 200, 0)).x - this.ioShinyRight() - 8 : 9999;
+            if (GLOBAL._flags && int(GLOBAL._flags.io_admin) == 1) {
+                room -= 250; // (an admin's Admin, Test and Designer buttons come after them)
+            }
+            if (GLOBAL.ioOnPhone && screen) {
+                // a phone: the page's menu button is at the top centre, over the game; the names stop short of it
+                room = Math.min(room, mc.globalToLocal(new Point(screen.x + screen.width / 2 - Math.max(70, screen.width * 0.08), 0)).x - this.ioShinyRight() - 8);
+            }
+            var compact:Boolean = full > room;
+            var x:Number = this.ioShinyRight() + 8;
+            var h:Number = mc.mcR5 && mc.mcR5.mcBG ? mc.mcR5.mcBG.height : 33;
+            for each (b in shown) {
+                this.ioShapeBar(b, compact);
+                b.x = x;
+                b.y = mc.mcR5.y + (h - 38) / 2 + 1;
+                x += this.ioBarWidth(b) + 6;
+            }
+            this._ioBarsCompact = compact ? 1 : 0;
+        }
+
+        private var _ioAdmin:Button_CLIP = null;
+
+        /**
+         * Inferno-only: the Admin button, for accounts in InfernoOnlyConfig.admins (flag io_admin). It gets
+         * a one-time sign-in code from the server and opens the admin panel in the browser with it.
+         */
+        public function ioShowAdminButton():void {
+            var show:Boolean = GLOBAL.INFERNO_ONLY && GLOBAL._flags && int(GLOBAL._flags.io_admin) == 1;
+            if (!show) {
+                if (this._ioAdmin) {
+                    this._ioAdmin.visible = false;
+                }
+                return;
+            }
+            if (!this._ioAdmin) {
+                this._ioAdmin = new Button_CLIP();
+                this._ioAdmin.Setup("Admin");
+                this._ioAdmin.addEventListener(MouseEvent.CLICK, this.ioOpenAdmin);
+                mc.addChild(this._ioAdmin);
+            }
+            this._ioAdmin.visible = true;
+            this._ioAdmin.x = this.ioAfterShiny();
+            this._ioAdmin.y = mc.mcR5.y;
+            // Admin test mode switch, and the test tools while it is on (com/monsters/admin/IoTestMode.as).
+            var testOn:Boolean = GLOBAL.ioTestMode();
+            if (!this._ioTest) {
+                this._ioTest = new Button_CLIP();
+                this._ioTest.addEventListener(MouseEvent.CLICK, IoTestMode.ToggleClick);
+                mc.addChild(this._ioTest);
+            }
+            if (this._ioTestShown != (testOn ? 1 : 0)) {
+                this._ioTestShown = testOn ? 1 : 0;
+                this._ioTest.Setup(testOn ? "Test: ON" : "Test: OFF");
+            }
+            this._ioTest.x = this._ioAdmin.x + this._ioAdmin.width + 6;
+            this._ioTest.y = mc.mcR5.y;
+            if (testOn && !this._ioTools) {
+                this._ioTools = new Button_CLIP();
+                this._ioTools.Setup("Test tools");
+                this._ioTools.addEventListener(MouseEvent.CLICK, IoTestMode.ShowTools);
+                mc.addChild(this._ioTools);
+            }
+            if (this._ioTools) {
+                this._ioTools.visible = testOn;
+                this._ioTools.x = this._ioTest.x + this._ioTest.width + 6;
+                this._ioTools.y = mc.mcR5.y;
+            }
+            // The Designer (com/monsters/admin/IoDesigner.as): kits, wild tribe and Moloch layouts.
+            if (!this._ioDesigner) {
+                this._ioDesigner = new Button_CLIP();
+                this._ioDesigner.Setup("Designer");
+                this._ioDesigner.name = "ioDesignerButton";
+                this._ioDesigner.addEventListener(MouseEvent.CLICK, IoDesigner.Show);
+                mc.addChild(this._ioDesigner);
+            }
+            this._ioDesigner.visible = true;
+            this._ioDesigner.x = (testOn && this._ioTools ? this._ioTools.x + this._ioTools.width : this._ioTest.x + this._ioTest.width) + 6;
+            this._ioDesigner.y = mc.mcR5.y;
+        }
+
+        private var _ioDesigner:Button_CLIP = null;
+
+        private var _ioDesignBar:Sprite = null;
+
+        private var _ioDesignBarFor:String = null;
+
+        /** The design bar under the top bar while a Designer draft is on screen (GLOBAL.ioDesign). */
+        private function ioDesignBar():void {
+            var design:Object = GLOBAL.ioDesign();
+            var id:String = design ? String(design.kind) + ":" + String(design.key) + ":" + BASE._loadedBaseID : null;
+            if (this._ioDesignBar && this._ioDesignBarFor != id) {
+                if (this._ioDesignBar.parent) {
+                    this._ioDesignBar.parent.removeChild(this._ioDesignBar);
+                }
+                this._ioDesignBar = null;
+            }
+            if (!design || GLOBAL._loadmode != GLOBAL.e_BASE_MODE.BUILD) {
+                return;
+            }
+            if (!this._ioDesignBar) {
+                this._ioDesignBar = IoDesigner.makeBar();
+                this._ioDesignBar.name = "ioDesignBar";
+                this._ioDesignBarFor = id;
+                addChild(this._ioDesignBar);
+            }
+            this._ioDesignBar.x = int(GLOBAL._SCREENCENTER.x - this._ioDesignBar.width / 2 - x);
+            this._ioDesignBar.y = this._ioTestBanner && this._ioTestBanner.visible ? 86 : 64;
+        }
+
+        private var _ioTest:Button_CLIP = null;
+
+        private var _ioTestShown:int = -1;
+
+        private var _ioTools:Button_CLIP = null;
+
+        private var _ioTestBanner:TextField = null;
+
+        /** "TEST MODE" under the top bar while admin test mode is on, on every screen of the yard. */
+        private function ioTestBanner():void {
+            var on:Boolean = GLOBAL.ioTestMode();
+            if (!on) {
+                if (this._ioTestBanner) {
+                    this._ioTestBanner.visible = false;
+                }
+                return;
+            }
+            if (!this._ioTestBanner) {
+                this._ioTestBanner = IoTestMode.makeBanner();
+                addChild(this._ioTestBanner);
+            }
+            this._ioTestBanner.visible = true;
+            this._ioTestBanner.x = int(GLOBAL._SCREENCENTER.x - this._ioTestBanner.width / 2 - x);
+            this._ioTestBanner.y = 64;
+        }
+
+        private function ioOpenAdmin(e:MouseEvent):void {
+            // A field is sent so Flash keeps this a POST (it turns an empty POST into a GET).
+            new URLLoaderApi().load(GLOBAL.serverUrl + "admin/session", [["open", 1]], function(serverData:Object):void {
+                    if (serverData && serverData.error == 0 && serverData.code) {
+                        navigateToURL(new URLRequest(GLOBAL.serverUrl + "admin/signin?code=" + String(serverData.code)), "_blank");
+                    }
+                    else {
+                        GLOBAL.Message(serverData && serverData.error ? String(serverData.error) : "The admin panel could not be opened.");
+                    }
+                }, function(e:Event):void {
+                    GLOBAL.Message("The admin panel could not be opened. Please try again.");
+                });
         }
 
         public function Update():void {
@@ -786,6 +1481,9 @@ package {
             if (!GLOBAL._catchup) {
                 if (GLOBAL._loadmode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL._loadmode == GLOBAL.e_BASE_MODE.IBUILD) {
                     this.updateBuildMode();
+                }
+                else if (this._ioBars) {
+                    this.ioHideBars();
                 }
                 else if (MapRoomManager.instance.isInMapRoom3 && (GLOBAL._loadmode === GLOBAL.e_BASE_MODE.VIEW || GLOBAL._loadmode === GLOBAL.e_BASE_MODE.WMVIEW)) {
                     this.updateScoutMode();
@@ -795,6 +1493,8 @@ package {
                 }
                 _loc1_ = BASE.BaseLevel();
                 this.SetPoints(_loc1_.lower, _loc1_.upper, _loc1_.needed, _loc1_.points, _loc1_.level, false);
+                this.ioTestBanner();
+                this.ioDesignBar();
             }
         }
 
@@ -811,35 +1511,14 @@ package {
             var _loc4_:Number = Number(BASE._resources["r" + 2].Get());
             var _loc5_:Number = Number(BASE._resources["r" + 3].Get());
             var _loc6_:Number = Number(BASE._resources["r" + 4].Get());
-            TweenLite.to(mc.mcR1, 0.5, {
-                        "_resource": _loc3_,
-                        "onUpdate": this.UpdateTweenResourceText,
-                        "onUpdateParams": [1],
-                        "ease": Linear.easeNone,
-                        "overwrite": 1
-                    });
-            TweenLite.to(mc.mcR2, 0.5, {
-                        "_resource": _loc4_,
-                        "onUpdate": this.UpdateTweenResourceText,
-                        "onUpdateParams": [2],
-                        "ease": Linear.easeNone,
-                        "overwrite": 1
-                    });
-            TweenLite.to(mc.mcR3, 0.5, {
-                        "_resource": _loc5_,
-                        "onUpdate": this.UpdateTweenResourceText,
-                        "onUpdateParams": [3],
-                        "ease": Linear.easeNone,
-                        "overwrite": 1
-                    });
-            TweenLite.to(mc.mcR4, 0.5, {
-                        "_resource": _loc6_,
-                        "onUpdate": this.UpdateTweenResourceText,
-                        "onUpdateParams": [4],
-                        "ease": Linear.easeNone,
-                        "overwrite": 1
-                    });
-            mc["mcR" + 5].tR.htmlText = "<b>" + GLOBAL.FormatNumber(BASE._credits.Get()) + "</b>";
+            this.ioTweenResource(1, _loc3_);
+            this.ioTweenResource(2, _loc4_);
+            this.ioTweenResource(3, _loc5_);
+            this.ioTweenResource(4, _loc6_);
+            this.ioSetText(mc["mcR" + 5].tR, GLOBAL.ioFreeBuild() ? "<b>Unlimited</b>" : "<b>" + GLOBAL.FormatNumber(BASE._credits.Get()) + "</b>");
+            this.ioTopBars();
+            this.ioShowAdminButton();
+            this.ioSwitchButton();
             if (MapRoomManager.instance.isInMapRoom2) {
                 mc.mcOutposts.visible = true;
                 mc.mcOutposts.tR.htmlText = GLOBAL._mapOutpost.length;
@@ -860,20 +1539,18 @@ package {
                     mc["mcR" + _loc1_].bAdd.visible = false;
                     _loc1_++;
                 }
+                this.ioGauntletButton();
                 this.SortButtonIcons();
             }
             else {
-                if (GLOBAL._flags.sroverlay) {
-                    mc.mcR5.bAdd.visible = true;
-                }
-                else {
-                    mc.mcR5.bAdd.visible = true;
-                }
+                // Inferno-only: no shiny to buy, so the shiny "+" stays hidden (see Setup).
+                mc.mcR5.bAdd.visible = !GLOBAL.INFERNO_ONLY;
                 mc.bEarn.visible = GLOBAL._flags.showFBCEarn == 1;
                 mc.bDailyDeal.visible = GLOBAL._flags.showFBCDaily == 1;
                 _loc1_ = 1;
                 while (_loc1_ < 6) {
-                    if (!mc["mcR" + _loc1_].bAdd.visible) {
+                    // Inferno-only: the shiny counter (mcR5) keeps its "+" hidden; this loop used to show it again.
+                    if (!mc["mcR" + _loc1_].bAdd.visible && !(GLOBAL.INFERNO_ONLY && _loc1_ == 5)) {
                         mc["mcR" + _loc1_].bAdd.visible = true;
                     }
                     _loc1_++;
@@ -902,7 +1579,12 @@ package {
                     mc.bInvite.visible = BYMConfig.instance.INVITE_BUTTON;
                 }
                 _loc8_ = this.extraResourceRows * this._RESOURCEBAR_HEIGHT;
+                this.ioGauntletButton();
                 this.SortButtonIcons(2, 4, _loc8_);
+                if (GLOBAL.INFERNO_ONLY) {
+                    this.ioDailyButton();
+                }
+                else {
                 mc.bGift.visible = true;
                 if ((_loc7_ = POPUPS.QueueCount("gifts")) > 0) {
                     mc.bGift.mcSpinner.visible = true;
@@ -917,6 +1599,7 @@ package {
                 else {
                     mc.bGift.mcSpinner.visible = false;
                     mc.bGift.mcCounter.visible = false;
+                }
                 }
                 mc.bInbox.visible = true;
                 if (GLOBAL._unreadMessages > 0) {
@@ -1147,20 +1830,28 @@ package {
             }
         }
 
+        /** The outposts counter's button: the Outposts list in the Inferno (it has Next in it), else the next outpost. */
+        private static function ioNextClick(param1:MouseEvent = null):void {
+            if (GLOBAL.INFERNO_ONLY && MapRoomManager.instance.isInMapRoom2) {
+                IoOutpostsPopup.Show();
+            }
+            else {
+                BASE.LoadNext(param1);
+            }
+        }
+
         /**
          * Inferno-only Invite Friends: the player's own invite link and a Copy button. A friend who
          * starts the game from the link and registers earns both players shiny (server: referrals.ts).
+         * The Invite button on the top bar opens it, and so does the button on the "still there?" popup
+         * (POPUPS.AFK) and the Invite Friends button anywhere else.
          */
-        private static function ioShowInvite():void {
+        public static function ioShowInvite():void {
+            GLOBAL._ioInviteSeen = true;
             var link:String = String(GLOBAL._flags.io_invite);
             var shiny:String = GLOBAL.FormatNumber(Number(GLOBAL._flags.io_invite_shiny));
-            var download:String = String(GLOBAL._flags.io_invite_download || "");
-            var message:String = "Join me in the inferno maproom 2, a custom bymr server!\n"
-                + "Joining with this link rewards you " + shiny + " shiny.\n"
-                + "Step 1: Download adobe flash player (link: " + download + ")\n"
-                + "Step 2: Open flash player > File > Open\n"
-                + "Step 3: Paste this link and hit Enter: " + link + "\n"
-                + "Step 4: Register and sign in!";
+            var message:String = "Join me on maproom 2 in the inferno! - A custom backyard monsters refitted server.\n"
+                + "Play in your browser at " + link;
             var popupMC:popup_generic = new popup_generic();
             var CopyMessage:Function = function(param1:MouseEvent):void {
                 System.setClipboard(message);
@@ -1170,15 +1861,44 @@ package {
             popupMC.tB.htmlText = "Copy the invite below and send it to a friend. When they start the game from your link and register, you <b>both</b> get <b>" + shiny + " shiny</b>.<br><br>"
                 + "<font color=\"#FFFFFF\">" + message.split("\n").join("<br>") + "</font><br><br>"
                 + "The shiny arrives when your friend's yard is created. Two accounts on the same connection do not count.";
+            // The popup grows to its text: at its stock size only the first lines showed, and the invite itself
+            // and the note under it were cut off. Everything moves up by half of what it grew, to stay centred.
+            var ioRoom:int = Math.ceil(popupMC.tB.textHeight + 6 - popupMC.tB.height);
+            if (ioRoom > 0) {
+                var ioI:int = 0;
+                while (ioI < popupMC.numChildren) {
+                    popupMC.getChildAt(ioI).y -= int(ioRoom / 2);
+                    ioI++;
+                }
+                popupMC.tB.height += ioRoom;
+                popupMC.bAction.y += ioRoom;
+                popupMC.mcBG.height += ioRoom;
+                popupMC.mcBG.Setup(true);
+            }
             popupMC.bAction.Setup("Copy invite");
             popupMC.bAction.addEventListener(MouseEvent.CLICK, CopyMessage);
+            // The two friendly monsters from the original Invite Friends popup, built into the game
+            // (io_invite_friends) so the picture never depends on a file being on the server.
+            var ioPicture:Bitmap = new Bitmap(new io_invite_friends(0, 0));
+            ioPicture.smoothing = true;
+            popupMC.mcImage.addChild(ioPicture);
+            popupMC.mcImage.mouseEnabled = false;
+            popupMC.mcImage.mouseChildren = false;
+            if (popupMC.mcImageFrame) {
+                popupMC.mcImage.x = popupMC.mcImageFrame.x + (popupMC.mcImageFrame.width - popupMC.mcImage.width) * 0.5;
+                popupMC.mcImage.y = popupMC.mcImageFrame.y + (popupMC.mcImageFrame.height - popupMC.mcImage.height) * 0.5;
+            }
             POPUPS.Push(popupMC, null, null, null, null, true, "now");
         }
 
         public function ButtonClick(param1:String):Function {
             var label:String = param1;
             return function(param1:MouseEvent):void {
-                if (label == "gift") {
+                if (label == "gift" && GLOBAL.INFERNO_ONLY) {
+                    // The gift button is the Daily Reward button here.
+                    BASE.ioOpenDaily();
+                }
+                else if (label == "gift") {
                     if (POPUPS.QueueCount("gifts") > 0 && GLOBAL._flags.gifts == 1) {
                         POPUPS.Show("gifts");
                     }
@@ -1367,8 +2087,23 @@ package {
                 case "bInvite":
                     _loc4_ = KEYS.Get("pop_invite");
                     break;
+                case "ioSwitch":
+                    _loc4_ = "<b>Switch account</b>";
+                    break;
                 case "bGift":
-                    if (POPUPS.QueueCount("gifts") > 0) {
+                    if (GLOBAL.INFERNO_ONLY) {
+                        var ioStatus:Object = ioStreak();
+                        if (!ioStatus) {
+                            _loc4_ = "Daily Reward";
+                        }
+                        else if (int(ioStatus.collected) != 1) {
+                            _loc4_ = "<b>Daily Reward</b><br>Day " + int(ioStatus.offerDay) + ": collect " + int(ioStatus.offerShiny) + " Shiny!";
+                        }
+                        else {
+                            _loc4_ = "<b>Daily Reward</b><br>Day " + int(ioStatus.day) + " collected. Come back tomorrow!";
+                        }
+                    }
+                    else if (POPUPS.QueueCount("gifts") > 0) {
                         _loc4_ = KEYS.Get("pop_acceptgifts", {"v1": POPUPS.QueueCount("gifts")});
                     }
                     else {
@@ -1378,11 +2113,17 @@ package {
                 case "bInbox":
                     _loc4_ = KEYS.Get("pop_mailbox");
                     break;
+                case "ioGauntlet":
+                    _loc4_ = ioGauntletTip();
+                    break;
                 case "bAlert":
                     _loc4_ = KEYS.Get("pop_alerts");
                     break;
                 case "mcHit":
                     _loc4_ = KEYS.Get("pop_outposts");
+                    if (GLOBAL.INFERNO_ONLY) {
+                        _loc4_ = "<b>Outposts</b><br>The number of Outposts under your control. Click the arrow for the list of your Outposts.";
+                    }
                     _loc2_ = param1.target.parent.x + 140;
                     _loc3_ = param1.target.parent.y + 20;
                     break;

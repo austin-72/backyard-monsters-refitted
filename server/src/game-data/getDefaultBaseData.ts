@@ -35,7 +35,7 @@ export const getDefaultBaseData = (user: User, baseType: BaseType) => {
     credits: infernoOnly ? rollStartingShiny() : devConfig.shiny || 1000,
 
     // Inferno-only: every worker is unlocked from the start. The client reads extra workers
-    // from storedata.BEW.q and caps any non-main yard at one worker on its own (QUEUE.Spawn).
+    // from storedata.BEW.q; an outpost has its own 2 (QUEUE.Spawn, GLOBAL.ioOutpostWorkers).
     ...(infernoOnly && extraWorkers > 0 && { storedata: { BEW: { q: extraWorkers } } }),
     createtime: currentTime,
     protected: currentTime + sevenDays,

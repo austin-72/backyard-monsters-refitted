@@ -6,6 +6,7 @@ package {
     import flash.events.MouseEvent;
     import flash.geom.Point;
     import flash.geom.Rectangle;
+    import com.monsters.quests.IoQuests;
 
     public class BUILDING9 extends BFOUNDATION {
 
@@ -42,6 +43,9 @@ package {
         }
 
         public function Prep(param1:String):void {
+            if (GLOBAL.INFERNO_ONLY) {
+                IoQuests.juiced(param1); // (the quest book)
+            }
             ++QUESTS._global.monstersblended;
             QUESTS._global.monstersblendedgoo += Math.ceil(CREATURES.GetProperty(param1, "cResource") * 0.7);
             ACHIEVEMENTS.Check("monstersblended", QUESTS._global.monstersblended);
@@ -52,7 +56,8 @@ package {
         }
 
         public function Blend(param1:int, param2:String, param3:Number = 1):void {
-            var _loc4_:* = param2.substr(0, 2) == "IC";
+            // Inferno-only: Rezghul (C19) is an Inferno monster here, so his juice flies as magma, not goo
+            var _loc4_:* = param2.substr(0, 2) == "IC" || GLOBAL.INFERNO_ONLY && BASE.isInfernoCreep(param2);
             this._blend += param1;
             var _loc5_:Number = 0.6;
             if (_lvl.Get() == 2) {

@@ -281,7 +281,7 @@ package com.monsters.maproom3 {
         }
 
         private function imageLoaded(param1:String, param2:BitmapData):void {
-            if (this.m_currImageUrl == param1) {
+            if (this.m_currImageUrl == param1 && this.m_bigPopup) {
                 this.m_bigPopup.mcImageContainer.addChild(new Bitmap(param2));
             }
         }

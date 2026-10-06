@@ -1,0 +1,13 @@
+import { readFileSync, writeFileSync } from "node:fs";
+import { readSwfAbc, type ApiDb } from "./abc.ts";
+const db: ApiDb = { classes: {}, globals: {} };
+readSwfAbc(readFileSync("/tmp/pg/library.swf"), db);
+writeFileSync("playerglobal-api.json", JSON.stringify(db));
+const c = db.classes;
+console.log("classes:", Object.keys(c).length, "globals:", Object.keys(db.globals).length);
+console.log("MovieClip:", c["flash.display.MovieClip"]?.super, Object.keys(c["flash.display.MovieClip"]?.inst ?? {}).slice(0, 12).join(","));
+console.log("getTimer:", JSON.stringify(db.globals["flash.utils.getTimer"]));
+console.log("BitmapData.width:", JSON.stringify(c["flash.display.BitmapData"]?.inst.width));
+console.log("Array.push:", JSON.stringify(c["Array"]?.inst.push), "Array.length:", JSON.stringify(c["Array"]?.inst.length));
+console.log("TextField.text:", JSON.stringify(c["flash.text.TextField"]?.inst.text));
+console.log("Vector:", Object.keys(c).filter(k => k.includes("Vector")).join(" | "));

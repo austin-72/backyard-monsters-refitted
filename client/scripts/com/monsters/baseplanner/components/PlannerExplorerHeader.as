@@ -119,7 +119,13 @@ package com.monsters.baseplanner.components {
             var _loc2_:int = 0;
             while (_loc2_ < this._elementList.length) {
                 if (this._elementList[_loc2_].displayName == param1.displayName) {
-                    this._elementList[_loc2_].decrement();
+                    // Inferno-only: the wall line takes out the very wall it placed and puts nothing on the mouse
+                    if (GLOBAL.INFERNO_ONLY && PLANNER.basePlanner && PLANNER.basePlanner.popup && PLANNER.basePlanner.popup.designView && PLANNER.basePlanner.popup.designView.ioPlacingLine) {
+                        this._elementList[_loc2_].ioRemoveExact(param1);
+                    }
+                    else {
+                        this._elementList[_loc2_].decrement();
+                    }
                     if (this._elementList[_loc2_].numBuildings <= 0) {
                         var _loc3_:PlannerExplorerButton = this._elementList[_loc2_];
                         _loc3_.x = 30000;

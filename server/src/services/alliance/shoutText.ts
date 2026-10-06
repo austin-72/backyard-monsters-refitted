@@ -99,6 +99,12 @@ export const composeShout = (type: AllianceMessageType, username: string, body: 
     case AllianceMessageType.POWERUP_PURCHASE:
       return createPowerupPurchaseText(username, body);
 
+    case AllianceMessageType.PINNED:
+      return `${username} pinned to the board: ${body}`;
+
+    case AllianceMessageType.OFFICER:
+      return body === "1" ? `${username} is now an officer.` : `${username} is no longer an officer.`;
+
     case AllianceMessageType.RELATIONSHIP:
       if (!targetAlliance) return "";
 

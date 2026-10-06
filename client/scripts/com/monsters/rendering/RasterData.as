@@ -1,4 +1,5 @@
 package com.monsters.rendering {
+    import flash.display.Bitmap;
     import flash.display.BitmapData;
     import flash.display.IBitmapDrawable;
     import flash.display.MovieClip;
@@ -48,6 +49,51 @@ package com.monsters.rendering {
         renderer_friend var _unSorted:Boolean;
 
         renderer_friend var _cleared:Boolean;
+
+        // Where and how it was drawn last (Renderer's partial redraw): what changed since is drawn again.
+        renderer_friend var _rsHas:Boolean;
+
+        renderer_friend var _rsFrame:uint;
+
+        renderer_friend var _rsX:Number;
+
+        renderer_friend var _rsY:Number;
+
+        renderer_friend var _rsW:Number;
+
+        renderer_friend var _rsH:Number;
+
+        renderer_friend var _rsVer:Number;
+
+        renderer_friend var _rsData:Object;
+
+        renderer_friend var _rsAlpha:uint;
+
+        renderer_friend var _rsBlend:String;
+
+        renderer_friend var _rsFilter:Object;
+
+        renderer_friend var _rsDepth:Number;
+
+        /** Its own Bitmap for drawing it through its filter (Renderer): the browser build keeps the filtered
+         *  picture of each Bitmap while it is unchanged; one Bitmap shared by every entry never matched. */
+        renderer_friend var _ioBm:Bitmap;
+
+        // Frame interpolation (browser build, Renderer.ioInterpolate): where it was drawn at the game's last two
+        // frames (_ipSeen: the renderer's frame count of the last), and where it really is while drawn between.
+        renderer_friend var _ipX0:Number = 0;
+
+        renderer_friend var _ipY0:Number = 0;
+
+        renderer_friend var _ipX1:Number = 0;
+
+        renderer_friend var _ipY1:Number = 0;
+
+        renderer_friend var _ipSeen:int = -10;
+
+        renderer_friend var _ipSx:Number = 0;
+
+        renderer_friend var _ipSy:Number = 0;
 
         public function RasterData(param1:IBitmapDrawable, param2:Point, param3:Number, param4:String = null, param5:Boolean = false) {
             super();

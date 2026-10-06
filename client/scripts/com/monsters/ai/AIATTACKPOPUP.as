@@ -64,9 +64,17 @@ package com.monsters.ai {
             var _loc2_:Object = WMATTACK._queued.attack;
             var _loc3_:Array = [];
             for (_loc4_ in _loc2_) {
-                if (_loc2_[_loc4_] > 0) {
+                if (_loc2_[_loc4_] > 0 && CREATURELOCKER._creatures[_loc4_]) {
                     _loc3_.push(_loc4_);
                 }
+            }
+            // The warning has three places for monsters, but a wild attack can bring four or five kinds: the
+            // strongest three are shown and the third one's note lists the rest.
+            _loc3_.sort(this.ioStronger);
+            var ioOthers:Array = [];
+            while (_loc3_.length > 3) {
+                var ioId:String = _loc3_.pop();
+                ioOthers.unshift(_loc2_[ioId] + " " + KEYS.Get(CREATURELOCKER._creatures[ioId].name));
             }
             switch (_loc3_.length) {
                 case 1:
@@ -79,7 +87,12 @@ package com.monsters.ai {
             var _loc5_:Array = [this.d1, this.d2, this.d3];
             var _loc6_:int = 0;
             while (_loc6_ < _loc3_.length) {
-                _loc5_[_loc6_].Setup(47, 23, KEYS.Get(CREATURELOCKER._creatures[_loc3_[_loc6_]].description), 3);
+                if (_loc6_ == 2 && ioOthers.length > 0) {
+                    _loc5_[_loc6_].Setup(47, 23, KEYS.Get(CREATURELOCKER._creatures[_loc3_[_loc6_]].description) + "<br><br><b>Also coming:</b> " + ioOthers.join(", "), 4);
+                }
+                else {
+                    _loc5_[_loc6_].Setup(47, 23, KEYS.Get(CREATURELOCKER._creatures[_loc3_[_loc6_]].description), 3);
+                }
                 _loc6_++;
             }
             c1.addChild(this.d1);
@@ -89,7 +102,7 @@ package com.monsters.ai {
             var _loc8_:int = 0;
             while (_loc8_ < _loc3_.length) {
                 ImageCache.GetImageWithCallBack("monsters/" + _loc3_[_loc8_] + "-medium.jpg", this.IconLoaded, true, 1, "", [_loc7_[_loc8_].mcIcon]);
-                _loc7_[_loc8_].tInfo.htmlText = "x" + _loc2_[_loc3_[_loc8_]];
+                _loc7_[_loc8_].tInfo.htmlText = "x" + _loc2_[_loc3_[_loc8_]] + (_loc8_ == 2 && ioOthers.length > 0 ? " +" + ioOthers.length + " more" : "");
                 _loc7_[_loc8_].tName.htmlText = "<b>" + KEYS.Get(CREATURELOCKER._creatures[_loc3_[_loc8_]].name) + "</b>";
                 _loc5_[_loc8_].visible = false;
                 _loc7_[_loc8_].mouseChildren = false;
@@ -103,6 +116,26 @@ package com.monsters.ai {
             else {
                 name_txt.htmlText = "<b>" + KEYS.Get("ai_tribe", {"v1": TRIBES.TribeForBaseID(WMATTACK._attackersBaseID).name}) + "</b>";
             }
+        }
+
+        /** Sorts monster kinds strongest first: health of one at the attack's level. */
+        private function ioStronger(a:String, b:String):int {
+            var ha:Number = ioHealth(a);
+            var hb:Number = ioHealth(b);
+            return ha > hb ? -1 : (ha < hb ? 1 : 0);
+        }
+
+        private function ioHealth(id:String):Number {
+            try {
+                var health:Array = CREATURELOCKER._creatures[id].props.health as Array;
+                var level:int = WMATTACK._queued && WMATTACK._queued.level ? int(WMATTACK._queued.level) : 1;
+                if (health && health.length > 0) {
+                    return Number(health[Math.max(0, Math.min(health.length, level) - 1)]);
+                }
+            }
+            catch (e:Error) {
+            }
+            return 0;
         }
 
         public function IconLoaded(param1:String, param2:BitmapData, param3:Array = null):void {

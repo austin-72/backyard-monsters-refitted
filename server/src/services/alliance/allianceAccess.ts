@@ -61,3 +61,13 @@ export const requireAllianceLeader = async (user: User): Promise<Alliance> => {
 
   return await requireAllianceMember(user);
 };
+
+/** Inferno-only: the leader or an officer (pins, invites, kicking members, recruiting). */
+export const isAllianceStaff = (user: User) =>
+  user.alliance_role === AllianceRole.LEADER || user.alliance_role === AllianceRole.OFFICER;
+
+export const requireAllianceStaff = async (user: User): Promise<Alliance> => {
+  if (!isAllianceStaff(user)) throw permissionErr();
+
+  return await requireAllianceMember(user);
+};

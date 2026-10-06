@@ -54,6 +54,10 @@ package {
                 "IC6": 1,
                 "IC7": 1,
                 "IC8": 1,
+                "IC12": 1,
+                "IC14": 1,
+                "IC15": 1,
+                "IC20": 1,
                 "C1": 1,
                 "C2": 1,
                 "C3": 1,
@@ -535,6 +539,11 @@ package {
                     _loc4_.push([this._selected[_loc2_].Get(), KEYS.Get(CREATURELOCKER._creatures[_loc2_].name)]);
                 }
                 if (_loc3_.Get() <= BASE._credits.Get()) {
+                    if (!GLOBAL.ioConfirmShiny(_loc3_.Get(), "on these monsters", function():void {
+                                Transfer(param1);
+                            })) {
+                        return;
+                    }
                     for (_loc2_ in this._selected) {
                         if (this._bunker._monsters[_loc2_]) {
                             this._bunker._monsters[_loc2_] += this._selected[_loc2_].Get();

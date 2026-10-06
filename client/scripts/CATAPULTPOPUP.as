@@ -1,4 +1,5 @@
 package {
+    import flash.text.TextField;
     import flash.geom.Point;
     import com.monsters.display.ImageCache;
     import com.monsters.effects.ResourceBombs;
@@ -145,6 +146,10 @@ package {
                 _mc.tTitleTwig.htmlText = KEYS.Get("#w_decoy#");
                 _mc.tTitlePebble.htmlText = KEYS.Get("#w_jars#");
                 _mc.tTitlePutty.htmlText = "Sulfur Bomb";
+                // The title boxes were sized for "Twigs" and wrap: "Marilyn Monstroe" showed as "Marilyn".
+                ioFitTitle(_mc.tTitleTwig);
+                ioFitTitle(_mc.tTitlePebble);
+                ioFitTitle(_mc.tTitlePutty);
             }
             var _loc3_:String = String(_loc1_[ResourceBombs._bombid.substr(0, 2)]);
             if (_loc2_.image != this._currentImage) {
@@ -158,6 +163,21 @@ package {
             }
             else if (ResourceBombs._state == 1) {
                 _imageContainer.txtName.htmlText = "<font color=\"#FF0000\">Cancel</font>";
+            }
+        }
+
+        /** One line, widened to the left (the titles are right-aligned) when the text is longer. */
+        private static function ioFitTitle(param1:TextField):void {
+            if (!param1) {
+                return;
+            }
+            param1.wordWrap = false;
+            param1.multiline = false;
+            var need:Number = param1.textWidth + 6;
+            if (need > param1.width) {
+                var right:Number = param1.x + param1.width;
+                param1.width = need;
+                param1.x = right - need;
             }
         }
 

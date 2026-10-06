@@ -1,4 +1,6 @@
 package {
+    import flash.display.Graphics;
+    import com.monsters.display.IoLockIcon;
     import com.monsters.display.ImageCache;
     import com.monsters.display.ScrollSet;
     import com.monsters.managers.InstanceManager;
@@ -6,6 +8,7 @@ package {
     import flash.display.Bitmap;
     import flash.display.BitmapData;
     import flash.display.MovieClip;
+    import flash.display.Shape;
     import flash.display.Sprite;
     import flash.events.Event;
     import flash.events.MouseEvent;
@@ -28,6 +31,35 @@ package {
         public var _monsterSlots:Array;
 
         public var _guidePage:int = 1;
+
+        /** Inferno-only: the monster list's columns (the art has room for five). */
+        private static const IO_COLUMNS:int = 4;
+
+        /** One column: an icon (66) and the gap (5). */
+        private static const IO_COLUMN:int = 71;
+
+        /**
+         * Inferno-only (the user's, 29 September): the monster list four across instead of five, and the stats and
+         * the description moved left into the room that frees, the description a column wider, so it is no longer
+         * cut off. The art's divider between list and stats is painted over and drawn again at the new edge.
+         */
+        private function ioNarrowList():void {
+            var cut:int = (5 - IO_COLUMNS) * IO_COLUMN;
+            var oldEdge:Number = monsterMask.x + monsterMask.width;
+            monsterMask.width -= cut;
+            scroller.x -= cut;
+            var edge:Number = oldEdge - cut;
+            var paint:Shape = new Shape();
+            paint.graphics.beginFill(0xE3D7CA);
+            paint.graphics.drawRect(edge, monsterMask.y, cut + 4, monsterMask.height + 2);
+            paint.graphics.endFill();
+            paint.graphics.lineStyle(1, 0xB1A89B);
+            paint.graphics.moveTo(edge, monsterMask.y);
+            paint.graphics.lineTo(edge, monsterMask.y + monsterMask.height + 1);
+            addChildAt(paint, getChildIndex(monsterMask));
+            mcMonsterInfo.x -= cut;
+            mcMonsterInfo.tDescription.width += cut;
+        }
 
         public function HATCHERYCCPOPUP() {
             var _loc1_:String = null;
@@ -61,6 +93,9 @@ package {
                 bTopup.addEventListener(MouseEvent.CLICK, STORE.Show(2, 4, ["BR41I", "BR42I", "BR43I"]));
             }
             bTopup.buttonMode = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioNarrowList();
+            }
             this._scrollSet = new ScrollSet();
             this._scrollSet.x = scroller.x;
             this._scrollSet.y = scroller.y;
@@ -75,7 +110,7 @@ package {
             var _loc2_:int = 0;
             var _loc3_:int = 0;
             var _loc4_:Point = new Point(10, 14);
-            _loc5_ = 5;
+            _loc5_ = GLOBAL.INFERNO_ONLY ? IO_COLUMNS : 5;
             var _loc6_:int = 5;
             this._monsterSlots = [];
             _loc7_ = CREATURELOCKER.GetSortedCreatures(true);
@@ -111,6 +146,9 @@ package {
                     if (!(Boolean(CREATURELOCKER._lockerData[_loc1_]) && CREATURELOCKER._lockerData[_loc1_].t == 2)) {
                         _loc11_.alpha = 0.75;
                         _loc12_.visible = false;
+                        if (GLOBAL.INFERNO_ONLY) {
+                            IoLockIcon.mark(_loc11_, true);
+                        }
                     }
                     _loc2_++;
                 }
@@ -167,6 +205,12 @@ package {
         public function IconLoaded(param1:String, param2:BitmapData, param3:Array = null):void {
             var _loc4_:Bitmap;
             (_loc4_ = new Bitmap(param2)).smoothing = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (Inferno-only: the picture before is taken away; they piled up at every redraw)
+                while (this[param3[0] + param3[1]].mcImage.numChildren > 0) {
+                    this[param3[0] + param3[1]].mcImage.removeChildAt(0);
+                }
+            }
             this[param3[0] + param3[1]].mcImage.addChild(_loc4_);
             this[param3[0] + param3[1]].mcImage.visible = true;
             this[param3[0] + param3[1]].mcLoading.visible = false;
@@ -476,6 +520,9 @@ package {
                 this["mcCount" + _loc3_].tCounter.text = _loc2_[_loc3_ - 1][1];
                 _loc3_++;
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioDrawArrows(_loc2_.length);
+            }
             HOUSING.HousingSpace();
             var _loc4_:int = 0;
             var _loc5_:int = 100 / HOUSING._housingCapacity.Get() * HOUSING._housingUsed.Get();
@@ -549,6 +596,7 @@ package {
             }
             mcGoo.mcBar.width = _loc5_;
             txtGoo.htmlText = "<b>" + KEYS.Get("hat_gooremaining", {"v1": GLOBAL.FormatNumber(BASE._resources.r4.Get())}) + "</b>";
+            GLOBAL.ioFitText(txtGoo); // (Inferno-only: "remaining" wrapped out of sight)
             bTopup.gotoAndStop(1);
             if (BASE._resources.r4.Get() < BASE._resources.r4max * 0.1) {
                 bTopup.gotoAndStop(2);
@@ -569,6 +617,86 @@ package {
                 bTopupMagma.gotoAndStop(1);
                 if (BASE._iresources.r4.Get() < BASE._iresources.r4max * 0.1) {
                     bTopupMagma.gotoAndStop(2);
+                }
+            }
+        }
+
+        // ---- Inferno-only (3 October): a small left and right arrow under each queued monster moves it one
+        // place earlier or later in the queue (the first is made first).
+
+        private var _ioArrows:Array = [];
+
+        private function ioArrow(left:Boolean, onClick:Function):Sprite {
+            var a:Sprite = new Sprite();
+            a.name = left ? "ioQueueLeft" : "ioQueueRight";
+            a.buttonMode = true;
+            var g:Graphics = a.graphics;
+            g.lineStyle(1, 0x5A3A10, 1);
+            g.beginFill(0xFFD06A, 1);
+            g.drawRoundRect(-8, -7, 16, 14, 6, 6);
+            g.endFill();
+            g.lineStyle(0, 0, 0);
+            g.beginFill(0x4A2A08, 1);
+            if (left) {
+                g.moveTo(3, -4);
+                g.lineTo(3, 4);
+                g.lineTo(-4, 0);
+            }
+            else {
+                g.moveTo(-3, -4);
+                g.lineTo(-3, 4);
+                g.lineTo(4, 0);
+            }
+            g.endFill();
+            a.addEventListener(MouseEvent.MOUSE_DOWN, function(e:MouseEvent):void {
+                    e.stopPropagation();
+                    SOUNDS.Play("click1");
+                    onClick();
+                });
+            return a;
+        }
+
+        private function ioMove(from:int, to:int):Function {
+            return function():void {
+                var q:Array = GLOBAL._bHatcheryCC._monsterQueue;
+                if (from < 0 || to < 0 || from >= q.length || to >= q.length) {
+                    return;
+                }
+                var t:Array = q[from];
+                q[from] = q[to];
+                q[to] = t;
+                BASE.Save();
+                Update();
+            };
+        }
+
+        private function ioDrawArrows(n:int):void {
+            for each (var old:Sprite in this._ioArrows) {
+                if (old.parent) {
+                    old.parent.removeChild(old);
+                }
+            }
+            this._ioArrows = [];
+            for (var i:int = 1; i <= n; i++) {
+                var slot:MovieClip = this["slot" + i];
+                if (!slot) {
+                    continue;
+                }
+                var cx:Number = slot.x + slot.width / 2;
+                var by:Number = slot.y + slot.height + 7;
+                if (i > 1) {
+                    var l:Sprite = this.ioArrow(true, this.ioMove(i - 1, i - 2));
+                    l.x = cx - 10;
+                    l.y = by;
+                    addChild(l);
+                    this._ioArrows.push(l);
+                }
+                if (i < n) {
+                    var r:Sprite = this.ioArrow(false, this.ioMove(i - 1, i));
+                    r.x = cx + 10;
+                    r.y = by;
+                    addChild(r);
+                    this._ioArrows.push(r);
                 }
             }
         }

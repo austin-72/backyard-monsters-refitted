@@ -116,9 +116,16 @@ package {
                 return "Lures defending monsters, then explodes.<br><b>Damage: </b>" + GLOBAL.FormatNumber(p.damage) + "<br><b>Lure range: </b>" + p.radius + "<br><b>Fuse: </b>" + p.fuse + " seconds";
             }
             if (p.kind == "jars") {
+                if (Number(p.seconds) > 0) {
+                    return "Jars every tower in range. The glass cracks as the time runs out, then breaks.<br><b>Range: </b>" + p.radius + "<br><b>Lasts: </b>" + p.seconds + " seconds";
+                }
                 return "Jars every tower in range until it shoots its way out.<br><b>Range: </b>" + p.radius + "<br><b>Durability: </b>" + GLOBAL.FormatNumber(p.durability);
             }
-            return "Enrages your monsters.<br><b>Radius: </b>" + p.radius + "<br><b>Speed: </b>" + Math.round(p.speed * 100) + "%<br><b>Armor: </b>" + Math.round((1 - p.damageMult) * 100) + "%<br><b>Lasts: </b>" + p.speedlength + " seconds";
+            var invuln:Number = Number(p.invuln) || 0;
+            var armor:Number = p.hasOwnProperty("armor") ? Number(p.armor) : 99;
+            var shield:String = (invuln > 0 ? "<br><b>Invulnerable: </b>" + invuln + " seconds<br><b>Then damage removed: </b>" : "<br><b>Damage removed: </b>")
+                + armor + "%, fading to 0 over " + (p.speedlength - invuln) + " seconds";
+            return "Speeds up and shields your monsters.<br><b>Radius: </b>" + p.radius + "<br><b>Speed: </b>" + Math.round(p.speed * 100) + "%" + shield + "<br><b>Lasts: </b>" + p.speedlength + " seconds";
         }
 
         public function Hide():void {

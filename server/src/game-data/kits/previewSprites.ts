@@ -1,182 +1,342 @@
 /**
- * Building art used to draw outpost kit previews (src/scripts/export-kits.ts).
- * Generated from the client's prop tables (INFERNOYARDPROPS, OUTPOST_YARD_PROPS for the hall, YARD_PROPS for
- * decorations): file names and the offsets the game itself uses to place each sprite on a building.
- * `top` = [file, x, y]; `anim` = [sprite sheet, x, y, frame width, frame height] (frame 0 is drawn).
+ * Building art used to draw outpost kit previews (services/kits/kitPreview.ts).
+ * Generated from the client's INFERNOYARDPROPS (29 September: every level band, the outpost hall's own Inferno
+ * art, anim2 and anim3): file names and the offsets the game itself uses to place each sprite on a building.
+ * `top` = [file, x, y]; `anim`, `anim2`, `anim3` = [sprite sheet, x, y, frame width, frame height] (frame 0 is
+ * drawn), drawn in that order over the top, as the yard draws them.
  */
-export interface PreviewSprite { top?: [string, number, number]; anim?: [string, number, number, number, number]; }
+export interface PreviewSprite {
+  top?: [string, number, number];
+  anim?: [string, number, number, number, number];
+  anim2?: [string, number, number, number, number];
+  anim3?: [string, number, number, number, number];
+}
 
 export const previewSprites: Record<number, { base: string; levels: Record<number, PreviewSprite> }> = {
  "1": {
-  base: "buildings/iboneharvester/",
-  levels: {
+  "base": "buildings/iboneharvester/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -48.0,
-     -33.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -32.0,
      -33.0,
      65.0,
      80.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -48.0,
+     -33.0
     ]
    },
    "3": {
-    top: [
-     "top.2.png",
-     -44.0,
-     25.0
-    ],
-    anim: [
+    "anim": [
      "anim.2.png",
      -44.0,
      -38.0,
      90.0,
      97.0
+    ],
+    "top": [
+     "top.2.png",
+     -44.0,
+     25.0
+    ]
+   },
+   "6": {
+    "anim": [
+     "anim.3.png",
+     -44.0,
+     -52.0,
+     90.0,
+     111.0
+    ],
+    "top": [
+     "top.3.png",
+     -35.0,
+     -12.0
+    ]
+   },
+   "10": {
+    "anim": [
+     "anim.4.png",
+     -44.0,
+     -65.0,
+     91.0,
+     124.0
+    ],
+    "top": [
+     "top.4.png",
+     -37.0,
+     -19.0
     ]
    }
   }
  },
  "2": {
-  base: "buildings/icoalproducer/",
-  levels: {
+  "base": "buildings/icoalproducer/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -32.0,
-     -40.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -21.0,
      -45.0,
      40.0,
      18.0
+    ],
+    "anim2": [
+     "anim.2.v2.png",
+     -39.0,
+     -9.0,
+     39.0,
+     63.0
+    ],
+    "anim3": [
+     "anim.3.v2.png",
+     -3.0,
+     8.9,
+     31.0,
+     18.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -32.0,
+     -40.0
     ]
    },
    "3": {
-    top: [
-     "top.2.png",
-     -40.0,
-     -50.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.2.png",
      -40.0,
      -52.0,
      74.0,
      105.0
+    ],
+    "top": [
+     "top.2.png",
+     -40.0,
+     -50.0
+    ]
+   },
+   "6": {
+    "anim": [
+     "anim.3.png",
+     -40.0,
+     -62.0,
+     77.0,
+     115.0
+    ],
+    "top": [
+     "top.3.png",
+     -34.0,
+     -57.0
+    ]
+   },
+   "10": {
+    "anim": [
+     "anim.4.png",
+     -40.0,
+     -75.0,
+     77.0,
+     128.0
+    ],
+    "top": [
+     "top.4.png",
+     -34.0,
+     -67.0
     ]
    }
   }
  },
  "3": {
-  base: "buildings/isulpherproducer/",
-  levels: {
+  "base": "buildings/isulpherproducer/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -24.0,
-     -41.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -35.0,
      -4.0,
      20.0,
      50.0
+    ],
+    "anim2": [
+     "anim.2.v2.png",
+     -20.0,
+     -58.0,
+     34.0,
+     36.0
+    ],
+    "anim3": [
+     "anim.3.v2.png",
+     -11.0,
+     -14.0,
+     26.0,
+     17.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -24.0,
+     -41.0
     ]
    },
    "3": {
-    top: [
-     "top.2.png",
-     0.0,
-     -15.0
-    ],
-    anim: [
+    "anim": [
      "anim1.2.png",
      -36.0,
      -60.0,
      60.0,
      118.0
+    ],
+    "top": [
+     "top.2.png",
+     0.0,
+     -15.0
+    ]
+   },
+   "6": {
+    "anim": [
+     "anim.3.png",
+     -40.0,
+     -60.0,
+     71.0,
+     118.0
+    ],
+    "top": [
+     "top.3.png",
+     -11.0,
+     -44.0
+    ]
+   },
+   "10": {
+    "anim": [
+     "anim.4.png",
+     -40.0,
+     -60.0,
+     71.0,
+     118.0
+    ],
+    "top": [
+     "top.4.png",
+     -11.0,
+     -44.0
     ]
    }
   }
  },
  "4": {
-  base: "buildings/imagmaproducer/",
-  levels: {
+  "base": "buildings/imagmaproducer/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -35.0,
-     -15.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      9.2,
      12.6,
      25.0,
      31.0
+    ],
+    "anim2": [
+     "anim.2.v2.png",
+     -32.0,
+     9.0,
+     36.0,
+     26.0
+    ],
+    "anim3": [
+     "anim.3.v2.png",
+     -18.0,
+     -60.0,
+     34.0,
+     58.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -35.0,
+     -15.0
     ]
    },
    "3": {
-    top: [
-     "top.2.png",
-     -40.0,
-     -15.0
+    "anim": [
+     "anim.2.v3.png",
+     -45.0,
+     -68.0,
+     83.0,
+     120.0
     ],
-    anim: [
-     "anim.1.2.png",
-     -37.0,
-     -66.0,
-     59.0,
-     52.0
+    "top": [
+     "top.2.v3.png",
+     -45.0,
+     -23.0
+    ]
+   },
+   "6": {
+    "anim": [
+     "anim.3.png",
+     -54.0,
+     -68.0,
+     92.0,
+     120.0
+    ],
+    "top": [
+     "top.3.png",
+     -54.0,
+     -23.0
+    ]
+   },
+   "10": {
+    "anim": [
+     "anim.4.png",
+     -54.0,
+     -68.0,
+     94.0,
+     120.0
+    ],
+    "top": [
+     "top.4.png",
+     -54.0,
+     -40.0
     ]
    }
   }
  },
  "5": {
-  base: "buildings/flinger/",
-  levels: {
+  "base": "buildings/iflinger/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
-     -46.0,
-     -43.0
+     -58.0,
+     -31.0
     ]
    },
    "2": {
-    top: [
+    "top": [
      "top.2.png",
-     -45.0,
+     -58.0,
      -40.0
     ]
    },
    "3": {
-    top: [
+    "top": [
      "top.3.png",
-     -47.0,
-     -45.0
+     -60.0,
+     -41.0
     ]
    },
    "4": {
-    top: [
+    "top": [
      "top.4.png",
-     -45.0,
-     -66.0
+     -63.0,
+     -61.0
     ]
    }
   }
  },
  "6": {
-  base: "buildings/istoragesilo/",
-  levels: {
+  "base": "buildings/istoragesilo/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.v2.png",
      -45.0,
      -58.0
@@ -185,117 +345,124 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "8": {
-  base: "buildings/imonsterlab/",
-  levels: {
+  "base": "buildings/imonsterlab/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -56.0,
-     8.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -42.0,
      -41.0,
      86.0,
      88.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -56.0,
+     8.0
     ]
    }
   }
  },
  "9": {
-  base: "buildings/monsterjuiceloosener/",
-  levels: {
+  "base": "buildings/imonsterjuiceloosener/",
+  "levels": {
    "1": {
-    top: [
-     "top.2.png",
-     -44.0,
-     -8.0
-    ],
-    anim: [
+    "anim": [
      "anim.2.png",
      -30.0,
      -17.0,
      60.0,
      39.0
+    ],
+    "top": [
+     "top.2.png",
+     -46.0,
+     -7.0
     ]
    }
   }
  },
  "10": {
-  base: "buildings/yardplanner/",
-  levels: {
+  "base": "buildings/iyardplanner/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
-     -45.0,
-     -29.0
+     -51.0,
+     -34.0
     ]
    }
   }
  },
  "11": {
-  base: "buildings/maproom/",
-  levels: {
+  "base": "buildings/imaproom/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
-     -58.0,
-     -67.0
+     -65.0,
+     -70.0
     ]
    }
   }
  },
  "12": {
-  base: "buildings/generalstore/",
-  levels: {
+  "base": "buildings/igeneralstore/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
-     -40.0,
-     -37.0
+     -43.0,
+     -35.0
     ]
    }
   }
  },
  "13": {
-  base: "buildings/ihatchery/",
-  levels: {
+  "base": "buildings/ihatchery/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -55.0,
-     -28.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -48.0,
      -45.0,
      33.0,
      78.0
+    ],
+    "anim2": [
+     "anim.2.v2.png",
+     4.0,
+     13.5,
+     27.0,
+     31.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -55.0,
+     -28.0
     ]
    }
   }
  },
  "14": {
-  base: "buildings/itownhall/",
-  levels: {
+  "base": "buildings/itownhall/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.v2.png",
      -52.0,
      -31.0
     ]
    },
    "2": {
-    top: [
+    "top": [
      "top.2.v2.png",
      -50.0,
      -46.0
     ]
    },
    "3": {
-    top: [
+    "top": [
      "top.3.v2.png",
      -51.0,
      -57.0
@@ -304,10 +471,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "15": {
-  base: "buildings/monsterhousing/",
-  levels: {
+  "base": "buildings/monsterhousing/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.3.v2.png",
      -109.0,
      11.0
@@ -316,36 +483,36 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "16": {
-  base: "buildings/hatcherycontrolcenter/",
-  levels: {
+  "base": "buildings/ihatcherycontrolcenter/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
-     -40.0,
-     -58.0
+     -46.0,
+     -53.0
     ]
    }
   }
  },
  "17": {
-  base: "buildings/iwalls/",
-  levels: {
+  "base": "buildings/iwalls/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.v2.png",
      -24.0,
      -5.0
     ]
    },
    "2": {
-    top: [
+    "top": [
      "top.2.v2.png",
      -20.0,
      -9.0
     ]
    },
    "3": {
-    top: [
+    "top": [
      "top.3.v2.png",
      -20.0,
      -27.0
@@ -354,10 +521,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "18": {
-  base: "buildings/walls/stone/",
-  levels: {
+  "base": "buildings/walls/stone/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -16.0,
      -21.0
@@ -366,67 +533,67 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "19": {
-  base: "buildings/monsterbaiter/",
-  levels: {
+  "base": "buildings/monsterbaiter/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.png",
-     -37.0,
-     -6.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.png",
      -33.0,
      -23.0,
      67.0,
      77.0
+    ],
+    "top": [
+     "top.1.png",
+     -37.0,
+     -6.0
     ]
    }
   }
  },
  "20": {
-  base: "buildings/icannontower/",
-  levels: {
+  "base": "buildings/icannontower/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -38.0,
-     11.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -38.0,
      -53.0,
      74.0,
      64.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -38.0,
+     11.0
     ]
    }
   }
  },
  "21": {
-  base: "buildings/isnipertower/",
-  levels: {
+  "base": "buildings/isnipertower/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -35.0,
-     -5.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -56.0,
      -86.0,
      85.0,
      81.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -35.0,
+     -5.0
     ]
    }
   }
  },
  "22": {
-  base: "buildings/bunker/",
-  levels: {
+  "base": "buildings/bunker/",
+  "levels": {
    "1": {
-    anim: [
+    "anim": [
      "anim.1.png",
      -46.0,
      -15.0,
@@ -437,29 +604,29 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "23": {
-  base: "buildings/lasertower/",
-  levels: {
+  "base": "buildings/lasertower/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.png",
-     -33.0,
-     -29.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.png",
      -13.0,
      -50.0,
      29.0,
      32.0
+    ],
+    "top": [
+     "top.1.png",
+     -33.0,
+     -29.0
     ]
    }
   }
  },
  "24": {
-  base: "buildings/boobytrap/",
-  levels: {
+  "base": "buildings/boobytrap/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -15.0,
      1.0
@@ -468,563 +635,577 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "25": {
-  base: "buildings/lightningtower/",
-  levels: {
+  "base": "buildings/lightningtower/",
+  "levels": {
    "1": {
-    top: [
-     "top.3.png",
-     -33.0,
-     -57.0
-    ],
-    anim: [
+    "anim": [
      "anim.3.png",
      -25.0,
      -15.0,
      27.0,
      53.0
+    ],
+    "top": [
+     "top.3.png",
+     -33.0,
+     -57.0
     ]
    }
   }
  },
  "26": {
-  base: "buildings/iacademy/",
-  levels: {
+  "base": "buildings/iacademy/",
+  "levels": {
    "1": {
-    top: [
+    "anim": [
+     "anim1.1.png",
+     2.0,
+     -7.0,
+     44.0,
+     26.0
+    ],
+    "anim2": [
+     "anim2.1.png",
+     -19.0,
+     -37.0,
+     48.0,
+     66.0
+    ],
+    "top": [
      "top.1.png",
      -50.0,
      -55.0
-    ],
-    anim: [
-     "anim1.1.png",
-     11.0,
-     -2.0,
-     22.0,
-     17.0
     ]
    },
    "2": {
-    top: [
-     "top.2.png",
-     -56.0,
-     -95.0
-    ],
-    anim: [
+    "anim": [
      "anim1.2.png",
      1.0,
      -18.0,
      44.0,
      26.0
+    ],
+    "anim2": [
+     "anim2.2.png",
+     -35.0,
+     -63.0,
+     67.0,
+     89.0
+    ],
+    "top": [
+     "top.2.png",
+     -56.0,
+     -95.0
     ]
    }
   }
  },
  "27": {
-  base: "buildings/trojanhorse/",
-  levels: {
+  "base": "buildings/trojanhorse/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.png",
-     -91.0,
-     -65.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.png",
      -92.0,
      -23.0,
      39.0,
      31.0
+    ],
+    "top": [
+     "top.1.png",
+     -91.0,
+     -65.0
     ]
    }
   }
  },
  "28": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-usa.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "29": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-britain.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "30": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-australia.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "31": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-brazil.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "32": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-europe.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "33": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-france.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "34": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-indonesian.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "35": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-italy.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "36": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-malaysia.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "37": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-dutch.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "38": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-newzealand.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "39": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-norway.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "40": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-poland.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "41": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-sweden.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "42": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-turkey.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "43": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-canadian.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "44": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-denmark.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "45": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-germany.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "46": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-philippines.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "47": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-singapore.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "48": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-austria.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "49": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-pirate.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "50": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -43.0
-    ],
-    anim: [
+    "anim": [
      "flag-peace.png",
      1.0,
      -35.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -43.0
     ]
    }
   }
  },
  "51": {
-  base: "buildings/catapult/",
-  levels: {
+  "base": "buildings/icatapult/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
-     -43.0,
-     12.0
+     -46.0,
+     10.0
     ]
    },
    "2": {
-    top: [
+    "top": [
      "top.2.png",
-     -44.0,
-     -21.0
+     -47.0,
+     -30.0
     ]
    },
    "3": {
-    top: [
+    "top": [
      "top.3.png",
-     -43.0,
-     -29.0
+     -47.0,
+     -30.0
     ]
    }
   }
  },
  "52": {
-  base: "buildings/decorations/flags/",
-  levels: {
+  "base": "buildings/decorations/flags/",
+  "levels": {
    "1": {
-    top: [
-     "flagpole.png",
-     -5.0,
-     -33.0
-    ],
-    anim: [
+    "anim": [
      "flag-pirate.png",
      1.0,
      -25.0,
      24.0,
      30.0
+    ],
+    "top": [
+     "flagpole.png",
+     -5.0,
+     -33.0
     ]
    }
   }
  },
  "53": {
-  base: "buildings/decorations/pumpkins/",
-  levels: {
+  "base": "buildings/decorations/pumpkins/",
+  "levels": {
    "1": {
-    anim: [
+    "anim": [
      "anim.png",
      -18.0,
      -15.0,
@@ -1035,15 +1216,15 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "54": {
-  base: "buildings/decorations/pumpkins/",
-  levels: {
+  "base": "buildings/decorations/pumpkins/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "large-top-6.png",
      -169.0,
      -60.0
     ],
-    anim: [
+    "anim": [
      "large-anim-6.png",
      -119.0,
      -113.0,
@@ -1054,10 +1235,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "55": {
-  base: "buildings/decorations/acorn/",
-  levels: {
+  "base": "buildings/decorations/acorn/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -10.0,
      -9.0
@@ -1066,10 +1247,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "56": {
-  base: "buildings/decorations/beehive/",
-  levels: {
+  "base": "buildings/decorations/beehive/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -18.0,
      -15.0
@@ -1078,10 +1259,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "57": {
-  base: "buildings/decorations/birdhouse/",
-  levels: {
+  "base": "buildings/decorations/birdhouse/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -16.0,
      -46.0
@@ -1090,10 +1271,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "58": {
-  base: "buildings/decorations/campingtent/",
-  levels: {
+  "base": "buildings/decorations/campingtent/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -30.0,
      -12.0
@@ -1102,10 +1283,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "59": {
-  base: "buildings/decorations/childrensjax/",
-  levels: {
+  "base": "buildings/decorations/childrensjax/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -11.0,
      -11.0
@@ -1114,10 +1295,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "60": {
-  base: "buildings/decorations/gnomes/",
-  levels: {
+  "base": "buildings/decorations/gnomes/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-red.png",
      -10.0,
      -31.0
@@ -1126,10 +1307,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "61": {
-  base: "buildings/decorations/gnomes/",
-  levels: {
+  "base": "buildings/decorations/gnomes/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-blue.png",
      -10.0,
      -31.0
@@ -1138,10 +1319,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "62": {
-  base: "buildings/decorations/gnomes/",
-  levels: {
+  "base": "buildings/decorations/gnomes/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-green.png",
      -10.0,
      -31.0
@@ -1150,10 +1331,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "63": {
-  base: "buildings/decorations/hammock/",
-  levels: {
+  "base": "buildings/decorations/hammock/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -25.0,
      -8.0
@@ -1162,10 +1343,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "64": {
-  base: "buildings/decorations/lawnchair/",
-  levels: {
+  "base": "buildings/decorations/lawnchair/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -24.0,
      -14.0
@@ -1174,10 +1355,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "65": {
-  base: "buildings/decorations/outhouse/",
-  levels: {
+  "base": "buildings/decorations/outhouse/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -16.0,
      -19.0
@@ -1186,10 +1367,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "66": {
-  base: "buildings/decorations/pinecone/",
-  levels: {
+  "base": "buildings/decorations/pinecone/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -13.0,
      -10.0
@@ -1198,10 +1379,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "67": {
-  base: "buildings/decorations/rock/",
-  levels: {
+  "base": "buildings/decorations/rock/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -15.0,
      0.0
@@ -1210,10 +1391,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "68": {
-  base: "buildings/decorations/scaleelectriccartoyset/",
-  levels: {
+  "base": "buildings/decorations/scaleelectriccartoyset/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -48.0,
      0.0
@@ -1222,10 +1403,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "69": {
-  base: "buildings/decorations/scarecrow/",
-  levels: {
+  "base": "buildings/decorations/scarecrow/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -25.0,
      -43.0
@@ -1234,10 +1415,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "70": {
-  base: "buildings/decorations/sundial/",
-  levels: {
+  "base": "buildings/decorations/sundial/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -23.0,
      -6.0
@@ -1246,29 +1427,29 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "71": {
-  base: "buildings/decorations/tikitorch/",
-  levels: {
+  "base": "buildings/decorations/tikitorch/",
+  "levels": {
    "1": {
-    top: [
-     "top.png",
-     -8.0,
-     -38.0
-    ],
-    anim: [
+    "anim": [
      "anim.png",
      -11.0,
      -71.0,
      16.0,
      36.0
+    ],
+    "top": [
+     "top.png",
+     -8.0,
+     -38.0
     ]
    }
   }
  },
  "72": {
-  base: "buildings/decorations/walnut/",
-  levels: {
+  "base": "buildings/decorations/walnut/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -12.0,
      -2.0
@@ -1277,10 +1458,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "73": {
-  base: "buildings/decorations/graveyardtombstone/",
-  levels: {
+  "base": "buildings/decorations/graveyardtombstone/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -22.0,
      -13.0
@@ -1289,10 +1470,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "74": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-pokey.png",
      -6.0,
      -28.0
@@ -1301,10 +1482,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "75": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-octo.png",
      -6.0,
      -23.0
@@ -1313,10 +1494,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "76": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-bolt.png",
      -10.0,
      -23.0
@@ -1325,10 +1506,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "77": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-bandito.png",
      -5.0,
      -26.0
@@ -1337,10 +1518,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "78": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-brain.png",
      -9.0,
      -28.0
@@ -1349,10 +1530,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "79": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-crabatron.png",
      -10.0,
      -29.0
@@ -1361,10 +1542,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "80": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-dave.png",
      -14.0,
      -30.0
@@ -1373,10 +1554,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "81": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-eyera.png",
      -4.0,
      -23.0
@@ -1385,10 +1566,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "82": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-fang.png",
      -10.0,
      -30.0
@@ -1397,10 +1578,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "83": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-fink.png",
      -11.0,
      -29.0
@@ -1409,10 +1590,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "84": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-ichi.png",
      -6.0,
      -29.0
@@ -1421,10 +1602,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "85": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-projectx.png",
      -19.0,
      -24.0
@@ -1433,10 +1614,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "86": {
-  base: "buildings/decorations/blackberrybush/",
-  levels: {
+  "base": "buildings/decorations/blackberrybush/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -25.0,
      -13.0
@@ -1445,10 +1626,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "87": {
-  base: "buildings/decorations/bonsaitree/",
-  levels: {
+  "base": "buildings/decorations/bonsaitree/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -41.0,
      -36.0
@@ -1457,10 +1638,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "88": {
-  base: "buildings/decorations/cactus/",
-  levels: {
+  "base": "buildings/decorations/cactus/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -14.0,
      -30.0
@@ -1469,10 +1650,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "89": {
-  base: "buildings/decorations/flytrap/",
-  levels: {
+  "base": "buildings/decorations/flytrap/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -33.0,
      -5.0
@@ -1481,10 +1662,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "90": {
-  base: "buildings/decorations/thorns/",
-  levels: {
+  "base": "buildings/decorations/thorns/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -23.0,
      -18.0
@@ -1493,10 +1674,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "91": {
-  base: "buildings/decorations/flowers/",
-  levels: {
+  "base": "buildings/decorations/flowers/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-pink.png",
      -18.0,
      -21.0
@@ -1505,10 +1686,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "92": {
-  base: "buildings/decorations/flowers/",
-  levels: {
+  "base": "buildings/decorations/flowers/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-purple.png",
      -18.0,
      -21.0
@@ -1517,10 +1698,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "93": {
-  base: "buildings/decorations/flowers/",
-  levels: {
+  "base": "buildings/decorations/flowers/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-red.png",
      -18.0,
      -21.0
@@ -1529,10 +1710,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "94": {
-  base: "buildings/decorations/flowers/",
-  levels: {
+  "base": "buildings/decorations/flowers/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-white.png",
      -18.0,
      -21.0
@@ -1541,10 +1722,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "95": {
-  base: "buildings/decorations/flowers/",
-  levels: {
+  "base": "buildings/decorations/flowers/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-yellow.png",
      -18.0,
      -21.0
@@ -1553,10 +1734,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "96": {
-  base: "buildings/decorations/statue-baseball/",
-  levels: {
+  "base": "buildings/decorations/statue-baseball/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.v2.png",
      -20.0,
      -36.0
@@ -1565,10 +1746,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "97": {
-  base: "buildings/decorations/statue-football/",
-  levels: {
+  "base": "buildings/decorations/statue-football/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.v2.png",
      -19.0,
      -39.0
@@ -1577,10 +1758,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "98": {
-  base: "buildings/decorations/statue-soccer/",
-  levels: {
+  "base": "buildings/decorations/statue-soccer/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.v2.png",
      -23.0,
      -36.0
@@ -1589,10 +1770,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "99": {
-  base: "buildings/decorations/statue-liberty/",
-  levels: {
+  "base": "buildings/decorations/statue-liberty/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.v2.png",
      -37.0,
      -118.0
@@ -1601,10 +1782,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "100": {
-  base: "buildings/decorations/statue-eiffeltower/",
-  levels: {
+  "base": "buildings/decorations/statue-eiffeltower/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -60.0,
      -121.0
@@ -1613,10 +1794,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "101": {
-  base: "buildings/decorations/statue-bigben/",
-  levels: {
+  "base": "buildings/decorations/statue-bigben/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.v2.png",
      -32.0,
      -104.0
@@ -1625,10 +1806,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "102": {
-  base: "buildings/decorations/pool/",
-  levels: {
+  "base": "buildings/decorations/pool/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -65.0,
      8.0
@@ -1637,10 +1818,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "103": {
-  base: "buildings/decorations/pond/",
-  levels: {
+  "base": "buildings/decorations/pond/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -40.0,
      14.0
@@ -1649,10 +1830,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "104": {
-  base: "buildings/decorations/zengarden/",
-  levels: {
+  "base": "buildings/decorations/zengarden/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -72.0,
      -5.0
@@ -1661,10 +1842,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "105": {
-  base: "buildings/decorations/fountain/",
-  levels: {
+  "base": "buildings/decorations/fountain/",
+  "levels": {
    "1": {
-    anim: [
+    "anim": [
      "anim.png",
      -47.0,
      -51.0,
@@ -1675,10 +1856,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "106": {
-  base: "buildings/decorations/japaneseteagarden/",
-  levels: {
+  "base": "buildings/decorations/japaneseteagarden/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -62.0,
      -38.0
@@ -1687,10 +1868,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "107": {
-  base: "buildings/decorations/headsonsticks/",
-  levels: {
+  "base": "buildings/decorations/headsonsticks/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-skull.png",
      -7.0,
      -39.0
@@ -1699,10 +1880,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "108": {
-  base: "buildings/decorations/rubikscube/",
-  levels: {
+  "base": "buildings/decorations/rubikscube/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-unsolved.png",
      -20.0,
      -23.0
@@ -1711,10 +1892,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "109": {
-  base: "buildings/decorations/rubikscube/",
-  levels: {
+  "base": "buildings/decorations/rubikscube/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top-solved.png",
      -20.0,
      -23.0
@@ -1723,10 +1904,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "110": {
-  base: "buildings/decorations/pumpkins/",
-  levels: {
+  "base": "buildings/decorations/pumpkins/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "attended-large-top.png",
      -24.0,
      -32.0
@@ -1735,10 +1916,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "111": {
-  base: "buildings/decorations/pumpkins/",
-  levels: {
+  "base": "buildings/decorations/pumpkins/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "attended-small-top.png",
      -10.0,
      -4.0
@@ -1747,22 +1928,29 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "112": {
-  base: "buildings/outpost/",
-  levels: {
+  "base": "buildings/ioutpost/",
+  "levels": {
    "1": {
-    top: [
+    "anim": [
+     "anim.1.png",
+     -22.0,
+     -42.0,
+     74.0,
+     49.0
+    ],
+    "top": [
      "top.1.png",
-     -63.0,
-     -72.0
+     -72.0,
+     -50.0
     ]
    }
   }
  },
  "113": {
-  base: "buildings/radiotower/",
-  levels: {
+  "base": "buildings/radiotower/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -40.0,
      -80.0
@@ -1771,10 +1959,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "114": {
-  base: "buildings/monstercage/",
-  levels: {
+  "base": "buildings/monstercage/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -128.0,
      -13.0
@@ -1783,48 +1971,62 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "115": {
-  base: "buildings/flaktower/",
-  levels: {
+  "base": "buildings/flaktower/",
+  "levels": {
    "1": {
-    top: [
-     "top.3.png",
-     -39.0,
-     6.0
-    ],
-    anim: [
+    "anim": [
      "anim.3.png",
      -32.0,
      -23.0,
      62.0,
      52.0
+    ],
+    "top": [
+     "top.3.png",
+     -39.0,
+     6.0
     ]
    }
   }
  },
  "116": {
-  base: "buildings/monsterlab/",
-  levels: {
+  "base": "buildings/monsterlab/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -74.0,
-     -96.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.png",
      -28.0,
      -30.0,
      54.0,
      48.0
+    ],
+    "anim2": [
+     "anim.2.png",
+     -66.0,
+     26.0,
+     33.0,
+     31.0
+    ],
+    "anim3": [
+     "anim.3.png",
+     32.0,
+     26.0,
+     33.0,
+     31.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -74.0,
+     -96.0
     ]
    }
   }
  },
  "117": {
-  base: "buildings/heavytrap/",
-  levels: {
+  "base": "buildings/heavytrap/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -16.0,
      -5.0
@@ -1833,29 +2035,29 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "118": {
-  base: "buildings/railguntower/",
-  levels: {
+  "base": "buildings/railguntower/",
+  "levels": {
    "1": {
-    top: [
-     "top.3.png",
-     -39.0,
-     7.0
-    ],
-    anim: [
+    "anim": [
      "anim.3.loaded.png",
      -49.0,
      -9.0,
      96.0,
      56.0
+    ],
+    "top": [
+     "top.3.png",
+     -39.0,
+     7.0
     ]
    }
   }
  },
  "119": {
-  base: "buildings/champchamber/",
-  levels: {
+  "base": "buildings/champchamber/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.3.png",
      -66.0,
      -62.0
@@ -1864,38 +2066,38 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "127": {
-  base: "buildings/iportal/",
-  levels: {
+  "base": "buildings/iportal/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.v2.png",
      -85.0,
      -5.0
     ]
    },
    "2": {
-    top: [
+    "top": [
      "top.2.v2.png",
      -105.0,
      -29.0
     ]
    },
    "3": {
-    top: [
+    "top": [
      "top.3.v2.png",
      -136.0,
      -64.0
     ]
    },
    "4": {
-    top: [
+    "top": [
      "top.4.v2.png",
      -140.0,
      -114.0
     ]
    },
    "5": {
-    top: [
+    "top": [
      "top.5.v2.png",
      -160.0,
      -172.0
@@ -1904,10 +2106,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "128": {
-  base: "buildings/ihousingbunker/",
-  levels: {
+  "base": "buildings/ihousingbunker/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.v2.png",
      -110.0,
      -49.0
@@ -1916,10 +2118,10 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "129": {
-  base: "buildings/iquaketower/",
-  levels: {
+  "base": "buildings/iquaketower/",
+  "levels": {
    "1": {
-    anim: [
+    "anim": [
      "anim.1.png",
      -37.0,
      -75.0,
@@ -1930,64 +2132,64 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "130": {
-  base: "buildings/icannontower/",
-  levels: {
+  "base": "buildings/icannontower/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -38.0,
-     11.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -38.0,
      -53.0,
      74.0,
      64.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -38.0,
+     11.0
     ]
    }
   }
  },
  "131": {
-  base: "buildings/decorations/wmitotem2/",
-  levels: {
+  "base": "buildings/decorations/wmitotem2/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top1.png",
      -31.0,
      -25.0
     ]
    },
    "2": {
-    top: [
+    "top": [
      "top2.png",
      -31.0,
      -60.0
     ]
    },
    "3": {
-    top: [
+    "top": [
      "top3.png",
      -31.0,
      -86.0
     ]
    },
    "4": {
-    top: [
+    "top": [
      "top4.png",
      -31.0,
      -122.0
     ]
    },
    "5": {
-    top: [
+    "top": [
      "top5.v2.png",
      -30.0,
      -125.0
     ]
    },
    "6": {
-    top: [
+    "top": [
      "top6.png",
      -31.0,
      -128.0
@@ -1996,34 +2198,41 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "132": {
-  base: "buildings/imagmatower/",
-  levels: {
+  "base": "buildings/imagmatower/",
+  "levels": {
    "1": {
-    top: [
-     "top.1.v2.png",
-     -34.0,
-     -9.0
-    ],
-    anim: [
+    "anim": [
      "anim.1.v2.png",
      -26.0,
      -50.0,
      54.0,
      42.0
+    ],
+    "anim2": [
+     "anim.2.v2.png",
+     -17.0,
+     26.0,
+     38.0,
+     19.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -34.0,
+     -9.0
     ]
    }
   }
  },
  "133": {
-  base: "buildings/siegefactory/",
-  levels: {
+  "base": "buildings/siegefactory/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -75.0,
      -23.0
     ],
-    anim: [
+    "anim": [
      "anim.1.png",
      -76.0,
      -101.0,
@@ -2034,15 +2243,15 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "134": {
-  base: "buildings/siegelab/",
-  levels: {
+  "base": "buildings/siegelab/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.1.png",
      -68.0,
      -66.0
     ],
-    anim: [
+    "anim": [
      "anim.1.png",
      -70.0,
      -106.0,
@@ -2053,13 +2262,158 @@ export const previewSprites: Record<number, { base: string; levels: Record<numbe
   }
  },
  "135": {
-  base: "buildings/decorations/dave_trophy/",
-  levels: {
+  "base": "buildings/decorations/dave_trophy/",
+  "levels": {
    "1": {
-    top: [
+    "top": [
      "top.png",
      -38.0,
      -30.0
+    ]
+   }
+  }
+ },
+ "141": {
+  "base": "buildings/ibrimstonepit/",
+  "levels": {
+   "1": {
+    "anim": [
+     "anim.1.v2.png",
+     -51.0,
+     9.0,
+     83.0,
+     50.0
+    ],
+    "anim2": [
+     "anim2.1.v2.png",
+     -40.0,
+     -27.0,
+     80.0,
+     50.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -64.0,
+     -31.0
+    ]
+   },
+   "2": {
+    "anim": [
+     "anim.1.v2.png",
+     -51.0,
+     9.0,
+     83.0,
+     50.0
+    ],
+    "anim2": [
+     "anim2.1.v2.png",
+     -40.0,
+     -27.0,
+     80.0,
+     50.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -64.0,
+     -31.0
+    ]
+   },
+   "3": {
+    "anim": [
+     "anim.1.v2.png",
+     -51.0,
+     9.0,
+     83.0,
+     50.0
+    ],
+    "anim2": [
+     "anim2.1.v2.png",
+     -40.0,
+     -27.0,
+     80.0,
+     50.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -64.0,
+     -31.0
+    ]
+   },
+   "4": {
+    "anim": [
+     "anim.1.v2.png",
+     -51.0,
+     9.0,
+     83.0,
+     50.0
+    ],
+    "anim2": [
+     "anim2.1.v2.png",
+     -40.0,
+     -27.0,
+     80.0,
+     50.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -64.0,
+     -31.0
+    ]
+   },
+   "5": {
+    "anim": [
+     "anim.1.v2.png",
+     -51.0,
+     9.0,
+     83.0,
+     50.0
+    ],
+    "anim2": [
+     "anim2.1.v2.png",
+     -40.0,
+     -27.0,
+     80.0,
+     50.0
+    ],
+    "top": [
+     "top.1.v2.png",
+     -64.0,
+     -31.0
+    ]
+   }
+  }
+ },
+ "144": {
+  "base": "buildings/icindercoil/",
+  "levels": {
+   "1": {
+    "anim": [
+     "anim.1.png",
+     -42.0,
+     -67.0,
+     82.0,
+     127.0
+    ],
+    "anim2": [
+     "anim.2.png",
+     -35.0,
+     -69.0,
+     71.0,
+     93.0
+    ]
+   }
+  }
+ },
+ "145": {
+  "base": "buildings/iobsidianmortar/",
+  "levels": {
+   "1": {
+    "anim": [
+     "anim.1.png",
+     -44.0,
+     -37.0,
+     88.0,
+     93.0
     ]
    }
   }

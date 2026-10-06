@@ -82,6 +82,57 @@ export const terrainLimiter = RateLimit.middleware({
  * The payload is rebuilt at most once a minute, so anything above that rate is
  * served from cache or answered with a 304.
  */
+/**
+ * Rate limit for the game's map snapshot (/worldmapv2/mapdata): the game asks about once a minute while
+ * the map room is open.
+ */
+export const mapDataLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 20,
+  prefixKey: "mapdata",
+  keyGenerator: byUser("mapdata"),
+  handler: async (ctx: Context) => {
+    ctx.status = Status.TOO_MANY_REQUESTS;
+    ctx.body = { error: "Too many map requests. Please slow down." };
+  },
+});
+
+/** Inferno-only: the game's attack logs (/attacklogs/game): the list, and a report when one is opened. */
+export const attackLogsLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 40,
+  prefixKey: "attacklogs",
+  keyGenerator: byUser("attacklogs"),
+  handler: async (ctx: Context) => {
+    ctx.status = Status.TOO_MANY_REQUESTS;
+    ctx.body = { error: "Too many requests. Please slow down." };
+  },
+});
+
+/** Inferno-only: attack replays (replays/*): a recording's parts, watching, downloading: 90 a minute per player. */
+export const replaysLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 90,
+  prefixKey: "replays",
+  keyGenerator: byUser("replays"),
+  handler: async (ctx: Context) => {
+    ctx.status = Status.OK;
+    ctx.body = { error: "Too many requests. Wait a moment." };
+  },
+});
+
+/** Inferno-only: the Pets tab (pets/*): 60 requests a minute per player. */
+export const petsLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 60,
+  prefixKey: "pets",
+  keyGenerator: byUser("pets"),
+  handler: async (ctx: Context) => {
+    ctx.status = Status.OK;
+    ctx.body = { error: "Too many requests. Wait a moment." };
+  },
+});
+
 export const snapshotLimiter = RateLimit.middleware({
   interval: { min: 1 },
   max: 10,
@@ -188,7 +239,7 @@ export const registerLimiter = RateLimit.middleware({
     ctx.status = Status.TOO_MANY_REQUESTS;
     ctx.body = {
       error:
-        "Too many requests where sent from this IP while creating an account. Please try again in 1 hour.",
+        "Too many requests were sent from this IP while creating an account. Please try again in 1 hour.",
     };
   },
 });
@@ -219,5 +270,45 @@ export const loginLimiter = RateLimit.middleware({
   handler: async (ctx: Context) => {
     ctx.status = Status.TOO_MANY_REQUESTS;
     ctx.body = { error: "Too many login attempts. Please try again later." };
+  },
+});
+
+/**
+ * The admin panel (controllers/admin/adminApi.ts): sign-in links 20 a minute and API calls 300 a
+ * minute per IP. Codes and sessions can't be guessed anyway; this keeps anyone from trying.
+ */
+export const adminSignInLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 20,
+  prefixKey: "admin-signin",
+  handler: async (ctx: Context) => {
+    ctx.status = Status.TOO_MANY_REQUESTS;
+    ctx.body = "Too many sign-in attempts. Wait a minute and press the Admin button in the game again.";
+  },
+});
+
+export const adminApiLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 300,
+  prefixKey: "admin-api",
+  handler: async (ctx: Context) => {
+    ctx.status = Status.TOO_MANY_REQUESTS;
+    ctx.body = { error: "Too many requests. Wait a minute." };
+  },
+});
+
+/**
+ * Rate limit for the Brimstone Pit (casino/*): 720 requests a minute per player, about 12 a second.
+ * Answered with status 200 and a message the game shows (it treats other statuses as a lost connection).
+ */
+export const casinoLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  // (Magma Drop keeps up to 20 Spurtz in the air, each about 2 seconds: 10 a second, 600 a minute, at full tilt)
+  max: 720,
+  prefixKey: "casino",
+  keyGenerator: byUser("casino"),
+  handler: async (ctx: Context) => {
+    ctx.status = Status.OK;
+    ctx.body = { error: "Easy there: too many bets at once. Wait a moment." };
   },
 });

@@ -40,7 +40,7 @@ package {
             }
             else if (MapRoomManager.instance.isInMapRoom2or3 && GLOBAL._currentCell && !BASE.usesInfernoBackend) {
                 mc.bReturn.SetupKey("btn_openmap");
-                if ((GLOBAL.mode != GLOBAL.e_BASE_MODE.HELP || MapRoomManager.instance.isInMapRoom3) && !MapRoomManager.instance.viewOnly && GLOBAL._currentCell && MapRoomManager.instance.flingerInRange) {
+                if ((GLOBAL.mode != GLOBAL.e_BASE_MODE.HELP || MapRoomManager.instance.isInMapRoom3) && !MapRoomManager.instance.viewOnly && GLOBAL._currentCell && (MapRoomManager.instance.flingerInRange || GLOBAL.ioTestMode())) {
                     if (GLOBAL._currentCell.isDestroyed && GLOBAL._currentCell.baseType != 2) {
                         mc.bAttack.SetupKey("newmap_take_btn");
                     }
@@ -54,7 +54,7 @@ package {
                     else {
                         mc.bAttack.addEventListener(MouseEvent.CLICK, this.Attack);
                     }
-                    if (GLOBAL._currentCell.isLocked || this.isLevelLimited || !ATTACK.hasCreaturesToAttackWith) {
+                    if ((GLOBAL._currentCell.isLocked || this.isLevelLimited || !ATTACK.hasCreaturesToAttackWith) && !GLOBAL.ioTestMode()) {
                         mc.bAttack.Enabled = false;
                     }
                     else {
@@ -185,6 +185,12 @@ package {
 
         public function Attack(param1:MouseEvent):void {
             var _loc2_:MapRoomCell = GLOBAL._currentCell as MapRoomCell;
+            // Admin test mode: a practice attack on any yard.
+            if (_loc2_ && GLOBAL.ioTestMode()) {
+                MapRoom.showAttackWait = true;
+                MapRoomManager.instance.Show();
+                return;
+            }
             if (_loc2_) {
             }
             if (Boolean(_loc2_) && _loc2_.isLocked) {

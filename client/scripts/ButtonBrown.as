@@ -73,6 +73,8 @@ package {
             if (param1) {
                 this._txt.htmlText = "<b><font color=\"" + param5 + "\">" + param1 + "</font></b>";
                 this.label = param1;
+                // Inferno-only: a label too long for the button is drawn smaller rather than cut at its edges
+                GLOBAL.ioFitText(this._txt, 7, scaleX > 0 ? scaleX : 1);
             }
             this.Update();
         }

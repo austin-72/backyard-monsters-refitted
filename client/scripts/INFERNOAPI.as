@@ -124,7 +124,7 @@ package {
                 _loading = false;
             };
             handleLoadError = function(param1:IOErrorEvent):void {
-                if (GLOBAL._reloadonerror) {
+                if (GLOBAL._reloadonerror && !GLOBAL.INFERNO_ONLY) {
                     GLOBAL.CallJS("reloadPage");
                 }
                 else {

@@ -1,5 +1,6 @@
 package com.monsters.alliances.tabs {
     import com.monsters.alliances.ALLIANCES;
+    import com.monsters.leaderboards.IoLeaderboards;
 
     public class SuggestedTab extends MembersTab {
         public function SuggestedTab() {
@@ -17,10 +18,22 @@ package com.monsters.alliances.tabs {
          * @returns {Array} Visit Base + Invite actions for MemberActionPopup
          */
         override protected function _actionsFor(rowData:Object):Array {
+            if (GLOBAL.INFERNO_ONLY) {
+                // (Inferno: yards can't be visited from here; the map can show where they are)
+                return [
+                        {labelKey: "io_alliance_act_jump", handler: _ioOnJump},
+                        {labelKey: "alliance_btn_invite", handler: _onInvite}
+                    ];
+            }
             return [
                     {labelKey: "alliance_btn_visit", handler: _onVisitBase},
                     {labelKey: "alliance_btn_invite", handler: _onInvite}
                 ];
+        }
+
+        private function _ioOnJump(rowData:Object):void {
+            ALLIANCEWINDOW.Hide();
+            IoLeaderboards.JumpToPlayer(int(rowData.user_id), String(rowData.name));
         }
 
         /**

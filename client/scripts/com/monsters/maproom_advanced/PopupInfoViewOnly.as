@@ -78,7 +78,7 @@ package com.monsters.maproom_advanced {
                 }
                 this.ProfilePic();
             }
-            tLocation.htmlText = GLOBAL.ioCoord(this._cell.X) + " x " + GLOBAL.ioCoord(this._cell.Y);
+            tLocation.htmlText = IoMapUi.location(this._cell.X, this._cell.Y);
             tHeight.htmlText = this._cell._height - 100 + "m";
             if (this._cell._base == 2) {
                 _loc3_ = 0;
@@ -194,7 +194,7 @@ package com.monsters.maproom_advanced {
         }
 
         public function ButtonInfo(param1:String):void {
-            txtButtonInfo.htmlText = KEYS.Get("newmap_view", {"v1": this._cell._name});
+            txtButtonInfo.htmlText = KEYS.Get("newmap_view", {"v1": this._cell._base == 1 ? TRIBES.DisplayName(this._cell._name) : this._cell._name});
             mcArrow.x = bView.x + bView.width / 2 - 5;
         }
 

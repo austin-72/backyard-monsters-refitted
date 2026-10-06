@@ -5,6 +5,7 @@ import { ChangeInviteStatusSchema } from "../../schemas/AllianceSchemas.js";
 import { answerInvite } from "../../services/alliance/allianceInvites.js";
 import { getAllianceData } from "../../services/alliance/allianceData.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { questInviteAccepted } from "../../services/quests/questProgress.js";
 
 /**
  * Answers a pending invite or join request from the Invites tab. Accepting an
@@ -22,6 +23,9 @@ export const changeInviteStatus: KoaController = async (ctx) => {
   const joined = invite.type === AllianceInviteType.INVITE && status === AllianceInviteStatus.ACCEPTED;
 
   const alliance = joined ? await getAllianceData(user) : null;
+
+  // Inferno-only quest book: whoever brought the player in
+  if (status === AllianceInviteStatus.ACCEPTED) void questInviteAccepted(invite.id, user.userid, invite.type === AllianceInviteType.INVITE);
 
   ctx.status = Status.OK;
   ctx.body = { error: 0, ...(alliance && { alliancedata: alliance }) };

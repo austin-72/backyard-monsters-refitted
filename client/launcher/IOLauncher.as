@@ -110,6 +110,8 @@ package {
         private function loadGame(address:String):void {
             say("Loading the game...");
             _loader = new Loader();
+            // Switch account (GAME.ioSwitchAccount): the game asks to be loaded again from scratch.
+            _loader.contentLoaderInfo.sharedEvents.addEventListener("io_restart", onRestartRequested);
             _loader.contentLoaderInfo.addEventListener(ProgressEvent.PROGRESS, onProgress);
             _loader.contentLoaderInfo.addEventListener(Event.COMPLETE, onGameLoaded);
             _loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, onGameFailed);
@@ -129,8 +131,34 @@ package {
             setTimeout(askForCurrentBuild, 5000);
         }
 
+        private function onRestartRequested(event:Event):void {
+            // Cancelling the request tells the game the launcher is handling it.
+            event.preventDefault();
+            setTimeout(restartGame, 50);
+        }
+
+        /** Unloads the running game completely and loads a fresh copy, which opens on the login page. */
+        private function restartGame():void {
+            if (_loader) {
+                _loader.contentLoaderInfo.sharedEvents.removeEventListener("io_restart", onRestartRequested);
+                if (_loader.parent) {
+                    removeChild(_loader);
+                }
+                _loader.unloadAndStop(true);
+                _loader = null;
+            }
+            if (!_status.parent) {
+                addChild(_status);
+            }
+            say("Restarting the game...");
+            askForCurrentBuild();
+        }
+
         private function onGameLoaded(event:Event):void {
-            removeChild(_status);
+            // Also runs when a game reloads itself into this Loader (switch account, older launchers).
+            if (_status.parent) {
+                removeChild(_status);
+            }
             // The game starts itself once it is on the stage (GAME.as: ioStartWhenOnStage).
             addChild(_loader);
         }

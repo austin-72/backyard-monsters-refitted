@@ -1,0 +1,292 @@
+import * as as3 from "as3";
+import { int } from "as3";
+import { IOErrorEvent, MouseEvent } from "flash/events";
+import { Point, Rectangle } from "flash/geom";
+import { ACHIEVEMENTS, ALLIANCES, BASE, BFOUNDATION, BuildingEvent, GLOBAL, KEYS, LOGGER, MAPROOM, MapRoomManager, PLEASEWAIT, POPUPS, STORE, URLLoaderApi, popup_generic } from "@game";
+
+export class BUILDING11 extends BFOUNDATION {
+    static {
+        as3.fields(this, { callPending: false });
+    }
+
+    public static readonly CHANGED_TO_MR2: string = "changedToMR2";
+    private callPending: boolean;
+
+    public $ctor(): void {
+        super.$ctor();
+        this._type = 11;
+        this._footprint = [new Rectangle(0, 0, 90, 90)];
+        this._gridCost = [[new Rectangle(0, 0, 90, 90), 10], [new Rectangle(10, 10, 70, 70), 200]];
+        this.SetProps();
+    }
+
+    public override Tick(param1: int): void {
+        if (this._countdownBuild.Get() > 0 || this.health < this.maxHealth * 0.5) {
+            this._canFunction = false;
+        } else {
+            this._canFunction = true;
+            if (this._lvl.Get() == 1 || GLOBAL.StatGet("mrl") >= 2 || MapRoomManager.instance.isInMapRoom3) {
+                MAPROOM.initMaproomSetup = true;
+            }
+        }
+        if (MapRoomManager.instance.isInMapRoom3) {
+            GLOBAL.StatSet("mrl", 3);
+        } else if (GLOBAL.INFERNO_ONLY) {
+            // Inferno-only: the account is on Map Room 2 from its very first load, whatever level
+            // this building is. There is no MR1 to fall back to and no world to move to.
+            if (GLOBAL.StatGet("mrl") != 2) {
+                GLOBAL.StatSet("mrl", 2);
+            }
+        } else {
+            if (GLOBAL.StatGet("mrl") == 2 && !MapRoomManager.instance.isInMapRoom2or3) {
+                GLOBAL.StatSet("mrl", 1);
+            }
+            if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._lvl.Get() >= 2 && GLOBAL.StatGet("mrl") != 2 && BASE._saveCounterA == BASE._saveCounterB && !BASE._saving) {
+                this.NewWorld();
+            }
+        }
+        if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !GLOBAL._catchup && GLOBAL._render && this._countdownUpgrade.Get() && this._countdownUpgrade.Get() < 60 * 60 * 24 * 2) {
+            this.PopupUpgrade(2);
+        }
+        super.Tick(param1);
+    }
+
+    private NewWorld(): void {
+        let _loc1_: any[] = null;
+        if (!MapRoomManager.instance.isInMapRoom3 && GLOBAL.mode == GLOBAL._loadmode && GLOBAL._flags.maproom2) {
+            ACHIEVEMENTS.Check("map2", 1);
+            if (this.callPending) {
+                return;
+            }
+            this.callPending = true;
+            MAPROOM.initMaproomSetup = false;
+            _loc1_ = [["version", 2]];
+            new URLLoaderApi().load(GLOBAL._mapURL + "setmapversion", _loc1_, as3.bind(this, this.NewWorldSuccess), as3.bind(this, this.NewWorldFail));
+        }
+    }
+
+    private NewWorldSuccess(param1: any): void {
+        let _loc2_: int = 0;
+        if (param1.error == 0) {
+            if (GLOBAL.mode != GLOBAL._loadmode) {
+                return;
+            }
+            GLOBAL.StatSet(BUILDING11.CHANGED_TO_MR2, 1);
+            GLOBAL.StatSet("mrl", 2, true);
+            GLOBAL._flags.mr2upgraded = 1;
+            MapRoomManager.instance.mapRoomVersion = MapRoomManager.MAP_ROOM_VERSION_2;
+            GLOBAL._baseURL = as3.str(param1.baseurl);
+            GLOBAL._homeBaseID = Number(param1.homebaseid);
+            BASE._loadedBaseID = Number(param1.homebaseid);
+            BASE._baseID = 0;
+            BASE._loadedFriendlyBaseID = GLOBAL._homeBaseID;
+            MapRoomManager.instance.BookmarksClear();
+            LOGGER.StatB({ "st1": "NWM" }, "migration");
+            if (param1.basesaveid != 1) {
+                BASE._lastSaveID = param1.basesaveid | 0;
+            }
+            if (param1.homebase.length == 2 && param1.homebase[0] > -1 && param1.homebase[1] > -1) {
+                if (param1.worldsize) {
+                    MapRoomManager.instance.mapWidth = param1.worldsize[0] | 0;
+                    MapRoomManager.instance.mapHeight = param1.worldsize[1] | 0;
+                }
+                GLOBAL._mapHome = new Point(param1.homebase[0], param1.homebase[1]);
+                if (param1.outposts) {
+                    GLOBAL._mapOutpost = [];
+                    _loc2_ = 0;
+                    while (_loc2_ < param1.outposts.length) {
+                        if (param1.outposts[_loc2_].length == 2) {
+                            GLOBAL._mapOutpost.push(new Point(param1.outposts[_loc2_][0], param1.outposts[_loc2_][1]));
+                        }
+                        _loc2_++;
+                    }
+                }
+                GLOBAL.eventDispatcher.dispatchEvent(new BuildingEvent(BuildingEvent.ENTER_MR2, this));
+            } else {
+                LOGGER.Log("err", "BUILDING11.NewWorldSuccess Invalid home base coordinate. " + param1.homebase);
+                GLOBAL.ErrorMessage("BUILDING11 1");
+            }
+        } else {
+            this.callPending = true;
+            GLOBAL._flags.discordOldEnough = false;
+        }
+        this.callPending = false;
+        PLEASEWAIT.Hide();
+    }
+
+    private NewWorldFail(param1: IOErrorEvent): void {
+        this.callPending = false;
+        LOGGER.Log("err", "BUILDING11.NewWorld HTTP");
+        GLOBAL.ErrorMessage("BUILDING11.NewWorld HTTP");
+        PLEASEWAIT.Hide();
+    }
+
+    public override PlaceB(): void {
+        super.PlaceB();
+        GLOBAL._bMap = this;
+    }
+
+    public override Constructed(): void {
+        GLOBAL._bMap = this;
+        if (this._lvl.Get() < 2 && !GLOBAL.INFERNO_ONLY) {
+            new URLLoaderApi().load(GLOBAL._mapURL + "setmapversion", [["version", 1]], null, null);
+        }
+        super.Constructed();
+    }
+
+    public override UpgradeCost(): any {
+        let cost: any = super.UpgradeCost();
+        if (Boolean(GLOBAL._flags.mr2upgraded) && cost.time) {
+            cost.time.Set(300);
+        }
+        return cost;
+    }
+
+    public override UpgradeB(): void {
+        if (Boolean(GLOBAL._flags.mr2upgraded)) {
+            this._buildingProps.costs[this._lvl.Get()].time.Set(300);
+        }
+        super.UpgradeB();
+        this._hasResources = true;
+        this.PopupUpgrade(1);
+    }
+
+    public PopupUpgrade(param1: int): void {
+        let Speedup: Function = null;
+        let popupMC: popup_generic = null;
+        let n: int = param1;
+        Speedup = (param1: MouseEvent = null): void => {
+            POPUPS.Next();
+            STORE.SpeedUp("SP4");
+        };
+        if (GLOBAL.StatGet("mrp") < n && !STORE._open) {
+            GLOBAL.StatSet("mrp", n);
+            GLOBAL._selectedBuilding = GLOBAL._bMap;
+            popupMC = new popup_generic();
+            popupMC.tA.htmlText = KEYS.Get("popup_upgrademaproomtitle");
+            popupMC.tB.htmlText = KEYS.Get("popup_upgrademaproom");
+            popupMC.bAction.SetupKey("btn_speedup");
+            popupMC.bAction.addEventListener(MouseEvent.CLICK, Speedup);
+            popupMC.mcImage.x = -200;
+            popupMC.mcImage.y = -95;
+            POPUPS.Push(popupMC, null, null, null, "mapv2.jpg", true, "now");
+        }
+    }
+
+    public override Upgraded(): void {
+        let Brag: Function = null;
+        if (!MapRoomManager.instance.isInMapRoom3 && !GLOBAL.INFERNO_ONLY) {
+            Brag = (): void => {
+                GLOBAL.CallJS("sendFeed", ["upgrade-mr", KEYS.Get("newmap_upgraded3"), KEYS.Get("newmap_upgraded1"), "build-maproom.png"]);
+                POPUPS.Next();
+            };
+            POPUPS.DisplayGeneric(KEYS.Get("newmap_upgraded1"), KEYS.Get("newmap_upgraded2"), KEYS.Get("btn_brag"), "building-map.png", Brag);
+            PLEASEWAIT.Show(KEYS.Get("wait_newworld"));
+        }
+        super.Upgraded();
+    }
+
+    public override Recycle(): void {
+        // Comment: The original only guarded the Map Room 2 branch because Map Room 3
+        // could not be recycled at all - see map_cannot_recycle_map_room3 and
+        // the disabled guard below. Refitted re-enabled it, so the alliance
+        // check has to cover both branches now.
+        if (ALLIANCES._myAlliance != null) {
+            GLOBAL.Message(KEYS.Get("map_alliance_recycle", { "v1": ALLIANCES._myAlliance.name }));
+            return;
+        }
+        if (MapRoomManager.instance.isInMapRoom2 && !GLOBAL.INFERNO_ONLY) {
+            GLOBAL._mapOutpostIDs.length = 0;
+            GLOBAL.Message(KEYS.Get("newmap_recycle1"), KEYS.Get("btn_recycle"), as3.bind(this, this.RecycleD));
+        } else {
+            // Comment: this stopped Map Room 3 from being recycled
+            // if(MapRoomManager.instance.isInMapRoom3 && !GLOBAL._aiDesignMode)
+            // {
+            // GLOBAL.Message(KEYS.Get("map_cannot_recycle_map_room3"));
+            // return;
+            // }
+            GLOBAL.Message(KEYS.Get("newmap_recycle2"), KEYS.Get("btn_recycle"), as3.bind(this, this.RecycleD));
+        }
+        GLOBAL.eventDispatcher.dispatchEvent(new BuildingEvent(BuildingEvent.ATTEMPT_RECYCLE, this));
+    }
+
+    private RecycleD(): void {
+        if (GLOBAL.INFERNO_ONLY) {
+            // Recycling the building does not leave the world: the yard keeps its cell and its
+            // outposts, the map just cannot be opened until a Map Room is built again.
+            GLOBAL._bMap = null;
+            this.RecycleB();
+            GLOBAL.eventDispatcher.dispatchEvent(new BuildingEvent(BuildingEvent.DESTROY_MAPROOM, this));
+            return;
+        }
+        if (GLOBAL.mode != GLOBAL._loadmode) {
+            return;
+        }
+        let _loc1_: any[] = [["version", 0]];
+        // Comment: This stopped Map Room 3 from being recycled.
+        // if(MapRoomManager.instance.isInMapRoom3)
+        // {
+        // RecycleB();
+        // return;
+        // }
+        new URLLoaderApi().load(GLOBAL._mapURL + "setmapversion", _loc1_, as3.bind(this, this.RecycleDSuccess), as3.bind(this, this.RecycleDFail));
+    }
+
+    private RecycleDSuccess(param1: any): void {
+        let _loc2_: int = 0;
+        PLEASEWAIT.Hide();
+        if (param1.error == 0 && GLOBAL.mode == GLOBAL._loadmode) {
+            LOGGER.StatB({ "st1": "world_map", "st2": "leave" }, MapRoomManager.instance.worldID);
+            if (!MapRoomManager.instance.isInMapRoom3) {
+                GLOBAL.StatSet("mrl", 1, true);
+            }
+            GLOBAL._bMap = null;
+            MapRoomManager.instance.DowngradeFromMapRoom3();
+            GLOBAL._baseURL = as3.str(param1.baseurl);
+            BASE._baseID = 0;
+            BASE._loadedFriendlyBaseID = 0;
+            _loc2_ = 1;
+            while (_loc2_ < 5) {
+                BASE._GIP["r" + _loc2_].Set(0);
+                _loc2_++;
+            }
+            BASE._lastProcessedGIP = GLOBAL.Timestamp();
+            BASE._rawGIP = { "t": BASE._lastProcessedGIP };
+            BASE._processedGIP = { "t": BASE._lastProcessedGIP };
+            GLOBAL._mapOutpost = [];
+            if (param1.basesaveid != 1) {
+                BASE._lastSaveID = param1.basesaveid | 0;
+            }
+            MapRoomManager.instance.BookmarksClear();
+            this.RecycleB();
+            if (this._lvl.Get() == 2) {
+                GLOBAL.Message(KEYS.Get("newmap_return"));
+            }
+            GLOBAL.eventDispatcher.dispatchEvent(new BuildingEvent(BuildingEvent.DESTROY_MAPROOM, this));
+        } else {
+            LOGGER.Log("err", as3.str(param1.error));
+            GLOBAL.ErrorMessage("BUILDING11 RecycleD 1");
+        }
+    }
+
+    private RecycleDFail(param1: IOErrorEvent): void {
+        PLEASEWAIT.Hide();
+        LOGGER.Log("err", "BUILDING11.Recycle HTTP");
+        GLOBAL.ErrorMessage("BUILDING11 RecycleD 2");
+    }
+
+    public override Setup(param1: any): void {
+        super.Setup(param1);
+        if (MapRoomManager.instance.isInMapRoom3) {
+            this._lvl.Set(3);
+        } else if (MapRoomManager.instance.isInMapRoom2) {
+            this._lvl.Set(2);
+        }
+        if (this._lvl.Get() > 1) {
+            ACHIEVEMENTS.Check("map2", 1);
+        }
+        if (this._countdownBuild.Get() == 0) {
+            GLOBAL._bMap = this;
+        }
+    }
+}

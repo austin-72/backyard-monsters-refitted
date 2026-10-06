@@ -1,6 +1,11 @@
 package {
 
     import com.gskinner.utils.Rndm;
+    import com.monsters.maproom_advanced.IoOutpostsPopup;
+    import com.monsters.admin.IoTestMode;
+    import com.monsters.leaderboards.IoLeaderboards;
+    import com.monsters.leaderboards.IoAttackLogs;
+    import com.monsters.leaderboards.IoChangelog;
     import com.monsters.ai.*;
     import com.monsters.display.ImageCache;
     import com.monsters.managers.InstanceManager;
@@ -16,6 +21,7 @@ package {
     import flash.events.MouseEvent;
     import flash.geom.Point;
     import flash.utils.getTimer;
+    import com.monsters.quests.IoQuests;
 
     public class WMATTACK {
 
@@ -211,6 +217,18 @@ package {
                 else if (_history.nextAttack == undefined) {
                     _attackPreference = _history.attackPreference;
                 }
+                if (_ioLoginAt < 0) {
+                    _ioLoginAt = getTimer(); // the first yard of this session
+                }
+                if (ioWild() != null) {
+                    // Inferno: one a day per player; the first check a minute after the yard opens.
+                    _history.nextAttack = Math.max(ioNextAttackTime(), GLOBAL.Timestamp() + 60);
+                    if (_queued != null && !BASE.isMainYardOrInfernoMainYard) {
+                        // Only the main yard is attacked: an attack waiting in an outpost's save is dropped.
+                        _queued = null;
+                        delete _history.queued;
+                    }
+                }
             }
             else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.VIEW || GLOBAL.mode == GLOBAL.e_BASE_MODE.HELP) {
                 _history = param1;
@@ -271,6 +289,20 @@ package {
             _enabled = param1;
         }
 
+        /** Inferno-only: give up on the raid being planned (its planner threw). The next one is planned afresh. */
+        public static function ioAbandon():void {
+            try {
+                processor = null;
+                _queued = null;
+                if (_history) {
+                    delete _history.queued;
+                    _history.nextAttack = GLOBAL.Timestamp() + 6 * 60 * 60;
+                }
+            }
+            catch (e:Error) {
+            }
+        }
+
         public static function Tick():void {
             var _loc1_:int = 0;
             var _loc2_:Vector.<Object> = null;
@@ -278,6 +310,10 @@ package {
             var a:int = 0;
             var _loc5_:Object = null;
             var activeEvent:* = SPECIALEVENT.getActiveSpecialEvent();
+            // Inferno-only: nothing attacks a Designer draft (GLOBAL.ioDesign).
+            if (GLOBAL.ioDesignMode()) {
+                return;
+            }
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 activeEvent.Tick();
                 if (t % 10 == 0) {
@@ -311,7 +347,7 @@ package {
                         BASE.Save();
                     }
                 }
-                if (_queued != null && !_inProgress) {
+                if (_queued != null && !_inProgress && ioSettled()) {
                     if (!GLOBAL._catchup && !warningPopup && !_trojan && _queued.warned == 0 && !baseIsRepairing && BASE._isSanctuary <= GLOBAL.Timestamp() && _enabled && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent() && !PLANNER.isOpen()) {
                         ShowWarning();
                     }
@@ -335,7 +371,7 @@ package {
                     }
                 }
                 else if (!_inProgress) {
-                    if (!GLOBAL._catchup && _history.sessionsSinceLastAttack >= _sessionsBetweenAttacks && !baseIsRepairing && !_processing && GLOBAL.Timestamp() > _history.nextAttack && BASE._baseLevel >= 9 && !_trojan && BASE._isSanctuary <= GLOBAL.Timestamp() && _enabled && !PLANNER.isOpen() && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent()) {
+                    if (!GLOBAL._catchup && ioAttackDue() && !baseIsRepairing && !_processing && !_trojan && BASE._isSanctuary <= GLOBAL.Timestamp() && _enabled && !PLANNER.isOpen() && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent()) {
                         _processing = true;
                         Trigger();
                     }
@@ -473,7 +509,11 @@ package {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && GLOBAL._render && POPUPS.Done()) {
                 intelligence = param2;
                 quickly = param1;
-                if (Boolean(WMBASE._bases) && WMBASE._bases.length > 0) {
+                _ioPlan = null;
+                if (ioWild() != null && BASE.isInfernoMainYardOrOutpost && ioChooseTribe()) {
+                    _loc3_ = PROCESS_INFERNO1;
+                }
+                else if (Boolean(WMBASE._bases) && WMBASE._bases.length > 0) {
                     for each (_loc4_ in WMBASE._bases) {
                         if (_loc4_.destroyed == 0 && _loc4_.level >= BASE._baseLevel - 10) {
                             _attackersBaseID = _loc4_.baseid;
@@ -547,6 +587,9 @@ package {
                     "warned": 0,
                     "t": _attackersBaseID
                 };
+            if (_ioPlan) {
+                _queued.level = int(_ioPlan.level);
+            }
             if (_loc3_ > _trojanThreshold && !_history["s1"] && !BASE.isMainYard) {
                 _trojan = true;
                 _history["s1"] = [1, GLOBAL.Timestamp(), 0];
@@ -560,6 +603,13 @@ package {
         }
 
         public static function PreemptQueue():void {
+            // (bug report #61: "Send now" pressed again once the attack had started, nothing queued any more)
+            if (!_queued) {
+                if (UI2._wildMonsterBar) {
+                    UI2.Hide("wmbar");
+                }
+                return;
+            }
             _queued.attackTime = GLOBAL.Timestamp();
             _type = !!_queued.type ? int(_queued.type) : 1;
             BASE.Save(0, false, true);
@@ -567,6 +617,18 @@ package {
         }
 
         public static function LaunchQueuedAttack():void {
+            if (ioWild() != null && GLOBAL.Timestamp() < ioNextAttackTime()) {
+                // Another of the player's yards was attacked since this one was planned.
+                _queued = null;
+                delete _history.queued;
+                if (UI2._wildMonsterBar) {
+                    UI2.Hide("wmbar");
+                }
+                HideWarning();
+                _history.nextAttack = ioNextAttackTime();
+                return;
+            }
+            _ioSpawnLevel = WMATTACK._queued && WMATTACK._queued.level ? int(WMATTACK._queued.level) : 0;
             PATHING.ResetCosts();
             SendAttack(WMATTACK._queued.attack, WMATTACK._queued.degrees, WMATTACK._queued.distances);
         }
@@ -712,15 +774,17 @@ package {
                 _loc9_ = int(param1[_loc8_][4]);
                 if (_type == TYPE_SWARM) {
                     _loc10_ = 0;
+                    // Groups of three along an arc. The last group is the remainder: the stock code sent a
+                    // full group and then the remainder again, so 8 Spurtz came as 11.
                     while (_loc10_ < param1[_loc8_][2]) {
                         _loc9_ += 8;
                         _loc4_ = GRID.ToISO(Math.cos(_loc9_ * 0.0174532925) * (800 + param1[_loc8_][3] / 2), Math.sin(_loc9_ * 0.0174532925) * (800 + param1[_loc8_][3] / 2), 0);
                         _loc5_ = GRID.ToISO(Math.cos(_loc9_ * 0.0174532925) * 900, Math.sin(_loc9_ * 0.0174532925) * 900, 0);
-                        _loc6_ = SpawnB(_loc4_, param1[_loc8_][3], param1[_loc8_][0], _loc7_, param1[_loc8_][1]);
+                        _loc6_ = SpawnB(_loc4_, param1[_loc8_][3], param1[_loc8_][0], Math.min(_loc7_, param1[_loc8_][2] - _loc10_), param1[_loc8_][1]);
                         _loc3_.push(_loc6_);
                         _loc10_ += _loc7_;
                     }
-                    if (param1[_loc8_][2] % _loc7_ != 0) {
+                    if (false) {
                         _loc4_ = GRID.ToISO(Math.cos(_loc9_ * 0.0174532925) * (800 + param1[_loc8_][3] / 2), Math.sin(_loc9_ * 0.0174532925) * (800 + param1[_loc8_][3] / 2), 0);
                         _loc5_ = GRID.ToISO(Math.cos(_loc9_ * 0.0174532925) * 900, Math.sin(_loc9_ * 0.0174532925) * 900, 0);
                         _loc6_ = SpawnB(_loc4_, param1[_loc8_][3], param1[_loc8_][0], param1[_loc8_][2] % _loc7_, param1[_loc8_][1]);
@@ -780,7 +844,13 @@ package {
                 var offsetPoint:Point = getPooledPoint(Math.cos(_loc6_) * _loc7_, Math.sin(_loc6_) * _loc7_);
                 _loc8_ = param1.add(offsetPoint);
 
-                monster = CREEPS.Spawn(param3, MAP._BUILDINGTOPS, "bounce", GRID.ToISO(_loc8_.x, _loc8_.y, 0), _loc12_.random() * 360, _loc11_, true);
+                if (_ioSpawnLevel > 0) {
+                    // Inferno wild attack from the config: the listed level, at full strength.
+                    monster = CREEPS.Spawn(param3, MAP._BUILDINGTOPS, "bounce", GRID.ToISO(_loc8_.x, _loc8_.y, 0), _loc12_.random() * 360, 1, true, false, _ioSpawnLevel);
+                }
+                else {
+                    monster = CREEPS.Spawn(param3, MAP._BUILDINGTOPS, "bounce", GRID.ToISO(_loc8_.x, _loc8_.y, 0), _loc12_.random() * 360, _loc11_, true);
+                }
                 if (_rage) {
                     monster.addComponent(new TemporaryComponent(new Enrage(2, 0), _rage));
                 }
@@ -796,6 +866,12 @@ package {
 
         public static function AttackB():void {
             HideWarning();
+            // Windows that can take the player to another yard (away from the attack) or change this one.
+            IoOutpostsPopup.ioCloseOpen();
+            IoTestMode.ioCloseOpen();
+            IoLeaderboards.CloseOpen();
+            IoAttackLogs.CloseOpen();
+            IoChangelog.CloseOpen();
             _inProgress = true;
             ATTACK.Setup();
             BASE._blockSave = true;
@@ -833,6 +909,7 @@ package {
             UI2.Hide("warning");
             UI2.Hide("scareAway");
             warningPopup = null;
+            _ioSpawnLevel = 0; // monster baiter and portal attacks use their own strengths
             if (Boolean(_history["s1"]) && _history["s1"][0] == 1) {
                 _history["s1"][0] = 2;
                 _trojan = false;
@@ -882,6 +959,10 @@ package {
             }
             else if (_loc3_ >= _loc4_ * 0.9) {
                 ATTACK.WellDefended(true);
+                // Inferno-only quest book: a wild monster attack held off
+                if (GLOBAL.INFERNO_ONLY) {
+                    IoQuests.event("wild_defended");
+                }
             }
             CUSTOMATTACKS._started = false;
             QUESTS.Check();
@@ -901,6 +982,7 @@ package {
             UI2.Hide("warning");
             UI2.Hide("scareAway");
             warningPopup = null;
+            _ioSpawnLevel = 0; // monster baiter and portal attacks use their own strengths
             if (Boolean(_history["s1"]) && _history["s1"][0] == 1) {
                 _history["s1"][0] = 2;
                 _trojan = false;
@@ -1025,7 +1107,203 @@ package {
                         LOGGER.Stat([89, "fast"]);
                     }
             }
+            if (ioWild() != null) {
+                _history.nextAttack = ioNextAttackTime();
+            }
             BASE.Save();
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Inferno-only wild tribe attacks (server config wildAttacks, flag io_wildattacks): at most one a
+        // day per player (io_wildlast: the last start on any of the player's yards), a tribe chosen at
+        // random (Moloch by `molochChance`, the others evenly), and a fixed list of monsters per tribe and
+        // player-level band, spawned at the listed level. The planner (PROCESS_INFERNO1) still picks the
+        // side they come from and where they aim.
+        // ---------------------------------------------------------------------------------------------
+
+        /** The attack being planned: {tribe, level, monsters}. Read by PROCESS_INFERNO1.ProcessC. */
+        public static var _ioPlan:Object = null;
+
+        private static var _ioSpawnLevel:int = 0;
+
+        public static function ioResetSpawnLevel():void {
+            _ioSpawnLevel = 0;
+        }
+
+        private static var _ioWildRaw:String = null;
+
+        private static var _ioWildParsed:Object = null;
+
+        private static const IO_TRIBES:Array = [
+                // key, base id (TRIBES.TribeForBaseID), attack formation
+                ["legionnaire", 1, TYPE_TOWERS],
+                ["kozu", 11, TYPE_SWARM],
+                ["abunakki", 21, TYPE_KAMIKAZE],
+                ["dreadnaut", 31, TYPE_NERD]
+            ];
+
+        /** The wild attack settings from the server, or null (not the Inferno, or switched off). */
+        public static function ioWild():Object {
+            var raw:String = GLOBAL.INFERNO_ONLY && GLOBAL._flags && GLOBAL._flags.io_wildattacks ? String(GLOBAL._flags.io_wildattacks) : "";
+            if (raw != _ioWildRaw) {
+                _ioWildRaw = raw;
+                _ioWildParsed = null;
+                if (raw != "") {
+                    try {
+                        _ioWildParsed = JSON.parse(raw);
+                    }
+                    catch (e:Error) {
+                        _ioWildParsed = null;
+                    }
+                }
+            }
+            return _ioWildParsed;
+        }
+
+        /** The earliest time the next wild attack may start: `minHours` after the last on any yard. */
+        public static function ioNextAttackTime():Number {
+            var wild:Object = ioWild();
+            var last:Number = Math.max(Number(_history && _history.lastattack ? _history.lastattack : 0), GLOBAL.ioFlag("io_wildlast", 0));
+            return last + Number(wild && wild.minHours ? wild.minHours : 23) * 3600;
+        }
+
+        private static function ioAttackDue():Boolean {
+            var wild:Object = ioWild();
+            if (wild == null || !BASE.isInfernoMainYardOrOutpost) {
+                return _history.sessionsSinceLastAttack >= _sessionsBetweenAttacks && GLOBAL.Timestamp() > _history.nextAttack && BASE._baseLevel >= 9;
+            }
+            return GLOBAL.Timestamp() >= ioNextAttackTime() && BASE._baseLevel >= int(wild.minLevel) && BASE.isMainYardOrInfernoMainYard && ioSettled();
+        }
+
+        /** When the game started (getTimer), set on the first yard of the session; -1 before that. */
+        private static var _ioLoginAt:int = -1;
+
+        private static const IO_LOGIN_GRACE_MS:int = 60000;
+
+        /**
+         * Inferno: nothing about a wild attack happens in the first minute after logging in (a new
+         * session: logging in, or a reload): no planning, no warning, no attack, even one planned in an
+         * earlier session and due already.
+         */
+        private static function ioSettled():Boolean {
+            if (ioWild() == null) {
+                return true;
+            }
+            return _ioLoginAt >= 0 && getTimer() - _ioLoginAt >= IO_LOGIN_GRACE_MS;
+        }
+
+        /**
+         * Admin test mode (com/monsters/admin/IoTestMode.as): a wild attack now, on the yard on screen, whatever
+         * the one-a-day limit, the first minute after logging in and the player's level. tribe: legionnaire,
+         * kozu, abunakki, dreadnaut or moloch; band: the level band's attack (0-4). `custom` ({id: count}, at
+         * `customLevel`) sends those monsters instead, in the tribe's formation. Returns "" or why not.
+         */
+        public static function ioAdminAttack(tribe:String, band:int, custom:Object = null, customLevel:int = 1):String {
+            if (!GLOBAL.ioTestMode()) {
+                return "Admin test mode is off.";
+            }
+            if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isInfernoMainYardOrOutpost) {
+                return "Open one of your own yards first.";
+            }
+            if (_inProgress) {
+                return "An attack is already under way.";
+            }
+            var wild:Object = ioWild();
+            var key:String = tribe;
+            var id:int = TRIBES.M_IDS[0];
+            var type:int = TYPE_NERD;
+            if (tribe != "moloch") {
+                var found:Boolean = false;
+                for each (var pick:Array in IO_TRIBES) {
+                    if (pick[0] == tribe) {
+                        id = pick[1];
+                        type = pick[2];
+                        found = true;
+                    }
+                }
+                if (!found) {
+                    return "Unknown tribe " + tribe + ".";
+                }
+            }
+            var level:int = customLevel;
+            var monsters:Object = custom;
+            if (!monsters) {
+                var list:Array = wild && wild.tribes ? wild.tribes[key] as Array : null;
+                if (!list || list.length == 0) {
+                    return "The server has no wild attack for that tribe.";
+                }
+                var entry:Object = list[Math.max(0, Math.min(list.length - 1, band))];
+                monsters = entry.monsters;
+                level = int(entry.level);
+            }
+            var attack:Object = {};
+            var distances:Object = {};
+            var any:Boolean = false;
+            for (var mid:String in monsters) {
+                if (CREATURELOCKER._creatures[mid] && int(monsters[mid]) > 0) {
+                    attack[mid] = int(monsters[mid]);
+                    distances[mid] = 100;
+                    any = true;
+                }
+            }
+            if (!any) {
+                return "No monsters to send.";
+            }
+            HideWarning();
+            if (UI2._wildMonsterBar) {
+                UI2.Hide("wmbar");
+            }
+            _attackersBaseID = id;
+            _type = type;
+            _ioPlan = {"tribe": key, "level": level, "monsters": attack};
+            _queued = {"type": _type, "attack": attack, "attackTime": GLOBAL.Timestamp(), "degrees": Math.random() * 360, "distances": distances, "warned": 1, "t": _attackersBaseID, "level": level};
+            _ioSpawnLevel = Math.max(1, level);
+            PATHING.ResetCosts();
+            SendAttack(attack, _queued.degrees, distances);
+            return "";
+        }
+
+        /** Which band of the level list the player is in: 0 for levels up to bands[0], and so on. */
+        public static function ioBand(level:int):int {
+            var bands:Array = ioWild() && ioWild().bands is Array ? ioWild().bands as Array : [10, 20, 30, 40];
+            var i:int = 0;
+            while (i < bands.length && level > int(bands[i])) {
+                i++;
+            }
+            return i;
+        }
+
+        /** Picks the tribe and its attack for the player's level. False if the config has no attack for it. */
+        public static function ioChooseTribe(roll:Number = -1):Boolean {
+            var wild:Object = ioWild();
+            var key:String = null;
+            var id:int = 0;
+            var type:int = TYPE_NERD;
+            if (roll < 0) {
+                roll = Math.random();
+            }
+            if (roll < Number(wild.molochChance)) {
+                key = "moloch";
+                id = TRIBES.M_IDS[0];
+            }
+            else {
+                var pick:Array = IO_TRIBES[Math.min(IO_TRIBES.length - 1, int((roll - Number(wild.molochChance)) / (1 - Number(wild.molochChance)) * IO_TRIBES.length))];
+                key = pick[0];
+                id = pick[1];
+                type = pick[2];
+            }
+            var list:Array = wild.tribes ? wild.tribes[key] as Array : null;
+            if (!list || list.length == 0) {
+                return false;
+            }
+            var entry:Object = list[Math.min(list.length - 1, ioBand(BASE.BaseLevel().level))];
+            if (!entry || !entry.monsters) {
+                return false;
+            }
+            _attackersBaseID = id;
+            _type = type;
+            _ioPlan = {"tribe": key, "level": int(entry.level), "monsters": entry.monsters};
+            return true;
         }
 
         public static function dpsAtPoint(param1:Solution, param2:Point):Number {

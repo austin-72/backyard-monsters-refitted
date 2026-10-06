@@ -286,6 +286,9 @@ package com.monsters.siege.weapons {
 
         public function buyResourcesAndUpgrade():void {
             var _loc1_:int = this.instantUpgradeResourceCost;
+            if (!GLOBAL.ioConfirmShiny(_loc1_, "to make up the missing resources and upgrade", buyResourcesAndUpgrade)) {
+                return;
+            }
             BASE.Fund(1, Math.max(this.upgradeCosts.r1 - BASE._iresources.r1, 0), false, null, true);
             BASE.Fund(2, Math.max(this.upgradeCosts.r2 - BASE._iresources.r2, 0), false, null, true);
             BASE.Fund(3, Math.max(this.upgradeCosts.r3 - BASE._iresources.r3, 0), false, null, true);
@@ -296,6 +299,9 @@ package com.monsters.siege.weapons {
 
         public function buyResourcesAndBuild():void {
             var _loc1_:int = this.instantBuildResourceCost;
+            if (!GLOBAL.ioConfirmShiny(_loc1_, "to make up the missing resources and build", buyResourcesAndBuild)) {
+                return;
+            }
             BASE.Fund(1, Math.max(this.buildCosts.r1 - BASE._iresources.r1, 0), false, null, true);
             BASE.Fund(2, Math.max(this.buildCosts.r2 - BASE._iresources.r2, 0), false, null, true);
             BASE.Fund(3, Math.max(this.buildCosts.r3 - BASE._iresources.r3, 0), false, null, true);

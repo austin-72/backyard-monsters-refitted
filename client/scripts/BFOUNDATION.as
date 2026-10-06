@@ -31,6 +31,9 @@ package {
     import flash.events.Event;
     import flash.events.MouseEvent;
     import flash.filters.ColorMatrixFilter;
+    import flash.filters.GlowFilter;
+    import flash.display.Graphics;
+    import flash.utils.Dictionary;
     import flash.geom.Matrix;
     import flash.geom.Point;
     import flash.geom.Rectangle;
@@ -436,7 +439,9 @@ package {
                     if (buildingData is ICoreBuilding) {
                         hasTownHall = true;
                     }
-                    if (buildingData is BTRAP && buildingData._fired || buildingData._type == 53 && buildingData._expireTime < GLOBAL.Timestamp()) {
+                    // (Inferno-only: in your own yard a spent trap is kept, disarmed, "fd"; an attack still leaves it
+                    // out, and the server marks it)
+                    if (buildingData is BTRAP && buildingData._fired && !(GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD)) || buildingData._type == 53 && buildingData._expireTime < GLOBAL.Timestamp()) {
                         Console.warning("Ignored Building" + buildingData + buildingData._type + buildingData._expireTime + " setting buildinghealthdata to 0");
                         buildingHealthData[buildingData._id] = 0;
                     }
@@ -649,6 +654,7 @@ package {
                 }
                 this._mcHit.cacheAsBitmap = true;
                 this._mcHit.alpha = 0;
+                s_ioHitOwner[this._mcHit] = this;
             }
             catch (e:Error) {
                 LOGGER.Log("err", "BFOUNDATION.SetProps:  mcHit | " + e.message + " | " + e.getStackTrace());
@@ -918,7 +924,9 @@ package {
                 this._renderState = state;
                 if (imageDataB) {
                     loadImages = [];
-                    if (!imageDataB[_IMAGE_NAMES[_RASTERDATA_TOP] + state]) {
+                    // (a building drawn with no top, only an anim strip, like the Inferno's Cinder Coil and
+                    // Obsidian Mortar, keeps its damaged state when it has a damaged strip: "noTop")
+                    if (!imageDataB[_IMAGE_NAMES[_RASTERDATA_TOP] + state] && !(imageDataA.noTop && imageDataB[_IMAGE_NAMES[_RASTERDATA_ANIM] + state])) {
                         state = "";
                     }
                     length = _IMAGE_NAMES.length;
@@ -1046,6 +1054,8 @@ package {
             var buildingAssetContainer:BuildingAssetContainer = null;
             var _loc16_:Rectangle = null;
             var _loc17_:DisplayObject = null;
+            // the pictures that make the building's hit area (ioBuildHit): [bitmap, x, y, width, height, frames]
+            var ioParts:Array = [];
             if (m_isCleared) {
                 return;
             }
@@ -1121,6 +1131,7 @@ package {
                     }
                     else if (Boolean(imageDataB[_IMAGE_NAMES[_RASTERDATA_TOP] + state]) && imageDataA.baseurl + imageDataB[_IMAGE_NAMES[_RASTERDATA_TOP] + state][0] == _loc13_) {
                         this.setupImage(_RASTERDATA_TOP, state, this.topContainer, imageDataB, imageBitmapData, int.MAX_VALUE);
+                        ioParts.push([imageBitmapData, imageDataB[_IMAGE_NAMES[_RASTERDATA_TOP] + state][1].x, imageDataB[_IMAGE_NAMES[_RASTERDATA_TOP] + state][1].y, imageBitmapData.width, imageBitmapData.height, 1]);
                         this.setupHit(_RASTERDATA_TOP, _loc9_, state);
                         if (_loc7_) {
                             this.updateRasterData();
@@ -1143,6 +1154,7 @@ package {
                         }
                         this._animContainerBMD = new BitmapData(_loc16_.width, _loc16_.height, true, 16777215);
                         this.setupImage(_RASTERDATA_ANIM, state, this.animContainer, imageDataB, this._animContainerBMD, int.MAX_VALUE);
+                        ioParts.push([imageBitmapData, _loc16_.x, _loc16_.y, _loc16_.width, _loc16_.height, this._animFrames]);
                         this.AnimFrame(false);
                         if (!_mc.hasEventListener(Event.ENTER_FRAME)) {
                             _mc.addEventListener(Event.ENTER_FRAME, this.TickFast);
@@ -1216,6 +1228,7 @@ package {
                         }
                         this._animContainerBMD = new BitmapData(_loc16_.width, _loc16_.height, true, 16777215);
                         this.setupImage(_RASTERDATA_ANIM, state, this.animContainer, imageDataB, this._animContainerBMD, int.MAX_VALUE);
+                        ioParts.push([imageBitmapData, _loc16_.x, _loc16_.y, _loc16_.width, _loc16_.height, this._animFrames]);
                         this.AnimFrame(false);
                         if (!_mc.hasEventListener(Event.ENTER_FRAME)) {
                             _mc.addEventListener(Event.ENTER_FRAME, this.TickFast);
@@ -1244,6 +1257,10 @@ package {
                 }
             }
             this.AnimFrame();
+            this.ioBuildHit(ioParts);
+            if (this._ioHover) {
+                this.ioShowGlow(); // the pictures changed under the mouse (damaged, upgraded...)
+            }
         }
 
         protected function setupImage(param1:uint, param2:String, param3:BuildingAssetContainer, param4:Object, param5:BitmapData, param6:Number):void {
@@ -1286,6 +1303,7 @@ package {
                 this._mcHit.x = this._offsets[param1].x;
                 this._mcHit.y = this._offsets[param1].y;
             }
+            this.ioPlaceHit();
         }
 
         public function showFootprint(param1:Boolean, param2:Boolean = false):void {
@@ -1440,6 +1458,13 @@ package {
                     }
                     _loc10_++;
                 }
+                if (this._ioGlow && this._ioGlowPt) {
+                    // the hover glow: under every part of the building (and its fortification)
+                    this._ioGlowPt.x = _mc.x + this._ioGlowOff.x - _loc1_.x;
+                    this._ioGlowPt.y = _mc.y + this._ioGlowOff.y - _loc1_.y;
+                    this._ioGlow.depth = _loc7_ - 1.5;
+                    this._ioGlow.visible = _mc.visible;
+                }
                 _loc4_ = this._rasterData[_RASTERDATA_SHADOW];
                 _loc5_ = this._rasterPt[_RASTERDATA_SHADOW];
                 if (this._mcBase && _loc4_ && Boolean(_loc5_)) {
@@ -1544,6 +1569,7 @@ package {
         }
 
         public function FollowMouse():void {
+            this._ioFollowKey = null;
             if (BYMConfig.instance.RENDERER_ON) {
                 this.showFootprint(true);
             }
@@ -1554,11 +1580,26 @@ package {
             this.Render(k_STATE_DEFAULT);
         }
 
+        /** Where the building held by the pointer was last drawn, with the view (FollowMouseB). */
+        private var _ioFollowKey:String = null;
+
         public function FollowMouseB(param1:Event = null):void {
-            var _loc2_:String = BASE.BuildBlockers(this, this._class == "decoration");
+            var ioX:int = int((MAP._GROUND.mouseX - this._mouseOffset.x) / 10) * 10;
+            var ioY:int = int((MAP._GROUND.mouseY - this._mouseOffset.y) / 5) * 5;
+            // Every frame, whether or not it moved: the overlap check, the building's layers and its
+            // footprint were all worked out again. Now only when it lands on another snap step or the
+            // view moves (scrolled or zoomed while held).
+            var ioKey:String = ioX + "," + ioY + "," + MAP._GROUND.x + "," + MAP._GROUND.y + "," + MAP._GROUND.scaleX;
+            if (ioKey == this._ioFollowKey && _mc.x == ioX && _mc.y == ioY) {
+                return;
+            }
+            this._ioFollowKey = ioKey;
             var _loc3_:int = this._mcFootprint.currentFrame;
-            _mc.x = int((MAP._GROUND.mouseX - this._mouseOffset.x) / 10) * 10;
-            _mc.y = int((MAP._GROUND.mouseY - this._mouseOffset.y) / 5) * 5;
+            _mc.x = ioX;
+            _mc.y = ioY;
+            // (checked where it is now: the stock check came before the move, so the footprint showed
+            // whether the last spot was free, a step behind)
+            var _loc2_:String = BASE.BuildBlockers(this, this._class == "decoration");
             this._mcBase.x = _mc.x;
             this._mcBase.y = _mc.y;
             this.updateRasterData();
@@ -1607,6 +1648,7 @@ package {
         protected function clearRasterData():void {
             var _loc1_:RasterData = null;
             var _loc2_:int = 0;
+            this.ioHideGlow();
             if (!BYMConfig.instance.RENDERER_ON || !this._rasterData) {
                 return;
             }
@@ -1621,7 +1663,32 @@ package {
             }
         }
 
+        /**
+         * Placing a building runs on the ground's MOUSE_UP. If anything in it throws, Flash stops
+         * delivering that MOUSE_UP to the other listeners, so MAP.Release never runs: the building keeps
+         * following the mouse and the yard drags with it until the game is restarted (it happened).
+         * Whatever fails, the placement is now abandoned cleanly, and what failed is reported.
+         */
         public function Place(param1:MouseEvent = null):void {
+            try {
+                this.ioPlaceInner(param1);
+            }
+            catch (e:Error) {
+                LOGGER.Log("err", "Place failed for building type " + this._type + (BASE.isOutpost ? " (outpost)" : "") + ": " + e + " | " + e.getStackTrace());
+                try {
+                    _mc.removeEventListener(Event.ENTER_FRAME, this.FollowMouseB);
+                    MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, this.Place);
+                    _mc.removeEventListener(MouseEvent.MOUSE_DOWN, MAP.Click);
+                    GLOBAL._newBuilding = null;
+                    this.Cancel();
+                }
+                catch (e2:Error) {
+                }
+                MAP.Release(null);
+            }
+        }
+
+        private function ioPlaceInner(param1:MouseEvent = null):void {
             var BragBiggulp:Function;
             var BragTotem:Function;
             var tmpBuildTime:int = 0;
@@ -1698,7 +1765,15 @@ package {
                         if (STORE._storeItems["BUILDING" + this._type]) {
                             BASE.Purchase("BUILDING" + this._type, 1, "building");
                         }
-                        if (this._buildingProps.costs[0].time.Get() != 0 && InventoryManager.buildingStorageCount(this._type) == 0) {
+                        if (GLOBAL.ioFreeBuild()) {
+                            // Admin test mode (and the Designer): built at once.
+                            this.Constructed();
+                        }
+                        else if (GLOBAL.INFERNO_ONLY && this._buildingProps.type == "decoration" && this._buildingProps.costs[0].time.Get() == 0) {
+                            // Inferno-only: a decoration is up the moment it's placed (no worker, no countdown)
+                            this.Constructed();
+                        }
+                        else if (this._buildingProps.costs[0].time.Get() != 0 && InventoryManager.buildingStorageCount(this._type) == 0) {
                             QUEUE.Add("building" + this._id, this);
                         }
                     }
@@ -1875,6 +1950,8 @@ package {
             if (!this._mcHit.hasEventListener(MouseEvent.MOUSE_OUT)) {
                 this._mcHit.addEventListener(MouseEvent.MOUSE_OUT, this.Out);
             }
+            this._mcHit.addEventListener(MouseEvent.MOUSE_OVER, this.ioHoverIn);
+            this._mcHit.addEventListener(MouseEvent.MOUSE_OUT, this.ioHoverOut);
         }
 
         protected function removeListeners():void {
@@ -1893,6 +1970,9 @@ package {
             if (this._mcHit.hasEventListener(MouseEvent.MOUSE_OUT)) {
                 this._mcHit.removeEventListener(MouseEvent.MOUSE_OUT, this.Out);
             }
+            this._mcHit.removeEventListener(MouseEvent.MOUSE_OVER, this.ioHoverIn);
+            this._mcHit.removeEventListener(MouseEvent.MOUSE_OUT, this.ioHoverOut);
+            this.ioHoverOut(null);
         }
 
         public function PlaceB():void {
@@ -2015,6 +2095,14 @@ package {
         }
 
         public function Repair():void {
+            // Admin test mode (and the Designer): repaired at once.
+            if (GLOBAL.ioFreeBuild() && health < maxHealth) {
+                this._destroyed = false;
+                setHealth(maxHealth);
+                this.Repaired();
+                this.Update();
+                return;
+            }
             this._repairing = 1;
             this._destroyed = false;
             this.Update();
@@ -2085,12 +2173,12 @@ package {
         public function InstantBuildCost():int {
             var _loc1_:Object = GLOBAL._buildingProps[this._type - 1].costs[0];
             var _loc2_:int = int(_loc1_.time.Get());
-            if (_loc2_ <= 300) {
+            if (_loc2_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 300)) {
                 _loc2_ = 0;
             }
             var _loc3_:int = _loc1_.r1.Get() + _loc1_.r2.Get() + _loc1_.r3.Get();
             var _loc4_:int = Math.ceil(Math.pow(Math.sqrt(_loc3_ / 2), 0.75));
-            var _loc5_:int = STORE.GetTimeCost(_loc2_);
+            var _loc5_:int = STORE.ioBuildingTimeCost(_loc2_);
             var _loc6_:int = _loc4_ + _loc5_;
             return int(_loc6_ * 0.95);
         }
@@ -2101,12 +2189,12 @@ package {
             }
             var _loc1_:Object = this._buildingProps.fortify_costs[this._fortification.Get()];
             var _loc2_:int = int(_loc1_.time.Get());
-            if (_loc2_ <= 300) {
+            if (_loc2_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 300)) {
                 _loc2_ = 0;
             }
             var _loc3_:int = _loc1_.r1.Get() + _loc1_.r2.Get() + _loc1_.r3.Get();
             var _loc4_:int = Math.ceil(Math.pow(Math.sqrt(_loc3_ / 2), 0.75));
-            var _loc5_:int = STORE.GetTimeCost(_loc2_);
+            var _loc5_:int = STORE.ioBuildingTimeCost(_loc2_);
             var _loc6_:int = _loc4_ + _loc5_;
             return int(_loc6_ * 0.95);
         }
@@ -2117,12 +2205,12 @@ package {
             }
             var _loc1_:Object = this._buildingProps.costs[this._lvl.Get()];
             var _loc2_:int = int(_loc1_.time.Get());
-            if (_loc2_ <= 300) {
+            if (_loc2_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 300)) {
                 _loc2_ = 0;
             }
             var _loc3_:int = _loc1_.r1.Get() + _loc1_.r2.Get() + _loc1_.r3.Get();
             var _loc4_:int = Math.ceil(Math.pow(Math.sqrt(_loc3_ / 2), 0.75));
-            var _loc5_:int = STORE.GetTimeCost(_loc2_);
+            var _loc5_:int = STORE.ioBuildingTimeCost(_loc2_);
             var _loc6_:int = _loc4_ + _loc5_;
             return int(_loc6_ * 0.95);
         }
@@ -2204,7 +2292,13 @@ package {
                     LOGGER.Stat([64, this._type, this._fortification.Get() + 1]);
                     this._helpList = [];
                     this.Update();
-                    if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class == "tower") {
+                    if (GLOBAL.ioFreeBuild()) {
+                        // Admin test mode (and the Designer): fortified at once.
+                        this._countdownFortify.Set(0);
+                        this.Fortified();
+                        this.Update();
+                    }
+                    else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class == "tower") {
                         GLOBAL._selectedBuilding = this;
                         GLOBAL.Message(KEYS.Get("msg_inactivefortify"), KEYS.Get("btn_speedup"), STORE.SpeedUp, ["SP4"]);
                     }
@@ -2322,7 +2416,13 @@ package {
                     LOGGER.Stat([7, this._type, this._lvl.Get() + 1]);
                     this._helpList = [];
                     this.Update();
-                    if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class == "tower") {
+                    if (GLOBAL.ioFreeBuild()) {
+                        // Admin test mode (and the Designer): upgraded at once.
+                        this._countdownUpgrade.Set(0);
+                        this.Upgraded();
+                        this.Update();
+                    }
+                    else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class == "tower") {
                         GLOBAL._selectedBuilding = this;
                         GLOBAL.Message(KEYS.Get("msg_inactiveupgrade"), KEYS.Get("btn_speedup"), STORE.SpeedUp, ["SP4"]);
                     }
@@ -2758,11 +2858,13 @@ package {
         }
 
         public function StartMove():void {
+            this.ioHoverOut(null);
             try {
                 BASE._blockSave = true;
                 BASE.BuildingSelect(this, true);
                 this.GridCost(false);
                 this._moving = true;
+                this._ioFollowKey = null;
                 this._stopMoveCount = 0;
                 _mc.mouseEnabled = false;
                 if (!PLANNER._open) {
@@ -3560,6 +3662,318 @@ package {
                 return new buildingFootprint190x160();
             }
             return new MovieClip();
+        }
+
+        // ---------------------------------------------------------------------------------------------
+        // Inferno-only: clicking buildings, and the white glow round the one under the mouse
+        // ---------------------------------------------------------------------------------------------
+
+        /**
+         * The hit area each building type had was a vector shape drawn for the original overworld art: it
+         * matched the Inferno pictures badly (bits of a building did not click, empty ground next to it did,
+         * and a taller building's shape stole clicks from the one behind it). Now the hit area is made from
+         * the pictures themselves: every 3 x 3 pixel square where the top or any frame of the animation is
+         * solid, grown by one square so the edges are easy to hit, plus the building's footprint on the
+         * ground. It is the old hit clip's hitArea, so everything that listens to it works as before.
+         * Worked out once for each set of pictures (s_ioHitCache).
+         */
+        private var _ioHit:Sprite;
+
+        private static var s_ioHitCache:Dictionary = new Dictionary(true);
+
+        private static const IO_HIT_CELL:int = 3;
+
+        /** Hit clip -> its building, so the clips can be kept in drawing order (MAP.SortDepth). */
+        private static var s_ioHitOwner:Dictionary = new Dictionary(true);
+
+        /**
+         * Where a hit clip's building is drawn in the yard's order (NaN for anything else): with the bitmap
+         * renderer the clips were never sorted, so where two buildings overlapped the one behind could take
+         * the click. Sorted by this, the building in front gets it.
+         */
+        public static function ioHitDepth(param1:DisplayObject):Number {
+            var b:BFOUNDATION = s_ioHitOwner[param1] as BFOUNDATION;
+            if (!b || !b._mc) {
+                return NaN;
+            }
+            return (b._mc.y + (b._middle ? b._middle : 0)) * 1000 + b._mc.x;
+        }
+
+        /** The building under the mouse (one at a time) and its glow (a picture of it, glowing, under it). */
+        public static var s_ioHovered:BFOUNDATION = null;
+
+        private var _ioHover:Boolean = false;
+
+        private var _ioGlow:RasterData;
+
+        private var _ioGlowBMD:BitmapData;
+
+        private var _ioGlowPt:Point;
+
+        private var _ioGlowOff:Point;
+
+        private static const IO_GLOW_PAD:int = 12;
+
+        private static var s_ioGlowFilter:GlowFilter = new GlowFilter(0xFFFFFF, 1, 9, 9, 3, 2, false, true);
+
+        private function ioBuildHit(param1:Array):void {
+            if (!this._mcHit || !param1 || param1.length == 0 || this is BMUSHROOM) {
+                return;
+            }
+            var fp:Rectangle = this._footprint && this._footprint.length ? this._footprint[0] : new Rectangle();
+            var sig:String = fp.x + "," + fp.y + "," + fp.width + "," + fp.height + ";";
+            var p:Array = null;
+            for each (p in param1) {
+                sig += p[1] + "," + p[2] + "," + p[3] + "," + p[4] + "," + p[5] + ";";
+            }
+            var byPicture:Object = s_ioHitCache[param1[0][0]];
+            if (!byPicture) {
+                byPicture = {};
+                s_ioHitCache[param1[0][0]] = byPicture;
+            }
+            var rects:Array = byPicture[sig];
+            if (!rects) {
+                try {
+                    rects = ioHitRects(param1, fp);
+                    byPicture[sig] = rects;
+                }
+                catch (e:Error) {
+                    return; // (a picture that cannot be read: the old hit shape stays)
+                }
+            }
+            if (!this._ioHit) {
+                this._ioHit = new Sprite();
+                this._ioHit.name = "ioHit";
+                this._ioHit.mouseEnabled = false;
+                this._ioHit.mouseChildren = false;
+            }
+            var g:Graphics = this._ioHit.graphics;
+            g.clear();
+            g.beginFill(0xFFFFFF, 1);
+            var i:int = 0;
+            while (i < rects.length) {
+                g.drawRect(rects[i], rects[i + 1], rects[i + 2], rects[i + 3]);
+                i += 4;
+            }
+            g.endFill();
+            if (this._ioHit.parent != this._mcHit) {
+                this._mcHit.addChild(this._ioHit);
+            }
+            this._mcHit.hitArea = this._ioHit;
+            this.ioPlaceHit();
+        }
+
+        /** The hit area is drawn in the building's own coordinates; the hit clip sits at a picture's corner. */
+        private function ioPlaceHit():void {
+            if (this._ioHit && this._offsets && this._offsets[this.m_hitOffsetIndex]) {
+                this._ioHit.x = -this._offsets[this.m_hitOffsetIndex].x;
+                this._ioHit.y = -this._offsets[this.m_hitOffsetIndex].y;
+            }
+        }
+
+        /** Rows of solid squares [x, y, w, h, ...] (none overlapping: the fill is even-odd). */
+        private static function ioHitRects(param1:Array, param2:Rectangle):Array {
+            var C:int = IO_HIT_CELL;
+            // the footprint on the ground: the grid rectangle's corners in the building's own coordinates
+            var fx0:Number = param2.x - param2.y - param2.height;
+            var fx1:Number = param2.x + param2.width - param2.y;
+            var fy0:Number = (param2.x + param2.y) / 2;
+            var fy1:Number = (param2.x + param2.width + param2.y + param2.height) / 2;
+            var minX:Number = fx0;
+            var maxX:Number = fx1;
+            var minY:Number = fy0;
+            var maxY:Number = fy1;
+            var p:Array = null;
+            for each (p in param1) {
+                minX = Math.min(minX, p[1]);
+                minY = Math.min(minY, p[2]);
+                maxX = Math.max(maxX, p[1] + p[3]);
+                maxY = Math.max(maxY, p[2] + p[4]);
+            }
+            var ox:int = Math.floor(minX / C) * C - C;
+            var oy:int = Math.floor(minY / C) * C - C;
+            var cols:int = Math.ceil((maxX - ox) / C) + 2;
+            var rows:int = Math.ceil((maxY - oy) / C) + 2;
+            var on:Array = new Array(cols * rows);
+            var r:int = 0;
+            var c:int = 0;
+            var f:int = 0;
+            var cx:Number = NaN;
+            var cy:Number = NaN;
+            var bx:int = 0;
+            var by:int = 0;
+            var gx:Number = NaN;
+            var gy:Number = NaN;
+            var bmd:BitmapData = null;
+            var step:int = 1;
+            for each (p in param1) {
+                bmd = p[0];
+                step = p[5] > 16 ? 2 : 1;
+                r = 0;
+                while (r < rows) {
+                    cy = oy + r * C + C / 2;
+                    by = int(cy - p[2]);
+                    if (by >= 0 && by < p[4] && by < bmd.height) {
+                        c = 0;
+                        while (c < cols) {
+                            if (!on[r * cols + c]) {
+                                cx = ox + c * C + C / 2;
+                                bx = int(cx - p[1]);
+                                if (bx >= 0 && bx < p[3]) {
+                                    f = 0;
+                                    while (f < p[5]) {
+                                        if (f * p[3] + bx < bmd.width && (bmd.getPixel32(f * p[3] + bx, by) >>> 24) > 40) {
+                                            on[r * cols + c] = 1;
+                                            break;
+                                        }
+                                        f += step;
+                                    }
+                                }
+                            }
+                            c++;
+                        }
+                    }
+                    r++;
+                }
+            }
+            // the footprint (a point's grid position: x = gx - gy, y = (gx + gy) / 2)
+            r = 0;
+            while (r < rows) {
+                cy = oy + r * C + C / 2;
+                c = 0;
+                while (c < cols) {
+                    cx = ox + c * C + C / 2;
+                    gx = cy + cx / 2;
+                    gy = cy - cx / 2;
+                    if (gx >= param2.x && gx <= param2.x + param2.width && gy >= param2.y && gy <= param2.y + param2.height) {
+                        on[r * cols + c] = 1;
+                    }
+                    c++;
+                }
+                r++;
+            }
+            // grown by one square
+            var grown:Array = new Array(cols * rows);
+            r = 0;
+            while (r < rows) {
+                c = 0;
+                while (c < cols) {
+                    if (on[r * cols + c] || c > 0 && on[r * cols + c - 1] || c < cols - 1 && on[r * cols + c + 1] || r > 0 && on[(r - 1) * cols + c] || r < rows - 1 && on[(r + 1) * cols + c]) {
+                        grown[r * cols + c] = 1;
+                    }
+                    c++;
+                }
+                r++;
+            }
+            var out:Array = [];
+            var start:int = 0;
+            r = 0;
+            while (r < rows) {
+                c = 0;
+                while (c < cols) {
+                    if (grown[r * cols + c]) {
+                        start = c;
+                        while (c < cols && grown[r * cols + c]) {
+                            c++;
+                        }
+                        out.push(ox + start * C, oy + r * C, (c - start) * C, C);
+                    }
+                    else {
+                        c++;
+                    }
+                }
+                r++;
+            }
+            return out;
+        }
+
+        /** Not while attacking (the mouse drops monsters then), moving or placing a building. */
+        private function ioHoverIn(param1:MouseEvent):void {
+            if (String(GLOBAL.mode).indexOf("attack") != -1 || this._moving || this._placing || GLOBAL._newBuilding === this || m_isCleared) {
+                return;
+            }
+            if (s_ioHovered && s_ioHovered != this) {
+                s_ioHovered.ioHoverOut(null);
+            }
+            s_ioHovered = this;
+            this._ioHover = true;
+            this.ioShowGlow();
+        }
+
+        public function ioHoverOut(param1:MouseEvent):void {
+            if (s_ioHovered == this) {
+                s_ioHovered = null;
+            }
+            if (!this._ioHover) {
+                return;
+            }
+            this._ioHover = false;
+            this.ioHideGlow();
+        }
+
+        /** A picture of the building as it is now (every part), glowing white round its edge only. */
+        private function ioShowGlow():void {
+            this.ioHideGlow();
+            if (!_mc || m_isCleared) {
+                return;
+            }
+            if (!BYMConfig.instance.RENDERER_ON) {
+                _mc.filters = [new GlowFilter(0xFFFFFF, 1, 9, 9, 3, 2)];
+                return;
+            }
+            if (!this._rasterData || !this._offsets) {
+                return;
+            }
+            var parts:Array = [_RASTERDATA_TOP, _RASTERDATA_ANIM, _RASTERDATA_ANIM2, _RASTERDATA_ANIM3];
+            var minX:Number = Infinity;
+            var minY:Number = Infinity;
+            var maxX:Number = -Infinity;
+            var maxY:Number = -Infinity;
+            var i:uint = 0;
+            var rd:RasterData = null;
+            var d:BitmapData = null;
+            for each (i in parts) {
+                rd = this._rasterData[i] as RasterData;
+                d = rd ? rd.data as BitmapData : null;
+                if (d && this._offsets[i]) {
+                    minX = Math.min(minX, this._offsets[i].x);
+                    minY = Math.min(minY, this._offsets[i].y);
+                    maxX = Math.max(maxX, this._offsets[i].x + d.width);
+                    maxY = Math.max(maxY, this._offsets[i].y + d.height);
+                }
+            }
+            if (minX == Infinity || maxX - minX > 2048 || maxY - minY > 2048) {
+                return;
+            }
+            minX -= IO_GLOW_PAD;
+            minY -= IO_GLOW_PAD;
+            this._ioGlowBMD = new BitmapData(int(maxX - minX + IO_GLOW_PAD), int(maxY - minY + IO_GLOW_PAD), true, 0);
+            for each (i in parts) {
+                rd = this._rasterData[i] as RasterData;
+                d = rd ? rd.data as BitmapData : null;
+                if (d && this._offsets[i]) {
+                    this._ioGlowBMD.copyPixels(d, d.rect, new Point(int(this._offsets[i].x - minX), int(this._offsets[i].y - minY)), null, null, true);
+                }
+            }
+            this._ioGlowOff = new Point(int(minX), int(minY));
+            this._ioGlowPt = new Point();
+            this._ioGlow = new RasterData(this._ioGlowBMD, this._ioGlowPt, 0);
+            this._ioGlow.filter = s_ioGlowFilter;
+            this.updateRasterData();
+        }
+
+        private function ioHideGlow():void {
+            if (this._ioGlow) {
+                this._ioGlow.clear();
+                this._ioGlow = null;
+            }
+            if (this._ioGlowBMD) {
+                this._ioGlowBMD.dispose();
+                this._ioGlowBMD = null;
+            }
+            if (!BYMConfig.instance.RENDERER_ON && _mc && _mc.filters.length && _mc.filters[0] is GlowFilter) {
+                _mc.filters = [];
+            }
         }
 
         public function highlight(param1:uint):void {

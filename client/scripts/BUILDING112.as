@@ -2,6 +2,7 @@ package {
     import com.monsters.ai.WMBASE;
     import com.monsters.interfaces.ICoreBuilding;
     import com.monsters.maproom_manager.MapRoomManager;
+    import flash.events.Event;
     import flash.events.MouseEvent;
     import flash.geom.Point;
     import flash.geom.Rectangle;
@@ -16,6 +17,17 @@ package {
             _spoutPoint = new Point(0, -55);
             _spoutHeight = 115;
             SetProps();
+        }
+
+        private var _ioFrame:int = 0;
+
+        /** Inferno-only: the hall's fire and banner (its anim strip, 24 frames), a frame every 3 steps. */
+        override public function TickFast(param1:Event = null):void {
+            super.TickFast(param1);
+            if (GLOBAL._render && _animLoaded && this._ioFrame % 3 == 0) {
+                this.AnimFrame();
+            }
+            ++this._ioFrame;
         }
 
         override public function Repair():void {

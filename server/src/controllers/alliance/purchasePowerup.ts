@@ -7,6 +7,7 @@ import { reducePowerupCharge, type PowerupPurchase } from "../../services/allian
 import { isShinyLocked } from "../../services/user/shinyLock.js";
 import { shinyLockedErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { questBump } from "../../services/quests/questProgress.js";
 
 /**
  * Fields loaded off the paying player's save.
@@ -42,6 +43,7 @@ export const purchasePowerup: KoaController = async (ctx) => {
   };
 
   const resolved = await reducePowerupCharge(purchase);
+  void questBump(user.userid, "powerup");
 
   const powerups = resolved.map(({ rules, status }) => ({
     powerup_id: rules.powerup_id,

@@ -602,6 +602,12 @@ package com.monsters.siege {
         }
 
         private function DoInstant(param1:MouseEvent = null):void {
+            var ioCost:int = this._tab == "lab" ? GLOBAL._bSiegeLab.getInstantUpgradeCost(this._currentWeapon.weaponID) : (this._tab == "factory" ? GLOBAL._bSiegeFactory.getInstantUpgradeCost(this._currentWeapon.weaponID) : 0);
+            if (!GLOBAL.ioConfirmShiny(ioCost, "to finish this now", function():void {
+                        DoInstant(param1);
+                    })) {
+                return;
+            }
             if (this._tab == "lab") {
                 if (GLOBAL._bSiegeLab.HasEnoughShinyToUpgrade(this._currentWeapon)) {
                     GLOBAL._bSiegeLab.InstantUpgrade(this._currentWeapon.weaponID);

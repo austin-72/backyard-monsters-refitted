@@ -1,4 +1,5 @@
 package com.monsters.monsters {
+    import com.monsters.events.hfo.IoHfoWaves;
     import com.cc.utils.SecNum;
     import com.monsters.GameObject;
     import com.monsters.configs.BYMConfig;
@@ -216,6 +217,9 @@ package com.monsters.monsters {
 
         protected var _currentSkinOverride:String;
 
+        /** Inferno-only: a small Spurtz hatched from a Clinkerjaw (3/4 size and speed). */
+        public var ioHatchling:Boolean = false;
+
         protected var _rasterData:RasterData;
 
         protected var _rasterPt:Point;
@@ -359,8 +363,18 @@ package com.monsters.monsters {
             return null;
         }
 
+        /**
+         * Inferno-only: damage below a whole hit point not yet taken off. Health is kept in whole points
+         * (SecNum rounds), so a hit shrunk below half a point by armour (the Sulfur Bomb's) was rounded away
+         * altogether. The Quake tower never hits for more than the health left, so a monster on 1 point
+         * under armour took 1 x (1 - armour) a hit and stayed on 1: it could not die until the armour had
+         * faded below half. The fractions are added up here and taken off once they make a whole point.
+         */
+        private var _ioHurtCarry:Number = 0;
+
         override public function modifyHealth(param1:Number, param2:ITargetable = null):Number {
             var _loc6_:Component = null;
+            var ioWhole:Number = NaN;
             if (!health) {
                 return 0;
             }
@@ -378,6 +392,12 @@ package com.monsters.monsters {
             }
             if (param1 < 0) {
                 param1 *= !!armor ? 1 - armor : 1;
+                if (GLOBAL.INFERNO_ONLY) {
+                    param1 += this._ioHurtCarry;
+                    ioWhole = -Math.floor(-param1 + 0.000001); // whole points, towards 0: -2.7 takes 2
+                    this._ioHurtCarry = Math.min(0, param1 - ioWhole); // and keeps -0.7 for the next hit
+                    param1 = ioWhole;
+                }
                 this.damaged(param1);
             }
             else {
@@ -513,6 +533,12 @@ package com.monsters.monsters {
             if (this._dead) {
                 return true;
             }
+            // Inferno-only (Hell Freezes Over): a monster pacing in its Compound is frozen still while a wave has the
+            // Compound sealed in ice (IoHfoWaves)
+            if (GLOBAL.INFERNO_ONLY && (this._behaviour == k_sBHVR_PEN || this._behaviour == k_sBHVR_HOUSING) && IoHfoWaves.compoundFrozen) {
+                this.updateRasterData(); // (still where it stands when the map scrolls)
+                return false;
+            }
 
             // Performance optimization: Reduce component tick frequency
             _componentTickCounter += param1;
@@ -579,6 +605,45 @@ package com.monsters.monsters {
         protected function move():void {
         }
 
+        private var _ioPuppetY:Number = NaN;
+
+        /**
+         * Inferno-only (attack replays, IoReplayPlayer): a monster that only shows where a recording says it was. It
+         * is never ticked (it neither moves nor fights by itself): each frame it is told where it is, how hurt, and
+         * how high it flies, and draws itself as it would have (its own art, facing the way it moved, its health
+         * bar); walking moves its walk on.
+         */
+        /** Inferno-only (a replay's puppet): its glows as recorded (GlowFilters; null or [] for none). */
+        public function ioPuppetGlow(glows:Array):void {
+            this.m_filters = glows ? glows.concat() : [];
+            if (this._graphicMC) {
+                this._graphicMC.filters = this.m_filters;
+            }
+            this.updateRasterData();
+        }
+
+        public function ioPuppet(x:Number, y:Number, hpRatio:Number, altitude:Number, walking:Boolean):void {
+            var dx:Number = x - this._tmpPoint.x;
+            var dy:Number = y - this._tmpPoint.y;
+            if (dx * dx + dy * dy > 0.25) {
+                this._xd = dx;
+                this._yd = dy;
+            }
+            this._tmpPoint.x = x;
+            this._tmpPoint.y = y;
+            if (walking) {
+                ++this._frameNumber;
+            }
+            setHealth(Math.max(1, maxHealth * Math.min(1, hpRatio)));
+            if (this._graphicMC) {
+                if (isNaN(this._ioPuppetY)) {
+                    this._ioPuppetY = this._graphicMC.y;
+                }
+                this._graphicMC.y = this._ioPuppetY - altitude;
+            }
+            this.render();
+        }
+
         protected function render():void {
             var _loc1_:Number = NaN;
             var _loc2_:String = null;
@@ -615,6 +680,13 @@ package com.monsters.monsters {
                     graphic.x = int(this._tmpPoint.x);
                     graphic.y = int(this._tmpPoint.y);
                 }
+                // Inferno-only (fps pass, 4 October): the game takes two steps a frame and only the last is
+                // drawn (GLOBAL._render; SPRITES.GetSprite already skips the others). The picture, its health
+                // bar and its place in the yard's drawing are left for that step: the health bar was copied onto
+                // the same picture twice a frame, and the ice monsters' frames drawn twice.
+                if (GLOBAL.INFERNO_ONLY && !GLOBAL._render && this._ioDrawn) {
+                    return;
+                }
                 if (this._graphic) {
                     this._graphic.lock();
                 }
@@ -647,8 +719,12 @@ package com.monsters.monsters {
                     this._shadow.unlock();
                 }
                 this.updateRasterData();
+                this._ioDrawn = true;
             }
         }
+
+        /** Drawn at least once (see render: steps that are not drawn skip the picture after that). */
+        private var _ioDrawn:Boolean = false;
 
         protected function getNextSprite():void {
         }

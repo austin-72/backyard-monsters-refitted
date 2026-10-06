@@ -39,7 +39,8 @@ package com.monsters.alliances.tabs {
                 "alliance_relation_ally"
             ];
 
-        private static const POPUP_H_MEMBER:int = PAD + BTN_H + BTN_GAP + BTN_H + PAD;
+        // Inferno-only: a third button, Members.
+        private static const POPUP_H_MEMBER:int = PAD + BTN_H + BTN_GAP + BTN_H + BTN_GAP + BTN_H + PAD;
         private static const POPUP_H_LEADER:int = POPUP_H_MEMBER + ICON_ROW_GAP + ICON_H;
 
         private var _rowData:Object;
@@ -92,10 +93,15 @@ package com.monsters.alliances.tabs {
             joinBtn.y = PAD + BTN_H + BTN_GAP;
             joinBtn.addEventListener(MouseEvent.CLICK, _onRequestJoin);
 
+            var membersBtn:MovieClip = _makeBtn("Members");
+            membersBtn.x = btnX;
+            membersBtn.y = PAD + (BTN_H + BTN_GAP) * 2;
+            membersBtn.addEventListener(MouseEvent.CLICK, _onMembers);
+
             if (!ALLIANCES._isLeader)
                 return;
 
-            const iconsY:int = PAD + BTN_H + BTN_GAP + BTN_H + ICON_ROW_GAP;
+            const iconsY:int = PAD + (BTN_H + BTN_GAP) * 2 + BTN_H + ICON_ROW_GAP;
             const startX:int = PAD;
             const shieldId:int = (_rowData != null) ? int(_rowData.image) : 0;
 
@@ -257,6 +263,25 @@ package com.monsters.alliances.tabs {
                         }
                     });
             };
+        }
+
+        /** Inferno-only: lists this alliance's members (IoAllianceMembersPopup). */
+        private function _onMembers(e:MouseEvent):void {
+            SOUNDS.Play("click1");
+            var allianceId:int = (_rowData != null) ? int(_rowData.alliance_id) : 0;
+            var allianceName:String = (_rowData != null) ? String(_rowData.name) : "";
+            if (allianceId <= 0)
+                return;
+            _dismiss();
+            PLEASEWAIT.Show(KEYS.Get("msg_loading"));
+            ALLIANCES.LoadAllianceMembers(allianceId, function(response:Object):void {
+                    PLEASEWAIT.Hide();
+                    if (response == null || response.error) {
+                        GLOBAL.Message((response && response.error) ? String(response.error) : KEYS.Get("alliance_err_generic"));
+                        return;
+                    }
+                    new IoAllianceMembersPopup().Show(allianceName, response.members as Array || []);
+                });
         }
 
         private function _onVisitLeader(e:MouseEvent):void {

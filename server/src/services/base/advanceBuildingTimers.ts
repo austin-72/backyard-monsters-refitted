@@ -88,4 +88,4 @@ export const advanceBuildingTimers = (buildingData: BuildingDataMap, healthData:
  * @returns {boolean} True if the building was damaged or repairing
  */
 const isCountdownPaused = (building: BuildingData, healthData: HealthData) =>
-  Boolean(building.rE) || building.hp != null || (healthData != null && String(building.id) in healthData);
+  Boolean(building.rE) || building.hp != null || (healthData != null && typeof healthData === "object" && String(building.id) in healthData);

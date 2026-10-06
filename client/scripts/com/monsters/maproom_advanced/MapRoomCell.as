@@ -1,5 +1,6 @@
 package com.monsters.maproom_advanced {
     import com.monsters.ai.TRIBES;
+    import com.monsters.admin.IoTestMode;
 
     import com.cc.utils.SecNum;
     import com.monsters.alliances.*;
@@ -25,6 +26,15 @@ package com.monsters.maproom_advanced {
 
         internal var _dataAge:int;
 
+        /** Drawn from the world snapshot only (IoMapSnapshot): no monsters or resources yet, getarea brings them. */
+        internal var _ioSnap:Boolean = false;
+
+        /** Inferno-only: an underworld cell (IoUnderworld): an outpost there has no Flinger and a range of 1. */
+        internal var _ioUnder:Boolean = false;
+
+        /** Inferno-only: a portal to the underworld or back up on this (lava) cell: [number, x, y, under x, under y]. */
+        internal var _ioPortal:Array = null;
+
         internal var _base:int;
 
         internal var _baseID:Number;
@@ -34,6 +44,9 @@ package com.monsters.maproom_advanced {
         internal var _alliance:AllyInfo;
 
         internal var _height:int;
+
+        /** Inferno-only: the extra ground art drawn under this cell's frame (HellTileVariants), or null. */
+        private var _groundVariant:Bitmap;
 
         internal var _mine:int;
 
@@ -177,6 +190,65 @@ package com.monsters.maproom_advanced {
             mc.mcPrompt.visible = false;
         }
 
+        /** Inferno-only: a second worker marker, stacked behind the first (an outpost with both workers idle). */
+        private var _ioWorker2:MovieClip = null;
+
+        /**
+         * Inferno-only (5 October, the user's): how many of this outpost's workers are idle. The outpost's save says
+         * when each is free again (finishtimes, BASE.getHousingSaveData); a save from before has only the first
+         * worker's (finishtime), and the outpost now has 2 (GLOBAL.ioOutpostWorkers).
+         */
+        internal function ioIdleWorkers():int {
+            var workers:int = GLOBAL.ioOutpostWorkers();
+            if (!this._monsterData) {
+                return workers;
+            }
+            var now:Number = GLOBAL.Timestamp();
+            var times:Array = this._monsterData.finishtimes as Array;
+            var busy:int = 0;
+            if (times && times.length) {
+                for (var i:int = 0; i < times.length && i < workers; i++) {
+                    if (Number(times[i]) > now) {
+                        busy++;
+                    }
+                }
+            }
+            else if (Number(this._monsterData.finishtime) > now) {
+                busy = 1;
+            }
+            return Math.max(0, workers - busy);
+        }
+
+        /** Inferno-only: the idle worker marker, and a second one behind it when two are idle. */
+        internal function ioShowWorkers(idle:int):void {
+            var first:MovieClip = mc.mcPlayer.mcWorker;
+            first.visible = idle >= 1;
+            if (idle >= 2 && !this._ioWorker2) {
+                // (a copy of the marker from a fresh cell: it has no class of its own to make one from)
+                var source:MapRoomCell_CLIP = new MapRoomCell_CLIP();
+                this._ioWorker2 = source.mc.mcPlayer.mcWorker;
+                if (this._ioWorker2) {
+                    this._ioWorker2.parent.removeChild(this._ioWorker2);
+                    this._ioWorker2.mouseEnabled = false;
+                    this._ioWorker2.mouseChildren = false;
+                }
+            }
+            if (!this._ioWorker2) {
+                return;
+            }
+            if (idle >= 2) {
+                if (this._ioWorker2.parent != first.parent) {
+                    first.parent.addChildAt(this._ioWorker2, first.parent.getChildIndex(first));
+                }
+                this._ioWorker2.x = first.x + 9;
+                this._ioWorker2.y = first.y - 6;
+                this._ioWorker2.scaleX = first.scaleX;
+                this._ioWorker2.scaleY = first.scaleY;
+                this._ioWorker2.gotoAndStop(first.currentFrame);
+            }
+            this._ioWorker2.visible = idle >= 2;
+        }
+
         public function set alliance(param1:AllyInfo):void {
             this._alliance = param1;
         }
@@ -213,8 +285,45 @@ package com.monsters.maproom_advanced {
             return this._terrain;
         }
 
+        /* Inferno-only (hell-yard-grounds): the yard ground (MAPBG texture) for this cell's height, one per
+         * ground picture of the map (the same bands as Update: sand1 100-104 ... land6 175+). Null for lava
+         * (below 100), where no yard stands. */
+        public function get ioYardGround():String {
+            var h:int = this._height;
+            if (h < 100) {
+                return null;
+            }
+            if (h < 105) {
+                return "hell_sand1";
+            }
+            if (h < 110) {
+                return "hell_sand2";
+            }
+            if (h < 120) {
+                return "hell_land1";
+            }
+            if (h < 140) {
+                return "hell_land2";
+            }
+            if (h < 160) {
+                return "hell_land3";
+            }
+            if (h < 170) {
+                return "hell_land4";
+            }
+            if (h < 175) {
+                return "hell_land5";
+            }
+            return "hell_land6";
+        }
+
         public function get flingerRange():SecNum {
             return this._flingerRange;
+        }
+
+        /** Inferno-only: the yard's level as the map shows it (the quest book: Moloch's level). */
+        public function get ioLevel():int {
+            return this._level;
         }
 
         public function get baseID():Number {
@@ -295,13 +404,16 @@ package com.monsters.maproom_advanced {
             var _loc5_:int = 0;
             this._dataAge = 10;
             this._updated = true;
+            this._ioSnap = Boolean(serverData.io_snap);
+            this._ioUnder = GLOBAL.INFERNO_ONLY && Boolean(serverData.u);
+            this._ioPortal = GLOBAL.INFERNO_ONLY ? serverData.io_portal as Array : null;
             this._processed = false;
             this._base = serverData.b;
             if (serverData.bid) {
                 if (this._baseID != 0 && this._baseID == GLOBAL._homeBaseID) {
                     MapRoom._homeCell = this;
                 }
-                else if (this.X == GLOBAL._mapHome.x && this.Y == GLOBAL._mapHome.y) {
+                else if (GLOBAL._mapHome && this.X == GLOBAL._mapHome.x && this.Y == GLOBAL._mapHome.y) { // (bug report: no home cell known yet)
                     MapRoom._homeCell = this;
                 }
                 this._baseID = serverData.bid;
@@ -326,7 +438,13 @@ package com.monsters.maproom_advanced {
             this._height = serverData.i;
             this._water = this._height < 100;
             this._mine = serverData.mine;
-            if (serverData.f) {
+            if (this._ioUnder && this._base == 3) {
+                // Inferno-only: an underworld outpost has no Flinger. It reaches the cells next to it, and flings as
+                // many monsters as the main yard's Flinger can (IoUnderworld).
+                this._flingerLevel = new SecNum(Math.max(1, GLOBAL._playerFlingerLevel ? GLOBAL._playerFlingerLevel.Get() : 1));
+                this._flingerRange = new SecNum(IoUnderworld.outpostRange);
+            }
+            else if (serverData.f) {
                 this._flingerLevel = new SecNum(serverData.f);
                 this._flingerRange = new SecNum(BUILDING5.getFlingerRange(serverData.f, this.isMainBase));
             }
@@ -342,7 +460,7 @@ package com.monsters.maproom_advanced {
             }
             this._userID = serverData.uid;
             this._facebookID = serverData.fbid;
-            this._truce = serverData.t;
+            this._truce = GLOBAL.INFERNO_ONLY ? 0 : serverData.t; // (Inferno: no truces, 4 October)
             this._name = serverData.n;
             this._friend = serverData.fr;
             this._online = serverData.on;
@@ -399,7 +517,11 @@ package com.monsters.maproom_advanced {
             }
             this._dirty = false;
             if (serverData.m && serverData.m.hcc != null && serverData.m.h != null && serverData.m.overdrivepower != null && serverData.m.housed != null) {
-                this._hpMonsterData = serverData.m;
+                // A private copy: several MapRoomCell objects are set up from the same map data (the tile on
+                // the map, GLOBAL._currentCell, MapRoom._monsterSource). Sharing this object meant each of them
+                // counted the same numbers down while keeping its own protected copy, so the two stopped
+                // matching, Check() failed and the outpost's update after an attack from it was not saved.
+                this._hpMonsterData = JSON.parse(JSON.stringify(serverData.m));
                 if (!this._hpMonsterData.overdrivetime) {
                     this._hpMonsterData.overdrivetime = 0;
                 }
@@ -430,6 +552,7 @@ package com.monsters.maproom_advanced {
             if (this._monsterData) {
                 this._monsters = this._monsterData.housed;
                 this._monsterData.finishtime = this._hpMonsterData.finishtime;
+                this._monsterData.finishtimes = this._hpMonsterData.finishtimes;
             }
             if (this._hpMonsterData) {
                 this._hpMonsters = this._hpMonsterData.housed;
@@ -526,7 +649,9 @@ package com.monsters.maproom_advanced {
                 mc.y = -int((this._height - 100) * 0.6) + 18;
             }
             if (GLOBAL.INFERNO_ONLY) {
+                // The map's own art is the Inferno's now (hell-maproom2): no tint, one of four ground pictures
                 InfernoMapTheme.apply(mc, this._height);
+                this.ApplyGroundVariant();
             }
             if (this._base > 0) {
                 mc.mcPlayer.visible = true;
@@ -596,7 +721,7 @@ package com.monsters.maproom_advanced {
                         mc.mcPlayer.mcFlag.txtAlliance.y = this._soloProps.txtAllyY;
                         mc.mcPlayer.mcFlag.txtAlliance.htmlText = "";
                     }
-                    mc.mcPlayer.mcTruce.visible = this._truce > GLOBAL.Timestamp();
+                    mc.mcPlayer.mcTruce.visible = !GLOBAL.INFERNO_ONLY && this._truce > GLOBAL.Timestamp();
                 }
             }
             else {
@@ -604,9 +729,10 @@ package com.monsters.maproom_advanced {
             }
             if (GLOBAL.INFERNO_ONLY) {
                 // After the icon's frame has been chosen, and on every update, not only for tribes:
-                // cells are recycled, so one that showed a Moloch stronghold a moment ago may now be a
-                // player, an outpost or open ground.
-                InfernoMapTheme.molochIcon(mc.mcPlayer, this._base == 1 && this._name == "Moloch");
+                // cells are recycled, so one that showed a tribe yard a moment ago may now be a player, an
+                // outpost or open ground.
+                InfernoMapTheme.tribeIcon(mc.mcPlayer, this._base == 1 ? this._name : null);
+                IoUnderworld.portalIcon(mc, this._base == 0 ? this._ioPortal : null, this.X, this.Y);
             }
             if (this._damage) {
                 mc.mcPlayer.mcFlag2.visible = false;
@@ -642,7 +768,10 @@ package com.monsters.maproom_advanced {
                     this._workerBusy = false;
                 }
             }
-            if (!this._workerBusy && this._base == 3 && Boolean(this._mine)) {
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioShowWorkers(this._base == 3 && Boolean(this._mine) ? this.ioIdleWorkers() : 0);
+            }
+            else if (!this._workerBusy && this._base == 3 && Boolean(this._mine)) {
                 mc.mcPlayer.mcWorker.visible = true;
             }
             else {
@@ -664,6 +793,21 @@ package com.monsters.maproom_advanced {
             }
         }
 
+        /** Inferno-only: draws one of the four ground pictures of this cell's terrain (HellTileVariants). */
+        public function ApplyGroundVariant():void {
+            if (IoUnderworld.drawsDepths(this.X, this.Y)) {
+                // the Depths of Hell: platforms in lava, bridges between them (IoUnderworld.depthsGround)
+                this._groundVariant = HellTileVariants.applyBitmap(mc, IoUnderworld.depthsGround(this.X, this.Y), this._groundVariant);
+                return;
+            }
+            this._groundVariant = HellTileVariants.apply(mc, this.X, this.Y, this._groundVariant);
+        }
+
+        /** Puts the frame's own ground art back (a cell sent back to the unloaded frame while scrolling). */
+        public function ResetGroundVariant():void {
+            HellTileVariants.reset(mc, this._groundVariant);
+        }
+
         internal function Tick(param1:int = 0):Boolean {
             var _loc3_:int = 0;
             var _loc4_:String = null;
@@ -675,6 +819,7 @@ package com.monsters.maproom_advanced {
             var _loc10_:String = null;
             if (MapRoom._viewOnly) {
                 mc.mcPlayer.mcWorker.visible = false;
+                this.ioShowWorkers(0);
                 if (this._baseID == MapRoom._inviteBaseID) {
                     if (this._over) {
                         mc.mcGlow.gotoAndStop(5);
@@ -714,6 +859,7 @@ package com.monsters.maproom_advanced {
             var _loc2_:Boolean = true;
             if (!this._mine) {
                 mc.mcPlayer.mcWorker.visible = false;
+                this.ioShowWorkers(0);
                 return true;
             }
             if (!this._updated) {
@@ -726,7 +872,10 @@ package com.monsters.maproom_advanced {
                 else {
                     this._workerBusy = false;
                 }
-                if (!this._workerBusy && this._base == 3 && Boolean(this._mine)) {
+                if (GLOBAL.INFERNO_ONLY) {
+                    this.ioShowWorkers(this._base == 3 && Boolean(this._mine) ? this.ioIdleWorkers() : 0);
+                }
+                else if (!this._workerBusy && this._base == 3 && Boolean(this._mine)) {
                     mc.mcPlayer.mcWorker.visible = true;
                 }
                 else {
@@ -962,6 +1111,8 @@ package com.monsters.maproom_advanced {
                 }
                 if (Boolean(this._hpMonsterData.h) && Boolean(this._hpMonsterData.h[_loc2_]) && this._hpMonsterData.h[_loc2_].length > 0) {
                     this._monsterData.h[_loc2_][0] = this._hpMonsterData.h[_loc2_][0];
+                    // Whole numbers, like the queue below: the protected copy only holds whole numbers.
+                    this._hpMonsterData.h[_loc2_][1] = Math.floor(this._hpMonsterData.h[_loc2_][1]);
                     this._monsterData.h[_loc2_][1] = new SecNum(this._hpMonsterData.h[_loc2_][1]);
                     if (this._monsterData.h[_loc2_][1].Get() != this._hpMonsterData.h[_loc2_][1]) {
                     }
@@ -993,6 +1144,9 @@ package com.monsters.maproom_advanced {
         }
 
         private function Click(param1:MouseEvent):void {
+            // Admin test mode: the test tools' map fields start from the last cell clicked.
+            IoTestMode.lastX = X;
+            IoTestMode.lastY = Y;
             var _loc2_:String = null;
             if (Boolean(MapRoom._mc) && MapRoom._mc._dragged) {
                 return;
@@ -1000,6 +1154,18 @@ package com.monsters.maproom_advanced {
             if (MapRoom._inviteBaseID == this._baseID) {
                 return;
             }
+            // Only the world snapshot's data so far: the popups need the cell's monsters and resources, so
+            // the click happens once getarea has answered for its zone (a moment later).
+            if (this._ioSnap && this._base > 0) {
+                MapRoom.ioClickWhenLoaded(this);
+                return;
+            }
+            this.ioClick();
+        }
+
+        /** The click itself (Click, or MapRoom once the cell's zone has arrived). */
+        internal function ioClick():void {
+            var _loc2_:String = null;
             MapRoom._currentPosition = new Point(this.X, this.Y);
             if (GLOBAL._local) {
                 _loc2_ = "MapRoomCell.Click - X " + this.X + " Y " + this.Y + " H " + this._height + " B " + this._base + " ID " + this._baseID + " UID " + this._userID + " FBID " + this._facebookID + " Mine " + this._mine + " Name " + this._name + " d " + this._destroyed + " dm " + this._damage + " p " + this._protected + " fr " + this._friend + " busy " + this._workerBusy;
@@ -1024,6 +1190,10 @@ package com.monsters.maproom_advanced {
                 else {
                     MapRoom._mc.ShowInfoEnemy(this);
                 }
+            }
+            else if (this._base == 0 && this._updated && !MapRoom._monsterTransferInProgress && GLOBAL.INFERNO_ONLY) {
+                // Inferno-only: an empty place (lava) can be shared in chat or bookmarked.
+                MapRoom._mc.ioShowSpot(this);
             }
         }
 

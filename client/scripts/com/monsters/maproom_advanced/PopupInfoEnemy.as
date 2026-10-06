@@ -90,6 +90,9 @@ package com.monsters.maproom_advanced {
             this.bTruce.addEventListener(MouseEvent.CLICK, function(param1:MouseEvent):void {
                     ShowTruce();
                 });
+            if (GLOBAL.INFERNO_ONLY) {
+                this.bTruce.visible = false; // (no truces in the game since 4 October)
+            }
             this.bAlliance.SetupKey("btn_invitetoalliance");
             this.bAlliance.addEventListener(MouseEvent.MOUSE_OVER, this.ButtonInfo);
             this.bAlliance.addEventListener(MouseEvent.MOUSE_OUT, function(param1:MouseEvent):void {
@@ -129,6 +132,13 @@ package com.monsters.maproom_advanced {
             MapRoom._mc.HideInfoEnemy();
         }
 
+        /** Inferno-only: worked out again for the same cell (what the portals reach has come: IoUnderworld). */
+        public function ioRefresh():void {
+            if (this._cell && this.parent) {
+                this.Setup(this._cell, MapRoom._flingerInRange);
+            }
+        }
+
         public function Setup(param1:MapRoomCell, param2:Boolean = false):void {
             var _loc5_:CellData = null;
             var _loc6_:int = 0;
@@ -146,6 +156,10 @@ package com.monsters.maproom_advanced {
                 _loc4_ = POWERUPS.Apply(POWERUPS.ALLIANCE_DECLAREWAR, [0]);
             }
             GLOBAL._attackerCellsInRange = MapRoom._mc.GetCellsInRange(this._cell.X, this._cell.Y, 10 + _loc4_);
+            if (GLOBAL.INFERNO_ONLY) {
+                // the yards that reach it through the underworld's portals, and its rules there (IoUnderworld)
+                GLOBAL._attackerCellsInRange = IoUnderworld.withReach(GLOBAL._attackerCellsInRange, this._cell.X, this._cell.Y);
+            }
             MapRoom._flingerInRange = param2;
             this.bAlliance.visible = GLOBAL.alliancesEnabled;
             for each (_loc5_ in GLOBAL._attackerCellsInRange) {
@@ -272,7 +286,7 @@ package com.monsters.maproom_advanced {
                     this.mcRelations.visible = false;
                 }
             }
-            tLocation.htmlText = GLOBAL.ioCoord(this._cell.X) + " x " + GLOBAL.ioCoord(this._cell.Y);
+            tLocation.htmlText = IoMapUi.location(this._cell.X, this._cell.Y);
             tHeight.htmlText = this._cell._height - 100 + "m";
             if (this._cell._base == 2) {
                 _loc6_ = 0;
@@ -498,6 +512,11 @@ package com.monsters.maproom_advanced {
                 GLOBAL.Message(KEYS.Get("map_msg_attackingdisabled"));
                 return;
             }
+            // Admin test mode: a practice attack on any yard (nothing is written to it).
+            if (GLOBAL.ioTestMode()) {
+                MapRoom._mc.ShowAttack(this._cell);
+                return;
+            }
             if (this._cell._base != 2 && this._cell._destroyed && !this._cell._protected && (this._cell._locked == 0 || this._cell._locked == LOGIN._playerID) && MapRoom._flingerInRange) {
                 _loc2_ = _minTakeoverCost.Get();
                 if (GLOBAL._mapOutpost) {
@@ -564,7 +583,7 @@ package com.monsters.maproom_advanced {
                 PLEASEWAIT.Hide();
                 if (serverData.error == 0) {
                     BASE._takeoverFirstOpen = _cell._base == 1 ? 1 : 2;
-                    BASE._takeoverPreviousOwnersName = _cell._name;
+                    BASE._takeoverPreviousOwnersName = TRIBES.DisplayName(_cell._name); // (Inferno-only: a tribe's Inferno name)
                     MapRoom.GetCell(_cell.X, _cell.Y, true);
                     GLOBAL._mapOutpost.push(new Point(_cell.X, _cell.Y));
                     GLOBAL._resources.r1max += GLOBAL._outpostCapacity.Get();
@@ -668,7 +687,7 @@ package com.monsters.maproom_advanced {
 
         public function ShowTruce():void {
             if (this._cell._base < 2) {
-                GLOBAL.Message(KEYS.Get("newmap_wmtruce", {"v1": this._cell._name}));
+                GLOBAL.Message(KEYS.Get("newmap_wmtruce", {"v1": TRIBES.DisplayName(this._cell._name)}));
                 return;
             }
             if (Boolean(this._message) && Boolean(this._message.parent)) {
@@ -693,7 +712,7 @@ package com.monsters.maproom_advanced {
 
         public function ShowAllianceInvite():void {
             if (this._cell._base < 2) {
-                GLOBAL.Message(KEYS.Get("newmap_wmtruce", {"v1": this._cell._name}));
+                GLOBAL.Message(KEYS.Get("newmap_wmtruce", {"v1": TRIBES.DisplayName(this._cell._name)}));
                 return;
             }
             ALLIANCES.AllianceInvite(this._cell._userID);
@@ -710,11 +729,14 @@ package com.monsters.maproom_advanced {
                 else {
                     _loc2_ = KEYS.Get("newmap_att4");
                 }
+                if (GLOBAL.INFERNO_ONLY && !MapRoom._flingerInRange) {
+                    _loc2_ = KEYS.Get("io_map_outofrange"); // (bug report B11: why it is greyed out)
+                }
                 _loc3_ = bAttack.x - 5;
                 _loc4_ = bAttack.y + bAttack.height / 2 - 0;
             }
             else if (param1.currentTarget.name == "bView") {
-                _loc2_ = KEYS.Get("newmap_view", {"v1": this._cell._name});
+                _loc2_ = KEYS.Get("newmap_view", {"v1": this._cell._base == 1 ? TRIBES.DisplayName(this._cell._name) : this._cell._name});
                 _loc3_ = bView.x - 5;
                 _loc4_ = bView.y + bAttack.height / 2 - 0;
             }
@@ -756,8 +778,9 @@ package com.monsters.maproom_advanced {
 
         public function PopupHide():void {
             if (_popupdo) {
-                if (this.parent) {
-                    this.parent.removeChild(_popupdo);
+                // Removed from wherever it actually is: it may already be gone from this popup's parent.
+                if (_popupdo.parent) {
+                    _popupdo.parent.removeChild(_popupdo);
                 }
                 _popupdo = null;
             }

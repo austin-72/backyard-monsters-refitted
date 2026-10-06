@@ -31,12 +31,16 @@ export const buildingDataHandler = (buildingData: Record<string, any> | null, sa
   const result: BuildingDataMap = {};
 
   for (const [key, building] of Object.entries(savedBuildingData)) {
+    if (!building || typeof building !== "object") continue;
     const isTrap = building.t === Building.TRAP || building.t === Building.HEAVY_TRAP;
 
     if (isTrap) {
       // Keep the trap only if the client still reports it as present.
       // Absent = triggered during the attack, so we drop it.
       if (buildingData[key]) result[key] = building;
+      // Inferno-only (3 October): a trap set off stays in the yard, disarmed ("fd": 1), until its owner
+      // re-arms it (the client's IoTrapRearm, every spent trap at once for its build cost).
+      else if (infernoOnlyConfig.enabled) result[key] = { ...building, fd: 1 } as typeof building;
     } else if (infernoOnlyConfig.enabled && building.t === 22) {
       // Inferno-only: a Monster Bunker's defenders can die or be wounded in the attack, and stay that way.
       result[key] = applyBunkerLosses(building, buildingData[key]) as typeof building;

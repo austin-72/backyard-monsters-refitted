@@ -29,6 +29,7 @@ type EntityManagerType = EntityManager<PostgreSqlDriver>;
 type AllianceFeed = Promise<HistoryEntry[]>;
 
 const FEED_FIELDS = [
+  "id",
   "messageType", 
   "body", 
   "created_at", 
@@ -132,6 +133,7 @@ export const emitShout = async (shout: ShoutDraft) => {
     body: shoutText,
     ts: stored.created_at.getTime(),
     messageType: message.type,
+    id: `a${stored.id}`,
   };
 
   publishAllianceShout(message.allianceId, entry);
@@ -165,7 +167,7 @@ export const getAllianceMessages = async (allianceId: number, em: EntityManagerT
     { orderBy: { id: "DESC" }, limit: ALLIANCE_MESSAGE_LIMIT, fields: FEED_FIELDS }
   );
 
-  const entries = rows.toReversed().map(({ author, targetAlliance, messageType, body, created_at }) => {
+  const entries = rows.toReversed().map(({ id, author, targetAlliance, messageType, body, created_at }) => {
     const { userid, username, pic_square } = author;
 
     const isShout = messageType !== AllianceMessageType.MESSAGE;
@@ -179,6 +181,8 @@ export const getAllianceMessages = async (allianceId: number, em: EntityManagerT
       body: text,
       ts: created_at.getTime(),
       messageType,
+      // (Inferno-only: the line's id, so chat moderators can delete it: chat/chatModeration.ts)
+      id: `a${id}`,
     };
   });
 

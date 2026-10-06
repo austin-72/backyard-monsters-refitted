@@ -4,108 +4,120 @@ package com.monsters.maproom_advanced {
     import flash.display.BitmapData;
     import flash.display.DisplayObject;
     import flash.display.MovieClip;
+    import flash.display.Shape;
     import flash.geom.ColorTransform;
 
     /**
      * Inferno look for the Map Room 2 world map (inferno-only builds).
      *
-     * The map tiles are vector frames baked into the SWF (water1-3, sand1-2, land1-6), so
-     * instead of new art the terrain is re-coloured at runtime: water becomes glowing lava,
-     * sand becomes ash, grass becomes scorched earth and rock becomes basalt. Only the
-     * anonymous timeline shapes of a tile are tinted; named children (player flags, glow,
-     * tribe icons) keep their colours.
-     *
-     * A ColorTransform is used rather than a filter so tiles are not forced into bitmap
-     * caching - the map redraws hundreds of cells while scrolling.
+     * The map's ground is the Inferno's own art since 30 September (the user's hell-maproom2 pack: lava,
+     * bone, netherrack and black rock tiles in assets.swf, and three more pictures of each in
+     * HellTileVariants), so the terrain is no longer re-coloured here. What is left: cells whose data has
+     * not arrived are darkened (applyUnloaded), and apply() takes that tint off again once they have it.
+     * Named children (player flags, glow, tribe icons) are never touched.
      */
     public class InfernoMapTheme {
 
-        // ColorTransform(redMult, greenMult, blueMult, alphaMult, redOffset, greenOffset, blueOffset)
-        private static const LAVA_DEEP:ColorTransform = new ColorTransform(0.25, 0.30, 0.05, 1, 165, 35, 0, 0);
-
-        private static const LAVA_MID:ColorTransform = new ColorTransform(0.25, 0.35, 0.05, 1, 190, 60, 0, 0);
-
-        private static const LAVA_SHALLOW:ColorTransform = new ColorTransform(0.25, 0.40, 0.05, 1, 210, 85, 5, 0);
-
-        // The water frames also carry a named child, mcWater: a flat (0, 204, 255) sheet at 50% alpha
-        // that floats at sea level above the sea bed. Left alone it puts a blue film over the lava.
-        // Its own colour is multiplied away and replaced: hotter and more opaque the deeper it is.
-        private static const LAVA_SURFACE_DEEP:ColorTransform = new ColorTransform(0, 0, 0, 1.5, 255, 150, 25, 0);
-
-        private static const LAVA_SURFACE_MID:ColorTransform = new ColorTransform(0, 0, 0, 1.3, 250, 110, 5, 0);
-
-        private static const LAVA_SURFACE_SHALLOW:ColorTransform = new ColorTransform(0, 0, 0, 1.1, 225, 80, 0, 0);
-
-        private static const ASH:ColorTransform = new ColorTransform(0.45, 0.35, 0.30, 1, 25, 10, 5, 0);
-
-        private static const SCORCHED:ColorTransform = new ColorTransform(0.55, 0.30, 0.20, 1, 30, 5, 0, 0);
-
-        private static const BASALT:ColorTransform = new ColorTransform(0.40, 0.35, 0.35, 1, 10, 0, 0, 0);
+        private static const NONE:ColorTransform = new ColorTransform();
 
         public function InfernoMapTheme() {
             super();
         }
 
-        /** Same height bands as MapRoomCell.Update(). */
-        private static function forHeight(height:int):ColorTransform {
-            if (height < 80) {
-                return LAVA_DEEP;
+        // The tribe frames of the cell icon are 30 x 30 framed portraits drawn at (-5, -31), built into the
+        // SWF (and the art has none for Moloch, who borrows the Dreadnaut frame). In the Inferno every
+        // tribe's portrait is replaced by its own picture from the server, assets/monsters/tribe_<tribe>_30.jpg
+        // (60 x 60, drawn at 30 x 30 so it stays sharp when the map is zoomed or the screen is high-DPI),
+        // laid over the frame's portrait and under its border. New art needs no SWF change.
+        private static const TRIBE_ICON_NAME:String = "ioTribeIcon";
+
+        private static const TRIBE_ICON_KEYS:Object = {
+                "Legionnaire": "legionnaire",
+                "Kozu": "kozu",
+                "Abunakki": "abunakki",
+                "Dreadnaut": "dreadnaut",
+                "Dreadnought": "dreadnaut",
+                "Moloch": "moloch"
+            };
+
+        /** Shows the tribe's portrait on a map cell's icon, or removes it (tribe null: not a tribe yard). */
+        /** The tribes' large pictures (their splash art, 150 high). */
+        private static const TRIBE_PICTURES:Object = {
+                "Dreadnought": "popups/tribe_dreadnaut.v2.png",
+                "Dreadnaut": "popups/tribe_dreadnaut.v2.png",
+                "Kozu": "popups/tribe_kozu.v2.png",
+                "Legionnaire": "popups/tribe_legionnaire.v2.png",
+                "Abunakki": "popups/tribe_abunakki.v2.png",
+                "Moloch": "popups/tribe_moloch.png"
+            };
+
+        /**
+         * Inferno-only: a wild tribe's picture in the cell information right of the map (MapRoomPopup.TribePic), from
+         * its large picture (150 high) made to `size`, smoothly, not the 50 x 50 one blown up (the user's, 29
+         * September), on the ember ground of the small ones. Returns false for a name it does not know (the caller
+         * then does as before).
+         */
+        public static function tribeCellPicture(tribe:String, into:MovieClip, size:int = 50):Boolean {
+            var url:String = TRIBE_PICTURES[tribe];
+            if (!url || !into) {
+                return false;
             }
-            if (height < 90) {
-                return LAVA_MID;
-            }
-            if (height < 100) {
-                return LAVA_SHALLOW;
-            }
-            if (height < 110) {
-                return ASH;
-            }
-            if (height < 170) {
-                return SCORCHED;
-            }
-            return BASALT;
+            var ground:Shape = new Shape();
+            ground.graphics.beginFill(0x3A1206);
+            ground.graphics.drawRect(0, 0, size, size);
+            ground.graphics.endFill();
+            into.addChild(ground);
+            ImageCache.GetImageWithCallBack(url, function(key:String, bmd:BitmapData, ... rest):void {
+                var b:Bitmap = new Bitmap(bmd);
+                b.smoothing = true;
+                var k:Number = Math.min(size / bmd.width, size / bmd.height);
+                b.scaleX = b.scaleY = k;
+                b.x = (size - bmd.width * k) / 2;
+                b.y = size - bmd.height * k;
+                into.addChild(b);
+            });
+            return true;
         }
 
-        // The tribe frames of the cell icon are 30 x 30 framed portraits drawn at (-5, -31). The art
-        // has four of them and none for Moloch, so his own portrait (the one his yard popup uses,
-        // assets/monsters/tribe_moloch_50.jpg) is laid over the borrowed frame, under its border.
-        private static const MOLOCH_PORTRAIT:String = "monsters/tribe_moloch_50.jpg";
-
-        private static const MOLOCH_ICON_NAME:String = "ioMolochIcon";
-
-        public static function molochIcon(icon:MovieClip, show:Boolean):void {
+        public static function tribeIcon(icon:MovieClip, tribe:String):void {
             var existing:DisplayObject = null;
             if (!icon) {
                 return;
             }
-            existing = icon.getChildByName(MOLOCH_ICON_NAME);
-            icon.ioWantsMoloch = show;
-            if (!show) {
-                if (existing) {
-                    icon.removeChild(existing);
-                }
-                return;
+            var key:String = tribe != null && TRIBE_ICON_KEYS.hasOwnProperty(tribe) ? String(TRIBE_ICON_KEYS[tribe]) : null;
+            existing = icon.getChildByName(TRIBE_ICON_NAME);
+            icon.ioTribeKey = key;
+            if (existing && MovieClip(existing).ioKey != key) {
+                icon.removeChild(existing);
+                existing = null;
             }
-            if (!existing) {
-                ImageCache.GetImageWithCallBack(MOLOCH_PORTRAIT, molochPortraitLoaded, true, 1, "", [icon]);
+            if (key && !existing) {
+                ImageCache.GetImageWithCallBack("monsters/tribe_" + key + "_30.jpg", tribePortraitLoaded, true, 1, "", [icon, key]);
             }
         }
 
-        private static function molochPortraitLoaded(key:String, image:BitmapData, args:Array):void {
+        private static function tribePortraitLoaded(url:String, image:BitmapData, args:Array):void {
             var icon:MovieClip = args[0] as MovieClip;
+            var key:String = args[1] as String;
+            var holder:MovieClip = null;
             var portrait:Bitmap = null;
             // The cell may have been recycled to something else while the image was loading.
-            if (!icon || !icon.ioWantsMoloch || icon.getChildByName(MOLOCH_ICON_NAME)) {
+            if (!icon || icon.ioTribeKey != key || icon.getChildByName(TRIBE_ICON_NAME)) {
                 return;
             }
             portrait = new Bitmap(image, "auto", true);
-            portrait.name = MOLOCH_ICON_NAME;
-            portrait.x = -5;
-            portrait.y = -31;
             portrait.width = 30;
             portrait.height = 30;
-            // Above the borrowed tribe portrait (child 0), below the frame's border and the flags.
-            icon.addChildAt(portrait, Math.min(1, icon.numChildren));
+            holder = new MovieClip();
+            holder.name = TRIBE_ICON_NAME;
+            holder.ioKey = key; // MovieClip is dynamic
+            holder.mouseEnabled = false;
+            holder.mouseChildren = false;
+            holder.x = -5;
+            holder.y = -31;
+            holder.addChild(portrait);
+            // Above the built-in tribe portrait (child 0), below the frame's border and the flags.
+            icon.addChildAt(holder, Math.min(1, icon.numChildren));
         }
 
         /** Cells whose map data has not arrived yet: dark, cooled rock instead of the stock green placeholder. */
@@ -126,25 +138,24 @@ package com.monsters.maproom_advanced {
             }
         }
 
-        /** Call right after the tile has been sent to its terrain frame. */
+        /** Call right after the tile has been sent to its terrain frame: takes the unloaded tint off. */
         public static function apply(tile:MovieClip, height:int):void {
             var child:DisplayObject = null;
             var i:int = 0;
             if (!tile) {
                 return;
             }
-            var tint:ColorTransform = forHeight(height);
             while (i < tile.numChildren) {
                 child = tile.getChildAt(i);
                 // Timeline art without an instance name is auto-named "instanceN".
                 if (child && child.name.indexOf("instance") == 0) {
-                    setTint(child, tint);
+                    setTint(child, NONE);
                 }
                 i++;
             }
             var surface:DisplayObject = tile.getChildByName("mcWater");
             if (surface) {
-                setTint(surface, height < 80 ? LAVA_SURFACE_DEEP : (height < 90 ? LAVA_SURFACE_MID : LAVA_SURFACE_SHALLOW));
+                setTint(surface, NONE);
             }
         }
 
@@ -155,10 +166,16 @@ package com.monsters.maproom_advanced {
          */
         private static function setTint(target:DisplayObject, tint:ColorTransform):void {
             var current:ColorTransform = target.transform.colorTransform;
-            if (current.redOffset == tint.redOffset && current.greenOffset == tint.greenOffset && current.blueOffset == tint.blueOffset && current.redMultiplier == tint.redMultiplier && current.greenMultiplier == tint.greenMultiplier && current.blueMultiplier == tint.blueMultiplier && current.alphaMultiplier == tint.alphaMultiplier) {
+            // Flash stores multipliers in 1/256 steps, so 0.30 reads back as 0.296875: compare with that
+            // tolerance, or the check never matches and every tile is redrawn on every refresh anyway.
+            if (current.redOffset == tint.redOffset && current.greenOffset == tint.greenOffset && current.blueOffset == tint.blueOffset && sameMultiplier(current.redMultiplier, tint.redMultiplier) && sameMultiplier(current.greenMultiplier, tint.greenMultiplier) && sameMultiplier(current.blueMultiplier, tint.blueMultiplier) && sameMultiplier(current.alphaMultiplier, tint.alphaMultiplier)) {
                 return;
             }
             target.transform.colorTransform = tint;
+        }
+
+        private static function sameMultiplier(stored:Number, wanted:Number):Boolean {
+            return Math.abs(stored - wanted) < 1 / 128;
         }
     }
 }

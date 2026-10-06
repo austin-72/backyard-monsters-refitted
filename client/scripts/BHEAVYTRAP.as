@@ -107,7 +107,11 @@ package {
             _mc.visible = true;
             setHealth(0);
             SOUNDS.Play("trap");
-            if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && _fired) {
+                setHealth(maxHealth); // (Inferno-only: kept, disarmed, as BTRAP)
+                ioDrawDisarmed();
+            }
+            else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 RecycleC();
             }
         }

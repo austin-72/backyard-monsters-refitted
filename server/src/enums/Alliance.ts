@@ -5,6 +5,8 @@
  */
 export enum AllianceRole {
   LEADER = "leader",
+  /** Inferno-only: named by the leader; can pin to the board, invite, and kick members. */
+  OFFICER = "officer",
   MEMBER = "member",
 }
 
@@ -34,6 +36,10 @@ export enum AllianceMessageType {
   RELATIONSHIP = "relationship",
   POWERUP_ACTIVATED = "powerup_activated",
   POWERUP_PURCHASE = "powerup_purchase",
+  /** Inferno-only: a pin put on the alliance board (body: its title, and its place as a [map:x,y:tag] token). */
+  PINNED = "pinned",
+  /** Inferno-only: a member made an officer (body "1") or no longer one (body "0"). */
+  OFFICER = "officer",
 }
 
 /**

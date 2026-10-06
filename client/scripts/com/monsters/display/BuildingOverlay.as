@@ -136,8 +136,13 @@ package com.monsters.display {
                         _loc6_ = _loc10_;
                     }
                     else {
-                        _loc6_ = int(param1._buildingProps.costs[param1._lvl.Get()].time.Get());
+                        // Inferno-only: a building is built from its first cost (BFOUNDATION: costs[0]), whatever
+                        // its level says: one under construction comes back from a save at level 1 (a save holds
+                        // no level 0), and a Map Room has one cost only, so costs[1] threw on every frame when a
+                        // yard with one being built was viewed (bug reports #42, #43)
+                        _loc6_ = param1._buildingProps.costs && param1._buildingProps.costs[0] ? int(param1._buildingProps.costs[0].time.Get()) : 0;
                     }
+                    _loc6_ = Math.max(_loc6_, param1._countdownBuild.Get(), 1);
                     _loc3_ = 49 / _loc6_ * (_loc6_ - param1._countdownBuild.Get());
                     _loc4_ = "building";
                 }

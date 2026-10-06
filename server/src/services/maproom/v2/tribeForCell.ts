@@ -2,6 +2,7 @@ import { Tribe, Tribes } from "../../../enums/Tribes.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
 import { calculateTribeLevel } from "./calculateTribeLevel.js";
 import { territoryCell } from "./tribeTerritories.js";
+import { isUnder, underLevel, underVariant, underworldOn } from "./underworld.js";
 
 /**
  * Single source of truth for "which wild monster tribe lives on this Map Room 2 cell".
@@ -22,6 +23,8 @@ export interface CellTribe {
   level: number;
   /** Moloch only: stable per-stronghold number that varies which yard loads. */
   variant: number;
+  /** Inferno-only: an underworld stronghold (services/maproom/v2/underworld.ts). */
+  under?: boolean;
 }
 
 export const MOLOCH_INDEX = 5;
@@ -31,6 +34,19 @@ export const MOLOCH_WMID = 51;
 
 export const tribeForCell = (worldid: string | null | undefined, cellX: number, cellY: number): CellTribe => {
   const { enabled, tribeSpawns } = infernoOnlyConfig;
+
+  // Inferno-only: every underworld cell is Moloch's until a player takes it.
+  if (underworldOn() && isUnder(cellX, cellY)) {
+    if (!worldid) throw new Error("worldid is required to resolve an underworld cell.");
+    return {
+      tribe: Tribe.MOLOCH,
+      tribeIndex: MOLOCH_INDEX,
+      wmid: MOLOCH_WMID,
+      level: underLevel(worldid, cellX, cellY),
+      variant: underVariant(worldid, cellX, cellY),
+      under: true,
+    };
+  }
 
   if (enabled && tribeSpawns.enabled) {
     // The world uuid is the seed; without it the listing and the yard could disagree.

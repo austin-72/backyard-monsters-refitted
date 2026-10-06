@@ -1,5 +1,6 @@
 package {
     import com.monsters.inventory.InventoryManager;
+    import com.monsters.pets.IoPetsPanel;
     import com.monsters.managers.InstanceManager;
     import flash.display.MovieClip;
     import flash.events.MouseEvent;
@@ -102,7 +103,8 @@ package {
             }
             this["b" + param1].Highlight = true;
             if (param1 == 4) {
-                this.SubMenu([KEYS.Get("btn_evil"), KEYS.Get("btn_plants"), KEYS.Get("btn_good"), KEYS.Get("btn_flags"), KEYS.Get("btn_premium")]);
+                // Inferno-only: a sixth tab, Pets (IoPetsPanel)
+                this.SubMenu(GLOBAL.INFERNO_ONLY ? [KEYS.Get("btn_evil"), KEYS.Get("btn_plants"), KEYS.Get("btn_good"), KEYS.Get("btn_flags"), KEYS.Get("btn_premium"), "Pets"] : [KEYS.Get("btn_evil"), KEYS.Get("btn_plants"), KEYS.Get("btn_good"), KEYS.Get("btn_flags"), KEYS.Get("btn_premium")]);
             }
             else {
                 this.SubMenu([]);
@@ -113,6 +115,12 @@ package {
             this._thumbnailsMC = this.addChild(new MovieClip()) as MovieClip;
             this._thumbnailsMC.x = 60;
             this._thumbnailsMC.y = 115 + 25;
+            if (GLOBAL.INFERNO_ONLY && param1 == 4 && BUILDINGS._menuB == IO_PETS_TAB) {
+                this._pageCount = IoPetsPanel.fill(this._thumbnailsMC, BUILDINGS._page, this.ioRefreshPets);
+                bPrevious.Trigger(BUILDINGS._page > 0);
+                bNext.Trigger(BUILDINGS._page < this._pageCount - 1);
+                return;
+            }
             var _loc7_:Array = GLOBAL._buildingProps.concat();
             if (TUTORIAL.hasFinished) {
                 this.SortBuildings(_loc7_);
@@ -164,6 +172,16 @@ package {
             }
             else {
                 bNext.Trigger(false);
+            }
+        }
+
+        /** Inferno-only: the Decorations' Pets tab (its sub-menu index). */
+        public static const IO_PETS_TAB:int = 5;
+
+        /** Inferno-only: the Pets tab drawn again (after a pet is bought, brought out or put away). */
+        public function ioRefreshPets():void {
+            if (BUILDINGS._mc == this && BUILDINGS._menuA == 4 && BUILDINGS._menuB == IO_PETS_TAB) {
+                this.SwitchB(4, IO_PETS_TAB, BUILDINGS._page);
             }
         }
 
@@ -224,9 +242,11 @@ package {
             this._subButtonsMC = this.addChild(new MovieClip()) as MovieClip;
             var _loc2_:Array = [];
             var _loc3_:int = 0;
+            // (six tabs, the Inferno's Decorations with Pets: a little narrower, to fit)
+            var ioStep:int = param1.length > 5 ? 102 : 110;
             while (_loc3_ < param1.length) {
-                (_loc4_ = this._subButtonsMC.addChild(new Button_CLIP()) as Button_CLIP).x = _loc3_ * 110;
-                _loc4_.width = 105;
+                (_loc4_ = this._subButtonsMC.addChild(new Button_CLIP()) as Button_CLIP).x = _loc3_ * ioStep;
+                _loc4_.width = ioStep - 5;
                 _loc4_.Setup(param1[_loc3_]);
                 _loc2_.push(_loc4_);
                 _loc4_.addEventListener(MouseEvent.CLICK, this.Switch(BUILDINGS._menuA, _loc3_, 0));

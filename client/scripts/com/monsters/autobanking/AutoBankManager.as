@@ -44,6 +44,11 @@ package com.monsters.autobanking {
 
         public static function updateSaveData():Object {
             var _loc1_:Object = {};
+            // Inferno-only: a Designer draft produces nothing for anyone (and a kit's draft, an outpost, has no
+            // map cell to work its production out from).
+            if (GLOBAL.ioDesignMode()) {
+                return null;
+            }
             setLocalGIP(_loc1_);
             if (MapRoomManager.instance.isInMapRoom2) {
                 return updateBuildingResources(_loc1_);

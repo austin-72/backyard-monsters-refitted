@@ -6,6 +6,7 @@ import { requireAllianceMember } from "../../services/alliance/allianceAccess.js
 import { startPowerup, type PowerupActivation } from "../../services/alliance/powerups.js";
 import { powerupLeaderOnlyErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { questBump } from "../../services/quests/questProgress.js";
 
 /**
  * Starts a fully charged power-up, buffing every member of the alliance for its
@@ -32,6 +33,7 @@ export const activatePowerup: KoaController = async (ctx) => {
   }
 
   const resolved = await startPowerup(purchase);
+  void questBump(user.userid, "powerup");
 
   const powerups = resolved.map(({ rules, status }) => ({
     powerup_id: rules.powerup_id,

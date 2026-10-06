@@ -7,6 +7,8 @@ import { postgres } from "../../server.js";
 import { getCurrentDateTime } from "../../utils/getCurrentDateTime.js";
 import { getLastSeen } from "../maproom/getLastSeen.js";
 import { getCachedWorlds } from "../maproom/knownWorlds.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+import { holdingsOf } from "./allianceOutposts.js";
 import { ALLIANCE_MEMBER_FIELDS, toAllianceMember, type AllianceMember } from "./allianceMember.js";
 
 const SUGGESTED_LIMIT = 50;
@@ -57,7 +59,15 @@ export const getSuggestedMembers = async (alliance: Alliance): Promise<AllianceM
   const lastSeen = await getLastSeen(candidates.map((user) => user.userid), BaseType.MAIN);
   const now = getCurrentDateTime();
 
-  return candidates
+  const rows = candidates
     .map((user) => toAllianceMember(user, lastSeen, now))
     .filter((user) => user !== null);
+
+  // Inferno: empire value in the Empire column, as everywhere else in the alliances
+  if (infernoOnlyConfig.enabled) {
+    const holdings = await holdingsOf(rows.map((row) => row.user_id));
+    for (const row of rows) row.points = holdings.get(row.user_id)?.empire ?? 0;
+  }
+
+  return rows;
 };

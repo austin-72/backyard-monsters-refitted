@@ -36,7 +36,7 @@ export const playerCell = async (ctx: Context, cell: Cell, cellOwners: Map<numbe
   const [cellX, cellY] = [cell.x, cell.y];
 
   const currentUser: User = ctx.authUser;
-  const { lastSeen = new Map(), truces, relationships = new Map() } = ctx.state;
+  const { lastSeen = new Map(), relationships = new Map() } = ctx.state;
 
   const mine = currentUser.userid === cell.uid;
   const cellOwner = mine ? currentUser : cellOwners.get(cell.uid);
@@ -79,8 +79,6 @@ export const playerCell = async (ctx: Context, cell: Cell, cellOwners: Map<numbe
   if (online || isUnderAttack) locked = 1;
   if (mine) locked = 0;
 
-  const hasTruce = !mine && !!truces.get(cellOwner.userid);
-
   const allianceId = cellOwner.alliance_id ?? 0;
 
   const relationship = mine
@@ -105,7 +103,7 @@ export const playerCell = async (ctx: Context, cell: Cell, cellOwners: Map<numbe
     fr: 0,
     p: isProtected ? 1 : 0,
     d: (cellSave?.damage ?? 0) >= 90 ? 1 : 0,
-    t: hasTruce ? 1 : 0,
+    t: 0,
     rel: relationship,
     aid: allianceId || undefined,
     pic_square: cellOwner.pic_square ?? undefined,

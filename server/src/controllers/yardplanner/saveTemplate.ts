@@ -2,46 +2,34 @@ import { Status } from "../../enums/StatusCodes.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { plannerSave } from "./plannerSave.js";
 
 interface RequestBody {
   slotid: number;
   name: string;
   data: Record<string, {}>;
+  baseid?: string;
 }
 
-/**
- * Controller to handle saving a Yard Planner slot/template for the authenticated user.
- * 
- * If a template with the same slot ID already exists, it will be overwritten. 
- * Otherwise, a new template will be added.
- * 
- * @param {Context} ctx - The Koa context object, which includes the authenticated user and request body.
- * @returns {Promise<void>} - A promise that resolves when the controller is complete.
- */
+/** Saves a layout into a slot of the yard being planned (baseid; main yard by default). */
 export const saveTemplate: KoaController = async (ctx) => {
-  const requestBody = ctx.request.body as RequestBody;
+  const { slotid, name, data, baseid } = ctx.request.body as RequestBody;
   const user: User = ctx.authUser;
-  let save = user.save!;
+  const save = await plannerSave(user, baseid);
 
-  await postgres.em.populate(user, ["save"], { fields: ["save.savetemplate"] });
+  const templates = [...(save.savetemplate ?? [])];
+  const entry = { slotid: Number(slotid), name: String(name ?? "").slice(0, 60), data };
+  const existingSlotIndex = templates.findIndex((template) => Number(template.slotid) === entry.slotid);
 
-  const existingSlotIndex = save.savetemplate.findIndex(
-    (template) => template.slotid === requestBody.slotid
-  );
+  if (existingSlotIndex !== -1) templates[existingSlotIndex] = entry;
+  else templates.push(entry);
 
-  if (existingSlotIndex !== -1) {
-    // Overwrite the existing layout
-    save.savetemplate[existingSlotIndex] = { ...requestBody };
-  } else {
-    // Insert new layout if slotid doesn't exist
-    save.savetemplate.push({ ...requestBody });
-  }
-  postgres.em.persist(save);
+  save.savetemplate = templates;
   await postgres.em.flush();
 
   ctx.status = Status.OK;
   ctx.body = {
     error: 0,
-    ...save.savetemplate,
+    ...templates,
   };
 };

@@ -1,5 +1,6 @@
 package com.monsters.effects {
 
+    import com.monsters.replays.IoReplayRecorder;
     import com.monsters.siege.weapons.Decoy;
     import com.monsters.siege.SiegeWeapons;
     import com.cc.utils.SecNum;
@@ -9,6 +10,7 @@ package com.monsters.effects {
     import flash.display.BitmapData;
     import flash.display.MovieClip;
     import flash.geom.Point;
+    import com.monsters.quests.IoQuests;
 
     public class ResourceBombs {
 
@@ -235,8 +237,10 @@ package com.monsters.effects {
          * Inferno-only: the Catapult fires Chaos weapons instead of twigs and pebbles.
          *
          *   row 1  Marilyn Monstroe  lures defenders (also out of bunkers and Compounds), then explodes
-         *   row 2  Candy Jars        jar every tower in range until the tower shoots its way out
-         *   row 3  Sulfur Bomb       Putty Rage under another name: speed and armour for your monsters
+         *   row 2  Candy Jars        jar every tower in range for a number of seconds (the glass cracks
+         *                            as the end nears, then breaks)
+         *   row 3  Sulfur Bomb       speed, and a shield: invulnerable at first, then armour (damage
+         *                            removed) fading from `armor`% to 0
          *
          * Four sizes each, one per Catapult level. The slot ids are the stock ones (tw / pb / pu) because
          * the popup art is laid out by them; tw3 is new, the stock twig row only had three.
@@ -248,8 +252,11 @@ package com.monsters.effects {
         private static function ioInfernoAmmo():void {
             var sizes:Array = [KEYS.Get("bomb_pb0_name"), KEYS.Get("bomb_pb1_name"), KEYS.Get("bomb_pb2_name"), KEYS.Get("bomb_pb3_name")];
             var decoy:Array = [[500, 300, 8, 100000, 50000], [1500, 300, 12, 500000, 250000], [4000, 300, 16, 2500000, 1250000], [8000, 300, 20, 5000000, 2500000]];
-            var jars:Array = [[200, 2000, 100000], [250, 4000, 250000], [300, 6000, 2000000], [350, 8000, 5000000]];
-            var sulfur:Array = [[150, 1.2, 0.2, 10, 100000], [200, 1.4, 0.4, 15, 500000], [300, 1.8, 0.6, 30, 2500000], [500, 2, 0.8, 40, 5000000]];
+            // radius, seconds jarred, bone and coal cost
+            var jars:Array = [[200, 15, 100000], [250, 25, 500000], [300, 40, 2000000], [350, 55, 5000000]];
+            // radius, speed, invulnerable seconds, total seconds, armour % when the invulnerable part ends
+            // (it fades to 0 by the end), sulfur cost
+            var sulfur:Array = [[150, 1.2, 0, 15, 40, 100000], [200, 1.4, 4, 25, 55, 500000], [300, 1.8, 8, 40, 70, 5000000], [500, 2, 12, 55, 85, 10000000]];
             var i:int = 0;
             _bombs = {};
             while (i < 4) {
@@ -261,14 +268,14 @@ package com.monsters.effects {
                     };
                 _bombs["pb" + i] = {
                         "used": false, "group": 1, "kind": "jars", "particles": 0, "name": sizes[i], "col": i,
-                        "damage": 0, "radius": jars[i][0], "durability": jars[i][1],
+                        "damage": 0, "radius": jars[i][0], "seconds": jars[i][1],
                         "costs": {"r1": jars[i][2], "r2": jars[i][2]}, "resource": 1, "cost": jars[i][2] * 2,
                         "image": "siegebuttons/jars.png", "dropTarget": DROPZONE.SIEGEWEAPON_BUILDINGS, "catapultLevel": i + 1
                     };
                 _bombs["pu" + i] = {
                         "used": false, "group": 2, "kind": "sulfur", "particles": 50, "name": sizes[i], "col": i,
-                        "damage": 0, "radius": sulfur[i][0], "speed": sulfur[i][1], "damageMult": sulfur[i][2], "speedlength": sulfur[i][3],
-                        "costs": {"r3": sulfur[i][4]}, "resource": 3, "cost": sulfur[i][4],
+                        "damage": 0, "radius": sulfur[i][0], "speed": sulfur[i][1], "invuln": sulfur[i][2], "speedlength": sulfur[i][3],
+                        "armor": sulfur[i][4], "costs": {"r3": sulfur[i][5]}, "resource": 3, "cost": sulfur[i][5],
                         "image": "bombbuttons/sulfur" + (i + 1) + ".png", "dropTarget": DROPZONE.MONSTERS, "catapultLevel": i + 1
                     };
                 i++;
@@ -319,6 +326,10 @@ package com.monsters.effects {
         public static function canAfford(param1:Object):Boolean {
             var key:String = null;
             var costs:Object = costsOf(param1);
+            // Admin test mode: catapult shots are free.
+            if (GLOBAL.ioTestMode()) {
+                return true;
+            }
             if (!GLOBAL._attackersResources) {
                 return false;
             }
@@ -359,6 +370,9 @@ package com.monsters.effects {
         private static function charge(param1:Object):void {
             var key:String = null;
             var costs:Object = costsOf(param1);
+            if (GLOBAL.ioTestMode()) {
+                return;
+            }
             for (key in costs) {
                 GLOBAL._resources[key].Add(-costs[key]);
                 GLOBAL._hpResources[key] -= costs[key];
@@ -395,6 +409,14 @@ package com.monsters.effects {
                 }
                 _bombid = _loc2_;
             }
+        }
+
+        /** Inferno-only: the bombs' pictures, for a replay's catapult shots (IoReplayPlayer). */
+        public static function ioLoadArt():void {
+            ImageCache.GetImageWithCallBack("effects/twigs.png", onAssetLoaded, true, 6);
+            ImageCache.GetImageWithCallBack("effects/pebble.png", onAssetLoaded, true, 6);
+            ImageCache.GetImageWithCallBack("effects/pebblehit.png", onAssetLoaded, true, 6);
+            ImageCache.GetImageWithCallBack(GLOBAL.INFERNO_ONLY ? "effects/sulfur.png" : "effects/putty.png", onAssetLoaded, true, 6);
         }
 
         public static function Clear():void {
@@ -452,10 +474,17 @@ package com.monsters.effects {
                 }
             }
             if (_loc3_) {
+                // Inferno-only quest book: Marilyn, the Candy Jars, a Sulfur Bomb
+                if (GLOBAL.INFERNO_ONLY && _loc2_.kind) {
+                    IoQuests.event("ammo_" + _loc2_.kind);
+                }
                 for each (_loc4_ in _bombs) {
                     if (_loc4_.group == _loc2_.group) {
                         _loc4_.used = true;
                     }
+                }
+                if (GLOBAL.INFERNO_ONLY && IoReplayRecorder.recording) {
+                    IoReplayRecorder.shot(_loc2_, MAP._GROUND.mouseX, MAP._GROUND.mouseY); // (the attack's replay throws it too)
                 }
                 if (_loc2_.kind == "decoy" || _loc2_.kind == "jars") {
                     ioLaunchChaosWeapon(_loc2_, MAP._GROUND.mouseX, MAP._GROUND.mouseY);
@@ -505,7 +534,9 @@ package com.monsters.effects {
                 SiegeWeapons.ioActivate(Decoy.ID, {"damage": param1.damage, "range": param1.radius, "duration": param1.fuse}, param2, param3);
             }
             else {
-                SiegeWeapons.ioDropJars({"range": param1.radius, "durability": param1.durability}, param2, param3);
+                // Jarred for `seconds` (an older server may still send a `durability` only: then as before,
+                // until the tower shoots its way out).
+                SiegeWeapons.ioDropJars({"range": param1.radius, "durability": param1.durability || 0, "seconds": Number(param1.seconds) || 0}, param2, param3);
             }
             _launchedBomb = true;
             if (_mc) {

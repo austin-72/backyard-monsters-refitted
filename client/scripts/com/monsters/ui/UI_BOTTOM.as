@@ -3,6 +3,7 @@ package com.monsters.ui {
     import com.monsters.maproom3.MapRoom3;
     import com.monsters.maproom_manager.MapRoomManager;
     import com.monsters.missions.UI_MISSIONMENU;
+    import com.monsters.quests.IoQuests;
     import com.monsters.replayableEvents.attacking.monsterMadness.MonsterMadness;
     import com.monsters.replayableEvents.attacking.monsterMadness.MonsterMadnessInfoBar;
     import flash.display.DisplayObject;
@@ -72,18 +73,36 @@ package com.monsters.ui {
         }
 
         public static function ShowStarterKits(param1:MouseEvent = null):void {
+            if (GLOBAL.ioDesignMode()) {
+                // Inferno-only: a Designer draft isn't a real outpost; kits are designed here, not bought
+                GLOBAL.Message("The kit popup isn't used in the Designer. Build the kit's buildings here, then Save.");
+                return;
+            }
             POPUPS.Push(new popup_prefab_help());
         }
 
         public static function Update():void {
             var _loc2_:int = 0;
             var _loc1_:int = 0;
+            // Inferno-only: an icon that finished loading after the bar was taken down (a yard change) called this
+            // with no bar (bug report #56)
+            if (GLOBAL.INFERNO_ONLY && !_mc) {
+                return;
+            }
             for each (_loc2_ in QUESTS._completed) {
                 if (_loc2_ == 1) {
                     _loc1_ += 1;
                 }
             }
             _mc.bQuests.Alert = "";
+            // Inferno-only: the quest book (IoQuests): how many are ready, kept up to date, its notice
+            if (GLOBAL.INFERNO_ONLY) {
+                IoQuests.refresh();
+                IoQuests.tick();
+                if (IoQuests.ready > 0) {
+                    _mc.bQuests.Alert = String(IoQuests.ready);
+                }
+            }
             if (_missions) {
                 _missions.Update();
             }

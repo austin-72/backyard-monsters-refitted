@@ -541,7 +541,7 @@ package com.monsters.mailbox {
                 GLOBAL.Message(KEYS.Get("msg_invalid_mr2_invitation_in_mr3"));
                 return;
             }
-            if (ALLIANCES._myAlliance) {
+            if (ALLIANCES._myAlliance && !GLOBAL.INFERNO_ONLY) {
                 GLOBAL.Message(KEYS.Get("msg_mustleavealliance"));
                 return;
             }

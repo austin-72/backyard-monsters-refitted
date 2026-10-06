@@ -4,8 +4,6 @@
  */
 export enum MessageType {
   MESSAGE = "message",
-  TRUCE_REQUEST = "trucerequest",
-  TRUCE_ACCEPT = "truceaccept",
-  TRUCE_REJECT = "trucereject",
   MIGRATE_REQUEST = "migraterequest",
+  MIGRATE_REVOKE = "migraterevoke",
 }

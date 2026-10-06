@@ -3,6 +3,7 @@ package {
     import com.monsters.configs.BYMConfig;
     import com.monsters.display.SpriteData;
     import com.monsters.display.SpriteSheetAnimation;
+    import com.monsters.events.hfo.IoHfoArt;
     import com.monsters.interfaces.IAttackable;
     import com.monsters.maproom_manager.IMapRoomCell;
     import com.monsters.maproom_manager.MapRoomManager;
@@ -19,6 +20,7 @@ package {
     import flash.geom.Point;
     import gs.TweenLite;
     import gs.easing.Expo;
+    import flash.utils.getTimer;
 
     public class BTOWER extends BFOUNDATION {
 
@@ -31,7 +33,9 @@ package {
                 "118": 0,
                 "129": 0,
                 "130": 0,
-                "132": 1
+                "132": 1,
+                "144": 1,
+                "145": 1
             };
 
         private var creeps:Array;
@@ -65,6 +69,22 @@ package {
         protected var _jarAnimation:SpriteSheetAnimation;
 
         public var _jarHealth:SecNum;
+
+        /**
+         * Inferno-only Candy Jars: the jar holds for this long (ms from landing) and the tower's shots at the
+         * glass do nothing; 0 = the stock jar, which holds until the tower has shot its way out.
+         */
+        private var _ioJarMs:Number = 0;
+
+        private var _ioJarLanded:int = 0;
+
+        /** 0 whole, 1 cracked, 2 badly cracked (the jar sprite's first three frames). */
+        private var _ioJarStage:int = 0;
+
+        private var _ioJarX:Number = 0;
+
+        /** A timed jar's health: out of reach of any tower's shots, and put back every tick. */
+        private static const IO_JAR_HEALTH:int = 1000000000;
 
         public var _targetVacuum:Boolean;
 
@@ -252,7 +272,9 @@ package {
             return Boolean(this._jarHealth);
         }
 
-        public function ApplyJar(param1:int):void {
+        public function ApplyJar(param1:int, ioSeconds:Number = 0):void {
+            this._ioJarMs = Math.max(0, ioSeconds) * 1000;
+            this._ioJarStage = 0;
             ++targetableStatus;
             this._jarAnimation = new SpriteSheetAnimation(SPRITES.GetSpriteDescriptor(Jars.JAR_GRAPHIC) as SpriteData, Jars.JAR_GRAPHIC_FRAMES);
             this._jarAnimation.render();
@@ -278,10 +300,48 @@ package {
         }
 
         private function JarLanded():void {
+            if (this._ioJarMs > 0) {
+                this._jarHealth = new SecNum(IO_JAR_HEALTH);
+                this._ioJarLanded = getTimer();
+                if (this._jarAnimation) {
+                    this._ioJarX = this._jarAnimation.x;
+                }
+                return;
+            }
             this._jarHealth = new SecNum(Jars(SiegeWeapons.getWeapon(Jars.ID)).durability);
         }
 
+        /**
+         * Inferno-only: a timed jar cracks as its time runs out (half left, then a quarter left), shakes in its
+         * last two seconds, and breaks when the time is up.
+         */
+        private function ioTickTimedJar():void {
+            var left:Number = 1 - (getTimer() - this._ioJarLanded) / this._ioJarMs;
+            var stage:int = left <= 0.25 ? 2 : (left <= 0.5 ? 1 : 0);
+            if (left <= 0) {
+                this._jarAnimation.x = this._ioJarX;
+                this.KillJar();
+                return;
+            }
+            if (this._jarHealth.Get() < IO_JAR_HEALTH / 2) {
+                this._jarHealth.Set(IO_JAR_HEALTH);
+            }
+            if (stage != this._ioJarStage) {
+                this._ioJarStage = stage;
+                this._jarAnimation.gotoAndStop(stage);
+                this._jarAnimation.render();
+                SOUNDS.Play(GetRandomString(Jars.CRACKING_SOUNDS));
+            }
+            if (left * this._ioJarMs < 2000) {
+                this._jarAnimation.x = this._ioJarX + ((getTimer() >> 6) % 2 ? 1.5 : -1.5);
+                updateRasterData();
+            }
+        }
+
         private function UpdateJar():void {
+            if (this._ioJarMs > 0) {
+                return; // a timed jar cracks by time (ioTickTimedJar), not by the shots it takes
+            }
             var _loc1_:Number = this._jarHealth.Get() / Jars(SiegeWeapons.getWeapon(Jars.ID)).durability;
             if (_loc1_ < 0.3) {
                 this._jarAnimation.gotoAndStop(2);
@@ -298,6 +358,9 @@ package {
         }
 
         protected function TickJar():void {
+            if (this._ioJarMs > 0 && Boolean(this._jarHealth)) {
+                this.ioTickTimedJar();
+            }
             if (Boolean(this._jarHealth) && this._jarHealth.Get() <= 0) {
                 this.KillJar();
             }
@@ -314,6 +377,9 @@ package {
         }
 
         public function KillJar():void {
+            if (this._ioJarMs > 0 && this._jarHealth && this._jarAnimation) {
+                this._jarAnimation.x = this._ioJarX;
+            }
             this._jarHealth = null;
             if (this._jarAnimation) {
                 this._jarAnimation.play();
@@ -391,6 +457,13 @@ package {
                 _loc9_ = int(_targetFlyerMode[_type]);
             }
             var _loc10_:int = Targeting.getOldStyleTargets(_loc9_);
+            // A tower not on the ground (no position yet, or taken off the yard) has nothing in range: it
+            // stopped the game here during an attack (bug report: "reading 'add'", Inferno Quake Tower).
+            if (_position == null || !_footprint || _footprint.length == 0) {
+                this.creeps = [];
+                this._hasTargets = false;
+                return;
+            }
             this.creeps = Targeting.getCreepsInRange(_range, _position.add(new Point(0, _footprint[0].height / 2)), _loc10_);
             this._hasTargets = false;
             if (this.creeps.length > 0) {
@@ -426,9 +499,54 @@ package {
             }
         }
 
+        // ---- Hell Freezes Over: iced over by an ice monster's hit (IoIce). The tower waits one reload more before
+        // it acts again, and the ice breaks when that wait is over (the shatter plays). Hits while it is iced
+        // do nothing more. The waiting is done by the loops that tick the towers (BASE, GLOBAL: ioIceTick).
+
+        private var _ioIceHold:int = 0;
+
+        private var _ioIceArt:Object = null;
+
+        public function get ioIced():Boolean {
+            return this._ioIceHold > 0;
+        }
+
+        public function ioIceHit():void {
+            if (!GLOBAL.INFERNO_ONLY || this._ioIceHold > 0 || health <= 0 || !this.canAttack) {
+                return;
+            }
+            this._ioIceHold = Math.max(20, _rate * 2);
+            this._ioIceArt = IoHfoArt.towerIceOn(this);
+        }
+
+        /** Each tower step: true while it is iced (it waits, and does nothing else). */
+        public function ioIceTick():Boolean {
+            if (this._ioIceHold <= 0) {
+                return false;
+            }
+            if (health <= 0) {
+                this.ioIceBreak(false);
+                return false;
+            }
+            if (--this._ioIceHold <= 0) {
+                this.ioIceBreak(true);
+                return false;
+            }
+            return true;
+        }
+
+        public function ioIceBreak(param1:Boolean):void {
+            this._ioIceHold = 0;
+            if (this._ioIceArt) {
+                IoHfoArt.towerIceOff(this._ioIceArt, param1);
+            }
+            this._ioIceArt = null;
+        }
+
         override public function RecycleC():void {
             GLOBAL._bTower = null;
             --GLOBAL._bTowerCount;
+            this.ioIceBreak(false);
             super.RecycleC();
         }
 
@@ -494,6 +612,11 @@ package {
         }
 
         private function RangeIndicator():void {
+            // Inferno-only: the yard may have gone in the quarter second since the mouse came over (report #61:
+            // into an attack, with no footprint layer)
+            if (GLOBAL.INFERNO_ONLY && (!MAP._BUILDINGFOOTPRINTS || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD)) {
+                return;
+            }
             var _loc1_:uint = 16777215;
             this._radiusGraphic = new Shape();
             this._radiusGraphic.graphics.beginFill(16777215, 0.1);

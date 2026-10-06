@@ -126,7 +126,8 @@ package com.monsters.mailbox {
                             "pic_square": ""
                         }, true);
                 _loc3_.picClass = system_message;
-                (_loc4_ = new URLLoaderApi()).load(GLOBAL._apiURL + "player/getmessagetargets", null, this.onTargetsSuccess);
+                // Inferno-only: relocation invites go to alliance members (server lists them).
+                (_loc4_ = new URLLoaderApi()).load(GLOBAL.INFERNO_ONLY ? GLOBAL._mapURL + "invitetargets" : GLOBAL._apiURL + "player/getmessagetargets", null, this.onTargetsSuccess);
             }
             else {
                 this._openMap2Friends();
@@ -142,6 +143,10 @@ package com.monsters.mailbox {
                 if (Boolean(param1.targets[_loc3_].friend) && param1.targets[_loc3_].mapver == 2) {
                     _contacts.push(_loc4_);
                 }
+            }
+            if (GLOBAL.INFERNO_ONLY && _contacts.length == 0) {
+                GLOBAL.Message("There is nobody else in your alliance to invite yet.");
+                return;
             }
             this._openMap2Friends();
         }

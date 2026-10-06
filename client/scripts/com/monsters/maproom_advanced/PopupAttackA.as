@@ -1,4 +1,6 @@
 package com.monsters.maproom_advanced {
+    import flash.utils.getTimer;
+    import com.monsters.ai.TRIBES;
 
     import com.cc.utils.SecNum;
     import com.monsters.alliances.*;
@@ -70,6 +72,9 @@ package com.monsters.maproom_advanced {
             MapRoom._mc.HideAttack();
         }
 
+        /** Inferno-only: when this attack's popup opened (yards off the screen are waited for from then). */
+        private var _ioWaitFrom:int = 0;
+
         public function Setup(param1:MapRoomCell):void {
             this._cell = param1;
             if (this._cell._base == 3) {
@@ -79,13 +84,14 @@ package com.monsters.maproom_advanced {
                 this.tAttackText.htmlText = "<b>" + KEYS.Get("newmap_att2", {"v1": this._cell._name}) + "</b>";
             }
             else if (this._cell._base == 1) {
-                this.tAttackText.htmlText = "<b>" + KEYS.Get("newmap_att3", {"v1": this._cell._name}) + "</b>";
+                this.tAttackText.htmlText = "<b>" + KEYS.Get("newmap_att3", {"v1": TRIBES.DisplayName(this._cell._name)}) + "</b>"; // (Inferno-only: the tribe's Inferno name)
             }
             else {
                 LOGGER.Log("err", "Cell at (" + this._cell.X + "," + this._cell.Y + ") has invalid base type " + this._cell._base + " when being attacked");
                 this.tAttackText.htmlText = "<b>Attack</b>";
             }
             this._enabled = false;
+            this._ioWaitFrom = getTimer();
             this.bAttack.Enabled = false;
             this.ProfilePic();
             if (this._cell._alliance) {
@@ -109,7 +115,7 @@ package com.monsters.maproom_advanced {
                 return;
             }
             MapRoom._mc.HideAttack();
-            if (!this._cell._protected && !(this._cell._truce && this._cell._truce > GLOBAL.Timestamp()) && this._monstersInRange) {
+            if ((GLOBAL.ioTestMode() || !this._cell._protected && !(this._cell._truce && this._cell._truce > GLOBAL.Timestamp())) && this._monstersInRange) {
                 if (this._protectedInRange) {
                     GLOBAL.Message(KEYS.Get("newmap_attack"), KEYS.Get("confirm_btn"), this.DoAttack);
                     return;
@@ -188,10 +194,28 @@ package com.monsters.maproom_advanced {
                 powerUpBonus = POWERUPS.Apply(POWERUPS.ALLIANCE_DECLAREWAR, [0]);
             }
             if (MapRoom._open) {
+                MapRoom._mc.ioOffscreenPending = false;
                 this._cellsInRange = MapRoom._mc.GetCellsInRange(this._cell.X, this._cell.Y, 10 + powerUpBonus);
+                if (GLOBAL.INFERNO_ONLY) {
+                    // the yards that reach it through the underworld's portals (IoUnderworld): waited for like those off screen
+                    this._cellsInRange = IoUnderworld.withReach(this._cellsInRange, this._cell.X, this._cell.Y);
+                    if (IoUnderworld.reachPending(this._cell.X, this._cell.Y)) {
+                        MapRoom._mc.ioOffscreenPending = true;
+                    }
+                }
+                // Inferno-only: yards in range off the screen come from their zone's data: waited for (a few
+                // seconds at most) before the monsters are counted
+                if (GLOBAL.INFERNO_ONLY && !this._enabled && MapRoom._mc.ioOffscreenPending && getTimer() - this._ioWaitFrom < 5000) {
+                    return false;
+                }
                 for each (cellData in this._cellsInRange) {
                     mapRoomCell = cellData.cell as MapRoomCell;
                     if (Boolean(mapRoomCell) && !mapRoomCell._processed) {
+                        return false;
+                    }
+                    // One of your yards known only from the world snapshot: its monsters come with getarea.
+                    if (Boolean(mapRoomCell) && mapRoomCell._mine && mapRoomCell._ioSnap) {
+                        MapRoom.GetZoneCell(mapRoomCell.X, mapRoomCell.Y);
                         return false;
                     }
                 }
@@ -243,6 +267,17 @@ package com.monsters.maproom_advanced {
                     if (mapRoomCell._flingerRange.Get() >= this._attackResources.flinger.Get()) {
                         this._attackResources.flinger.Set(mapRoomCell._flingerLevel.Get());
                     }
+                }
+                // Admin test mode: any monster, as many as you like, from anywhere (a practice attack).
+                if (GLOBAL.ioTestMode() && !MapRoomManager.instance.isInMapRoom3) {
+                    ATTACK._curCreaturesAvailable = new Array();
+                    for each (monsterType in CREATURELOCKER.ioTestMonsterIds()) {
+                        ATTACK._curCreaturesAvailable[monsterType] = 999;
+                    }
+                    this._monstersInRange = true;
+                    this._protectedInRange = false;
+                    MapRoom._flingerInRange = true;
+                    this._attackResources.flinger.Set(4);
                 }
                 if (MapRoom._flingerInRange) {
                     if (GLOBAL._playerCatapultLevel) {

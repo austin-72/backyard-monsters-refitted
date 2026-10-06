@@ -55,6 +55,10 @@ services:
       - ./public/assets/kits:/app/public/assets/kits
       # The published game client (served at /<name>.swf). Bound so a new build is a file copy.
       - ./public/client:/app/public/client
+      # The published browser client (publish-web.cmd -> /web/) and the watch-mode build (/web-dev/).
+      # Bound for the same reason: publishing is a file copy, no image rebuild.
+      - ./public/web:/app/public/web
+      - ./public/web-dev:/app/public/web-dev
     ports:
       - ${API_PORT:-3001}:3001
       - ${CHAT_WS_PORT:-3010}:3010
@@ -87,6 +91,8 @@ services:
   db:
     image: postgres:18.1
     container_name: bymr-database
+    # (back after Docker restarts, like the server: a stopped database stops the backups too)
+    restart: unless-stopped
     environment:
       - POSTGRES_DB=${DB_NAME:-bym}
       - POSTGRES_USER=${DB_USER:-postgres}
@@ -111,6 +117,41 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # Automatic database backups (docker/db-backup.sh): every day at BACKUP_HOUR (TZ), or as soon as it
+  # runs when the newest backup is more than a day old, into BACKUP_DIR (default: this folder's
+  # "backups"). Keeps BACKUP_KEEP_DAYS days, then one a week for BACKUP_KEEP_WEEKS weeks, then one a
+  # month for BACKUP_KEEP_MONTHS months. backup-db.cmd backs up now, restore-db.cmd puts one back.
+  backup:
+    image: postgres:18.1
+    container_name: bymr-backup
+    restart: unless-stopped
+    environment:
+      - PGHOST=db
+      - PGPORT=5432
+      - PGUSER=${DB_USER:-postgres}
+      - PGPASSWORD=${DB_PASSWORD:-dev12345}
+      - PGDATABASE=${DB_NAME:-bym}
+      - TZ=${TZ:-America/Chicago}
+      - BACKUP_HOUR=${BACKUP_HOUR:-4}
+      - BACKUP_KEEP_DAYS=${BACKUP_KEEP_DAYS:-14}
+      - BACKUP_KEEP_WEEKS=${BACKUP_KEEP_WEEKS:-8}
+      - BACKUP_KEEP_MONTHS=${BACKUP_KEEP_MONTHS:-12}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      - ./docker/db-backup.sh:/scripts/db-backup.sh:ro
+    networks:
+      - bymr
+    # (Windows line endings taken out first, in case git or an editor put them in)
+    entrypoint: ["sh", "-c", "tr -d '\\r' < /scripts/db-backup.sh > /usr/local/bin/db-backup && chmod +x /usr/local/bin/db-backup && exec db-backup loop"]
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    depends_on:
+      db:
+        condition: service_healthy
 
   # pgAdmin — database GUI (optional, start with: docker compose --profile tools up)
   pgadmin:

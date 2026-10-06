@@ -1,8 +1,10 @@
 package {
     import com.monsters.configs.BYMConfig;
+    import com.monsters.display.IoWarts;
     import com.monsters.rendering.RasterData;
     import flash.display.BlendMode;
     import flash.display.DisplayObject;
+    import flash.display.MovieClip;
     import flash.events.MouseEvent;
     import flash.geom.Point;
 
@@ -24,6 +26,13 @@ package {
             var _loc1_:doodad_mushroom_mc = null;
             var _loc2_:doodad_mushroom_shadow = null;
             super.PlaceB();
+            if (this.ioPlaceOwn()) {
+                return;
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioPlaceWart();
+                return;
+            }
             _loc1_ = new doodad_mushroom_mc();
             if (!BYMConfig.instance.RENDERER_ON) {
                 _mc.addChild(_loc1_);
@@ -45,6 +54,32 @@ package {
             _loc2_.mouseEnabled = false;
             _loc2_.mouseChildren = false;
             _loc2_.blendMode = BlendMode.MULTIPLY;
+            _origin = new Point(x, y);
+            updateRasterData();
+        }
+
+        /** A kind of its own draws itself here and says so (Hell Freezes Over's ice: IoHfoIce). */
+        protected function ioPlaceOwn():Boolean {
+            return false;
+        }
+
+        /* Inferno-only: the wart art (IoWarts) in place of the SWF's mushroom and its shadow, placed the same way. */
+        private function ioPlaceWart():void {
+            var wart:MovieClip = IoWarts.sprite(this._mushroomFrame);
+            var shadow:MovieClip = IoWarts.shadow(this._mushroomFrame);
+            wart.mouseEnabled = false;
+            wart.mouseChildren = false;
+            shadow.mouseEnabled = false;
+            shadow.mouseChildren = false;
+            shadow.blendMode = BlendMode.MULTIPLY;
+            if (!BYMConfig.instance.RENDERER_ON) {
+                _mc.addChild(wart);
+                _mcBase.addChild(shadow);
+            }
+            else {
+                _rasterData[_RASTERDATA_TOP] = _rasterData[_RASTERDATA_TOP] || new RasterData(wart, _rasterPt[_RASTERDATA_TOP], int.MAX_VALUE);
+                _rasterData[_RASTERDATA_SHADOW] = _rasterData[_RASTERDATA_SHADOW] || new RasterData(shadow, _rasterPt[_RASTERDATA_SHADOW], MAP.DEPTH_SHADOW, BlendMode.MULTIPLY, true);
+            }
             _origin = new Point(x, y);
             updateRasterData();
         }

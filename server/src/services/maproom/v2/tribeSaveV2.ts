@@ -1,15 +1,19 @@
 import { Save } from "../../../database/models/save.model.js";
+import { ClientSafeError } from "../../../middleware/clientSafeError.js";
+import { Status } from "../../../enums/StatusCodes.js";
 import { postgres } from "../../../server.js";
 import { Tribe, Tribes } from "../../../enums/Tribes.js";
 import { minimumTribeLevels } from "./calculateTribeLevel.js";
 import { MOLOCH_INDEX, tribeForCell } from "./tribeForCell.js";
-import { molochStronghold } from "../../../game-data/tribes/devil/molochStrongholds.js";
+import { molochStronghold, underworldStronghold } from "../../../game-data/tribes/devil/molochStrongholds.js";
 import { abunaki } from "../../../game-data/tribes/v2/abunaki.js";
 import { dreadnaught } from "../../../game-data/tribes/v2/dreadnaught.js";
 import { kozu } from "../../../game-data/tribes/v2/kozu.js";
 import { legionnaire } from "../../../game-data/tribes/v2/legionnaire.js";
 import { devilify } from "../../../game-data/tribes/devil/devilify.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
+import { getCurrentDateTime } from "../../../utils/getCurrentDateTime.js";
+import { tribeDefenders, tribeDesign, withStockDesign } from "../../admin/designStore.js";
 
 /**
  * Generates a save for a wild monster on Map Room 2 based on the given base ID.
@@ -25,9 +29,16 @@ export const tribeSaveV2 = (baseid: string, worldid: string | null | undefined) 
   const cellX = parseInt(baseid.slice(-6, -3));
   const cellY = parseInt(baseid.slice(-3));
 
-  const { tribeIndex, wmid, level, variant } = tribeForCell(worldid, cellX, cellY);
+  // (a base id that is not one: a 400, not a crash in the territory maths)
+  if (!Number.isInteger(cellX) || !Number.isInteger(cellY)) {
+    throw new ClientSafeError({ message: "That yard does not exist.", status: Status.BAD_REQUEST, data: {}, isClientFriendly: true });
+  }
 
-  const tribeSave = tribeIndex === MOLOCH_INDEX
+  const { tribeIndex, wmid, level, variant, under } = tribeForCell(worldid, cellX, cellY);
+
+  const tribeSave = under
+    ? underworldStronghold(level, variant)
+    : tribeIndex === MOLOCH_INDEX
     ? molochStronghold(level, variant)
     : fetchTribeData(tribeIndex, level).tribeSave;
 
@@ -38,6 +49,9 @@ export const tribeSaveV2 = (baseid: string, worldid: string | null | undefined) 
     level,
     wmid,
     worldid,
+    // A new yard starts fresh now (the templates carry an old or 0 savetime, which would make the
+    // 12-hour rebuild in baseModeView take it straight away).
+    savetime: getCurrentDateTime(),
   }, { partial: true });
 };
 
@@ -49,6 +63,23 @@ export const tribeSaveV2 = (baseid: string, worldid: string | null | undefined) 
  * @returns {object} - An object containing the tribe save data.
  */
 const fetchTribeData = (tribeIndex: number, level: number) => {
+  const tribeSave = tribeTemplate(tribeIndex, level);
+  // Inferno-only: a layout an admin designed for this tribe and level (services/admin/designs.ts) replaces
+  // the stock buildings, and the monsters the admin put in its Compounds (with their levels) the stock ones;
+  // everything else (the yard's settings) stays the template's.
+  const design = tribeDesign(tribeIndex, level);
+  const defenders = tribeDefenders(tribeIndex, level);
+  let save = design ? { ...tribeSave, buildingdata: design, buildinghealthdata: {} } : tribeSave;
+  if (defenders) save = { ...save, monsters: defenders.monsters, academy: defenders.academy };
+  return { tribeSave: save };
+};
+
+/**
+ * The stock yard of a tribe at a level (the devil version on an inferno-only server), before any layout
+ * designed since: the hand-made template whose slot of the tribe's level range the level falls in, with the
+ * level's shipped default layout on it (game-data/designs/defaultDesigns.ts) where there is one.
+ */
+export const tribeTemplate = (tribeIndex: number, level: number) => {
   const tribeData = [legionnaire, kozu, abunaki, dreadnaught];
 
   // Get the selected tribe
@@ -74,8 +105,7 @@ const fetchTribeData = (tribeIndex: number, level: number) => {
   const selectedKey = parseInt(sortedKeys[keyIndex]);
   const template = selectedTribe[selectedKey];
 
-  // Inferno-only: wild monsters are the devil versions of the overworld tribes.
-  const tribeSave = infernoOnlyConfig.enabled ? devilify(template) : template;
-
-  return { tribeSave };
+  // Inferno-only: wild monsters are the devil versions of the overworld tribes, and their layouts the ones
+  // designed for each level of the ladder (the defaults).
+  return infernoOnlyConfig.enabled ? withStockDesign("tribe", `${tribeIndex}-${level}`, devilify(template)) : template;
 };

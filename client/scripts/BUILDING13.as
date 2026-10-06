@@ -4,6 +4,7 @@ package {
     import flash.events.Event;
     import flash.events.MouseEvent;
     import flash.geom.Point;
+    import com.monsters.quests.IoQuests;
 
     public class BUILDING13 extends HatcheryBase {
 
@@ -256,6 +257,11 @@ package {
                 _inProduction = "C12";
             }
             super.Tick(param1);
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+                // A yard that is being viewed or attacked does not hatch: with one-second hatching, the
+                // hatcheries were refilling the Compounds mid-fight.
+                return;
+            }
             if (this._timeStamp > GLOBAL.Timestamp()) {
                 return;
             }
@@ -328,6 +334,9 @@ package {
                     if (_productionStage.Get() == 2 && Boolean(_inProduction)) {
                         _taken.Set(0);
                         if (HOUSING.HousingStore(_inProduction, new Point(_mc.x, _mc.y), false, _countdownProduce.Get())) {
+                            if (GLOBAL.INFERNO_ONLY) {
+                                IoQuests.hatched(_inProduction); // (the quest book)
+                            }
                             this.StartProduction();
                         }
                     }
@@ -359,11 +368,16 @@ package {
                 return;
             }
             if (BASE._credits.Get() >= _finishCost.Get()) {
+                if (!GLOBAL.ioConfirmShiny(_finishCost.Get(), "to finish hatching now", this.FinishNow)) {
+                    return;
+                }
                 _loc1_ = [];
                 _loc2_ = HOUSING._housingSpace.Get();
                 if (_inProduction != "" && _loc2_ >= CREATURES.GetProperty(_inProduction, "cStorage")) {
                     _loc3_ = new Point(_mc.x - 10 + Math.random() * 20, _mc.y - 10 + Math.random() * 20);
-                    HOUSING.HousingStore(_inProduction, _loc3_);
+                    if (HOUSING.HousingStore(_inProduction, _loc3_) && GLOBAL.INFERNO_ONLY) {
+                        IoQuests.hatched(_inProduction); // (the quest book)
+                    }
                     _loc2_ -= CREATURES.GetProperty(_inProduction, "cStorage");
                     _inProduction = "";
                     _productionStage.Set(0);
@@ -377,7 +391,9 @@ package {
                                     _loc3_ = new Point(_mc.x - 10 + Math.random() * 20, _mc.y - 10 + Math.random() * 20);
                                     --_monsterQueue[0][1];
                                     _loc2_ -= _loc6_;
-                                    HOUSING.HousingStore(_loc5_, _loc3_);
+                                    if (HOUSING.HousingStore(_loc5_, _loc3_) && GLOBAL.INFERNO_ONLY) {
+                                        IoQuests.hatched(_loc5_); // (the quest book)
+                                    }
                                 }
                             }
                             if (_monsterQueue[0][1] <= 0) {

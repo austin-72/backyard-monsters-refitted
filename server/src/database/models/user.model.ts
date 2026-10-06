@@ -126,9 +126,44 @@ export class User {
   @Property({ type: "string", nullable: true, length: 400 })
   referral_notice?: string | null;
 
+  /** "paid", "same-ip" or "no-inviter" once the referral is decided (the friend's first load); null before. */
+  @Property({ type: "string", nullable: true, length: 16 })
+  referral_result?: string | null;
+
+  /** Barred by an admin from invite rewards (abuse of the invite link): friends joining through it pay nothing. */
+  @Property({ type: "boolean", default: false })
+  referral_barred?: boolean;
+
+  @Property({ type: "string", nullable: true, length: 400 })
+  referral_barred_reason?: string | null;
+
   @Property({ type: "string", nullable: true, length: 64 })
   registration_ip?: string | null;
 
   @Property({ type: "string", nullable: true, length: 64 })
   last_ip?: string | null;
+
+  // Inferno-only daily login reward (services/user/dailyLogin.ts)
+  @Property({ type: "number", default: 0 })
+  login_streak?: number;
+
+  /** UTC day (YYYY-MM-DD) the reward was last collected. */
+  @Property({ type: "string", nullable: true, length: 10 })
+  login_last_claim?: string | null;
+
+  /** Shown to the player when a banned account tries to log in (set from the admin panel). */
+  @Property({ type: "string", nullable: true, length: 400 })
+  ban_reason?: string | null;
+
+  /** Inferno-only: the player's own saved outpost kits, 3 slots (services/maproom/v2/playerKits.ts). */
+  @Property({ type: "json", nullable: true })
+  player_kits?: (PlayerKit | null)[] | null;
+}
+
+export interface PlayerKit {
+  name: string;
+  savedAt: number;
+  /** Picture file name stem under public/assets/kits/player/ (a random id, so pictures cannot be guessed). */
+  image?: string;
+  buildings: Record<string, { t: number; X: number; Y: number; id: number; prefab?: number }>;
 }

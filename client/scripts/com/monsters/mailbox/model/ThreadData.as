@@ -43,7 +43,8 @@ package com.monsters.mailbox.model {
 
         public var worldID:int;
 
-        public var baseID:int;
+        // Base ids are larger than an int holds; an int wrapped them to another base's id.
+        public var baseID:Number = 0;
 
         public function ThreadData(param1:Object) {
             super();

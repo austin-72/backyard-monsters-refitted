@@ -27,7 +27,25 @@ package {
             try {
                 ti = getTimer();
                 tileCount = 0;
-                if (texture == "lava") {
+                // hell bone grounds are a single seamless 1000x500 sheet (no 200x100 tiling / mask blending,
+                // which would make different bone layouts ghost through each other)
+                if (texture == "hell_sand1") {
+                    return new hell_sand1_big(0, 0);
+                }
+                if (texture == "hell_sand2") {
+                    return new hell_sand2_big(0, 0);
+                }
+                if (texture == "hfo_frozen") {
+                    // Hell Freezes Over: the lava ground frozen over (the same four tiles, iced)
+                    g = {
+                            "g1": new hfo_frozen1(0, 0),
+                            "g2": new hfo_frozen2(0, 0),
+                            "g3": new hfo_frozen3(0, 0),
+                            "g4": new hfo_frozen4(0, 0)
+                        };
+                    tileCount = 4;
+                }
+                else if (texture == "lava") {
                     g = {
                             "g1": new inferno_lava1(0, 0),
                             "g2": new inferno_lava2(0, 0),
@@ -66,6 +84,60 @@ package {
                             "g7": new isograss7(0, 0)
                         };
                     tileCount = 7;
+                }
+                else if (texture == "hell_land1") {
+                    g = {
+                            "g1": new hell_land1_1(0, 0),
+                            "g2": new hell_land1_2(0, 0),
+                            "g3": new hell_land1_3(0, 0),
+                            "g4": new hell_land1_4(0, 0)
+                        };
+                    tileCount = 4;
+                }
+                else if (texture == "hell_land2") {
+                    g = {
+                            "g1": new hell_land2_1(0, 0),
+                            "g2": new hell_land2_2(0, 0),
+                            "g3": new hell_land2_3(0, 0),
+                            "g4": new hell_land2_4(0, 0)
+                        };
+                    tileCount = 4;
+                }
+                else if (texture == "hell_land3") {
+                    g = {
+                            "g1": new hell_land3_1(0, 0),
+                            "g2": new hell_land3_2(0, 0),
+                            "g3": new hell_land3_3(0, 0),
+                            "g4": new hell_land3_4(0, 0)
+                        };
+                    tileCount = 4;
+                }
+                else if (texture == "hell_land4") {
+                    g = {
+                            "g1": new hell_land4_1(0, 0),
+                            "g2": new hell_land4_2(0, 0),
+                            "g3": new hell_land4_3(0, 0),
+                            "g4": new hell_land4_4(0, 0)
+                        };
+                    tileCount = 4;
+                }
+                else if (texture == "hell_land5") {
+                    g = {
+                            "g1": new hell_land5_1(0, 0),
+                            "g2": new hell_land5_2(0, 0),
+                            "g3": new hell_land5_3(0, 0),
+                            "g4": new hell_land5_4(0, 0)
+                        };
+                    tileCount = 4;
+                }
+                else if (texture == "hell_land6") {
+                    g = {
+                            "g1": new hell_land6_1(0, 0),
+                            "g2": new hell_land6_2(0, 0),
+                            "g3": new hell_land6_3(0, 0),
+                            "g4": new hell_land6_4(0, 0)
+                        };
+                    tileCount = 4;
                 }
                 else if (texture == "crater") {
                     g = {"g1": new isocrater1(0, 0)};

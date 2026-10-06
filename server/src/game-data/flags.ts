@@ -37,20 +37,59 @@ export const getFlags = () => ({
   io_rezghul: infernoOnlyConfig.enabled && infernoOnlyConfig.rezghul.enabled ? 1 : 0,
   io_rezghulcost: infernoOnlyConfig.rezghul.magmaCost,
   io_build: 0,
+  io_outpost_capacity: infernoOnlyConfig.outpostCapacity,
+  io_welcome_title: infernoOnlyConfig.welcome.title,
+  io_welcome_body: infernoOnlyConfig.welcome.body,
+  io_welcome_image: infernoOnlyConfig.welcome.image,
+  // Shiny prices the client computes itself (InfernoOnlyConfig.prices); the rest come with the store table
+  io_price_move_main: infernoOnlyConfig.prices.moveMainYard,
+  io_price_move_outpost: infernoOnlyConfig.prices.moveOutpost,
+  io_price_takeover: infernoOnlyConfig.prices.takeoverOutpost,
+  io_price_kits: JSON.stringify(infernoOnlyConfig.prices.kits),
+  io_price_wall_stone: infernoOnlyConfig.prices.wallToStone,
+  io_price_wall_iron: infernoOnlyConfig.prices.wallStoneToIron,
+  io_price_topup: JSON.stringify(infernoOnlyConfig.prices.topup),
+  io_price_repair: infernoOnlyConfig.prices.repairAll,
+  io_price_closeenough: infernoOnlyConfig.prices.closeEnoughMinutes * 60,
+  io_price_finish_first: infernoOnlyConfig.prices.finishNowFirstHour,
+  io_price_finish_hour: infernoOnlyConfig.prices.finishNowPerHour,
   io_invite: "",
   io_invite_shiny: 0,
   io_invite_download: "",
   io_notice: "",
+  /** The login streak as JSON {day, collected, streakDays, offerDay?, offerShiny?} for the Daily Reward button. */
+  io_streak: "",
+  /** Hell Freezes Over: the player's progress as JSON (services/events/hfo.ts hfoView), once it started for them. */
+  io_hfo: "",
+  /** 1 for admins: the game shows the Admin button (services/admin). */
+  io_admin: 0,
+  /** A server-wide announcement from the admin panel as JSON {id, text}; each player sees it once. */
+  io_announce: "",
   io_catapult: infernoOnlyConfig.enabled ? JSON.stringify(infernoOnlyConfig.catapult) : "",
+  /** Wild tribe attacks: tribes, level bands and monster lists as JSON (InfernoOnlyConfig.wildAttacks). */
+  io_wildattacks: infernoOnlyConfig.enabled && infernoOnlyConfig.wildAttacks.enabled ? JSON.stringify(infernoOnlyConfig.wildAttacks) : "",
+  /** When the player's last wild attack started, on any of their yards (set per player: playerFlags.ts). */
+  io_wildlast: 0,
+  /** Added to picture requests as ?v= (InfernoOnlyConfig.assetVersion). */
+  io_assetv: infernoOnlyConfig.enabled ? infernoOnlyConfig.assetVersion : 0,
+  /** Shadows under buildings in the yard (InfernoOnlyConfig.yardShadows). */
+  io_shadows: !infernoOnlyConfig.enabled || infernoOnlyConfig.yardShadows ? 1 : 0,
+  /** Shadows while a building is held in the yard (InfernoOnlyConfig.yardShadowsWhileMoving). */
+  io_moveshadows: !infernoOnlyConfig.enabled || infernoOnlyConfig.yardShadowsWhileMoving ? 1 : 0,
+  /** 1: the yard is drawn whole every frame (InfernoOnlyConfig.yardPartialRedraw false). */
+  io_fullredraw: infernoOnlyConfig.enabled && !infernoOnlyConfig.yardPartialRedraw ? 1 : 0,
+  /** The yard in view is drawn again from scratch this often, a strip at a time (InfernoOnlyConfig.redrawSweepMs). */
+  io_sweepms: infernoOnlyConfig.enabled ? Math.max(0, infernoOnlyConfig.redrawSweepMs) : 0,
   io_chathttp: infernoOnlyConfig.enabled && infernoOnlyConfig.chatTransport === "http" ? 1 : 0,
   io_hideui: infernoOnlyConfig.enabled ? infernoOnlyConfig.hiddenUi.join(",") : "",
   io_decooff: infernoOnlyConfig.enabled ? infernoOnlyConfig.disabledDecorations.join(",") : "",
   io_kitpagetest: infernoOnlyConfig.enabled && infernoOnlyConfig.kitPagingTest ? 1 : 0,
-  io_outpostrecycle: infernoOnlyConfig.enabled && infernoOnlyConfig.outpostRecycling ? 1 : 0,
   io_alliances: !infernoOnlyConfig.enabled || infernoOnlyConfig.alliances ? 1 : 0,
   io_resmult: infernoOnlyConfig.resourceMultiplier,
   io_magmamult: infernoOnlyConfig.magmaMultiplier,
   io_timediv: infernoOnlyConfig.buildTimeDivisor,
+  /** The top bar's Leaderboards button (leaderboards/game). */
+  io_leaderboards: infernoOnlyConfig.enabled ? 1 : 0,
   io_hatch: infernoOnlyConfig.hatchSeconds,
   showProgressBar: 0,
   gamestats: 0,

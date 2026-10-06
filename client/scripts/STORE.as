@@ -159,11 +159,44 @@ package {
 
         }
 
+        /** Inferno-only: a top-up of size 1-3 (10% / 50% / 100% of storage) at the server's flat price. */
+        private static function ioTopup(param1:int, param2:Number):int {
+            var prices:Array = GLOBAL.ioPriceList("topup");
+            if (prices && prices.length >= param1) {
+                return int(prices[param1 - 1]);
+            }
+            return Math.ceil(Math.pow(Math.sqrt(param2 / 2), 0.75));
+        }
+
+        /**
+         * Inferno-only (the user's, 4 October): finishing a building's build, upgrade, fortify or repair early.
+         * Like the original game's last 5 minutes, but for the last 10 (GLOBAL.ioCloseEnough): free, no Shiny asked.
+         * Under an hour: 1 Shiny at 11 minutes left, one more every 6 minutes, 9 at 59 minutes (it was 10 flat).
+         * An hour or more: the usual curve (GetTimeCost). Other timers (hatching, healing, training...) keep theirs.
+         */
+        public static function ioBuildingTimeCost(seconds:int):int {
+            if (!GLOBAL.INFERNO_ONLY) {
+                return GetTimeCost(seconds);
+            }
+            if (seconds <= GLOBAL.ioCloseEnough) {
+                return 0;
+            }
+            if (seconds < 60 * 60) {
+                var minutes:int = Math.ceil(seconds / 60);
+                return Math.max(1, Math.min(9, 1 + Math.floor((minutes - 11) / 6)));
+            }
+            return GetTimeCost(seconds);
+        }
+
         public static function GetTimeCost(param1:int, param2:Boolean = true):int {
             var _loc3_:int = 0;
             var _loc4_:int = 0;
-            if (param2 && param1 <= 300) {
+            if (param2 && param1 <= GLOBAL.ioCloseEnough) {
                 return 0;
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                // A flat price for the first hour left, then so much per further hour, pro rata.
+                return Math.ceil(GLOBAL.ioPrice("finish_first", 10) + GLOBAL.ioPrice("finish_hour", 7.5) * Math.max(0, param1 / 3600 - 1));
             }
             _loc3_ = Math.ceil(param1 * 20 / 60 / 60);
             _loc4_ = int(Math.sqrt(param1 * 0.8));
@@ -234,7 +267,7 @@ package {
                             "v2": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1])
                         });
                 if (BASE._resources["r" + resourceIndex].Get() + BASE._resources["r" + resourceIndex + "max"] * 0.1 < BASE._resources["r" + resourceIndex + "max"]) {
-                    mainStoreItems.c = [Math.ceil(Math.pow(Math.sqrt(reourceMax / 2), 0.75))];
+                    mainStoreItems.c = [GLOBAL.INFERNO_ONLY ? ioTopup(1, reourceMax) : Math.ceil(Math.pow(Math.sqrt(reourceMax / 2), 0.75))];
                     mainStoreItems.d = KEYS.Get("str_top_10pct", {
                                 "v1": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1]),
                                 "v2": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1]),
@@ -255,7 +288,7 @@ package {
                 }
                 if (Boolean(BASE._iresources) && BASE._iresources["r" + resourceIndex].Get() + BASE._iresources["r" + resourceIndex + "max"] * 0.1 < BASE._iresources["r" + resourceIndex + "max"]) {
                     if (infernoStoreItems) {
-                        infernoStoreItems.c = [Math.ceil(Math.pow(Math.sqrt(iResourceMax / 2), 0.75))];
+                        infernoStoreItems.c = [GLOBAL.INFERNO_ONLY ? ioTopup(1, iResourceMax) : Math.ceil(Math.pow(Math.sqrt(iResourceMax / 2), 0.75))];
                         infernoStoreItems.d = KEYS.Get("str_top_10pct", {
                                     "v1": KEYS.Get(GLOBAL.iresourceNames[resourceIndex - 1]),
                                     "v2": KEYS.Get(GLOBAL.iresourceNames[resourceIndex - 1]),
@@ -283,7 +316,7 @@ package {
                             "v2": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1])
                         });
                 if (BASE._resources["r" + resourceIndex].Get() + BASE._resources["r" + resourceIndex + "max"] * 0.5 < BASE._resources["r" + resourceIndex + "max"]) {
-                    mainStoreItems.c = [Math.ceil(Math.pow(Math.sqrt(reourceMax / 2), 0.75))];
+                    mainStoreItems.c = [GLOBAL.INFERNO_ONLY ? ioTopup(2, reourceMax) : Math.ceil(Math.pow(Math.sqrt(reourceMax / 2), 0.75))];
                     mainStoreItems.d = KEYS.Get("str_top_50pct", {
                                 "v1": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1]),
                                 "v2": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1]),
@@ -302,7 +335,7 @@ package {
                                 "v2": KEYS.Get(GLOBAL.iresourceNames[resourceIndex - 1])
                             });
                     if (BASE._iresources["r" + resourceIndex].Get() + BASE._iresources["r" + resourceIndex + "max"] * 0.5 < BASE._iresources["r" + resourceIndex + "max"]) {
-                        infernoStoreItems.c = [Math.ceil(Math.pow(Math.sqrt(iResourceMax / 2), 0.75))];
+                        infernoStoreItems.c = [GLOBAL.INFERNO_ONLY ? ioTopup(2, iResourceMax) : Math.ceil(Math.pow(Math.sqrt(iResourceMax / 2), 0.75))];
                         infernoStoreItems.d = KEYS.Get("str_top_50pct", {
                                     "v1": KEYS.Get(GLOBAL.iresourceNames[resourceIndex - 1]),
                                     "v2": KEYS.Get(GLOBAL.iresourceNames[resourceIndex - 1]),
@@ -326,7 +359,7 @@ package {
                 mainStoreItems.t = KEYS.Get("str_top_fill_label", {"v1": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1])});
                 if (BASE._resources["r" + resourceIndex + "max"] > BASE._resources["r" + resourceIndex].Get()) {
                     reourceMax = BASE._resources["r" + resourceIndex + "max"] - BASE._resources["r" + resourceIndex].Get();
-                    mainStoreItems.c = [Math.ceil(Math.pow(Math.sqrt(reourceMax / 2), 0.75))];
+                    mainStoreItems.c = [GLOBAL.INFERNO_ONLY ? ioTopup(3, reourceMax) : Math.ceil(Math.pow(Math.sqrt(reourceMax / 2), 0.75))];
                     mainStoreItems.d = KEYS.Get("str_top_fill", {
                                 "v1": GLOBAL.FormatNumber(reourceMax),
                                 "v2": KEYS.Get(GLOBAL._resourceNames[resourceIndex - 1])
@@ -344,7 +377,7 @@ package {
                 if (BASE._iresources["r" + resourceIndex + "max"] > BASE._iresources["r" + resourceIndex].Get()) {
                     if (infernoStoreItems) {
                         iResourceMax = BASE._iresources["r" + resourceIndex + "max"] - BASE._iresources["r" + resourceIndex].Get();
-                        infernoStoreItems.c = [Math.ceil(Math.pow(Math.sqrt(iResourceMax / 2), 0.75))];
+                        infernoStoreItems.c = [GLOBAL.INFERNO_ONLY ? ioTopup(3, iResourceMax) : Math.ceil(Math.pow(Math.sqrt(iResourceMax / 2), 0.75))];
                         infernoStoreItems.d = KEYS.Get("str_top_fill", {
                                     "v1": GLOBAL.FormatNumber(iResourceMax),
                                     "v2": KEYS.Get(GLOBAL.iresourceNames[resourceIndex - 1])
@@ -361,16 +394,16 @@ package {
             }
             if (GLOBAL._selectedBuilding) {
                 if (GLOBAL._selectedBuilding._repairing) {
-                    _loc2_ = GetTimeCost(GLOBAL._selectedBuilding._repairTime);
+                    _loc2_ = ioBuildingTimeCost(GLOBAL._selectedBuilding._repairTime);
                 }
                 else if (GLOBAL._selectedBuilding._countdownBuild.Get() > 0) {
-                    _loc2_ = GetTimeCost(GLOBAL._selectedBuilding._countdownBuild.Get());
+                    _loc2_ = ioBuildingTimeCost(GLOBAL._selectedBuilding._countdownBuild.Get());
                 }
                 else if (GLOBAL._selectedBuilding._countdownUpgrade.Get() > 0) {
-                    _loc2_ = GetTimeCost(GLOBAL._selectedBuilding._countdownUpgrade.Get());
+                    _loc2_ = ioBuildingTimeCost(GLOBAL._selectedBuilding._countdownUpgrade.Get());
                 }
                 else if (GLOBAL._selectedBuilding._countdownFortify.Get() > 0) {
-                    _loc2_ = GetTimeCost(GLOBAL._selectedBuilding._countdownFortify.Get());
+                    _loc2_ = ioBuildingTimeCost(GLOBAL._selectedBuilding._countdownFortify.Get());
                 }
                 else if (GLOBAL._selectedBuilding._type == 8) {
                     for (_loc23_ in CREATURELOCKER._lockerData) {
@@ -395,13 +428,13 @@ package {
             for each (_loc7_ in _loc6_) {
                 if (_loc7_._repairing) {
                     _repairCount += 1;
-                    if (_loc7_._repairTime > 300) {
+                    if (_loc7_._repairTime > GLOBAL.ioCloseEnough) {
                         _loc4_ += _loc7_._repairTime;
                         _loc5_ += 1;
                     }
                 }
             }
-            _storeItems.FIX.c = [GetTimeCost(_loc4_) + _loc5_ * 10];
+            _storeItems.FIX.c = [GLOBAL.INFERNO_ONLY ? (_loc5_ > 0 ? int(GLOBAL.ioPrice("repair", 25)) : 0) : GetTimeCost(_loc4_) + _loc5_ * 10];
             _storeItems.FIX.d = KEYS.Get("desc_repairbdgs", {"v1": _repairCount});
             _storeItems.FIX.t = KEYS.Get("str_repairbdgs");
             _loc8_ = GLOBAL.player.getNumDamagedCreeps();
@@ -414,8 +447,8 @@ package {
             var _loc10_:int = 0;
             var _loc11_:int = 0;
             var _loc12_:int = 0;
-            var _loc14_:uint = 3;
-            var _loc15_:uint = 6;
+            var _loc14_:uint = GLOBAL.INFERNO_ONLY ? uint(GLOBAL.ioPrice("wall_stone", 3)) : 3;
+            var _loc15_:uint = GLOBAL.INFERNO_ONLY ? uint(GLOBAL.ioPrice("wall_iron", 6)) : 6;
             var _loc16_:uint = 10;
             var _loc17_:uint = 15;
             var _loc18_:Vector.<Object> = InstanceManager.getInstancesByClass(BWALL);
@@ -729,7 +762,7 @@ package {
                                 if (param1 == "SP1") {
                                     _streamline.tTitle.htmlText = KEYS.Get("str_closeenough");
                                     _streamline.tDescription.htmlText = KEYS.Get("str_closeenough_unlock", {"v1": _loc4_});
-                                    if (_loc3_ <= 60 * 5) {
+                                    if (_loc3_ <= GLOBAL.ioCloseEnough) {
                                         _streamline.tDescription.htmlText = KEYS.Get("str_closeenough_unlock", {"v1": _loc4_});
                                     }
                                 }
@@ -759,7 +792,7 @@ package {
                                 if (param1 == "SP1") {
                                     _streamline.tTitle.htmlText = KEYS.Get("str_closeenough");
                                     _streamline.tDescription.htmlText = KEYS.Get("str_closeenough_traindesc", {"v1": _loc4_});
-                                    if (_loc3_ <= 60 * 5) {
+                                    if (_loc3_ <= GLOBAL.ioCloseEnough) {
                                         _streamline.tDescription.htmlText = KEYS.Get("str_closeenough_traindesc_ok", {"v1": _loc4_});
                                     }
                                 }
@@ -793,7 +826,7 @@ package {
                                                 "v1": _loc4_,
                                                 "v2": _loc6_
                                             });
-                                    if (_loc3_ <= 60 * 5) {
+                                    if (_loc3_ <= GLOBAL.ioCloseEnough) {
                                         _streamline.tDescription.htmlText = KEYS.Get("str_closeenough_powerupdesc_ok", {
                                                     "v1": _loc4_,
                                                     "v2": _loc6_
@@ -825,7 +858,7 @@ package {
                             }
                         }
                     }
-                    if (_loc3_ <= 60 * 5) {
+                    if (_loc3_ <= GLOBAL.ioCloseEnough) {
                         _streamline.mcInstant.bAction.Setup(KEYS.Get("str_finishnow"));
                     }
                     else {
@@ -848,7 +881,8 @@ package {
         }
 
         public static function StreamlineBuy(param1:MouseEvent = null):void {
-            if (_streamline_time < 300) {
+            // (Inferno: 10 minutes or less left, as GetTimeCost has it, is the free Close Enough)
+            if (GLOBAL.INFERNO_ONLY ? _streamline_time <= GLOBAL.ioCloseEnough : _streamline_time < GLOBAL.ioCloseEnough) {
                 STORE.BuyB("SP1");
                 POPUPS.Next();
             }
@@ -856,6 +890,11 @@ package {
                 if (_streamline_cost > BASE._credits.Get()) {
                     POPUPS.Next();
                     POPUPS.DisplayGetShiny(param1);
+                    return;
+                }
+                if (!GLOBAL.ioConfirmShiny(_streamline_cost, "to finish this now", function():void {
+                            StreamlineBuy(param1);
+                        })) {
                     return;
                 }
                 STORE.BuyB("SP4");
@@ -1077,16 +1116,16 @@ package {
                     if (_loc12_ == 0) {
                         _loc20_ = KEYS.Get("str_prob_nothing");
                     }
-                    else if (_loc9_ == "SP1" && _loc12_ > 5 * 60) {
+                    else if (_loc9_ == "SP1" && _loc12_ > (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60)) {
                         _loc20_ = KEYS.Get("str_prob_morethan5");
                     }
-                    else if (_loc9_.substr(0, 3) == "SP2" && (_loc12_ < 60 * 60 && !_storeInventory.SP2 || _storeInventory.SP2 && _loc12_ <= 5 * 60)) {
+                    else if (_loc9_.substr(0, 3) == "SP2" && (_loc12_ < 60 * 60 && !_storeInventory.SP2 || _storeInventory.SP2 && _loc12_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60))) {
                         _loc20_ = KEYS.Get("str_prob_notneeded");
                     }
-                    else if (_loc9_.substr(0, 3) == "SP3" && (_loc12_ < 60 * 60 * 2 && !_storeInventory.SP3 || _storeInventory.SP3 && _loc12_ <= 5 * 60)) {
+                    else if (_loc9_.substr(0, 3) == "SP3" && (_loc12_ < 60 * 60 * 2 && !_storeInventory.SP3 || _storeInventory.SP3 && _loc12_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60))) {
                         _loc20_ = KEYS.Get("str_prob_notneeded");
                     }
-                    else if (_loc9_.substr(0, 3) == "SP4" && _loc12_ <= 5 * 60) {
+                    else if (_loc9_.substr(0, 3) == "SP4" && _loc12_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60)) {
                         _loc20_ = KEYS.Get("str_prob_notneeded");
                     }
                 }
@@ -1396,7 +1435,7 @@ package {
                                             "v1": _loc27_,
                                             "v2": KEYS.Get(_loc28_._buildingProps.name)
                                         });
-                                if (_loc24_ <= 60 * 5) {
+                                if (_loc24_ <= GLOBAL.ioCloseEnough) {
                                     storeItemObject.d = KEYS.Get("str_closeenough_descok", {
                                                 "v1": _loc27_,
                                                 "v2": KEYS.Get(_loc28_._buildingProps.name)
@@ -1435,7 +1474,7 @@ package {
                                     if (item == "SP1") {
                                         storeItemObject.t = KEYS.Get("str_closeenough");
                                         storeItemObject.d = KEYS.Get("str_closeenough_unlock", {"v1": _loc25_});
-                                        if (_loc24_ <= 60 * 5) {
+                                        if (_loc24_ <= GLOBAL.ioCloseEnough) {
                                             storeItemObject.d = KEYS.Get("str_closeenough_unlock", {"v1": _loc25_});
                                         }
                                     }
@@ -1465,7 +1504,7 @@ package {
                                     if (item == "SP1") {
                                         storeItemObject.t = KEYS.Get("str_closeenough");
                                         storeItemObject.d = KEYS.Get("str_closeenough_traindesc", {"v1": _loc25_});
-                                        if (_loc24_ <= 60 * 5) {
+                                        if (_loc24_ <= GLOBAL.ioCloseEnough) {
                                             storeItemObject.d = KEYS.Get("str_closeenough_traindesc_ok", {"v1": _loc25_});
                                         }
                                     }
@@ -1499,7 +1538,7 @@ package {
                                                     "v1": _loc25_,
                                                     "v2": _loc35_
                                                 });
-                                        if (_loc24_ <= 60 * 5) {
+                                        if (_loc24_ <= GLOBAL.ioCloseEnough) {
                                             storeItemObject.d = KEYS.Get("str_closeenough_powerupdesc_ok", {
                                                         "v1": _loc25_,
                                                         "v2": _loc35_
@@ -1652,16 +1691,16 @@ package {
                         if (_loc24_ == 0) {
                             _loc32_ = KEYS.Get("str_prob_nothing");
                         }
-                        else if (item == "SP1" && _loc24_ > 5 * 60) {
+                        else if (item == "SP1" && _loc24_ > (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60)) {
                             _loc32_ = KEYS.Get("str_prob_morethan5");
                         }
-                        else if (item.substr(0, 3) == "SP2" && (_loc24_ < 60 * 60 && !_storeInventory.SP2 || _storeInventory.SP2 && _loc24_ <= 5 * 60)) {
+                        else if (item.substr(0, 3) == "SP2" && (_loc24_ < 60 * 60 && !_storeInventory.SP2 || _storeInventory.SP2 && _loc24_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60))) {
                             _loc32_ = KEYS.Get("str_prob_notneeded");
                         }
-                        else if (item.substr(0, 3) == "SP3" && (_loc24_ < 60 * 60 * 2 && !_storeInventory.SP3 || _storeInventory.SP3 && _loc24_ <= 5 * 60)) {
+                        else if (item.substr(0, 3) == "SP3" && (_loc24_ < 60 * 60 * 2 && !_storeInventory.SP3 || _storeInventory.SP3 && _loc24_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60))) {
                             _loc32_ = KEYS.Get("str_prob_notneeded");
                         }
-                        else if (item.substr(0, 3) == "SP4" && _loc24_ <= 5 * 60) {
+                        else if (item.substr(0, 3) == "SP4" && _loc24_ <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 5 * 60)) {
                             _loc32_ = KEYS.Get("str_prob_notneeded");
                         }
                     }
@@ -1936,6 +1975,12 @@ package {
                             BuyB(itemCode, true);
                         }
                         else if (BASE._credits.Get() >= _loc3_) {
+                            var buyAgain:MouseEvent = param1;
+                            if (!GLOBAL.ioConfirmShiny(_loc3_, "on this", function():void {
+                                        Buy(itemCode)(buyAgain);
+                                    })) {
+                                return;
+                            }
                             BuyB(itemCode);
                         }
                         else {
@@ -2052,9 +2097,21 @@ package {
             }
             if (param1.substr(0, 2) == "SP") {
                 _loc15_ = GLOBAL._selectedBuilding;
+                if (!_loc15_ && GLOBAL.INFERNO_ONLY) {
+                    // (bug report 65: the building was deselected, or finished, while the speed-ups were open: Buy
+                    // stopped the game here. Nothing is bought; any Shiny taken comes back)
+                    if (!_loc7_ && !param2) {
+                        BASE._credits.Add(_loc4_);
+                        BASE._hpCredits += _loc4_;
+                    }
+                    Hide();
+                    GLOBAL.Message(KEYS.Get("io_speedup_nobuilding"));
+                    return;
+                }
                 _loc16_ = 0;
                 if (param1.substr(2, 1) == "1") {
-                    _loc16_ = 5 * 60;
+                    // (Inferno-only, bug report B4: Close Enough finishes it: it is offered under io_price_closeenough)
+                    _loc16_ = GLOBAL.INFERNO_ONLY ? Math.max(5 * 60, GLOBAL.ioCloseEnough) : 5 * 60;
                 }
                 if (param1.substr(2, 1) == "2") {
                     _loc16_ = 60 * 60;
@@ -2375,6 +2432,12 @@ package {
                     }
                     i++;
                 }
+                // Inferno-only: a wild tribe or Moloch design (the Designer) has no yard edge: its yard is nearly
+                // the whole map grid, for placing, moving and the Yard Planner alike.
+                if (GLOBAL.ioDesignFree()) {
+                    GLOBAL._mapWidth = GLOBAL.IO_DESIGN_YARD;
+                    GLOBAL._mapHeight = GLOBAL.IO_DESIGN_YARD;
+                }
                 GLOBAL._hatcheryOverdrive = 0;
                 if (Boolean(_storeData.HOD) && _storeData.HOD.e < GLOBAL.Timestamp()) {
                     delete _storeData.HOD;
@@ -2576,6 +2639,10 @@ package {
             var ZazzleImageLoaded:Function = null;
             ZazzleImageLoaded = function(param1:String, param2:BitmapData):void {
                 var _loc4_:int = 0;
+                // Inferno-only: the store may have been closed or moved on while the picture loaded
+                if (!_zazzleMC || !param2) {
+                    return;
+                }
                 if (_zazzleMC.numChildren) {
                     _loc4_ = _zazzleMC.numChildren;
                     while (_loc4_--) {

@@ -224,12 +224,26 @@ package {
                 var sound:Sound = _sounds[param1] as Sound;
                 if (sound) {
                     if (_musicChannel) {
-                        _musicChannel.stop();
+                        try {
+                            _musicChannel.stop();
+                        }
+                        catch (e:Error) {
+                        }
                         _musicChannel.removeEventListener(Event.SOUND_COMPLETE, replayMusic);
                     }
-                    _musicChannel = sound.play(param4, int.MAX_VALUE, new SoundTransform(param2, param3));
+                    // Played once and restarted by replayMusic when it ends. Asking for int.MAX_VALUE loops made
+                    // the browser runtime compute an invalid stop time and throw, which left _musicChannel null.
+                    // A sound can also fail to start (Flash returns null when it is out of channels).
+                    try {
+                        _musicChannel = sound.play(param4, 1, new SoundTransform(param2, param3));
+                    }
+                    catch (e:Error) {
+                        _musicChannel = null;
+                    }
                     _currentMusic = param1;
-                    _musicChannel.addEventListener(Event.SOUND_COMPLETE, replayMusic);
+                    if (_musicChannel) {
+                        _musicChannel.addEventListener(Event.SOUND_COMPLETE, replayMusic);
+                    }
                 }
             }
         }
@@ -237,7 +251,9 @@ package {
         private static function replayMusic(param1:Event):void {
             _queuedMusic = _currentMusic;
             _currentMusic = null;
-            PlayMusicB(_queuedMusic);
+            // At the music's own volume: _musicVolume is 0 while the music is switched off. Without it the
+            // replay used PlayMusicB's default (0.7), so switched-off music came back at every new loop.
+            PlayMusicB(_queuedMusic, _musicVolume, _musicPan);
         }
 
         public static function Play(soundPath:String = "", volume:Number = 0.8, pan:Number = 0, loop:int = 1):SoundChannel {
@@ -248,7 +264,12 @@ package {
                     // Retrieve sound from preloaded assets
                     var sound:Sound = _sounds[soundPath] as Sound;
                     if (sound) {
-                        return sound.play(0, loop, new SoundTransform(volume, pan));
+                        try {
+                            return sound.play(0, loop, new SoundTransform(volume, pan));
+                        }
+                        catch (e:Error) {
+                            // The browser runtime can refuse to start a sound; the game carries on without it.
+                        }
                     }
                 }
             }
@@ -262,7 +283,7 @@ package {
                 }
             }
             if (_currentMusic != _queuedMusic) {
-                if (_currentMusic) {
+                if (_currentMusic && _musicChannel) {
                     var currentMusicVolume:Number = _musicChannel.soundTransform.volume;
                     currentMusicVolume -= 0.05;
                     if (currentMusicVolume <= 0) {

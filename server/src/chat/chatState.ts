@@ -29,6 +29,8 @@ export interface ChatClient {
   picSquare: string | null;
   channels: Map<string, ChannelInfo>;
   lastMsgAt: number;
+  /** Inferno-only: an admin (InfernoOnlyConfig.admins) or a chat moderator (user.chat_mod), or null. */
+  role?: "admin" | "mod" | null;
 }
 
 /**

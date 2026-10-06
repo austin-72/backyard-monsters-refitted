@@ -1,4 +1,12 @@
 package {
+    import com.monsters.replays.IoReplayPlayer;
+    import com.monsters.replays.IoReplayRecorder;
+    import com.monsters.pets.IoPets;
+    import com.monsters.casino.CASINO;
+    import com.monsters.events.hfo.IoHfo;
+    import com.monsters.events.hfo.IoHfoIce;
+    import com.monsters.events.hfo.IoHfoWaves;
+    import com.monsters.daily.IoDailyPopup;
     import com.cc.utils.SecNum;
     import com.jac.mouse.MouseWheelEnabler;
     import com.monsters.ai.TRIBES;
@@ -13,6 +21,9 @@ package {
     import com.monsters.chat.Chat;
     import com.monsters.configs.BYMConfig;
     import com.monsters.debug.Console;
+    import com.monsters.debug.IoBugReport;
+    import com.monsters.maproom_advanced.IoUnderworld;
+    import com.monsters.maproom_advanced.IoGauntlet;
     import com.monsters.display.BuildingOverlay;
     import com.monsters.effects.ResourceBombs;
     import com.monsters.effects.fire.Fire;
@@ -28,6 +39,12 @@ package {
     import com.monsters.maproom3.MapRoom3Tutorial;
     import com.monsters.maproom3.popups.MapRoom3OutpostSecured;
     import com.monsters.maproom_advanced.CellData;
+    import com.monsters.maproom_advanced.IoOutpostsPopup;
+    import com.monsters.admin.IoTestMode;
+    import com.monsters.admin.IoDesigner;
+    import com.monsters.leaderboards.IoLeaderboards;
+    import com.monsters.leaderboards.IoAttackLogs;
+    import com.monsters.leaderboards.IoChangelog;
     import com.monsters.maproom_advanced.MapRoom;
     import com.monsters.maproom_advanced.MapRoomCell;
     import com.monsters.maproom_advanced.PopupLostMainBase;
@@ -50,6 +67,7 @@ package {
     import flash.text.TextField;
     import flash.utils.Dictionary;
     import flash.utils.getTimer;
+    import flash.utils.setTimeout;
     import gs.*;
     import gs.easing.*;
 
@@ -171,6 +189,11 @@ package {
         public static var _mushroomList:Array;
 
         public static var _lastSpawnedMushroom:int;
+
+        /** Inferno-only: the load's io_replay ({key, rec}: an attack to record) and io_replay_view ({key}: a replay's yard). */
+        private static var _ioReplay:Object = null;
+
+        private static var _ioReplayView:Object = null;
 
         public static var _baseName:String;
 
@@ -397,6 +420,14 @@ package {
         }
 
         public static function Cleanup():void {
+            // Inferno-only: the yard's pets go with it; an attack being recorded sends the rest of its replay; a
+            // replay playing stops
+            IoPets.Clear();
+            IoReplayRecorder.stop(true);
+            IoReplayPlayer.Clear();
+            // Hell Freezes Over: its things in the yard go with it (a wave left half-fought counts as lost)
+            IoHfoWaves.Abandon();
+            IoHfo.Cleanup();
             SPECIALEVENT.ClearWildMonsterPowerups();
             SPECIALEVENT_WM1.ClearWildMonsterPowerups();
             BaseBuffHandler.instance.clearBuffs();
@@ -448,6 +479,17 @@ package {
             GLOBAL._bStore = null;
             UI2.Hide("warning");
             UI2.Hide("scareAway");
+            // Windows of the yard going (their statics would say they are still open), the raid warning
+            // (it would stop the next yard's warning from showing) and the blockers of the old layers.
+            IoOutpostsPopup.ioCloseOpen();
+            IoTestMode.ioCloseOpen();
+            IoDesigner.ioCloseOpen();
+            IoLeaderboards.CloseOpen();
+            IoAttackLogs.CloseOpen();
+            IoChangelog.CloseOpen();
+            WMATTACK.HideWarning();
+            WMATTACK.ioResetSpawnLevel();
+            GLOBAL.ioBlockersReset();
             WMATTACK._inProgress = false;
             MONSTERBAITER._scaredAway = false;
             CUSTOMATTACKS._started = false;
@@ -490,6 +532,20 @@ package {
             }
             if (isNaN(userId)) {
                 userId = 0;
+            }
+            // Inferno-only: there is no separate Inferno yard; the stock game's ways back to it (the end of an
+            // attack or its popup when the map is not the current one, the Descent's capture) go home instead.
+            // The Inferno yard's load was refused ("You do not have permission ...") and halted (bug #54).
+            if (GLOBAL.INFERNO_ONLY && baseMode == GLOBAL.e_BASE_MODE.IBUILD) {
+                LOGGER.Log("log", "Inferno yard load sent home (base " + baseId + ", type " + baseType + ", from " + GLOBAL.mode + ")");
+                url = null;
+                baseMode = GLOBAL.e_BASE_MODE.BUILD;
+                if (baseType == EnumYardType.INFERNO_YARD || baseType < 0) {
+                    baseType = EnumYardType.MAIN_YARD;
+                }
+                else if (baseType == EnumYardType.INFERNO_OUTPOST) {
+                    baseType = EnumYardType.OUTPOST;
+                }
             }
             if (MapRoomManager.instance.isInMapRoom2or3 && MapRoomManager.instance.isOpen) {
                 MapRoomManager.instance.Hide();
@@ -544,12 +600,54 @@ package {
             Load(GLOBAL._baseURL2, userId, baseId, baseType, cellId);
         }
 
+        private static var _ioWelcomeShown:Boolean = false;
+
+        /** Inferno-only: the once-per-login welcome (text from the server, InfernoOnlyConfig.welcome). */
+        private static function ioWelcome():void {
+            var title:String = GLOBAL._flags && GLOBAL._flags.io_welcome_title ? String(GLOBAL._flags.io_welcome_title) : "";
+            var body:String = GLOBAL._flags && GLOBAL._flags.io_welcome_body ? String(GLOBAL._flags.io_welcome_body) : "";
+            if (_ioWelcomeShown || body == "") {
+                return;
+            }
+            _ioWelcomeShown = true;
+            // (the popup has a frame for a picture: without one it showed an empty box; a server without the
+            // io_welcome_image flag gets the two friends)
+            var image:String = GLOBAL._flags && GLOBAL._flags.io_welcome_image != null ? String(GLOBAL._flags.io_welcome_image) : "invite-friends.png";
+            POPUPS.DisplayGeneric(title, body.split("\n").join("<br>"), KEYS.Get("btn_ok"), image != "" ? image : null, function(param1:MouseEvent):void {
+                POPUPS.Next();
+            });
+        }
+
+        /**
+         * Inferno-only daily login reward (server: services/user/dailyLogin.ts), opened from the Daily Reward
+         * button (the gift button's place in the top bar; UI_TOP.ioDailyButton). The flag io_streak says
+         * whether today's reward is waiting and what it is; Collect claims it and the new shiny total and
+         * streak come straight back.
+         */
+        public static function ioOpenDaily():void {
+            var status:Object = null;
+            var raw:String = GLOBAL._flags && GLOBAL._flags.io_streak ? String(GLOBAL._flags.io_streak) : "";
+            try {
+                status = raw != "" ? JSON.parse(raw) : null;
+            }
+            catch (e:Error) {
+                status = null;
+            }
+            if (!status) {
+                GLOBAL.Message("The daily reward is not available right now.");
+                return;
+            }
+            IoDailyPopup.Show(status);
+        }
+
         public static function Load(url:String = null, userId:Number = 0, baseId:Number = 0, baseType:int = -1, cellId:Number = 0):void {
+            IoBugReport.Screen("yard: " + GLOBAL._loadmode + " base " + baseId + (userId ? " of player " + userId : "") + (baseType >= 0 ? " (type " + baseType + ")" : ""));
             var _loc15_:int = 0;
             GLOBAL._baseLoads += 1;
             var _loc6_:int = getTimer();
             _loading = true;
             _baseID = baseId;
+            GLOBAL._ioDesign = null; // (a Designer draft says so in its answer: io_design)
             _baseLevel = 0;
             _saveOver = 0;
             _returnHome = false;
@@ -663,16 +761,49 @@ package {
             if (!_loadedSomething && ExternalInterface.available) {
                 ExternalInterface.call("cc.recordStats", "basestart");
             }
-            if (url) {
-                new URLLoaderApi().load(url + "load", requestData, handleBaseLoadSuccessful, handleBaseLoadError);
-            }
-            else if (usesInfernoBackend || isEventBaseId(_baseID) && GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
-                new URLLoaderApi().load(GLOBAL._infBaseURL + "load", requestData, handleBaseLoadSuccessful, handleBaseLoadError);
-            }
-            else {
-                new URLLoaderApi().load(GLOBAL._baseURL + "load", requestData, handleBaseLoadSuccessful, handleBaseLoadError);
-            }
+            // Inferno-only: only the answer to the latest load builds a yard. Two loads in flight (a yard opened
+            // while another was still loading) built both, one after the other: the first yard's map was left
+            // behind, still listening (bug report #47), and the yard on screen could be the wrong one.
+            var seq:int = ++_ioLoadSeq;
+            var tries:int = 0;
+            var onLoaded:Function = function(data:Object):void {
+                if (seq != _ioLoadSeq) {
+                    LOGGER.Log("log", "BASE.Load: the answer for base " + baseId + " came after a newer load; not used");
+                    return;
+                }
+                if (tries > 0) {
+                    PLEASEWAIT.Hide(); // (the "trying again" note)
+                }
+                handleBaseLoadSuccessful(data);
+            };
+            var loadUrl:String = url ? url + "load" : (usesInfernoBackend || isEventBaseId(_baseID) && GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK ? GLOBAL._infBaseURL + "load" : GLOBAL._baseURL + "load");
+            var onFailed:Function = function(event:IOErrorEvent = null):void {
+                if (seq != _ioLoadSeq) {
+                    return;
+                }
+                // Inferno-only (bug report B26): no answer at all (the server restarting, the connection gone
+                // for a moment): asked again a few times, saying so, before "Oops, something broke!"
+                if (GLOBAL.INFERNO_ONLY && tries < IO_LOAD_RETRIES) {
+                    tries++;
+                    PLEASEWAIT.Hide(); // (its words are set when it opens: "Loading..." would stay)
+                    PLEASEWAIT.Show(KEYS.Get("io_load_retry"));
+                    setTimeout(function():void {
+                            if (seq == _ioLoadSeq) {
+                                new URLLoaderApi().load(loadUrl, requestData, onLoaded, onFailed);
+                            }
+                        }, 3000 * tries);
+                    return;
+                }
+                handleBaseLoadError(event);
+            };
+            new URLLoaderApi().load(loadUrl, requestData, onLoaded, onFailed);
         }
+
+        /** Inferno-only: a yard's load with no answer is asked for again this many times (3, 6, ... 18 s apart). */
+        private static const IO_LOAD_RETRIES:int = 6;
+
+        /** Inferno-only: counts base loads, so an answer to one that a newer load replaced is not used. */
+        private static var _ioLoadSeq:int = 0;
 
         private static function continueFromBaseLoadError():void {
             GLOBAL.CallJS("cc.reloadParent");
@@ -688,6 +819,23 @@ package {
                 return true;
             }
             return false;
+        }
+
+        /** Inferno-only: a message once the player's own yard has loaded (loading a yard clears the messages). */
+        private static function ioSayAtHome(text:String, tries:int):void {
+            if ((_loading || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) && tries < 120) {
+                setTimeout(function():void {
+                        ioSayAtHome(text, tries + 1);
+                    }, 500);
+                return;
+            }
+            GLOBAL.Message(text);
+        }
+
+        /** Inferno-only: the server's mark on a refused attack (errorDetails.data.io_refused: "protected", "range" ...). */
+        private static function ioRefusal(serverData:Object):String {
+            var details:Object = serverData ? serverData.errorDetails : null;
+            return details && details.data && details.data.io_refused ? String(details.data.io_refused) : null;
         }
 
         private static function handleBaseLoadSuccessful(data:Object):void {
@@ -727,6 +875,17 @@ package {
                         return;
                     }
                     loadObject = serverData;
+                    // Inferno-only: the player's own yard is the kind the server says it is (its save's type).
+                    // A load that gave no kind, or the wrong one, kept the last yard's: the main yard opened
+                    // after a run of outposts came up as an outpost and stopped on "outpost w TH" (bug #53).
+                    if (GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !MapRoomManager.instance.isInMapRoom3) {
+                        if (serverData.type == "main" && m_yardType != EnumYardType.MAIN_YARD) {
+                            m_yardType = EnumYardType.MAIN_YARD;
+                        }
+                        else if (serverData.type == "outpost" && m_yardType != EnumYardType.OUTPOST) {
+                            m_yardType = EnumYardType.OUTPOST;
+                        }
+                    }
                     if (serverData && serverData.player && Boolean(serverData.player.buffs)) {
                         s_resourceCells = serverData.player.buffs.resources;
                     }
@@ -833,6 +992,8 @@ package {
                         POWERUPS.Setup(null, serverData.attpowerups, true);
                     }
                     _attackID = int(serverData.attackid);
+                    // Inferno-only: a Designer draft (GLOBAL.ioDesign, com/monsters/admin/IoDesigner.as).
+                    GLOBAL._ioDesign = GLOBAL.INFERNO_ONLY && serverData.io_design && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD ? serverData.io_design : null;
                     if (serverData.worldsize) {
                         MapRoomManager.instance.mapWidth = serverData.worldsize[0];
                         MapRoomManager.instance.mapHeight = serverData.worldsize[1];
@@ -883,6 +1044,7 @@ package {
                     }
                     GLOBAL._unreadMessages = serverData.unreadmessages;
                     resources = serverData.resources;
+                    ioNoteServerResources("load", resources);
                     if (resources == null) {
                         _resources.r1 = 1000;
                         _resources.r2 = 1000;
@@ -930,6 +1092,14 @@ package {
                     if (serverData.mushrooms.s) {
                         _lastSpawnedMushroom = int(serverData.mushrooms.s);
                     }
+                    // Inferno-only: a main yard's pets (IoPets), put in the yard once it is built
+                    IoPets.setData(GLOBAL.INFERNO_ONLY ? serverData.io_pets : null);
+                    if (GLOBAL.INFERNO_ONLY && serverData.io_petinfo) {
+                        IoPets.apply(serverData.io_petinfo); // (the price, the limits, the monsters this player can have)
+                    }
+                    // Inferno-only: an attack to record for its replay, or a replay's yard to play one over
+                    _ioReplay = GLOBAL.INFERNO_ONLY ? serverData.io_replay : null;
+                    _ioReplayView = GLOBAL.INFERNO_ONLY ? serverData.io_replay_view : null;
                     _buildingHealthData = serverData.buildinghealthdata;
                     _buildingData = serverData.buildingdata;
                     if (!MapRoomManager.instance.isInMapRoom3) {
@@ -1335,7 +1505,8 @@ package {
                     Build();
                     WMBASE.CheckQuests();
                 }
-                else if (GLOBAL._reloadonerror) {
+                else if (GLOBAL._reloadonerror && !GLOBAL.INFERNO_ONLY) {
+                    // (Inferno-only: the error is shown, with a Reload button, not a reload without a word.)
                     GLOBAL.CallJS("reloadPage");
                 }
                 else if (GLOBAL._local && serverData.error == "Incorrect map version") {
@@ -1427,6 +1598,16 @@ package {
                     }
                     BASE.Load();
                 }
+                else if (GLOBAL.INFERNO_ONLY && (ioRefusal(serverData) || serverData.error && (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK))) {
+                    // Inferno-only (bug report 66): an attack the server refuses (the yard is protected, under
+                    // attack, its player online or out of range, e.g. attacked again straight after the attack
+                    // that protected it) is a message, and the player goes home; it was the Oops window with
+                    // Reload. (data.io_refused marks the refusals; any other answer to an attack is taken so too.)
+                    PLEASEWAIT.Hide();
+                    _loading = false; // (this load is over: LoadBase starts no other while it is set)
+                    BASE.LoadBase(null, 0, 0, GLOBAL.e_BASE_MODE.BUILD, false, EnumYardType.MAIN_YARD);
+                    ioSayAtHome(String(serverData.error || serverData.message), 0);
+                }
                 else {
                     GLOBAL.ErrorMessage(serverData.error, GLOBAL.ERROR_ORANGE_BOX_ONLY);
                     PLEASEWAIT.Hide();
@@ -1446,7 +1627,7 @@ package {
         }
 
         private static function handleBaseLoadError(param1:IOErrorEvent):void {
-            if (GLOBAL._reloadonerror) {
+            if (GLOBAL._reloadonerror && !GLOBAL.INFERNO_ONLY) {
                 GLOBAL.CallJS("reloadPage");
             }
             else {
@@ -1491,10 +1672,22 @@ package {
             var timer:int = getTimer();
             var terrainType:String = "grass";
             if (!MapRoomManager.instance.isInMapRoom3 && GLOBAL._currentCell && (isOutpostOrInfernoOutpost || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW)) {
-                terrainType = (GLOBAL._currentCell as MapRoomCell).terrain;
+                // Inferno-only: a current cell that isn't a Map Room 2 cell made this a null and the yard failed to load
+                if (!GLOBAL.INFERNO_ONLY || GLOBAL._currentCell is MapRoomCell) {
+                    terrainType = (GLOBAL._currentCell as MapRoomCell).terrain;
+                }
             }
             if (BASE.isInfernoMainYardOrOutpost) {
                 terrainType = "lava";
+                // Inferno-only (hell-yard-grounds): outposts and wild monster yards stand on the ground of their map
+                // cell's height (bone fields, netherrack, black rock); main yards keep the lava ground
+                if (GLOBAL.INFERNO_ONLY && !MapRoomManager.instance.isInMapRoom3 && GLOBAL._currentCell is MapRoomCell && (isOutpostOrInfernoOutpost || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW)) {
+                    terrainType = (GLOBAL._currentCell as MapRoomCell).ioYardGround || "lava";
+                }
+                // Hell Freezes Over: from Day 3 until the curse breaks, the player's main yard is frozen over
+                if (IoHfo.frozenGround()) {
+                    terrainType = "hfo_frozen";
+                }
             }
             var map:MAP = new MAP(terrainType);
             var targeting:Targeting = new Targeting();
@@ -1715,7 +1908,8 @@ package {
             // the original game, causing unintended behavior.
             // RebuildTH();
             var bFoundation:Vector.<Object> = InstanceManager.getInstancesByClass(BFOUNDATION);
-            if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && GLOBAL.townHall && isMainYardOrInfernoMainYard && !GLOBAL._aiDesignMode) {
+            // (not in admin test mode or a wild tribe / Moloch design: no building limits there)
+            if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && GLOBAL.townHall && isMainYardOrInfernoMainYard && !GLOBAL._aiDesignMode && !GLOBAL.ioNoLimits()) {
                 townHallLevel = GLOBAL.townHall._lvl.Get();
                 buildingTypeCount = 0;
                 for each (props in GLOBAL._buildingProps) {
@@ -1746,7 +1940,11 @@ package {
             var _loc16_:int = 0;
             bFoundation = InstanceManager.getInstancesByClass(BFOUNDATION);
             for each (buildingFoundation in bFoundation) {
-                if (GRID.FromISO(buildingFoundation.x, buildingFoundation.y).x > 1000) {
+                // (a building past x 1000 is off the yard and is given a free spot; Inferno-only: a Designer draft
+                // is 2400 across, and the wild tribes' and Moloch's yards made from designs may use all of it, so
+                // the limit is that edge there, else their buildings out east were moved to the top corner on
+                // every load)
+                if (GRID.FromISO(buildingFoundation.x, buildingFoundation.y).x > (GLOBAL.INFERNO_ONLY ? Math.max(1000, GLOBAL._mapWidth * 0.5, GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD ? 0 : GLOBAL.IO_DESIGN_YARD * 0.5) : 1000)) {
                     GRID.FindSpace(buildingFoundation);
                 }
                 if (buildingFoundation is BTRAP === false && buildingFoundation is BWALL === false) {
@@ -1953,7 +2151,10 @@ package {
                         CREEPS.Tick();
                         CREATURES.Tick();
                         for each (tower in allTowers) {
-                            tower.TickAttack();
+                            // (Hell Freezes Over: a tower iced over by an ice monster waits: BTOWER.ioIceTick)
+                            if (!(tower is BTOWER && BTOWER(tower).ioIceTick())) {
+                                tower.TickAttack();
+                            }
                         }
                         for each (trap in allTraps) {
                             trap.TickAttack();
@@ -2160,7 +2361,11 @@ package {
                 MonsterMadness.updateKorathStats();
             }
             FrontPageHandler.setup(loadObject["frontpage"]);
-            FrontPageHandler.showPopup();
+            if (!GLOBAL.INFERNO_ONLY) {
+                // The "front page": the stock game's news and promotion popups at login ("Prepare for
+                // Invasion", the 7-Eleven promo, feature nags). None of it applies here.
+                FrontPageHandler.showPopup();
+            }
             if (GLOBAL.DOES_USE_SCROLL) {
                 MouseWheelEnabler.init(MAP.stage);
             }
@@ -2263,6 +2468,19 @@ package {
             PATHING.ResetCosts();
             TUTORIAL.Process();
             MUSHROOMS.Setup();
+            // Inferno-only: a main yard's pets come out (IoPets); an attack's replay starts recording (a player's
+            // yard), or a replay plays over its yard (IoReplayRecorder, IoReplayPlayer)
+            if (GLOBAL.INFERNO_ONLY) {
+                IoPets.Setup();
+                if (_ioReplay && _ioReplay.rec && GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK) {
+                    IoReplayRecorder.begin(String(_ioReplay.key));
+                }
+                if (_ioReplayView) {
+                    IoReplayPlayer.Setup(_ioReplayView);
+                }
+            }
+            // Hell Freezes Over: the event's ice, the tomb and its popups (the player's own main yard only)
+            IoHfo.Setup();
             NewPopupSystem.instance.CheckAll(true);
             if (GLOBAL.mode == "help" && !(MapRoomManager.instance.isInMapRoom3 && BASE.isOutpost)) {
                 promptSPost = false;
@@ -2327,7 +2545,16 @@ package {
                     }
                 }
                 else {
-                    MARKETING.Process();
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // The stock login nags (unlock a monster, build a catapult, upgrade it) are
+                        // replaced by one welcome about invites, once per login (flags io_welcome_*).
+                        ioWelcome();
+                        // Back from a Moloch's Gauntlet attack: its window again, with what the attack did.
+                        IoGauntlet.AfterHome();
+                    }
+                    else {
+                        MARKETING.Process();
+                    }
                     if (GLOBAL._flags.trialpayDealspot == 1 && (TUTORIAL._stage > 200 && GLOBAL._sessionCount > 10)) {
                         UI2._top.InitDealspot();
                     }
@@ -2455,6 +2682,11 @@ package {
             if (BASE._pendingPurchase.length == 0) {
                 if (param1 > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
+                }
+                else if (!GLOBAL.ioConfirmShiny(param1, "to make up the missing resources and heal", function():void {
+                            startHealWithShiny(param1, param2, param3, param4);
+                        })) {
+                    return;
                 }
                 else {
                     BASE.Charge(4, param2, false, _loc5_);
@@ -2709,6 +2941,16 @@ package {
                         "finishtime": _loc1_
                     };
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only: when each worker is free again (0: idle now), for the Map Room's idle workers by an
+                // outpost (an outpost has 2: MapRoomCell.ioIdleWorkers)
+                var ioTimes:Array = [];
+                for each (var ioWorker:Object in WORKERS._workers) {
+                    var ioTask:BFOUNDATION = ioWorker ? ioWorker.task as BFOUNDATION : null;
+                    ioTimes.push(ioTask ? GLOBAL.Timestamp() + ioTask._countdownBuild.Get() + ioTask._countdownUpgrade.Get() + ioTask._countdownFortify.Get() : 0);
+                }
+                _loc9_.finishtimes = ioTimes;
+            }
             return _loc9_;
         }
 
@@ -2752,6 +2994,10 @@ package {
             _mushroomList = [];
             var _loc3_:Vector.<Object> = InstanceManager.getInstancesByClass(BMUSHROOM);
             for each (_loc1_ in _loc3_) {
+                // (Hell Freezes Over's ice is kept by the server, not with the warts)
+                if (_loc1_ is IoHfoIce) {
+                    continue;
+                }
                 _loc2_ = _loc1_.Export();
                 _mushroomList.push([_loc2_.frame, _loc2_.X, _loc2_.Y]);
             }
@@ -3089,28 +3335,41 @@ package {
             return _loc1_;
         }
 
+        /** Inferno-only: the last amounts the server sent and when, for the log line below. */
+        private static var _ioServerResources:String = "none";
+
+        public static function ioNoteServerResources(where:String, resources:Object):void {
+            try {
+                _ioServerResources = where + " " + int(resources.r1) + "/" + int(resources.r2) + "/" + int(resources.r3) + "/" + int(resources.r4) + " at " + GLOBAL.Timestamp();
+            }
+            catch (e:Error) {
+            }
+        }
+
         private static function fixNegativeResourceValues():void {
+            // The line says what the server last sent (a negative there points at the server, not the game).
+            var ioFrom:String = GLOBAL.INFERNO_ONLY ? " (server last sent " + _ioServerResources + ", now " + GLOBAL.Timestamp() + ")" : "";
             if (_resources.r1.Get() < 0) {
-                LOGGER.Log("err", "Negative twigs reset: " + _resources.r1.Get());
+                LOGGER.Log("err", "Negative twigs reset: " + _resources.r1.Get() + ioFrom);
                 Fund(1, _resources.r1.Get() * -1, true);
             }
             if (_resources.r2.Get() < 0) {
-                LOGGER.Log("err", "Negative pebbles reset: " + _resources.r2.Get());
+                LOGGER.Log("err", "Negative pebbles reset: " + _resources.r2.Get() + ioFrom);
                 Fund(2, _resources.r2.Get() * -1, true);
             }
             if (_resources.r3.Get() < 0) {
-                LOGGER.Log("err", "Negative putty reset: " + _resources.r3.Get());
+                LOGGER.Log("err", "Negative putty reset: " + _resources.r3.Get() + ioFrom);
                 Fund(3, _resources.r3.Get() * -1, true);
             }
             if (_resources.r4.Get() < 0) {
-                LOGGER.Log("err", "Negative goo reset: " + _resources.r4.Get());
+                LOGGER.Log("err", "Negative goo reset: " + _resources.r4.Get() + ioFrom);
                 Fund(4, _resources.r4.Get() * -1, true);
             }
         }
 
         private static function getOrderedSaveVariablesFromObject(param1:Object):Array {
             var _loc2_:Array = ["baseid", "lastupdate", "resources", "academy", "stats", "mushrooms", "basename", "baseseed", "buildingdata", "researchdata", "lockerdata", "quests", "basevalue", "points", "tutorialstage", "basesaveid", "clienttime", "monsters", "attacks", "monsterbaiter", "version", "attackreport", "over", "protect", "monsterupdate", "attackid", "aiattacks", "effects", "catapult", "flinger", "gifts", "sentgifts", "sentinvites", "purchase", "inventory", "timeplayed", "destroyed", "damage", "type", "attackcreatures", "attackloot", "lootreport"
-                    , "empirevalue", "champion", "attackerchampion", "attackersiege", "purchasecomplete", "achieved", "fbpromos", "iresources", "siege", "buildingresources", "frontpage", "events", "buildinghealthdata", "healtime", "lootbonus"];
+                    , "empirevalue", "champion", "attackerchampion", "attackersiege", "purchasecomplete", "achieved", "fbpromos", "iresources", "siege", "buildingresources", "frontpage", "events", "buildinghealthdata", "healtime", "lootbonus", "iotest"];
             var _loc3_:int = int(GLOBAL.player.handlers.length);
             var _loc4_:int = 0;
             while (_loc4_ < _loc3_) {
@@ -3149,6 +3408,13 @@ package {
                 _saveCounterB = _saveCounterA;
                 return false;
             }
+            // Never save an own yard that isn't in memory: opening the map runs BASE.Cleanup, and a save
+            // after that (a purchase, a tool, a timer) wrote the yard back with no buildings at all. The
+            // yard is loaded again from the server when the map closes.
+            if ((GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD) && (GLOBAL.isMapOpen() || (isMainYardOrInfernoMainYard && (!buildings || buildings.length == 0)))) {
+                _saveCounterB = _saveCounterA;
+                return false;
+            }
             _saving = true;
             _saveCounterB = _saveCounterA;
             fixNegativeResourceValues();
@@ -3156,6 +3422,10 @@ package {
             CalcResources();
             SaveDeltaResources();
             var saveData:Object = {};
+            // Admin test mode: the server refuses saves from a game still in test mode after it was switched off.
+            if (GLOBAL.ioTestMode()) {
+                saveData["iotest"] = 1;
+            }
             if (MapRoomManager.instance.isInMapRoom3 && !BASE.isInfernoMainYardOrOutpost) {
                 saveData["healtime"] = getEstimatedRepairDuration();
             }
@@ -3365,10 +3635,14 @@ package {
                 _saveErrors = 0;
                 _lastSaved = GLOBAL.Timestamp();
                 _lastSaveID = serverData.basesaveid;
-                _credits.Set(int(serverData.credits));
-                _hpCredits = int(serverData.credits);
-                GLOBAL._credits.Set(int(serverData.credits));
+                // (not while the Brimstone Pit is showing a result: the game shows the Shiny as it lands)
+                if (!CASINO.holdsCredits()) {
+                    _credits.Set(int(serverData.credits));
+                    _hpCredits = int(serverData.credits);
+                    GLOBAL._credits.Set(int(serverData.credits));
+                }
                 if (serverData.resources) {
+                    ioNoteServerResources("save", serverData.resources);
                     if (_saveCounterA == _saveCounterB) {
                         resourceIndex = 1;
                         while (resourceIndex < 5) {
@@ -3457,13 +3731,18 @@ package {
                     GLOBAL.SetFlags(serverData.flags);
                     GLOBAL._unreadMessages = !!serverData.unreadmessages ? int(serverData.unreadmessages) : 0;
                     _pageErrors = 0;
-                    _credits.Set(int(serverData.credits));
-                    _hpCredits = int(serverData.credits);
-                    GLOBAL._credits.Set(int(serverData.credits));
+                    if (!CASINO.holdsCredits()) {
+                        _credits.Set(int(serverData.credits));
+                        _hpCredits = int(serverData.credits);
+                        GLOBAL._credits.Set(int(serverData.credits));
+                    }
                     _isProtected = int(serverData["protected"]);
                     _isFan = int(serverData.fan);
                     _isBookmarked = int(serverData.bookmarked);
                     _installsGenerated = int(serverData.installsgenerated);
+                    if (serverData.resources) {
+                        ioNoteServerResources("update", serverData.resources);
+                    }
                     if ((GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD) && serverData.resources && _saveCounterA == _saveCounterB) {
                         if (serverData.resources.r1 != _resources.r1.Get() || serverData.resources.r2 != _resources.r2.Get() || serverData.resources.r3 != _resources.r3.Get() || serverData.resources.r4 != _resources.r4.Get()) {
                         }
@@ -3640,6 +3919,16 @@ package {
             }
         }
 
+        /** Inferno-only: the yard loaded is an outpost in the underworld (its baseid ends in its x and y: 500-509). */
+        public static function ioInUnderworldOutpost():Boolean {
+            if (!isOutpost || !_loadedBaseID) {
+                return false;
+            }
+            var cellX:int = int(Math.floor(_loadedBaseID / 1000) % 1000);
+            var cellY:int = int(_loadedBaseID % 1000);
+            return IoUnderworld.isUnder(cellX, cellY);
+        }
+
         public static function CanBuild(param1:int, param2:Boolean = false):Object {
             var _loc7_:String = null;
             var _loc8_:Vector.<Object> = null;
@@ -3667,8 +3956,17 @@ package {
             var _loc4_:Boolean = false;
             var _loc5_:String = "";
             var _loc6_:int = 0;
-            if (GLOBAL._aiDesignMode) {
+            // Admin test mode (and a wild tribe / Moloch design): any building, any number of it, whatever the
+            // Town Hall level. (An outpost kit's design keeps an outpost's limits.)
+            if (GLOBAL._aiDesignMode || GLOBAL.ioNoLimits()) {
                 return {"error": false};
+            }
+            // Inferno-only: an underworld outpost has no Flinger (com/monsters/maproom_advanced/IoUnderworld)
+            if (param1 == 5 && GLOBAL.INFERNO_ONLY && ioInUnderworldOutpost()) {
+                return {
+                        "error": true,
+                        "errorMessage": "Outposts in the Depths of Hell have no Flinger: they always reach the cells next to them."
+                    };
             }
             for (_loc7_ in GLOBAL._buildingProps) {
                 if (GLOBAL._buildingProps[_loc7_].id == param1) {
@@ -3828,6 +4126,22 @@ package {
                 };
         }
 
+        /* Inferno-only: why this building can't be upgraded now, or null: the Strongbox while it unlocks a monster,
+         * an Academy while it trains one (each Academy its own). */
+        public static function ioBusyForUpgrade(param1:BFOUNDATION):String {
+            var unlocking:String = null;
+            if (param1._type == 8 && param1 == GLOBAL._bLocker) {
+                unlocking = CREATURELOCKER.ioUnlockingID();
+                if (unlocking != null && CREATURELOCKER._creatures[unlocking]) {
+                    return KEYS.Get("cloc_err_cantupgrade", {"v1": KEYS.Get(CREATURELOCKER._creatures[unlocking].name)});
+                }
+            }
+            if (param1._type == ACADEMY.ID && ACADEMY.ioAcademyBusy(param1)) {
+                return KEYS.Get("acad_err_cantupgrade");
+            }
+            return null;
+        }
+
         public static function CanUpgrade(param1:BFOUNDATION):Object {
             var _loc7_:String = null;
             var _loc8_:Array = null;
@@ -3883,9 +4197,15 @@ package {
                 _loc4_ = true;
                 _loc5_ = KEYS.Get("base_uperr_stillfortifying");
             }
+            else if (GLOBAL.INFERNO_ONLY && ioBusyForUpgrade(param1)) {
+                // Inferno-only: here rather than in BUILDING8/BUILDING26.Upgrade only, so the instant upgrade (shiny)
+                // and an upgrade that waited for a worker are refused too
+                _loc4_ = true;
+                _loc5_ = ioBusyForUpgrade(param1);
+            }
             else {
                 _loc9_ = [];
-                for each (_loc10_ in _loc8_[_loc6_].re) {
+                for each (_loc10_ in (GLOBAL.ioFreeBuild() ? [] : _loc8_[_loc6_].re)) {
                     _loc12_ = 0;
                     if (_loc10_[0] == INFERNOQUAKETOWER.UNDERHALL_ID) {
                         _loc13_ = "#bi_townhall#";
@@ -4041,7 +4361,7 @@ package {
             }
             else {
                 _loc9_ = [];
-                for each (_loc10_ in _loc8_[_loc6_].re) {
+                for each (_loc10_ in (GLOBAL.ioFreeBuild() ? [] : _loc8_[_loc6_].re)) {
                     _loc11_ = 0;
                     _loc12_ = InstanceManager.getInstancesByClass(BFOUNDATION);
                     for each (_loc13_ in _loc12_) {
@@ -4419,6 +4739,10 @@ package {
             var _loc6_:Object = null;
             var _loc7_:Object = null;
             param2 = Math.floor(param2);
+            // Admin test mode (and the Designer): everything is affordable and nothing is taken.
+            if (GLOBAL.ioFreeBuild()) {
+                return param2;
+            }
             if (param4 && isInfernoMainYardOrOutpost) {
                 param4 = false;
             }
@@ -4658,19 +4982,125 @@ package {
             }
         }
 
+        /**
+         * Inferno-only (Outposts list): opens the outpost at (x, y), as "Next outpost" opens the next one:
+         * the map cell is loaded first, then the yard (GLOBAL tick, _needCurrentCell).
+         */
+        /** A wild monster or baiter attack on the yard is running: the player can't leave it (or change it) now. */
+        public static function ioAttackRunning():Boolean {
+            return WMATTACK._inProgress || CUSTOMATTACKS._started;
+        }
+
+        public static function ioLoadOutpost(x:int, y:int):void {
+            if (ioAttackRunning() || GLOBAL.isMapOpen()) {
+                return;
+            }
+            if (_saving || _loading || BASE._saveCounterA != BASE._saveCounterB) {
+                GLOBAL.Message("Your yard is still saving. Try again in a moment.");
+                return;
+            }
+            if (isMainYard && GLOBAL._bMap && !GLOBAL._bMap._canFunction) {
+                GLOBAL.Message(KEYS.Get("map_msg_damaged"));
+                return;
+            }
+            if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+                return;
+            }
+            _currentCellLoc = new Point(x, y);
+            GLOBAL._currentCell = null;
+            _needCurrentCell = true;
+            MapRoomManager.instance.LoadCell(x, y, true);
+            PLEASEWAIT.Show(KEYS.Get("process_outpost"));
+        }
+
+        /**
+         * Inferno-only (the Outposts list's buttons): which way LoadNext goes, 1 (Next) or -1 (Previous). It
+         * stays set while LoadNext waits for a save to finish, and goes back to 1 once used.
+         */
+        public static var _ioStepDir:int = 1;
+
+        /** Inferno-only: the Outposts list's Previous: the outpost before this one (from the main yard, the last). */
+        public static function ioLoadPrevious():void {
+            _ioStepDir = -1;
+            LoadNext();
+        }
+
+        /** Inferno-only: the Outposts list's Next (as the old button: LoadNext, forwards). */
+        public static function ioLoadNextOutpost():void {
+            _ioStepDir = 1;
+            LoadNext();
+        }
+
+        /** Inferno-only: the Outposts list's Home: back to the main yard from an outpost. */
+        public static function ioGoHome():void {
+            if (ioAttackRunning() || GLOBAL.isMapOpen() || isMainYardOrInfernoMainYard) {
+                return;
+            }
+            if (_saving || _loading || BASE._saveCounterA != BASE._saveCounterB) {
+                GLOBAL.Message("Your yard is still saving. Try again in a moment.");
+                return;
+            }
+            if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD && GLOBAL.mode != "ibuild") {
+                return;
+            }
+            _needCurrentCell = false;
+            GLOBAL._currentCell = null;
+            LoadBase(null, 0, GLOBAL._homeBaseID, GLOBAL.e_BASE_MODE.BUILD, false, EnumYardType.MAIN_YARD);
+        }
+
+        /**
+         * Inferno-only: the outpost LoadNext goes to, as an index in GLOBAL._mapOutpost (in the order they
+         * were taken): one on from this one (or back, _ioStepDir -1), round from the last to the first; from
+         * the main yard (or an outpost not in the list) the first, or the last going back.
+         */
+        private static function ioStepIndex():int {
+            var count:int = int(GLOBAL._mapOutpostIDs.length);
+            var here:int = -1;
+            if (!isMainYardOrInfernoMainYard) {
+                for (var i:int = 0; i < count; i++) {
+                    if (GLOBAL._mapOutpostIDs[i] == _loadedBaseID) {
+                        here = i;
+                        break;
+                    }
+                }
+            }
+            var dir:int = _ioStepDir < 0 ? -1 : 1;
+            _ioStepDir = 1;
+            if (here < 0) {
+                return dir > 0 ? 0 : count - 1;
+            }
+            return (here + dir + count) % count;
+        }
+
         public static function LoadNext(param1:MouseEvent = null):void {
             var _loc2_:Number = NaN;
             var _loc3_:int = 0;
+            if (ioAttackRunning()) {
+                GLOBAL._nextOutpostWaiting = 0;
+                _ioStepDir = 1;
+                return;
+            }
             if (_saving || _loading || BASE._saveCounterA != BASE._saveCounterB) {
                 GLOBAL._nextOutpostWaiting = 1;
                 return;
             }
             if (MapRoomManager.instance.isInMapRoom2) {
-                if (isMainYard && !GLOBAL._bMap._canFunction) {
+                // (as ioLoadOutpost: a main yard without a Map Room yet crashed here)
+                if (isMainYard && GLOBAL._bMap && !GLOBAL._bMap._canFunction) {
                     GLOBAL.Message(KEYS.Get("map_msg_damaged"));
                     return;
                 }
                 if (Boolean(GLOBAL._mapOutpostIDs) && GLOBAL._mapOutpostIDs.length > 0) {
+                    if (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == "ibuild")) {
+                        // Inferno-only: forwards or back (_ioStepDir), round from the last outpost to the first
+                        _loc3_ = ioStepIndex();
+                        _currentCellLoc = GLOBAL._mapOutpost[_loc3_];
+                        GLOBAL._currentCell = null;
+                        _needCurrentCell = true;
+                        MapRoomManager.instance.LoadCell(GLOBAL._mapOutpost[_loc3_].x, GLOBAL._mapOutpost[_loc3_].y, true);
+                        PLEASEWAIT.Show(KEYS.Get("process_outpost"));
+                        return;
+                    }
                     if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == "ibuild") {
                         if (isMainYardOrInfernoMainYard) {
                             _currentCellLoc = GLOBAL._mapOutpost[0];
@@ -4827,7 +5257,32 @@ package {
                     _loc8_++;
                 }
             }
+            ioTestResources();
             UI2.Update();
+        }
+
+        /** Admin test mode: storage without limit and resources always full (IoTestMode). */
+        public static const IO_TEST_RESOURCES:Number = 999999999;
+
+        public static function ioTestResources():void {
+            // The admin's own yards only (not a yard being viewed or attacked in practice: its loot).
+            if (!GLOBAL.ioFreeBuild() || (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD && GLOBAL.mode != GLOBAL.e_BASE_MODE.IBUILD)) {
+                return;
+            }
+            for (var r:int = 1; r < 5; r++) {
+                _resources["r" + r + "max"] = IO_TEST_RESOURCES;
+                if (GLOBAL._resources) {
+                    GLOBAL._resources["r" + r + "max"] = IO_TEST_RESOURCES;
+                }
+                if (_resources["r" + r] && _resources["r" + r].Get() < IO_TEST_RESOURCES) {
+                    _resources["r" + r].Set(IO_TEST_RESOURCES);
+                    _hpResources["r" + r] = IO_TEST_RESOURCES;
+                }
+                if (GLOBAL._resources && GLOBAL._resources["r" + r] && GLOBAL._resources["r" + r].Get() < IO_TEST_RESOURCES) {
+                    GLOBAL._resources["r" + r].Set(IO_TEST_RESOURCES);
+                    GLOBAL._hpResources["r" + r] = IO_TEST_RESOURCES;
+                }
+            }
         }
 
         public static function CalcBaseValue():Number {
@@ -5453,6 +5908,9 @@ package {
             var _loc3_:int = 0;
             var _loc4_:Vector.<Object> = null;
             var _loc5_:BFOUNDATION = null;
+            if (GLOBAL.ioFreeBuild()) {
+                return true;
+            }
             for each (_loc2_ in param1.re) {
                 _loc3_ = 0;
                 if (_loc2_[0] == INFERNOQUAKETOWER.UNDERHALL_ID) {

@@ -1,0 +1,35 @@
+import * as as3 from "as3";
+import { uint } from "as3";
+import { ByteArray, IDataOutput } from "flash/utils";
+import { Hex, ITestHarness, TLSPRF, TestCase } from "@game";
+
+export class TLSPRFTest extends TestCase {
+    public $ctor(h?: ITestHarness): void {
+        super.$ctor(h, "TLS-PRF Testing");
+        this.runTest(as3.bind(this, this.testVector), "TLF-PRF Test Vector");
+        h.endTestCase();
+    }
+
+    /**
+     * Test Vector as defined in
+     * http://www.imc.org/ietf-tls/mail-archive/msg01589.html
+     */
+    private testVector(): void {
+        let i: uint = 0;
+        let secret: ByteArray = new ByteArray();
+        for (i = 0; i < 48; i++) {
+            secret[i] = 0xab;
+        }
+        let label: string = "PRF Testvector";
+        let seed: ByteArray = new ByteArray();
+        for (i = 0; i < 64; i++) {
+            seed[i] = 0xcd;
+        }
+        let prf: TLSPRF = new TLSPRF(secret, label, seed);
+        let out: ByteArray = new ByteArray();
+        prf.nextBytes(as3.cast(out, IDataOutput), 104);
+        let expected: string = "D3 D4 D1 E3 49 B5 D5 15 04 46 66 D5 1D E3 2B AB" + "25 8C B5 21 B6 B0 53 46 3E 35 48 32 FD 97 67 54" + "44 3B CF 9A 29 65 19 BC 28 9A BC BC 11 87 E4 EB" + "D3 1E 60 23 53 77 6C 40 8A AF B7 4C BC 85 EF F6" + "92 55 F9 78 8F AA 18 4C BB 95 7A 98 19 D8 4A 5D" + "7E B0 06 EB 45 9D 3A E8 DE 98 10 45 4B 8B 2D 8F" + "1A FB C6 55 A8 C9 A0 13";
+        let expect: string = Hex.fromArray(Hex.toArray(expected));
+        this.assert("out == expected", Hex.fromArray(out) == expect);
+    }
+}

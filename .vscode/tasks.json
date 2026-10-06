@@ -1,55 +1,115 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "compile-debug",
-			"type": "actionscript",
-			"debug": true,
-			"problemMatcher": []
-		},
-		{
-			"label": "compile-local",
-			"type": "actionscript",
-			"debug": false,
-			"asconfig": "asconfig.local.json",
-			"problemMatcher": []
-		},
-		{
-			"label": "compile-stable",
-			"type": "actionscript",
-			"debug": false,
-			"asconfig": "asconfig.stable.json",
-			"problemMatcher": []
-		},
-		{
-			// Debug build is used for development and testing
-			"label": "BYMR - Debug",
-			"detail": "Debug build with stack traces and trace() output.",
-			"type": "shell",
-			"command": "${workspaceFolder}/client/archived/flashplayers/flashplayer_debug.exe",
-			"args": ["", "bin/bymr-debug.swf"],
-			"group": { "kind": "build", "isDefault": true },
-			"dependsOn": "compile-debug"
-		},
-		{
-			// Local build is used for releasing optimized local .swfs
-			"label": "BYMR - Local",
-			"detail": "Optimized local release build",
-			"type": "shell",
-			"command": "${workspaceFolder}/client/archived/flashplayers/flashplayer.exe",
-			"args": ["", "bin/bymr-local.swf"],
-			"group": { "kind": "build", "isDefault": true },
-			"dependsOn": "compile-local"
-		},
-		{
-			// Stable build is used for releasing optimized production-ready .swfs
-			"label": "BYMR - Stable",
-			"detail": "Optimized production release build",
-			"type": "shell",
-			"command": "${workspaceFolder}/client/archived/flashplayers/flashplayer.exe",
-			"args": ["", "bin/bymr-stable.swf"],
-			"group": { "kind": "build", "isDefault": true },
-			"dependsOn": "compile-stable"
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "compile-debug",
+      "type": "actionscript",
+      "debug": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "compile-local",
+      "type": "actionscript",
+      "debug": false,
+      "asconfig": "asconfig.local.json",
+      "problemMatcher": []
+    },
+    {
+      "label": "compile-stable",
+      "type": "actionscript",
+      "debug": false,
+      "asconfig": "asconfig.stable.json",
+      "problemMatcher": []
+    },
+    {
+      "label": "BYMR - Debug",
+      "detail": "Debug build with stack traces and trace() output.",
+      "type": "shell",
+      "command": "${workspaceFolder}/client/archived/flashplayers/flashplayer_debug.exe",
+      "args": [
+        "",
+        "bin/bymr-debug.swf"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": "compile-debug"
+    },
+    {
+      "label": "BYMR - Local",
+      "detail": "Optimized local release build",
+      "type": "shell",
+      "command": "${workspaceFolder}/client/archived/flashplayers/flashplayer.exe",
+      "args": [
+        "",
+        "bin/bymr-local.swf"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": "compile-local"
+    },
+    {
+      "label": "BYMR - Stable",
+      "detail": "Optimized production release build",
+      "type": "shell",
+      "command": "${workspaceFolder}/client/archived/flashplayers/flashplayer.exe",
+      "args": [
+        "",
+        "bin/bymr-stable.swf"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": "compile-stable"
+    },
+    {
+      "label": "io-stamp-build",
+      "type": "shell",
+      "command": "${workspaceFolder}/stamp-build.cmd",
+      "problemMatcher": []
+    },
+    {
+      "label": "io-publish-client",
+      "type": "shell",
+      "command": "${workspaceFolder}/publish-client.cmd",
+      "problemMatcher": []
+    },
+    {
+      "label": "io-publish-web",
+      "detail": "Builds the browser client (client-web) and copies it to server/public/web.",
+      "type": "shell",
+      "command": "${workspaceFolder}/publish-web.cmd",
+      "problemMatcher": []
+    },
+    {
+      "label": "BYMR - Release",
+      "detail": "Stamp the build, compile BYMR - Stable, publish it to the server (version control).",
+      "type": "shell",
+      "command": "echo Released.",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "io-stamp-build",
+        "compile-stable",
+        "io-publish-client",
+        "io-publish-web"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "compile-launcher",
+      "detail": "Rebuilds server/public/client/launcher.swf. Only needed if client/launcher/IOLauncher.as was changed: a built one ships with the repo.",
+      "type": "actionscript",
+      "debug": false,
+      "asconfig": "asconfig.launcher.json",
+      "problemMatcher": []
+    }
+  ]
 }

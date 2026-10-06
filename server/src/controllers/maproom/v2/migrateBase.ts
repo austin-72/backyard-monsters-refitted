@@ -11,8 +11,10 @@ import {
 } from "../../../services/base/updateResources.js";
 import { joinOrCreateWorld } from "../../../services/maproom/v2/joinOrCreateWorld.js";
 import { leaveWorld } from "../../../services/maproom/v2/leaveWorld.js";
+import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
 import { MapRoomCell } from "../../../enums/MapRoom.js";
-import { relocateOutpostErr, shinyLockedErr } from "../../../errors/errors.js";
+import { permissionErr, relocateOutpostErr, shinyLockedErr, notEnoughShinyErr, underworldRelocateErr } from "../../../errors/errors.js";
+import { isUnder } from "../../../services/maproom/v2/underworld.js";
 import { MigrateBaseSchema } from "../../../schemas/MigrateBaseSchema.js";
 import { isShinyLocked } from "../../../services/user/shinyLock.js";
 
@@ -63,8 +65,18 @@ export const migrateBase: KoaController = async (ctx) => {
   if (type === BaseType.RANDOM) {
     if (userSave.outposts.length > 0) throw relocateOutpostErr();
 
+    // Inferno-only: bookmarks are places on a map, so they only go when the new home is on another
+    // map. leaveWorld clears them; put them back if the relocation landed in the same world.
+    const oldWorld = userSave.worldid;
+    const oldBookmarks = currentUser.bookmarks;
+
     await leaveWorld(currentUser, userSave);
     await joinOrCreateWorld(currentUser, userSave, postgres.em, true);
+
+    if (infernoOnlyConfig.enabled && oldWorld && userSave.worldid === oldWorld && oldBookmarks) {
+      currentUser.bookmarks = oldBookmarks;
+      await postgres.em.persist(currentUser).flush();
+    }
 
     ctx.status = Status.OK;
     ctx.body = { error: 0 };
@@ -91,6 +103,15 @@ export const migrateBase: KoaController = async (ctx) => {
   if (!outpostCell || !outpostCell.save) {
     throw new Error(`Invalid base or base type. Base ID: ${baseid}`);
   }
+
+  // The destination has to be one of the mover's own outposts. Without this check any player could
+  // move their main yard onto someone else's outpost by its base id, deleting that outpost.
+  if (outpostCell.uid !== currentUser.userid || outpostCell.base_type !== MapRoomCell.OUTPOST) {
+    throw permissionErr();
+  }
+
+  // Inferno-only: not into the underworld.
+  if (infernoOnlyConfig.enabled && isUnder(outpostCell.x, outpostCell.y)) throw underworldRelocateErr();
 
   if (!homeCell) throw new Error("Invalid home cell");
 
@@ -120,7 +141,11 @@ export const migrateBase: KoaController = async (ctx) => {
     delete userSave.buildingresources[`b${outpostBaseId}`];
   }
 
-  if (shiny) userSave.credits = userSave.credits - shiny;
+  // Shiny can't go below 0 (the database refuses it, which failed the whole request with a 500).
+  if (shiny) {
+    if (!(shiny > 0) || (userSave.credits ?? 0) < shiny) throw notEnoughShinyErr();
+    userSave.credits -= shiny;
+  }
   if (resources)
     userSave.resources = updateResources(resources, userSave.resources ?? {}, Operation.SUBTRACT);
 

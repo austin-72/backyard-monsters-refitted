@@ -1,0 +1,44 @@
+import * as as3 from "as3";
+import { ASObject, uint } from "as3";
+import { ByteArray } from "flash/utils";
+import { IPad } from "@game";
+
+export class PKCS5 extends ASObject implements IPad {
+    static {
+        as3.implement(this, [IPad]);
+        as3.fields(this, { blockSize: 0 });
+    }
+
+    private blockSize: uint;
+
+    public $ctor(blockSize: uint = 0): void {
+        super.$ctor();
+        this.blockSize = blockSize;
+    }
+
+    public pad(a: ByteArray): void {
+        let c: uint = (this.blockSize - a.length % this.blockSize) >>> 0;
+        for (let i: uint = 0; i < c; i++) {
+            a[a.length] = c;
+        }
+    }
+
+    public unpad(a: ByteArray): void {
+        let c: uint = (a.length % this.blockSize) >>> 0;
+        if (c != 0) {
+            throw new Error("PKCS#5::unpad: ByteArray.length isn't a multiple of the blockSize");
+        }
+        c = a[a.length - 1] >>> 0;
+        for (let i: uint = c; i > 0; i--) {
+            let v: uint = a[a.length - 1] >>> 0;
+            a.length--;
+            if (c != v) {
+                throw new Error("PKCS#5:unpad: Invalid padding value. expected [" + c + "], found [" + v + "]");
+            }
+        }
+    }
+
+    public setBlockSize(bs: uint): void {
+        this.blockSize = bs;
+    }
+}

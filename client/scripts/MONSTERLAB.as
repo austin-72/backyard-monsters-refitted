@@ -398,6 +398,11 @@ package {
                 POPUPS.DisplayGetShiny();
                 return;
             }
+            if (!GLOBAL.ioConfirmShiny(instantCost, "to get this power-up now", function():void {
+                        InstantMonsterPowerup(id, level);
+                    })) {
+                return;
+            }
             GLOBAL.player.m_upgrades[id].powerup = level;
             this._upgradeLevel = level;
             LOGGER.Stat([48, id.substr(1), level]);

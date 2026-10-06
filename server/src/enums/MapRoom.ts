@@ -77,5 +77,4 @@ export enum AttackPermission {
   DAMAGE_PROTECTION = 5,
   SPECIAL_PROTECTION = 6,
   UNDER_ATTACK = 7,
-  TRUCE_ACTIVE = 9,
 }

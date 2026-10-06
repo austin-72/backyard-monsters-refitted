@@ -172,6 +172,24 @@ package {
             return _loc4_;
         }
 
+        /**
+         * Inferno-only: a monster in the air (Balthazar and the other flyers, landed to attack or not). Balthazar
+         * is made hittable by every tower (his class clears his flying and ground flags), so the ground-only
+         * defences have to leave him out by hand: he does not set off traps (their blast still catches him
+         * if he is near one when something else sets it off), and Quake towers neither fire at him nor hurt him.
+         */
+        public static function ioAirborne(param1:MonsterBase):Boolean {
+            return param1 != null && (param1._movement == "fly" || param1._movement == "fly_low");
+        }
+
+        /**
+         * Inferno-only: monsters that do not set traps off: the airborne ones, and Flickerfiend (IC14), too
+         * nimble to step on one. A trap something else sets off still catches them in its blast.
+         */
+        public static function ioSkipsTraps(param1:MonsterBase):Boolean {
+            return param1 != null && (ioAirborne(param1) || param1._creatureID == "IC14");
+        }
+
         public static function getOldStyleTargets(param1:int):int {
             var _loc2_:* = 0;
             if (param1 == -1) {

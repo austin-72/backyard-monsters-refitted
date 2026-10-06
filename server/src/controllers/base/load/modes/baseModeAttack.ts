@@ -8,17 +8,21 @@ import { Save } from "../../../../database/models/save.model.js";
 import { User } from "../../../../database/models/user.model.js";
 import { tribeSaveHandler } from "../../../../services/maproom/tribeSaveHandler.js";
 import { getCurrentDateTime } from "../../../../utils/getCurrentDateTime.js";
+import { isUnder } from "../../../../services/maproom/v2/underworld.js";
+import { underworldConfig } from "../../../../config/UnderworldConfig.js";
 import { validateRange } from "../../../../services/maproom/v2/validateRange.js";
 import { getGeneratedCells, cellKey } from "../../../../services/maproom/v3/generateCells.js";
+import { infernoOnlyConfig } from "../../../../config/InfernoOnlyConfig.js";
 import { createAttackLog } from "../../../../services/base/createAttackLog.js";
 import { updateResources, Operation } from "../../../../services/base/updateResources.js";
 import { isAttackActive } from "../../../../services/base/isAttackActive.js";
-import { baseUnderAttackErr, baseProtectedErr, userOnlineErr, truceActiveErr, shinyLockedErr } from "../../../../errors/errors.js";
+import { baseUnderAttackErr, baseProtectedErr, userOnlineErr, shinyLockedErr } from "../../../../errors/errors.js";
 import { redis } from "../../../../server.js";
-import { isTruceActive } from "../../../../services/mail/isTruceActive.js";
 import { MR1_TRIBE_IDS } from "../../../../game-data/tribes/v1/index.js";
+import { expireWildSave } from "./baseModeView.js";
 import { registerAttacker } from "../../../../services/maproom/v1/registerAttacker.js";
 import { isShinyLocked } from "../../../../services/user/shinyLock.js";
+import { isTestMode, isTestModeOn } from "../../../../services/admin/testMode.js";
 import {
   generateNoise,
   getTerrainHeight,
@@ -60,8 +64,35 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
 
   if (!save) throw new Error(`Save not found for baseid: ${baseid}`);
 
-  if (save.type !== BaseType.TRIBE) {
+  const practice = await isTestMode(user);
+
+  // Map Room 2 range first, before anything is written: it was checked after the attack was recorded (the
+  // attacker's protection gone, the yard marked under attack) and failed with a 500.
+  if (!practice && mapversion === MapRoomVersion.V2) {
+    const at =
+      (await postgres.em.findOne(WorldMapCell, { baseid })) ??
+      ({ x: parseInt(baseid.slice(-6, -3)), y: parseInt(baseid.slice(-3)), baseid } as unknown as WorldMapCell);
+    await validateRange(user, save, mapversion, { attackCell: at });
+  }
+
+  // A wild monster yard: rebuilt if nobody attacked it for 12 hours (as viewing it does), and its
+  // savetime moved to this attack, so it isn't rebuilt (its row deleted) while this attack is running.
+  if (save.type === BaseType.TRIBE && mapversion !== MapRoomVersion.V1 && mapversion !== MapRoomVersion.V3 && !practice) {
+    save = await expireWildSave(save, baseid, mapversion ?? MapRoomVersion.V2, userSave.worldid, user);
+    if (!save) throw new Error(`Save not found for baseid: ${baseid}`);
+    save.savetime = getCurrentDateTime();
+  }
+
+  // Admin test mode: a practice attack on any yard (protection, an owner online and range do not
+  // stop it), and nothing is marked on the yard: no attack record, no attack log, no lost protection.
+  // The attack's saves write nothing to it either (baseSave.ts). A tribe yard seen for the first time is
+  // still stored with its map cell, as viewing it does.
+
+  if (save.type !== BaseType.TRIBE && !practice) {
     if (save.protected > getCurrentDateTime()) throw baseProtectedErr();
+
+    // An admin testing (services/admin/testMode.ts): their yards hold the test shiny and resources.
+    if (await isTestModeOn(save.saveuserid)) throw baseProtectedErr();
 
     if (isAttackActive(save)) throw baseUnderAttackErr();
 
@@ -69,13 +100,10 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
       const lastSeen = await redis.get(`last-seen:${BaseType.MAIN}:${save.userid}`);
       if (lastSeen && parseInt(lastSeen) >= getCurrentDateTime() - 60) throw userOnlineErr();
     }
-
-    const activeTruce = await isTruceActive(user.userid, save.saveuserid);
-    
-    if (activeTruce) throw truceActiveErr();
+    // (No truces: they were taken out of the game, 4 October.)
   }
 
-  if (save.attacks.length > 3) save.attacks = save.attacks.slice(-2);
+  if (!practice && save.attacks.length > 3) save.attacks = save.attacks.slice(-2);
 
   // Track the details of the attack
   const attackDetails: AttackDetails = {
@@ -88,13 +116,13 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
     seen: false,
   };
 
-  if (save.type != BaseType.TRIBE) save.attacks.push(attackDetails);
+  if (save.type != BaseType.TRIBE && !practice) save.attacks.push(attackDetails);
 
-  if (save.type !== BaseType.TRIBE || mapversion !== MapRoomVersion.V1) {
+  if (!practice && (save.type !== BaseType.TRIBE || mapversion !== MapRoomVersion.V1)) {
     await damageProtection(userSave, BaseMode.ATTACK);
   }
 
-  save.attackid = Math.floor(Math.random() * 99999) + 1;
+  if (!practice) save.attackid = Math.floor(Math.random() * 99999) + 1;
 
   if (mapversion !== MapRoomVersion.V1) {
     let cell = await postgres.em.findOne(WorldMapCell, { baseid });
@@ -116,8 +144,8 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
         cell.map_version = MapRoomVersion.V3;
         cell.baseid = baseid;
       } else {
-        const noise = generateNoise(world.uuid);
-        const terrainHeight = getTerrainHeight(noise, cellX, cellY);
+        // (Inferno-only: an underworld cell is flat land: services/maproom/v2/underworld.ts)
+        const terrainHeight = isUnder(cellX, cellY) ? underworldConfig.height : getTerrainHeight(generateNoise(world.uuid), cellX, cellY);
 
         cell = new WorldMapCell(world, cellX, cellY, terrainHeight);
         cell.uid = save.saveuserid;
@@ -147,6 +175,15 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
 
   const isMR1Tribe = mapversion === MapRoomVersion.V1 && save.type === BaseType.TRIBE;
 
+  if (practice) {
+    // Only a tribe yard that was not stored yet is stored (unchanged); nothing else is written.
+    if (save.type === BaseType.TRIBE && !isMR1Tribe) {
+      postgres.em.persist(save);
+      await postgres.em.flush();
+    }
+    return save;
+  }
+
   if (!isMR1Tribe) postgres.em.persist(save);
 
   postgres.em.persist(userSave);
@@ -162,7 +199,10 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
 
     if (mapversion === MapRoomVersion.V1) await registerAttacker(user, defender);
     await createAttackLog(user, defender, save)
+  } else if (infernoOnlyConfig.enabled && !isMR1Tribe) {
+    // Inferno-only: tribe and Moloch yards are in the attack logs too (no defender: the tribe's name).
+    await createAttackLog(user, null, save);
   }
 
-  return await validateRange(user, save, mapversion, { baseid });
+  return mapversion === MapRoomVersion.V2 ? save : await validateRange(user, save, mapversion, { baseid });
 };

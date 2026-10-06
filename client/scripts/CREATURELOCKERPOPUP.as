@@ -1,4 +1,6 @@
 package {
+    import com.monsters.events.hfo.IoHfo;
+    import com.monsters.display.IoLockIcon;
     import com.monsters.display.ImageCache;
     import flash.display.Bitmap;
     import flash.display.BitmapData;
@@ -43,7 +45,8 @@ package {
             for (_loc2_ in CREATURELOCKER._creatures) {
                 _loc1_++;
             }
-            this._maxPages = 4;
+            // Inferno-only: page 5 holds Korath and Drull (Strongbox level 5).
+            this._maxPages = GLOBAL.INFERNO_ONLY && BASE.isInfernoMainYardOrOutpost ? 5 : 4;
             this.List();
             _loc3_ = false;
             if (CREATURELOCKER._unlocking != null) {
@@ -167,6 +170,10 @@ package {
                 else {
                     _loc6_.mcBar.width = 0;
                 }
+                if (GLOBAL.INFERNO_ONLY) {
+                    // locked: the padlock where the tick of an unlocked one goes
+                    IoLockIcon.mark(_loc6_.mcTick, !_loc5_, false, "middle", false);
+                }
                 _loc3_++;
             }
         }
@@ -197,6 +204,9 @@ package {
             var creatureID:String = param1;
             UpdatePortrait = function(param1:String, param2:BitmapData):void {
                 _portraitImage = mcImage.addChild(new Bitmap(param2));
+                if (GLOBAL.INFERNO_ONLY) {
+                    IoLockIcon.mark(_portraitImage, IoLockIcon.lockedMonster(_creatureID), true, "corner", false);
+                }
             };
             this._creatureID = creatureID;
             if (!creatureID) {
@@ -317,6 +327,15 @@ package {
                     bInstant.visible = false;
                 }
             }
+            else if (this._creatureID == CREATURELOCKER.RIMEGRAVE_ID && !IoHfo.championFree()) {
+                // Hell Freezes Over: sealed in the ice until the player breaks the curse
+                mcButtons.gotoAndStop(1);
+                mcButtons.bStart.SetupKey("mon_locked");
+                mcButtons.bStart.Enabled = false;
+                mcButtons.bStart.Highlight = false;
+                bInstant.visible = false;
+                tCosts.htmlText = "<font color=\"#1A5A9A\"><b>" + KEYS.Get("mon_strongbox_hfo_locked") + "</b></font>";
+            }
             else {
                 mcButtons.gotoAndStop(1);
                 mcButtons.bStart.SetupKey("btn_startunlocking");
@@ -334,6 +353,7 @@ package {
                 bInstant.Highlight = true;
             }
             if (Boolean(this._portraitImage) && Boolean(this._portraitImage.parent)) {
+                IoLockIcon.unmark(this._portraitImage);
                 this._portraitImage.parent.removeChild(this._portraitImage);
             }
             ImageCache.GetImageWithCallBack("monsters/" + this._creatureID + "-portrait.jpg", UpdatePortrait, true, 1);
@@ -371,8 +391,19 @@ package {
             var image:String = null;
             var hatcheryName:String = null;
             var e:MouseEvent = param1;
+            // Inferno-only: only a monster not yet unlocked or unlocking (a second click, or one after the shiny
+            // confirmation, paid for an unlock that was already done)
+            if (GLOBAL.INFERNO_ONLY && CREATURELOCKER._lockerData[this._creatureID]) {
+                this.Update();
+                return;
+            }
             if (BASE._credits.Get() < this._instantUnlockCost) {
                 POPUPS.DisplayGetShiny();
+                return;
+            }
+            if (!GLOBAL.ioConfirmShiny(this._instantUnlockCost, "to unlock this monster now", function():void {
+                        InstantUnlock(e);
+                    })) {
                 return;
             }
             if (GLOBAL._bLocker._lvl.Get() < CREATURELOCKER._creatures[this._creatureID].level) {
@@ -397,7 +428,10 @@ package {
                 img = String(creature.stream[2]);
             }
             CREATURELOCKER._lockerData[this._creatureID] = {"t": 2};
-            GLOBAL.player.m_upgrades[this._creatureID] = {"level": 1};
+            // Inferno-only: a monster unlocked again keeps the Academy level it was trained to (as a timed unlock does).
+            if (!(GLOBAL.INFERNO_ONLY && GLOBAL.player.m_upgrades[this._creatureID] && int(GLOBAL.player.m_upgrades[this._creatureID].level) > 1)) {
+                GLOBAL.player.m_upgrades[this._creatureID] = {"level": 1};
+            }
             if (!BASE.isInfernoMainYardOrOutpost) {
                 LOGGER.Stat([46, int(this._creatureID.substr(1))]);
             }
@@ -436,7 +470,11 @@ package {
                 image = this._creatureID + "-150.png";
                 POPUPS.Push(mc, null, null, null, image);
             }
-            CREATURELOCKER._unlocking = null;
+            // Inferno-only: a monster unlocked instantly while another one unlocks leaves that unlock running
+            // (clearing it let a second unlock start before the next tick)
+            if (!GLOBAL.INFERNO_ONLY || CREATURELOCKER._unlocking == this._creatureID) {
+                CREATURELOCKER._unlocking = null;
+            }
             QUESTS.Check();
             BASE.Purchase("IUN", this._instantUnlockCost, "creaturelocker");
             this.Update();

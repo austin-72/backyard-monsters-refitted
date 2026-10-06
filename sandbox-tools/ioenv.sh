@@ -1,0 +1,3 @@
+export DB_NAME=bymio DB_HOST=localhost DB_PORT=5432 DB_USER=postgres DB_PASSWORD=dev12345 ENV=local PORT=3001 API_PORT=3001
+export SECRET_KEY=localiosecret0123456789abcdef SESSION_LIFETIME=30d REDIS_URL=redis://localhost:6379/1 REDIS_PORT=6379
+export CHAT_WS_PORT=3010 CHAT_WS_HOST=localhost:3010 USE_VERSION_MANAGEMENT=disabled BASE_URL=http://localhost

@@ -5,6 +5,8 @@ package com.monsters.kits {
     import flash.events.SecurityErrorEvent;
     import flash.net.URLLoader;
     import flash.net.URLRequest;
+    import flash.utils.Timer;
+    import flash.events.TimerEvent;
 
     /**
      * Devil outpost kits (inferno-only builds).
@@ -44,6 +46,72 @@ package com.monsters.kits {
         public static const PER_PAGE:int = 3;
 
         public static const MAX_KITS:int = 6;
+
+        /**
+         * Inferno-only: the player's own kits, slots 7-9 on page 3, seen by nobody else. Saved from one of
+         * their outposts on the server (worldmapv2/saveplayerkit) and priced by customCosts().
+         */
+        public static const PLAYER_FIRST:int = 7;
+
+        public static const PLAYER_SLOTS:int = 3;
+
+        /** Index 0 is slot 7. null = empty slot. */
+        private static var _player:Array = [null, null, null];
+
+        public static function isPlayerSlot(kitID:int):Boolean {
+            return kitID >= PLAYER_FIRST && kitID < PLAYER_FIRST + PLAYER_SLOTS;
+        }
+
+        public static function playerKit(kitID:int):Object {
+            return isPlayerSlot(kitID) ? _player[kitID - PLAYER_FIRST] : null;
+        }
+
+        private static function takePlayerKits(param1:Object):void {
+            var i:int = 0;
+            if (param1 && param1.kits is Array) {
+                while (i < PLAYER_SLOTS) {
+                    _player[i] = param1.kits[i] && param1.kits[i].buildings ? param1.kits[i] : null;
+                    i++;
+                }
+            }
+        }
+
+        /**
+         * Saves the outpost that is open into player slot 7-9, then calls back with an error text or null.
+         * The server copies the outpost as it has it stored, and the game uploads changes on a delay, so the
+         * outpost is saved first and the copy is only asked for once that upload has finished. Otherwise
+         * buildings placed or upgraded just before would be missing or at their old level.
+         */
+        public static function savePlayerKit(kitID:int, name:String, onDone:Function):void {
+            var deadline:int = GLOBAL.Timestamp() + 30;
+            var wait:Timer = new Timer(250);
+            BASE.Save();
+            wait.addEventListener(TimerEvent.TIMER, function(e:TimerEvent):void {
+                    if (BASE._saveCounterA == BASE._saveCounterB && !BASE._saving && !BASE._loading) {
+                        wait.stop();
+                        requestPlayerKitSave(kitID, name, onDone);
+                    }
+                    else if (GLOBAL.Timestamp() > deadline) {
+                        wait.stop();
+                        onDone("Your outpost could not be saved just now, so the kit was not saved. Please try again.");
+                    }
+                });
+            wait.start();
+        }
+
+        private static function requestPlayerKitSave(kitID:int, name:String, onDone:Function):void {
+            new URLLoaderApi().load(GLOBAL._mapURL + "saveplayerkit", [["baseid", BASE._loadedBaseID], ["slot", kitID - PLAYER_FIRST + 1], ["name", name]], function(serverData:Object):void {
+                    if (serverData && serverData.error == 0) {
+                        takePlayerKits(serverData);
+                        onDone(null);
+                    }
+                    else {
+                        onDone(serverData && serverData.error ? String(serverData.error) : "The kit could not be saved.");
+                    }
+                }, function(e:Event):void {
+                    onDone("The kit could not be saved. Please try again.");
+                });
+        }
 
         /**
          * Custom kits made from real outposts with the server's export-kits command, downloaded
@@ -93,12 +161,28 @@ package com.monsters.kits {
                 return;
             }
             _loading = true;
-            finish = function(e:Event):void {
-                var data:Object = null;
+            var outstanding:int = 2;
+            var done:Function = function():void {
                 var callback:Function = null;
-                var pending:Array = _waiting;
+                var pending:Array = null;
+                if (--outstanding > 0) {
+                    return;
+                }
+                pending = _waiting;
                 _waiting = [];
                 _loading = false;
+                for each (callback in pending) {
+                    callback();
+                }
+            };
+            new URLLoaderApi().load(GLOBAL._mapURL + "playerkits", [], function(serverData:Object):void {
+                    takePlayerKits(serverData);
+                    done();
+                }, function(e:Event):void {
+                    done();
+                });
+            finish = function(e:Event):void {
+                var data:Object = null;
                 if (e.type == Event.COMPLETE) {
                     try {
                         data = JSON.parse(String(loader.data));
@@ -111,9 +195,7 @@ package com.monsters.kits {
                         LOGGER.Log("err", "InfernoKits: inferno-kits.json could not be read: " + err.message);
                     }
                 }
-                for each (callback in pending) {
-                    callback();
-                }
+                done();
             };
             loader = new URLLoader();
             loader.addEventListener(Event.COMPLETE, finish);
@@ -142,6 +224,10 @@ package com.monsters.kits {
             var last:int = 0;
             var i:int = 0;
             useBuiltIn();
+            if (GLOBAL.INFERNO_ONLY) {
+                // Pages 1-2: the server's kits. Page 3: the player's own three slots, always there to save into.
+                return int((PLAYER_FIRST - 1) / PER_PAGE) + 1;
+            }
             if (!_custom) {
                 return GLOBAL.kitPagingTest ? 2 : 1;
             }
@@ -156,6 +242,9 @@ package com.monsters.kits {
 
         /** kitID is 1-based. */
         public static function hasKit(kitID:int):Boolean {
+            if (isPlayerSlot(kitID)) {
+                return true;
+            }
             useBuiltIn();
             if (!_custom) {
                 return kitID >= 1 && kitID <= (GLOBAL.kitPagingTest ? MAX_KITS : 3);
@@ -169,6 +258,9 @@ package com.monsters.kits {
         }
 
         public static function kitName(kitID:int):String {
+            if (isPlayerSlot(kitID)) {
+                return playerKit(kitID) ? String(playerKit(kitID).name) : "Your Kit " + (kitID - PLAYER_FIRST + 1) + " (empty)";
+            }
             if (_custom && hasKit(kitID) && _custom[kitID - 1].name) {
                 return String(_custom[kitID - 1].name);
             }
@@ -176,10 +268,19 @@ package com.monsters.kits {
         }
 
         public static function thumbPath(kitID:int):String {
+            if (isPlayerSlot(kitID)) {
+                if (!playerKit(kitID)) {
+                    return null; // the popup shows the built-in empty-slot picture (io_kit_empty)
+                }
+                return playerKit(kitID).image ? "kits/player/" + playerKit(kitID).image + ".png" : null;
+            }
             return _custom ? "kits/kit-" + kitID + ".png?v=" + _version : "ui/prefab-" + (stockId(kitID) + 1) + ".v5.jpg";
         }
 
         public static function largePath(kitID:int):String {
+            if (isPlayerSlot(kitID)) {
+                return playerKit(kitID) && playerKit(kitID).image ? "kits/player/" + playerKit(kitID).image + "-large.png" : null;
+            }
             return _custom ? "kits/kit-" + kitID + "-large.png?v=" + _version : "ui/prefab-large-" + (stockId(kitID) + 1) + ".v5.jpg";
         }
 
@@ -187,15 +288,21 @@ package com.monsters.kits {
         private static const ROWS:Array = [
                 ["Sharpshooter/Blast", [21, 130]],
                 ["Quake/Magma Tower", [129, 132]],
+                ["Coil/Mortar", [144, 145]],
                 ["Blocks", [17]],
                 ["Booby Traps", [24]],
                 ["Compound", [128]],
                 ["Incubators", [13]],
-                ["Hatchery CC", [16]],
+                ["Incubation CS", [16]],
                 ["Monster Juicer", [9]],
                 ["Harvesters", [1, 2, 3, 4]],
                 ["Flinger", [5]]
             ];
+
+        /** How many rows the comparison table has (popup_prefab draws that many). */
+        public static function get rowCount():int {
+            return ROWS.length;
+        }
 
         /** Left column of the comparison table. One line per row, to line up with contentsText(). */
         public static function rowLabels():String {
@@ -251,8 +358,12 @@ package com.monsters.kits {
             var field:String = null;
             var copy:Object = null;
             var result:Object = {};
-            var source:Object = _custom[kitID - 1].buildings;
+            var source:Object = isPlayerSlot(kitID) ? (playerKit(kitID) ? playerKit(kitID).buildings : {}) : _custom[kitID - 1].buildings;
             for (key in source) {
+                if (isPlayerSlot(kitID) && int(source[key].t) != 112 && !GLOBAL.ioOutpostBuildable(int(source[key].t))) {
+                    // Decorations and anything an outpost cannot build are not part of a player kit.
+                    continue;
+                }
                 copy = {};
                 for (field in source[key]) {
                     copy[field] = source[key][field];
@@ -267,15 +378,56 @@ package com.monsters.kits {
          * every building costs to build and upgrade to its kit level (magma is left out, like the
          * stock kits) and prices the shiny buy-out with the stock kit formula.
          */
+        /**
+         * Player kits: every building's build and upgrade costs up to its level, times 2.5. The largest of
+         * the bone, coal and sulfur totals is the bone price and the coal price; sulfur is half of it.
+         * Player kits have no shiny buy-out; the fourth entry is kept only because every kit's cost list has one.
+         */
+        private static function playerKitCosts(kitID:int):Array {
+            var building:Object = null;
+            var props:Object = null;
+            var cost:Object = null;
+            var level:int = 0;
+            var total:Array = [0, 0, 0];
+            var kit:Object = playerKit(kitID);
+            if (kit) {
+                for each (building in kit.buildings) {
+                    // Every building an outpost can build, at every level up to its own; the hall is
+                    // already standing and decorations are not part of a player kit.
+                    props = int(building.t) == 112 || !GLOBAL.ioOutpostBuildable(int(building.t)) ? null : GLOBAL._buildingProps[int(building.t) - 1];
+                    if (!props || !props.costs) {
+                        continue;
+                    }
+                    level = 0;
+                    while (level < Math.max(1, int(building.prefab)) && level < props.costs.length) {
+                        cost = props.costs[level];
+                        total[0] += cost.r1.Get();
+                        total[1] += cost.r2.Get();
+                        total[2] += cost.r3.Get();
+                        level++;
+                    }
+                }
+            }
+            var main:int = Math.min(int.MAX_VALUE / 3, Math.ceil(Math.max(total[0], total[1], total[2]) * 2.5));
+            var sulfur:int = Math.ceil(main / 2);
+            var shiny:int = Math.max(1, Math.ceil(Math.sqrt((main + main + sulfur) / 2) * 0.75));
+            return [new SecNum(main), new SecNum(main), new SecNum(sulfur), new SecNum(shiny)];
+        }
+
         public static function customCosts(kitID:int):Array {
+            if (isPlayerSlot(kitID)) {
+                return playerKitCosts(kitID);
+            }
             var building:Object = null;
             var props:Object = null;
             var cost:Object = null;
             var level:int = 0;
             var total:Array = [0, 0, 0];
             var price:Object = _custom[kitID - 1].price;
+            // The shiny buy-out set on the server (InfernoOnlyConfig.prices.kits) wins over the kit file.
+            var shinyList:Array = GLOBAL.ioPriceList("kits");
             if (price && !(price is String)) {
-                return [new SecNum(int(price.r1)), new SecNum(int(price.r2)), new SecNum(int(price.r3)), new SecNum(int(price.shiny))];
+                return [new SecNum(int(price.r1)), new SecNum(int(price.r2)), new SecNum(int(price.r3)), new SecNum(shinyList && shinyList.length >= kitID ? int(shinyList[kitID - 1]) : int(price.shiny))];
             }
             for each (building in _custom[kitID - 1].buildings) {
                 // The outpost hall is already standing when a kit is bought.
@@ -291,6 +443,9 @@ package com.monsters.kits {
                     total[2] += cost.r3.Get();
                     level++;
                 }
+            }
+            if (shinyList && shinyList.length >= kitID) {
+                return [new SecNum(total[0]), new SecNum(total[1]), new SecNum(total[2]), new SecNum(int(shinyList[kitID - 1]))];
             }
             return [new SecNum(total[0]), new SecNum(total[1]), new SecNum(total[2]), new SecNum(Math.max(1, Math.ceil(Math.sqrt((total[0] + total[1] + total[2]) / 2) * 0.75)))];
         }

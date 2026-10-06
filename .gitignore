@@ -33,3 +33,15 @@ server/src/database/migrations/.snapshot*
 # Private scripts / sensitive
 server/src/scripts/anticheat/priv/*
 *server/src/scripts/mr3
+
+# Inferno-only: build artefacts and local data
+# (the launcher in server/public/client IS committed; the published game next to it is a build output)
+server/public/client/bymr-stable.swf
+server/backups/
+server/dump.rdb
+
+# Browser client: build outputs (client-web/node_modules and client-web/dist are covered above).
+# client-web/src/game and client-web/public/{swf,embed} are generated too but committed, so the
+# browser client builds without re-converting; publish-web regenerates them from client/scripts.
+server/public/web/
+server/public/web-dev/

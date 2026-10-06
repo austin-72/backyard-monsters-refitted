@@ -64,14 +64,6 @@ export class Message {
 
   @Property({ type: 'string', nullable: true })
   @FrontendKey
-  truceid: string | null = null;
-
-  @Property({ type: 'string', nullable: true })
-  @FrontendKey
-  trucestate: string | null = null;
-
-  @Property({ type: 'string', nullable: true })
-  @FrontendKey
   migratestate: string | null = null;
 
   @Property({ nullable: true, type: "json", columnType: "jsonb" })

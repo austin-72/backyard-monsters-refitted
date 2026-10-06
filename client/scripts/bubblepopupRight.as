@@ -53,7 +53,9 @@ package {
             var _loc5_:Rectangle = null;
             mcText.htmlText = param1;
             mcText.width = 20;
-            while (mcText.height > 20 * param2) {
+            // (grown until the text fits its lines; never past 700, so a text with more lines than asked
+            // for cannot hang the game)
+            while (mcText.height > 20 * param2 && mcText.width < 700) {
                 mcText.width += 2;
             }
             mcBG.width = mcText.width + 16;

@@ -42,6 +42,65 @@ package {
                 _mcBase.visible = false;
             }
             super.updateRasterData();
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioDrawDisarmed();
+            }
+        }
+
+        /**
+         * Inferno-only (3 October): a trap that went off stays in the yard, disarmed (drawn faded), until it is
+         * re-armed (IoTrapRearm: every disarmed trap at once, for what building them again costs). Saved as
+         * "fd": 1 in its building data; an attack's save marks the traps it set off so on the server
+         * (buildingDataHandler), where it used to drop them.
+         */
+        public function get ioDisarmed():Boolean {
+            return GLOBAL.INFERNO_ONLY && _fired;
+        }
+
+        public function ioDrawDisarmed():void {
+            var a:Number = this.ioDisarmed ? 0.4 : 1;
+            if (_mc) {
+                _mc.alpha = a;
+            }
+            if (_mcBase) {
+                _mcBase.alpha = a;
+            }
+            if (_rasterData) {
+                for each (var r:RasterData in _rasterData) {
+                    if (r) {
+                        r.alpha = a;
+                    }
+                }
+            }
+        }
+
+        /** Re-armed (IoTrapRearm): ready to go off again. */
+        public function ioRearm():void {
+            _fired = false;
+            _destroyed = false;
+            this._hasTargets = false;
+            this._retarget = 0;
+            setHealth(maxHealth);
+            this.ioDrawDisarmed();
+        }
+
+        override public function Setup(param1:Object):void {
+            super.Setup(param1);
+            if (GLOBAL.INFERNO_ONLY && param1 && int(param1.fd) == 1) {
+                // (its health was set to 0 when it went off: it isn't broken, only spent)
+                _fired = true;
+                _destroyed = false;
+                setHealth(maxHealth);
+                this.ioDrawDisarmed();
+            }
+        }
+
+        override public function Export():Object {
+            var o:Object = super.Export();
+            if (o && this.ioDisarmed) {
+                o.fd = 1;
+            }
+            return o;
         }
 
         override public function TickAttack():void {
@@ -74,6 +133,9 @@ package {
             for (_loc3_ in _loc8_) {
                 _loc1_ = this.creeps[_loc3_];
                 _loc2_ = _loc1_.creep;
+                if (Targeting.ioSkipsTraps(_loc2_)) {
+                    continue; // flyers (Balthazar is one) and Flickerfiend do not set traps off
+                }
                 _loc4_ = Number(_loc1_.dist);
                 _loc5_ = _loc1_.pos;
                 this._targetCreeps.push({
@@ -145,7 +207,12 @@ package {
             }
             setHealth(0);
             SOUNDS.Play("trap");
-            if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && _fired) {
+                // Inferno-only: set off in your own yard (a wild monster attack), it stays, disarmed
+                setHealth(maxHealth);
+                this.ioDrawDisarmed();
+            }
+            else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 RecycleC();
             }
         }

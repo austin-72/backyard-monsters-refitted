@@ -5,6 +5,7 @@ package {
     import com.monsters.monsters.champions.ChampionBase;
     import com.monsters.monsters.champions.Krallen;
     import com.monsters.monsters.creeps.CreepBase;
+    import com.monsters.monsters.creeps.inferno.MagmaPuddle;
     import flash.display.BitmapData;
     import flash.geom.Point;
     import flash.utils.getTimer;
@@ -108,6 +109,7 @@ package {
 
         public static function Tick():void {
             var _loc1_:int = getTimer();
+            MagmaPuddle.TickAll(); // Inferno-only: Clinkerjaw's healing puddles
 
             // Clear cache periodically to prevent memory bloat
             if (_loc1_ - _lastCacheClear > 30000) {
@@ -240,7 +242,7 @@ package {
             }
         }
 
-        public static function Spawn(param1:String, param2:*, param3:String, param4:Point, param5:Number, param6:Number = 1, param7:Boolean = false, param8:Boolean = false):MonsterBase {
+        public static function Spawn(param1:String, param2:*, param3:String, param4:Point, param5:Number, param6:Number = 1, param7:Boolean = false, param8:Boolean = false, param9:int = 0):MonsterBase {
             var _loc9_:MonsterBase = null;
             ++_creepID;
             if (!param8) {
@@ -252,7 +254,8 @@ package {
             if (!_loc10_) {
                 _loc10_ = CreepBase;
             }
-            _loc9_ = new _loc10_(param1, param3, param4, param5, 0, int.MAX_VALUE, null, false, null, param6, param7);
+            // param9: the monster's level (0: the usual rule, see CREATURES.GetProperty).
+            _loc9_ = new _loc10_(param1, param3, param4, param5, param9, int.MAX_VALUE, null, false, null, param6, param7);
             if (!BYMConfig.instance.RENDERER_ON) {
                 param2.addChild(_loc9_.graphic);
             }

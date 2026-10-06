@@ -53,6 +53,24 @@ package com.monsters.pathing {
 
         private static var _dirtyMaxY:int = int.MIN_VALUE;
 
+        // ---- fps pass (4 October) -------------------------------------------------------------------------
+        // The floods are kept in flat lists (PATHINGfloodobject.depth / edge, cell index x * 260 + y) and the
+        // cells' costs in _costGrid, a copy of _costs[].cost kept by Cost() and Tick(): one flood step used to
+        // make an object for every cell it reached and list every key of its edge again. And every pending
+        // flood was given at least 15 ms of every simulation step (two a frame), so a battle with ten new
+        // targets spent 300 ms a frame finding paths. Now all of them share FLOOD_BUDGET_MS a step, in turn.
+
+        /** Milliseconds of each simulation step the floods may use between them. */
+        private static const FLOOD_BUDGET_MS:int = 5;
+
+        private static var _costGrid:Vector.<int>;
+
+        /** The flood to start with next step (so that with many, each gets its turn). */
+        private static var _floodTurn:int = 0;
+
+        private static var _pendingList:Vector.<PATHINGfloodobject> = new Vector.<PATHINGfloodobject>();
+
+
         public function PATHING() {
             super();
         }
@@ -85,6 +103,10 @@ package com.monsters.pathing {
                     _costs[gridKey] = gridSpace;
                 }
             }
+            _costGrid = new Vector.<int>(_gridWidth * _gridHeight);
+            for (var c:int = 0; c < _costGrid.length; c++) {
+                _costGrid[c] = 10;
+            }
             _poolPathing = new Vector.<PATHINGobject>();
             _poolPathingB = new Vector.<PATHINGobject>();
             _poolPathingLength = 0;
@@ -103,6 +125,9 @@ package com.monsters.pathing {
                         _costs[gridKey].cost += regionCost;
                         if (_costs[gridKey].cost < 2)
                             _costs[gridKey].cost = 2;
+                        if (_costGrid) {
+                            _costGrid[xIdx * _gridHeight + yIdx] = _costs[gridKey].cost;
+                        }
 
                         if (xIdx < _dirtyMinX)
                             _dirtyMinX = xIdx;
@@ -150,6 +175,9 @@ package com.monsters.pathing {
                 for (var widthIdx:int = resetMinX; widthIdx <= resetMaxX; widthIdx++) {
                     for (var heightIdx:int = resetMinY; heightIdx <= resetMaxY; heightIdx++) {
                         _costs[widthIdx * 1000 + heightIdx].cost = 10;
+                        if (_costGrid) {
+                            _costGrid[widthIdx * _gridHeight + heightIdx] = 10;
+                        }
                     }
                 }
                 var allBuildings:Vector.<Object> = InstanceManager.getInstancesByClass(BFOUNDATION);
@@ -223,25 +251,27 @@ package com.monsters.pathing {
             }
             // Does no other monster have this target position?
             if (!_floods[gridKeyTarget]) {
-                var edgeArr:Object = {};
-                var floodFillArr:Object = {};
+                var newFlood:PATHINGfloodobject = new PATHINGfloodobject();
+                var cells:int = _gridWidth * _gridHeight;
+                newFlood.depth = new Vector.<int>(cells);
+                for (var c:int = 0; c < cells; c++) {
+                    newFlood.depth[c] = -1;
+                }
+                // the target's cells, at depth 0 (inside the grid)
                 for (var widthIdx:int = 0; widthIdx < gridTargetRect.width; widthIdx++) {
                     for (var heightIdx:int = 0; heightIdx < gridTargetRect.height; heightIdx++) {
-                        var initEdgeSpace:PATHINGobject = new PATHINGobject();
-                        initEdgeSpace.pointX = gridTargetRect.x + widthIdx;
-                        initEdgeSpace.pointY = gridTargetRect.y + heightIdx;
-                        initEdgeSpace.depth = 0;
-                        edgeArr[gridTargetRect.x + widthIdx * 1000 + gridTargetRect.y + heightIdx] = initEdgeSpace;
-                        var initFillSpace:PATHINGobject = new PATHINGobject();
-                        initFillSpace.pointX = gridTargetRect.x + widthIdx;
-                        initFillSpace.pointY = gridTargetRect.y + heightIdx;
-                        initFillSpace.depth = 0;
-                        floodFillArr[gridTargetRect.x + widthIdx * 1000 + gridTargetRect.y + heightIdx] = initFillSpace;
+                        var tx:int = gridTargetRect.x + widthIdx;
+                        var ty:int = gridTargetRect.y + heightIdx;
+                        if (tx < 0 || ty < 0 || tx >= _gridWidth || ty >= _gridHeight) {
+                            continue;
+                        }
+                        var ti:int = tx * _gridHeight + ty;
+                        if (newFlood.depth[ti] < 0) {
+                            newFlood.depth[ti] = 0;
+                            newFlood.edge.push(ti);
+                        }
                     }
                 }
-                var newFlood:PATHINGfloodobject = new PATHINGfloodobject();
-                newFlood.flood = floodFillArr;
-                newFlood.edge = edgeArr;
                 newFlood.ignoreWalls = ignoreWalls;
                 _floods[gridKeyTarget] = newFlood;
             }
@@ -269,147 +299,191 @@ package com.monsters.pathing {
         }
 
         /**
-         * Processes the flood fill pathfinding for all pending flood objects.
-         *
-         * Purpose:
-         * _______________________________________________________________
-         *
-         * - The `ProcessFlood` function iterates through all flood fill objects in `_floods`.
-         * - It performs pathfinding calculations on those marked as "pending," expanding the flood area step by step.
-         * - The function adjusts processing time based on the number of pending floods to maintain a balance in performance.
-         *
-         * Steps:
-         * _______________________________________________________________
-         *
-         * 1. Determine the number of pending flood objects and calculate the time slice (`timeSliceLimit`) allocated for processing each one.
-         *    - Ensures a minimum processing time to prevent resource starvation.
-         *
-         * 2. Iterate over each flood fill object (`currentFloodObject`) marked as pending.
-         *
-         * 3. For each pending flood object:
-         *    - Initialize processing variables such as `expandedPointsCount`, `pointsAddedCount`, and `newEdge`.
-         *    - Begin expanding the flood fill area by iterating over the current "edge" of the flood (`currentFloodObject.edge`).
-         *    - Evaluate neighboring points (`neighborX`, `neighborY`) for potential expansion.
-         *    - If a neighboring point (`neighborKey`) is not already part of the flood (`currentFloodObject.flood`):
-         *        - Calculate its movement cost (`movementCost`), considering factors like diagonal movement and wall ignoring.
-         *        - Create a new flood point (`newFloodPoint`) and update its depth based on the current point's depth and movement cost.
-         *        - Add the new flood point to the flood (`currentFloodObject.flood`) and include it in the edge for further expansion.
-         *        - Track the total number of points added (`pointsAddedCount`) and update `minDepth` if necessary.
-         *    - Update the flood's edge (`newEdge`) and adjust the minimum depth (`minDepth`).
-         *
-         * 4. Set the updated edge back to `currentFloodObject.edge` and check if the start point has been reached using `CheckStartReached`.
+         * Floods towards each target that monsters are waiting on (one flood per target cell, shared by every
+         * monster going there) until it reaches where they stand; then each gets its path (Path).
+         * All the pending floods share FLOOD_BUDGET_MS of each simulation step, at least 1 ms each, taking
+         * turns when there are many (fps pass, 4 October: each used to get at least 15 ms of every step).
          */
-
         private static function ProcessFlood(param1:Event = null):void {
-            var timeSliceLimit:int = 0;
-            var pendingFloodCount:int = 0;
             var currentFloodObject:PATHINGfloodobject = null;
-
-            // Count the number of pending flood objects
+            var list:Vector.<PATHINGfloodobject> = _pendingList;
+            var count:int = 0;
+            var stepStart:int = getTimer();
+            var slice:Number = 0;
+            var i:int = 0;
+            var k:int = 0;
+            var sliceStart:int = 0;
+            list.length = 0;
             for each (currentFloodObject in _floods) {
-                if (currentFloodObject.pending) {
-                    pendingFloodCount += 1;
+                if (currentFloodObject.pending > 0) {
+                    list.push(currentFloodObject);
                 }
             }
-
-            // Determine the time slice limit based on the number of pending flood fills
-            timeSliceLimit = 25 / pendingFloodCount;
-            if (timeSliceLimit < 15) {
-                timeSliceLimit = 15;
+            count = list.length;
+            if (count == 0) {
+                return;
             }
-
-            // Process each flood object
-            for each (currentFloodObject in _floods) {
-                if (!currentFloodObject.pending)
-                    continue;
-
-                // Continue processing within the allowed time slice
-                var timeSliceStart:int = getTimer();
-                while (getTimer() - timeSliceStart < timeSliceLimit && currentFloodObject.pending > 0) {
-                    var newEdge:Object = {};
-                    var minDepth:int = 9999999;
-
-                    // Expand the current edge of the flood fill
-                    for each (var currentEdgePoint:PATHINGobject in currentFloodObject.edge) {
-                        if (currentEdgePoint.depth <= currentFloodObject.minDepth) {
-                            var currentX:int = currentEdgePoint.pointX;
-                            var currentY:int = currentEdgePoint.pointY;
-
-                            // Check all neighboring points
-                            for (var neighborX:int = currentX - 1; neighborX < currentX + 2; neighborX++) {
-                                for (var neighborY:int = currentY - 1; neighborY < currentY + 2; neighborY++) {
-                                    // Skip the current point itself
-                                    if (neighborX == currentX && neighborY == currentY)
-                                        continue;
-
-                                    var neighborKey:int = neighborX * 1000 + neighborY;
-
-                                    // Check if the neighbor is already part of the flood
-                                    if (!currentFloodObject.flood[neighborKey] && _costs[neighborKey]) {
-                                        var newFloodPoint:PATHINGobject = new PATHINGobject();
-                                        newFloodPoint.pointX = neighborX;
-                                        newFloodPoint.pointY = neighborY;
-
-                                        // Calculate movement cost
-                                        var movementCost:int = _costs[neighborKey].cost;
-                                        if (currentFloodObject.ignoreWalls && _costs[neighborKey].building) {
-                                            movementCost = 20;
-                                        }
-
-                                        // Increase cost for diagonal movement
-                                        if (neighborX != currentEdgePoint.pointX && neighborY != currentEdgePoint.pointY) {
-                                            movementCost *= 1.5;
-                                        }
-
-                                        // Set the depth for the new flood point
-                                        newFloodPoint.depth = currentEdgePoint.depth + movementCost;
-                                        if (newFloodPoint.depth < minDepth) {
-                                            minDepth = newFloodPoint.depth;
-                                        }
-
-                                        // Add the new point to the flood and edge
-                                        newEdge[neighborKey] = newFloodPoint;
-                                        currentFloodObject.flood[neighborKey] = newFloodPoint;
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            newEdge[currentEdgePoint.pointID] = currentEdgePoint;
-                            if (currentEdgePoint.depth < minDepth) {
-                                minDepth = currentEdgePoint.depth;
-                            }
-                        }
+            // the step's budget shared out, each flood at least 1 ms; the one after the last served goes first
+            slice = Math.max(1, FLOOD_BUDGET_MS / count);
+            _floodTurn %= count;
+            k = 0;
+            while (k < count) {
+                if (getTimer() - stepStart >= FLOOD_BUDGET_MS && k > 0) {
+                    break;
+                }
+                i = (_floodTurn + k) % count;
+                currentFloodObject = list[i];
+                sliceStart = getTimer();
+                do {
+                    if (!ExpandFlood(currentFloodObject)) {
+                        // nothing left to reach: whatever still waits can never be reached; it goes straight there
+                        CheckStartReached(currentFloodObject);
+                        GiveUp(currentFloodObject);
+                        break;
                     }
-                    // Update the current edge and minimum depth
-                    currentFloodObject.edge = newEdge;
-                    currentFloodObject.minDepth = minDepth;
-
-                    // Check if the flood fill has reached the start point
                     CheckStartReached(currentFloodObject);
                 }
+                while (currentFloodObject.pending > 0 && getTimer() - sliceStart < slice);
+                k++;
             }
+            _floodTurn = (_floodTurn + k) % Math.max(1, count);
+        }
+
+        /**
+         * One round of the flood (as before): every cell of the edge at the lowest depth so far reaches its 8
+         * neighbours not yet flooded (diagonals cost 1.5 times as much); the others wait on the edge.
+         * False when the edge is empty (the whole grid is flooded).
+         */
+        private static function ExpandFlood(f:PATHINGfloodobject):Boolean {
+            var edge:Vector.<int> = f.edge;
+            var next:Vector.<int> = f.edgeNext;
+            var depth:Vector.<int> = f.depth;
+            var costs:Vector.<int> = _costGrid;
+            var n:int = edge.length;
+            var minDepth:int = 9999999;
+            var limit:int = f.minDepth;
+            var gw:int = _gridWidth;
+            var gh:int = _gridHeight;
+            var i:int = 0;
+            var idx:int = 0;
+            var d:int = 0;
+            var cx:int = 0;
+            var cy:int = 0;
+            var nx:int = 0;
+            var ny:int = 0;
+            var ni:int = 0;
+            var cost:int = 0;
+            var nd:int = 0;
+            var cell:Object = null;
+            if (n == 0) {
+                return false;
+            }
+            next.length = 0;
+            while (i < n) {
+                idx = edge[i++];
+                d = depth[idx];
+                if (d <= limit) {
+                    cx = int(idx / gh);
+                    cy = idx - cx * gh;
+                    nx = cx - 1;
+                    while (nx <= cx + 1) {
+                        if (nx >= 0 && nx < gw) {
+                            ny = cy - 1;
+                            while (ny <= cy + 1) {
+                                if (ny >= 0 && ny < gh && !(nx == cx && ny == cy)) {
+                                    ni = nx * gh + ny;
+                                    if (depth[ni] < 0) {
+                                        cost = costs[ni];
+                                        if (f.ignoreWalls) {
+                                            cell = _costs[nx * 1000 + ny];
+                                            if (Boolean(cell) && Boolean(cell.building)) {
+                                                cost = 20;
+                                            }
+                                        }
+                                        if (nx != cx && ny != cy) {
+                                            cost = int(cost * 1.5);
+                                        }
+                                        nd = d + cost;
+                                        depth[ni] = nd;
+                                        next.push(ni);
+                                        if (nd < minDepth) {
+                                            minDepth = nd;
+                                        }
+                                    }
+                                }
+                                ny++;
+                            }
+                        }
+                        nx++;
+                    }
+                }
+                else {
+                    next.push(idx);
+                    if (d < minDepth) {
+                        minDepth = d;
+                    }
+                }
+            }
+            f.edgeNext = edge;
+            f.edge = next;
+            f.minDepth = minDepth;
+            return true;
+        }
+
+        /** A flood with nothing left to reach and callers still waiting: they go straight to the target. */
+        private static function GiveUp(floodFill:PATHINGfloodobject):void {
+            var pathingStart:Object = null;
+            var callback:Array = null;
+            var waiting:Array = [];
+            for each (pathingStart in floodFill.startpoints) {
+                if (pathingStart) {
+                    waiting.push(pathingStart);
+                }
+            }
+            for each (pathingStart in waiting) {
+                for each (callback in pathingStart.callbackfunctions) {
+                    --floodFill.pending;
+                    callback[0](callback[3] ? [ToISO(LocalGlobal(new Point(pathingStart.startPoint.x, pathingStart.startPoint.y)), 0), callback[3]] : [], callback[2]);
+                }
+                pathingStart.callbackfunctions = [];
+                delete floodFill.startpoints[pathingStart.startID];
+            }
+            floodFill.pending = 0;
         }
 
         private static function CheckStartReached(floodFill:PATHINGfloodobject):int {
             var pathingStart:Object = null;
             var callback:Array = null;
             var found:int = 0;
+            var reached:Array = null;
             for each (pathingStart in floodFill.startpoints) {
-                if (Boolean(pathingStart) && Boolean(floodFill.flood[pathingStart.startID])) {
-                    for each (callback in pathingStart.callbackfunctions) {
-                        Path(floodFill.flood, pathingStart.startID, callback[0], callback[1], callback[2], callback[3]);
-                        --floodFill.pending;
-                        found += 1;
-                    }
-                    pathingStart.callbackfunctions = [];
-                    delete floodFill.startpoints[pathingStart.startID];
+                if (Boolean(pathingStart) && depthAt(floodFill, pathingStart.startID) >= 0) {
+                    (reached = reached || []).push(pathingStart);
                 }
+            }
+            for each (pathingStart in reached) {
+                for each (callback in pathingStart.callbackfunctions) {
+                    Path(floodFill, pathingStart.startID, callback[0], callback[1], callback[2], callback[3]);
+                    --floodFill.pending;
+                    found += 1;
+                }
+                pathingStart.callbackfunctions = [];
+                delete floodFill.startpoints[pathingStart.startID];
             }
             return found;
         }
 
-        public static function Path(floodFill:Object, startId:int, callback:Function, ignoreWalls:Boolean = false, targetBuilding:BFOUNDATION = null, originalTarget:Point = null):void {
+        /** Depth of the flood at a grid key (x * 1000 + y), -1 outside it. */
+        private static function depthAt(f:PATHINGfloodobject, gridKey:int):int {
+            var x:int = int(gridKey / 1000);
+            var y:int = gridKey - x * 1000;
+            if (x < 0 || y < 0 || x >= _gridWidth || y >= _gridHeight) {
+                return -1;
+            }
+            return f.depth[x * _gridHeight + y];
+        }
+
+        public static function Path(flood:PATHINGfloodobject, startId:int, callback:Function, ignoreWalls:Boolean = false, targetBuilding:BFOUNDATION = null, originalTarget:Point = null):void {
             var startX:int = 0;
             var startY:int = 0;
             var gridPoint:Point = new Point(0, 0);
@@ -419,10 +493,11 @@ package com.monsters.pathing {
             var foundLowerDepth:Boolean = false;
             var buildPath:Boolean = false;
             var path:Array = [];
-            if (floodFill[startId]) {
-                startX = floodFill[startId].pointX;
-                startY = floodFill[startId].pointY;
-                currentDepth = floodFill[startId].depth;
+            var nd:int = 0;
+            if (depthAt(flood, startId) >= 0) {
+                startX = int(startId / 1000);
+                startY = startId - startX * 1000;
+                currentDepth = depthAt(flood, startId);
                 path.push(ToISO(LocalGlobal(new Point(startX, startY)), 0));
                 buildPath = true;
             }
@@ -436,11 +511,12 @@ package com.monsters.pathing {
                         gridPoint.x = startX + offsetX;
                         gridPoint.y = startY + offsetY;
                         var gridKey:int = gridPoint.x * 1000 + gridPoint.y;
-                        if (floodFill[gridKey] && floodFill[gridKey].depth < currentDepth && floodFill[gridKey].depth > 0) {
+                        nd = depthAt(flood, gridKey);
+                        if (nd >= 0 && nd < currentDepth && nd > 0) {
                             currentX = gridPoint.x;
                             currentY = gridPoint.y;
                             foundLowerDepth = true;
-                            currentDepth = floodFill[gridKey].depth;
+                            currentDepth = nd;
                             buildPath = true;
                             if (!ignoreWalls && path.length > 1 && _costs[gridKey]) {
                                 var wall:BFOUNDATION = _costs[gridKey].building;
@@ -460,7 +536,8 @@ package com.monsters.pathing {
                                                 continue;
 
                                             var nearbyGridKey:int = (currentX + nearbyOffsetX) * 1000 + currentY + nearbyOffsetY;
-                                            if (floodFill[nearbyGridKey] && floodFill[nearbyGridKey].depth < 20 && floodFill[nearbyGridKey].depth > 0) {
+                                            nd = depthAt(flood, nearbyGridKey);
+                                            if (nd >= 0 && nd < 20 && nd > 0) {
                                                 nearbyGridSpaces.push(new Point(currentX + nearbyOffsetX, currentY + nearbyOffsetY));
                                             }
                                         }

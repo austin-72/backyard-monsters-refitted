@@ -55,5 +55,10 @@ package com.monsters.monsters.components.abilities {
         override public function clone():Component {
             return new Zombiefy(this.m_moveSpeedModifier.multiple, this.m_maxHealthModifier.multiple, this.m_damageModifier.multiple);
         }
+
+        /** Inferno-only: the same, with another health multiple (Rezghul raises a champion at a quarter of its health). */
+        public function ioCloneWithHealth(param1:Number):Component {
+            return new Zombiefy(this.m_moveSpeedModifier.multiple, param1, this.m_damageModifier.multiple);
+        }
     }
 }

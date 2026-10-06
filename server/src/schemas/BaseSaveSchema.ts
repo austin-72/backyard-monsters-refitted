@@ -3,6 +3,18 @@ import { ChampionListSchema } from "./ChampionSchema.js";
 import type { Resources } from "../services/base/updateResources.js";
 
 /**
+ * JSON sent by the client, or undefined when it isn't JSON (the browser build sends a missing value as
+ * the text "undefined"): one bad field is then left out of the save instead of failing it with a 500.
+ */
+const parseJson = (data: string): any => {
+  try {
+    return JSON.parse(data);
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * Schema for validating and transforming base save data.
  * The client sends data stringified, or in unexpected ways, so we need to transform it.
  * Add more properties as needed and handle accordingly.
@@ -31,7 +43,7 @@ export const BaseSaveSchema = z.object({
     .string()
     .optional()
     .transform((data) =>
-      data ? (JSON.parse(data) as [string, number]) : undefined
+      data ? (parseJson(data) as [string, number]) : undefined
     ),
 
   /**
@@ -55,7 +67,7 @@ export const BaseSaveSchema = z.object({
   buildingdata: z
     .string()
     .optional()
-    .transform((data) => (data ? JSON.parse(data) : undefined)),
+    .transform((data) => (data ? parseJson(data) : undefined)),
 
   /**
    * The building health data, transformed from a JSON string to an object.
@@ -65,7 +77,7 @@ export const BaseSaveSchema = z.object({
   buildinghealthdata: z
     .string()
     .optional()
-    .transform((data) => (data ? JSON.parse(data) : undefined)),
+    .transform((data) => (data ? parseJson(data) : undefined)),
 
   /**
    * The monster update data, transformed from a JSON string to an array of objects.
@@ -76,7 +88,7 @@ export const BaseSaveSchema = z.object({
   monsterupdate: z
     .string()
     .optional()
-    .transform((data) => (data ? JSON.parse(data) : undefined)),
+    .transform((data) => (data ? parseJson(data) : undefined)),
 
   /**
    * The attack loot data, transformed from a JSON string to an object.
@@ -86,7 +98,7 @@ export const BaseSaveSchema = z.object({
   attackloot: z
     .string()
     .optional()
-    .transform((data) => (data ? (JSON.parse(data) as Resources) : undefined)),
+    .transform((data) => (data ? (parseJson(data) as Resources) : undefined)),
 
   /**
    * The resource delta for the base being saved. During an attack this is the
@@ -96,7 +108,7 @@ export const BaseSaveSchema = z.object({
   resources: z
     .string()
     .optional()
-    .transform((data) => (data ? (JSON.parse(data) as Resources) : undefined)),
+    .transform((data) => (data ? (parseJson(data) as Resources) : undefined)),
 
   /**
    * The monsters data, transformed from a JSON string to an object.
@@ -106,7 +118,7 @@ export const BaseSaveSchema = z.object({
   monsters: z
     .string()
     .optional()
-    .transform((data) => (data ? JSON.parse(data) : undefined)),
+    .transform((data) => (data ? parseJson(data) : undefined)),
 
   /**
    * The attack creatures data, transformed from a JSON string to an object.
@@ -116,12 +128,12 @@ export const BaseSaveSchema = z.object({
   attackcreatures: z
     .string()
     .optional()
-    .transform((data) => (data ? JSON.parse(data) : undefined)),
+    .transform((data) => (data ? parseJson(data) : undefined)),
 
   attackersiege: z
     .string()
     .optional()
-    .transform((data) => (data ? JSON.parse(data) : undefined)),
+    .transform((data) => (data ? parseJson(data) : undefined)),
 
   /**
    * The 'over' property, which indicates a state.

@@ -1,4 +1,5 @@
 package {
+    import com.monsters.display.IoLockIcon;
     import com.monsters.display.ImageCache;
     import com.monsters.managers.InstanceManager;
     import flash.display.Bitmap;
@@ -43,7 +44,7 @@ package {
             super();
             if (BASE.isInfernoMainYardOrOutpost) {
                 _monsterString = "IC";
-                _maxMonsters = CREATURELOCKER.NUM_ICREEP_TYPE;
+                _maxMonsters = GLOBAL.INFERNO_ONLY ? ioRoster().length : CREATURELOCKER.NUM_ICREEP_TYPE;
                 if (_page > _maxMonsters) {
                     _page = 1;
                 }
@@ -91,9 +92,9 @@ package {
                 }
             }
             if (ACADEMY._building._upgrading) {
-                _page = int(String(ACADEMY._building._upgrading).substr(ACADEMY._building._upgrading.indexOf("C") + 1));
+                _page = ioPageOf(String(ACADEMY._building._upgrading));
             }
-            this.Setup(_monsterString + _page);
+            this.Setup(pageID(_page));
             speed_txt.htmlText = "<b>" + KEYS.Get("acad_att_speed") + "</b>";
             health_txt.htmlText = "<b>" + KEYS.Get("acad_att_health") + "</b>";
             damage_txt.htmlText = "<b>" + KEYS.Get("acad_att_damage") + "</b>";
@@ -118,11 +119,16 @@ package {
 
         private function UpdatePortrait(param1:String, param2:BitmapData, param3:Array):void {
             if (Boolean(this._portraitImage) && Boolean(this._portraitImage.parent)) {
+                IoLockIcon.unmark(this._portraitImage);
                 this._portraitImage.parent.removeChild(this._portraitImage);
                 this._portraitImage = null;
             }
             if (param3[0] == _monsterID) {
                 this._portraitImage = mcImage.addChild(new Bitmap(param2));
+                if (GLOBAL.INFERNO_ONLY) {
+                    // a monster not unlocked yet in the Strongbox: the padlock in the portrait's corner
+                    IoLockIcon.mark(this._portraitImage, IoLockIcon.lockedMonster(_monsterID), true, "corner", false);
+                }
             }
         }
 
@@ -370,8 +376,19 @@ package {
             var monsterName:String = null;
             var popupMC:popup_monster = null;
             var e:MouseEvent = param1;
+            // Inferno-only: checked again on the click, as the training button is (a second click, or one after
+            // the shiny confirmation, trained past the level the Academy allows, or past the last level)
+            if (GLOBAL.INFERNO_ONLY && !ioCanTrainNow()) {
+                this.Setup(_monsterID);
+                return;
+            }
             if (BASE._credits.Get() < _instantUpgradeCost) {
                 POPUPS.DisplayGetShiny();
+                return;
+            }
+            if (!GLOBAL.ioConfirmShiny(_instantUpgradeCost, "to finish this training now", function():void {
+                        InstantMonsterUpgrade(e);
+                    })) {
                 return;
             }
             if (GLOBAL.player.m_upgrades[_monsterID].time) {
@@ -422,6 +439,17 @@ package {
                 POPUPS.Push(popupMC, null, null, null, "" + _monsterID + "-150.png");
             }
             BASE.Purchase("ITR", _instantUpgradeCost, "academy");
+            if (GLOBAL.INFERNO_ONLY) {
+                this.Setup(_monsterID);
+            }
+        }
+
+        /* Inferno-only: may this monster be trained a level now (with sulfur or shiny)? What the training button
+         * asks: unlocked, below its last level and the Academy's, not training, the Academy free. Short of
+         * sulfur is fine here: shiny pays for it all. */
+        private function ioCanTrainNow():Boolean {
+            var check:Object = ACADEMY.StartMonsterUpgrade(_monsterID, true);
+            return !check.error || check.status == KEYS.Get("acad_err_putty") || check.status == KEYS.Get("acad_err_sulfur");
         }
 
         public function CancelMonsterUpgrade(param1:MouseEvent):void {
@@ -446,9 +474,9 @@ package {
                     _page = _maxMonsters;
                 }
             }
-            while (this.CheckMonsterLock(_monsterString + _page) == true);
+            while (this.CheckMonsterLock(pageID(_page)) == true);
 
-            if (this.CheckMonsterLock(_monsterString + _page)) {
+            if (this.CheckMonsterLock(pageID(_page))) {
                 if (lastAction > 0) {
                     this.Next();
                 }
@@ -457,7 +485,7 @@ package {
                 }
             }
             else {
-                this.Setup(_monsterString + _page);
+                this.Setup(pageID(_page));
             }
         }
 
@@ -469,9 +497,9 @@ package {
                     _page = 1;
                 }
             }
-            while (this.CheckMonsterLock(_monsterString + _page) == true);
+            while (this.CheckMonsterLock(pageID(_page)) == true);
 
-            if (this.CheckMonsterLock(_monsterString + _page)) {
+            if (this.CheckMonsterLock(pageID(_page))) {
                 if (lastAction > 0) {
                     this.Next();
                 }
@@ -480,8 +508,42 @@ package {
                 }
             }
             else {
-                this.Setup(_monsterString + _page);
+                this.Setup(pageID(_page));
             }
+        }
+
+        /**
+         * Inferno-only: the academy's pages. The stock Inferno academy paged through IC1-IC8 by number,
+         * which left out Rezghul (C19) and has no room for Korath, Drull and Ashkarr (IC9, IC10, IC24).
+         */
+        private static function ioRoster():Array {
+            var roster:Array = ["IC1", "IC2", "IC15", "IC3", "IC4", "IC12", "IC5", "IC6", "IC7", "IC14", "IC8", "IC20"];
+            var id:String = null;
+            // Rezghul between King Wormzer and the Emberghoul, as in every other list (29 September)
+            if (CREATURELOCKER._creatures[CREATURELOCKER.REZGHUL_ID] && !CREATURELOCKER._creatures[CREATURELOCKER.REZGHUL_ID].blocked) {
+                roster.splice(roster.indexOf("IC8") + 1, 0, CREATURELOCKER.REZGHUL_ID);
+            }
+            for each (id in [CREATURELOCKER.KORATH_ID, CREATURELOCKER.DRULL_ID, CREATURELOCKER.ASHKARR_ID, CREATURELOCKER.RIMEGRAVE_ID]) {
+                if (CREATURELOCKER._creatures[id] && !CREATURELOCKER._creatures[id].blocked) {
+                    roster.push(id);
+                }
+            }
+            return roster;
+        }
+
+        private static function pageID(param1:int):String {
+            if (GLOBAL.INFERNO_ONLY && BASE.isInfernoMainYardOrOutpost) {
+                var roster:Array = ioRoster();
+                return roster[Math.max(0, Math.min(param1, roster.length) - 1)];
+            }
+            return _monsterString + param1;
+        }
+
+        private static function ioPageOf(param1:String):int {
+            if (GLOBAL.INFERNO_ONLY && BASE.isInfernoMainYardOrOutpost) {
+                return Math.max(1, ioRoster().indexOf(param1) + 1);
+            }
+            return int(param1.substr(param1.indexOf("C") + 1));
         }
 
         public function CheckMonsterLock(param1:String):Boolean {

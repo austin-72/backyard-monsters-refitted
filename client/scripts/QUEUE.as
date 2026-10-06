@@ -35,12 +35,13 @@ package {
                     _workerCount = WORKERS._workers.length;
                     return;
                 }
-                if (param1 > 1) {
-                    param1 = 1;
+                // (Inferno: an outpost has 2 workers, GLOBAL.ioOutpostWorkers)
+                if (param1 > GLOBAL.ioOutpostWorkers()) {
+                    param1 = GLOBAL.ioOutpostWorkers();
                 }
             }
             if (param1 == 0) {
-                param1 = 1;
+                param1 = BASE.isMainYard ? 1 : GLOBAL.ioOutpostWorkers();
                 if (STORE._storeData.BEW) {
                     if (!BASE.isMainYard) {
                         if (STORE._storeData.BEW.q > 0) {
@@ -77,6 +78,10 @@ package {
         public static function CanDo():Object {
             var errorName:String = null;
             var stackIndex:int = 0;
+            // Admin test mode (and the Designer): builds finish at once, so a worker is always free.
+            if (GLOBAL.ioFreeBuild()) {
+                return {"error": false, "errormessage": ""};
+            }
             while (stackIndex < _stack.length) {
                 if (!_stack[stackIndex].active) {
                     return {
@@ -86,7 +91,11 @@ package {
                 }
                 stackIndex++;
             }
-            if (!STORE.CheckUpgrade("BEW")) {
+            if (GLOBAL.INFERNO_ONLY && BASE.isOutpostOrInfernoOutpost) {
+                // (bug report B24: an outpost has its own workers (2); no General Store to hire another)
+                errorName = KEYS.Get("ui_worker_waitforfinish");
+            }
+            else if (!STORE.CheckUpgrade("BEW")) {
                 if (GLOBAL._bStore) {
                     errorName = KEYS.Get("ui_worker_busy");
                 }
@@ -120,7 +129,7 @@ package {
             var _loc2_:int = 0;
             var _loc3_:int = 0;
             var _loc4_:BFOUNDATION = null;
-            if (!BASE.isMainYard) {
+            if (!BASE.isMainYard && GLOBAL.ioOutpostWorkers() == 1) {
                 if (_stack[0].active) {
                     return _stack[0].building;
                 }
@@ -130,7 +139,8 @@ package {
             _loc2_ = 2000000000;
             _loc3_ = 0;
             while (_loc3_ < _stack.length) {
-                if ((_loc4_ = _stack[_loc3_].building)._type != 7 && _loc4_._countdownUpgrade.Get() + _loc4_._countdownBuild.Get() + _loc4_._countdownFortify.Get() < _loc2_) {
+                // (Inferno: an outpost's worker may be idle, with no building)
+                if ((_loc4_ = _stack[_loc3_].building) != null && _loc4_._type != 7 && _loc4_._countdownUpgrade.Get() + _loc4_._countdownBuild.Get() + _loc4_._countdownFortify.Get() < _loc2_) {
                     _loc1_ = _loc4_;
                     _loc2_ = _loc4_._countdownUpgrade.Get() + _loc4_._countdownBuild.Get() + _loc4_._countdownFortify.Get();
                 }
@@ -144,7 +154,7 @@ package {
             var _loc1_:BFOUNDATION = GetBuilding();
             if (_loc1_) {
                 _loc2_ = _loc1_._countdownUpgrade.Get() + _loc1_._countdownBuild.Get() + _loc1_._countdownFortify.Get();
-                return STORE.GetTimeCost(_loc2_);
+                return STORE.ioBuildingTimeCost(_loc2_);
             }
             return 0;
         }

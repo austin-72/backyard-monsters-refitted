@@ -20,7 +20,7 @@ import type { KoaController } from "../../../../utils/KoaController.js";
  *   worldid   The uuid of an existing world. Required.
  *
  * Body
- *   640,000 bytes of application/octet-stream. One unsigned byte per cell,
+ *   WIDTH x HEIGHT bytes (160,000 at 400 x 400) of application/octet-stream. One unsigned byte per cell,
  *   indexed x * height + y over the fixed MapRoom2.WIDTH x MapRoom2.HEIGHT grid.
  *
  * Encoding

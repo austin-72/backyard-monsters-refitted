@@ -2,6 +2,9 @@ package {
     import com.cc.utils.SecNum;
     import com.monsters.display.BuildingAssetContainer;
     import com.monsters.display.ImageCache;
+    import com.monsters.display.IoMenuArt;
+    import flash.display.Shape;
+    import flash.geom.Rectangle;
     import com.monsters.inventory.InventoryManager;
     import com.monsters.managers.InstanceManager;
     import flash.display.Bitmap;
@@ -454,6 +457,12 @@ package {
                         POPUPS.DisplayGetShiny();
                         return;
                     }
+                    // Inferno-only: a building bought with shiny (charged when it is placed).
+                    if (!GLOBAL.ioConfirmShiny(STORE._storeItems["BUILDING" + this._building._type].c[0], "to build this", function():void {
+                                ActionResourceBuild(param1);
+                            })) {
+                        return;
+                    }
                 }
                 if (_loc5_.needResource) {
                     _loc3_ = 0;
@@ -597,18 +606,24 @@ package {
                 GLOBAL.Message(_loc5_.errorMessage);
             }
             else {
-                if ((_loc7_ = int(_loc6_.time.Get())) <= 300) {
+                if ((_loc7_ = int(_loc6_.time.Get())) <= (GLOBAL.INFERNO_ONLY ? GLOBAL.ioCloseEnough : 300)) {
                     _loc7_ = 0;
                 }
                 _loc8_ = _loc6_.r1.Get() + _loc6_.r2.Get() + _loc6_.r3.Get();
                 _loc9_ = Math.ceil(Math.pow(Math.sqrt(_loc8_ / 2), 0.75));
-                _loc10_ = STORE.GetTimeCost(_loc7_);
+                _loc10_ = STORE.ioBuildingTimeCost(_loc7_);
                 _loc11_ = _loc9_ + _loc10_;
                 if ((_loc11_ = int(_loc11_ * 0.95)) <= 5) {
                     _loc11_ = 5;
                 }
                 if (_loc11_ > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
+                    return;
+                }
+                // Inferno-only: asked here, before the building is placed (charged when it is put down).
+                if (!GLOBAL.ioConfirmShiny(_loc11_, "to build this instantly", function():void {
+                            ActionInstantBuild(param1);
+                        })) {
                     return;
                 }
                 if (BASE.addBuildingB(this._building._type, true)) {
@@ -624,6 +639,11 @@ package {
             if (Boolean(_loc2_.error) && !_loc2_.needResource) {
                 GLOBAL.Message(_loc2_.errorMessage);
             }
+            else if (!GLOBAL.ioConfirmShiny(this._building.InstantUpgradeCost(), "to upgrade this instantly", function():void {
+                        ActionInstantUpgrade(param1);
+                    })) {
+                return;
+            }
             else if (this._building.DoInstantUpgrade()) {
                 BUILDINGOPTIONS.Hide();
             }
@@ -633,6 +653,11 @@ package {
             var _loc2_:Object = BASE.CanFortify(this._building);
             if (Boolean(_loc2_.error) && !_loc2_.needResource) {
                 GLOBAL.Message(_loc2_.errorMessage);
+            }
+            else if (!GLOBAL.ioConfirmShiny(this._building.InstantFortifyCost(), "to fortify this instantly", function():void {
+                        ActionInstantFortify(param1);
+                    })) {
+                return;
             }
             else if (this._building.DoInstantFortify()) {
                 BUILDINGOPTIONS.Hide();
@@ -666,6 +691,11 @@ package {
             else if (BASE._pendingPurchase.length == 0) {
                 if (_loc4_ > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
+                }
+                else if (!GLOBAL.ioConfirmShiny(_loc4_, "to make up the missing resources and upgrade", function():void {
+                            TopoffUpgrade(param1);
+                        })) {
+                    return;
                 }
                 else {
                     _loc8_ = 1;
@@ -715,6 +745,11 @@ package {
             else if (_loc8_ > BASE._credits.Get()) {
                 POPUPS.DisplayGetShiny();
             }
+            else if (!GLOBAL.ioConfirmShiny(_loc8_, "to make up the missing resources and build", function():void {
+                        TopoffBuild(param1);
+                    })) {
+                return;
+            }
             else {
                 BASE.Purchase("BRTOPUP", _loc8_, "BUILDINGOPTIONS.TopoffBuild");
                 _loc7_ = 1;
@@ -754,6 +789,11 @@ package {
                 if (_loc4_ > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
                 }
+                else if (!GLOBAL.ioConfirmShiny(_loc4_, "to make up the missing resources and fortify", function():void {
+                            TopoffFortify(param1);
+                        })) {
+                    return;
+                }
                 else {
                     _loc6_ = 1;
                     while (_loc6_ < 5) {
@@ -787,6 +827,20 @@ package {
             var j:int = 0;
             var str:String = param1;
             var buildingProps:Object = GLOBAL._buildingProps[this._building._type - 1];
+            if (str != "fortify" && GLOBAL.INFERNO_ONLY && IoMenuArt.OVERWORLD_PICTURES[int(this._building._type)] && IoMenuArt.wanted(buildingProps)) {
+                // Inferno-only: a building with Inferno yard art and only the overworld's picture is drawn from its
+                // yard art, at the level it is (or is being upgraded to)
+                var artLevel:int = Math.max(1, this._building._lvl.Get() + (str == "upgrade" ? 1 : 0));
+                var locked:Boolean = this._building._lvl.Get() == 0 && buildingProps.costs && buildingProps.costs[0] && !BASE.HasRequirements(buildingProps.costs[0]) && !buildingProps.rewarded;
+                imageContainer.Clear();
+                var paper:Shape = new Shape();
+                paper.graphics.beginFill(0xFFFFFF);
+                paper.graphics.drawRect(0, 0, 120, 160);
+                paper.graphics.endFill();
+                imageContainer.addChild(paper);
+                imageContainer.addChild(new IoMenuArt(buildingProps, artLevel, new Rectangle(0, 10, 120, 145), locked));
+                return "";
+            }
             if (str == "fortify") {
                 FortifyImageLoaded = function(param1:String, param2:BitmapData):void {
                     imageContainer.Clear();
@@ -883,6 +937,14 @@ package {
                 }
                 else {
                     img = "buildingbuttons/" + this._building._type + ".jpg";
+                    // Inferno-only: the Chaos Factory's and Lab's pictures have names of their own (133.jpg and
+                    // 134.jpg don't exist: their window showed an empty frame)
+                    if (GLOBAL.INFERNO_ONLY && this._building._type == 133) {
+                        img = "buildingbuttons/seige_factory.jpg";
+                    }
+                    else if (GLOBAL.INFERNO_ONLY && this._building._type == 134) {
+                        img = "buildingbuttons/siege_lab.jpg";
+                    }
                 }
                 ImageCache.GetImageWithCallBack(img, DefaultImageLoaded);
             }

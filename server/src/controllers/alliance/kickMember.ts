@@ -1,9 +1,10 @@
 import { Status } from "../../enums/StatusCodes.js";
-import { AllianceMessageType } from "../../enums/Alliance.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+import { AllianceMessageType, AllianceRole } from "../../enums/Alliance.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { MemberActionSchema } from "../../schemas/AllianceSchemas.js";
-import { requireAllianceLeader } from "../../services/alliance/allianceAccess.js";
+import { requireAllianceLeader, requireAllianceStaff } from "../../services/alliance/allianceAccess.js";
 import { removeAllianceMember } from "../../services/alliance/membership.js";
 import { cannotKickErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
@@ -17,13 +18,16 @@ export const kickMember: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
   const { userid } = MemberActionSchema.parse(ctx.request.body);
 
-  const alliance = await requireAllianceLeader(user);
+  // (Inferno-only: officers kick too, but only members: not the leader or another officer)
+  const alliance = infernoOnlyConfig.enabled ? await requireAllianceStaff(user) : await requireAllianceLeader(user);
 
   if (userid === user.userid) throw cannotKickErr();
 
   const member = await postgres.em.findOne(User, { userid });
 
   if (!member || member.alliance_id !== alliance.id) throw cannotKickErr();
+
+  if (user.alliance_role === AllianceRole.OFFICER && (member.alliance_role === AllianceRole.LEADER || member.alliance_role === AllianceRole.OFFICER)) throw cannotKickErr();
 
   await removeAllianceMember(member, alliance, AllianceMessageType.KICKED);
 

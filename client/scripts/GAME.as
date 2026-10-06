@@ -1,4 +1,6 @@
 package {
+    import com.monsters.admin.IoTestMode;
+    import com.monsters.debug.IoBugReport;
     import com.flashdynamix.utils.SWFProfiler;
     import com.monsters.maproom_manager.MapRoomManager;
     import com.monsters.marketing.MarketingRecapture;
@@ -11,6 +13,16 @@ package {
     import flash.geom.Rectangle;
     import flash.system.Security;
     import flash.net.SharedObject;
+    import flash.events.IOErrorEvent;
+    import flash.media.SoundMixer;
+    import flash.system.LoaderContext;
+    import flash.system.ApplicationDomain;
+    import flash.display.Stage;
+    import flash.display.LoaderInfo;
+    import flash.net.URLRequest;
+    import flash.display.Loader;
+    import flash.events.TimerEvent;
+    import flash.utils.Timer;
     import com.monsters.external_interface.ExternalInterfaceManager;
     public class GAME extends Sprite {
 
@@ -37,6 +49,8 @@ package {
 
             // Override server URL if provided as a flash var
             var flashVarServerUrl:* = loaderInfo.parameters["serverUrl"];
+            // Inferno-only: on a phone (the browser version's page says so)
+            GLOBAL.ioOnPhone = String(loaderInfo.parameters["iomobile"]) == "1";
 
             if (flashVarServerUrl != undefined && flashVarServerUrl != "") {
                 GLOBAL.serverUrl = String(flashVarServerUrl);
@@ -112,6 +126,155 @@ package {
             GLOBAL.CallJS("cc.enableMouseWheel");
         }
 
+        /**
+         * Inferno-only: Switch account (top-bar button). Saves the yard (up to a few seconds), forgets the
+         * stored login token and loads the game SWF again from scratch, which opens on the login page with
+         * its account list. The reload is done by, in order:
+         *   1. the launcher (client/launcher/IOLauncher.as), asked with an "io_restart" request on the
+         *      game's LoaderInfo.sharedEvents; it answers by cancelling the request;
+         *   2. the Loader the game sits in (an older launcher): the game unloads itself and loads its own
+         *      address again into it;
+         *   3. otherwise (a game opened on its own) the player is told to restart it.
+         */
+        public static function ioSwitchAccount():void {
+            var deadline:int = GLOBAL.Timestamp() + 6;
+            var wait:Timer = new Timer(200);
+            // Admin test mode ends with the account: it is switched off (the account put back) first.
+            if (GLOBAL.ioTestMode()) {
+                IoTestMode.switchOff(function():void {
+                        ioReloadGame(false);
+                    });
+                return;
+            }
+            PLEASEWAIT.Show("Switching account...");
+            try {
+                BASE.Save();
+            }
+            catch (e:Error) {
+            }
+            wait.addEventListener(TimerEvent.TIMER, function(e:TimerEvent):void {
+                    if (BASE._saveCounterA == BASE._saveCounterB && !BASE._saving || GLOBAL.Timestamp() > deadline) {
+                        wait.stop();
+                        ioReloadGame(false);
+                    }
+                });
+            wait.start();
+        }
+
+        /**
+         * Inferno-only: loads the game again without saving first (the yard on screen is out of date or the
+         * login is gone), the same way as Switch account. keepLogin: true opens straight on the yard again
+         * with the stored login (Oops "Reload", back after a long time away); false forgets the login and
+         * opens on the login page (the login was replaced or ended on the server).
+         */
+        public static function ioReload(keepLogin:Boolean):void {
+            if (_ioReloading) {
+                return; // a second Reload press (or a popup closed meanwhile) while the first is under way
+            }
+            _ioReloading = true;
+            GLOBAL.Halt();
+            PLEASEWAIT.Show(keepLogin ? "Reloading..." : "Opening the login page...");
+            ioReloadGame(keepLogin);
+        }
+
+        private static var _ioReloading:Boolean = false;
+
+        private static function ioReloadGame(keepLogin:Boolean):void {
+            var handled:Boolean = false;
+            if (keepLogin && LOGIN.token) {
+                // A login made with the password is not stored anywhere, so hand this one to the next start,
+                // once (setLauncherVars takes it and deletes it).
+                try {
+                    var resume:SharedObject = SharedObject.getLocal("bymr_data", "/");
+                    resume.data.ioResumeToken = LOGIN.token;
+                    resume.flush();
+                }
+                catch (e:Error) {
+                }
+            }
+            if (!keepLogin) {
+                token = null;
+                try {
+                    var saved:SharedObject = SharedObject.getLocal("bymr_data", "/");
+                    delete saved.data.token;
+                    saved.flush();
+                }
+                catch (e:Error) {
+                }
+            }
+            // 1. The launcher reloads the game.
+            try {
+                handled = !_instance.loaderInfo.sharedEvents.dispatchEvent(new Event("io_restart", false, true));
+            }
+            catch (e:Error) {
+                LOGGER.Log("err", "Switch account: launcher request failed: " + e.message);
+            }
+            if (handled) {
+                return;
+            }
+            // 2. Loaded by a launcher (any version): reload through the Loader the game sits in.
+            // 3. Opened directly: load a fresh copy of this file onto the stage and retire this one.
+            try {
+                var info:LoaderInfo = _instance.loaderInfo;
+                var address:String = info.url;
+                var holder:Loader = null;
+                try {
+                    holder = info.loader;
+                }
+                catch (e:Error) {
+                    holder = null;
+                }
+                if (address) {
+                    // A fresh code space beside the running game's, not under it: under it, the new copy
+                    // would reuse this copy's classes and everything they remember (this session).
+                    var fresh:LoaderContext = new LoaderContext(false, new ApplicationDomain(info.applicationDomain.parentDomain));
+                    if (holder) {
+                        holder.unloadAndStop(true);
+                        holder.load(new URLRequest(address), fresh);
+                        return;
+                    }
+                    if (_instance.stage) {
+                        ioReplaceOnStage(address, fresh);
+                        return;
+                    }
+                }
+            }
+            catch (e:Error) {
+                LOGGER.Log("err", "Switch account: reload failed: " + e.message);
+            }
+            _ioReloading = false;
+            PLEASEWAIT.Hide();
+            GLOBAL.Message(keepLogin ? "Close the game and start it again to continue." : "Close the game and start it again to get to the login page.");
+        }
+
+        /**
+         * The game was opened directly (no launcher): this copy is the top of the display list, so it cannot
+         * be unloaded. It is halted instead (no more ticks or saves: GLOBAL.Halt), silenced and taken off the
+         * stage, and a fresh copy of the same file is loaded onto the stage in its place.
+         */
+        private static function ioReplaceOnStage(address:String, fresh:LoaderContext):void {
+            var theStage:Stage = _instance.stage;
+            var loader:Loader = new Loader();
+            GLOBAL.Halt();
+            SoundMixer.stopAll();
+            loader.contentLoaderInfo.addEventListener(Event.COMPLETE, function(e:Event):void {
+                    // Take the old copy off the stage; if Flash refuses, the new copy still goes on top of it.
+                    try {
+                        while (theStage.numChildren > 0) {
+                            theStage.removeChildAt(0);
+                        }
+                    }
+                    catch (err:Error) {
+                    }
+                    theStage.addChild(loader);
+                });
+            loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent):void {
+                    PLEASEWAIT.Hide();
+                    GLOBAL.Message("The game could not be loaded again. Close it and start it again to switch account.");
+                });
+            loader.load(new URLRequest(address), fresh);
+        }
+
         public function setLauncherVars(params:Object):void {
             try {
                 sharedObj = SharedObject.getLocal("bymr_data", "/");
@@ -125,6 +288,12 @@ package {
                     token = params.token;
                     sharedObj.data.token = token;
                 }
+                else if (sharedObj.data.ioResumeToken) {
+                    // Inferno-only: loaded again by GAME.ioReload (Oops "Reload"): log in as before.
+                    token = String(sharedObj.data.ioResumeToken);
+                    sharedObj.data.token = token;
+                }
+                delete sharedObj.data.ioResumeToken;
                 if (params && params.ref) {
                     // Started from a friend's invite link: kept until an account is registered with it.
                     sharedObj.data.ioReferral = String(params.ref);
@@ -142,6 +311,7 @@ package {
             }
             this._ioStarted = true;
             loaderInfo.uncaughtErrorEvents.addEventListener(UncaughtErrorEvent.UNCAUGHT_ERROR, this.uncaughtErrorThrown);
+            IoBugReport.Watch(stage);
             setLauncherVars(loaderParams);
             SWFProfiler.init(stage, this);
             Security.allowDomain("*");
@@ -205,6 +375,8 @@ package {
             }
         }
 
+        private var _ioErrorCounts:Object = {};
+
         protected function uncaughtErrorThrown(param1:UncaughtErrorEvent):void {
             var _loc2_:String = null;
             var _loc3_:Error = null;
@@ -218,7 +390,26 @@ package {
             else {
                 _loc2_ = String(param1.error.toString());
             }
-            LOGGER.Log("err", "UncaughtError: " + _loc2_ + (!!_loc3_ ? " | " + _loc3_.getStackTrace() : ""));
+            // The release player strips the message down to its number, so add what the game was doing.
+            var ioContext:String = "";
+            try {
+                if (GLOBAL._newBuilding) {
+                    ioContext += " | placing building type " + GLOBAL._newBuilding._type;
+                }
+                if (GLOBAL._selectedBuilding) {
+                    ioContext += " | selected building type " + GLOBAL._selectedBuilding._type;
+                }
+            }
+            catch (ctxError:Error) {
+            }
+            // The logger sends each distinct message once per session. An error that fires on every
+            // click would look like a one-off, so repeats are reported at 1, 2, 5, 20 and 100.
+            var ioKey:String = _loc2_ + ioContext;
+            _ioErrorCounts[ioKey] = int(_ioErrorCounts[ioKey]) + 1;
+            var ioN:int = int(_ioErrorCounts[ioKey]);
+            if (ioN == 1 || ioN == 2 || ioN == 5 || ioN == 20 || ioN == 100) {
+                LOGGER.Log("err", "UncaughtError: " + _loc2_ + (!!_loc3_ ? " | " + _loc3_.getStackTrace() : "") + ioContext + (ioN > 1 ? " | seen " + ioN + " times" : ""));
+            }
         }
 
         public function onStageRollOver(param1:MouseEvent = null):void {

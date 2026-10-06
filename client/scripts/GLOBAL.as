@@ -1,4 +1,7 @@
 package {
+    import com.monsters.replays.IoReplayPlayer;
+    import com.monsters.replays.IoReplayRecorder;
+    import com.monsters.pets.IoPets;
     import com.cc.tests.ABTest;
     import com.cc.utils.SecNum;
     import com.computus.model.Timekeeper;
@@ -7,6 +10,7 @@ package {
     import com.monsters.chat.Chat;
     import com.monsters.configs.BYMConfig;
     import com.monsters.debug.Console;
+    import com.monsters.debug.IoBugReport;
     import com.monsters.display.ImageCache;
     import com.monsters.effects.fire.Fire;
     import com.monsters.effects.smoke.Smoke;
@@ -34,6 +38,8 @@ package {
     import flash.geom.Point;
     import flash.geom.Rectangle;
     import flash.net.*;
+    import flash.text.TextField;
+    import flash.text.TextFormat;
     import flash.utils.*;
     import gs.TweenLite;
     import gs.easing.Cubic;
@@ -453,6 +459,17 @@ package {
 
         public static var _showStreamlinedSpeedUps:Boolean = false;
 
+        /**
+         * Inferno-only: the browser version on a phone (FlashVar iomobile=1, set by the page, client-web Shell.ts).
+         * Its menu button sits at the top centre, over the game.
+         */
+        public static var ioOnPhone:Boolean = false;
+
+        /** Inferno-only (5 October, the user's): an outpost's workers, 2 (the stock game's outposts have 1). */
+        public static function ioOutpostWorkers():int {
+            return INFERNO_ONLY ? 2 : 1;
+        }
+
         public static var _magnification:Number = 1;
 
         public static var __:uint;
@@ -490,7 +507,7 @@ package {
        *
        * @return void
        */
-        public static function init():void {
+        public static function init(ioAttempt:int = 0):void {
             new URLLoaderApi().load(serverUrl + "init", [["apiVersion", apiVersionSuffix], ["build", String(IOBuild.stamp)]], function(serverData:Object):void {
                     var stage:Stage = GAME._instance.stage;
 
@@ -506,6 +523,14 @@ package {
                         Console.initialize(stage);
                     }
                 }, function(error:IOErrorEvent):void {
+                    // Inferno-only: a phone's connection that drops for a moment as the page opens (bug #59)
+                    // tries again three times, two seconds apart, before "Failed to connect".
+                    if (GLOBAL.INFERNO_ONLY && ioAttempt < 3) {
+                        setTimeout(function():void {
+                            GLOBAL.init(ioAttempt + 1);
+                        }, 2000);
+                        return;
+                    }
                     GLOBAL.initError = "Failed to connect to the server.";
                     GLOBAL.eventDispatcher.dispatchEvent(new Event("initError"));
                     return;
@@ -746,7 +771,94 @@ package {
             _buildingProps[4].capacity = [500, 1000, 1750, 2250, 3000, 4000];
         }
 
-        private static function ioFlag(param1:String, param2:Number):Number {
+        /**
+         * Inferno-only: a picture URL on the server with the picture version (flag io_assetv,
+         * InfernoOnlyConfig.assetVersion) added, so a replaced picture is not served from a cache.
+         */
+        public static function ioVersioned(param1:String):String {
+            var version:int = int(ioFlag("io_assetv", 0));
+            if (!INFERNO_ONLY || version <= 0 || !param1) {
+                return param1;
+            }
+            return param1 + (param1.indexOf("?") < 0 ? "?v=" : "&v=") + version;
+        }
+
+        /**
+         * Inferno-only admin test mode (server services/admin/testMode.ts, switch next to the Admin button,
+         * com/monsters/admin/IoTestMode.as): unlimited resources and shiny, instant builds and upgrades,
+         * no placement limits, every monster unlocked, practice attacks without limits, test tools.
+         */
+        public static function ioTestMode():Boolean {
+            return INFERNO_ONLY && _flags != null && int(_flags.io_testmode) == 1;
+        }
+
+        /**
+         * Inferno-only: the Designer draft on screen (server services/admin/designs.ts, window
+         * com/monsters/admin/IoDesigner.as): {kind, key, title, free}, from the yard's load (io_design); null on
+         * any other yard. An outpost kit, a wild tribe level or a Moloch base, built with the game's own tools.
+         */
+        public static var _ioDesign:Object = null;
+
+        public static function ioDesign():Object {
+            return INFERNO_ONLY ? _ioDesign : null;
+        }
+
+        /** The yard's size in a wild tribe or Moloch design (the map grid is 2600: GRID._mapWidth). */
+        public static const IO_DESIGN_YARD:int = 2400;
+
+        public static function ioDesignMode():Boolean {
+            return ioDesign() != null;
+        }
+
+        /** A wild tribe or Moloch design: no building limits and no yard edge (kits keep an outpost's). */
+        public static function ioDesignFree():Boolean {
+            return ioDesign() != null && int(_ioDesign.free) == 1;
+        }
+
+        /** Building costs nothing and finishes at once, with no requirements: admin test mode, or any design. */
+        public static function ioFreeBuild():Boolean {
+            return ioTestMode() || ioDesignMode();
+        }
+
+        /**
+         * Inferno-only: a one-line text that doesn't fit its field is drawn smaller until it does, instead of
+         * wrapping its end under the field where it can't be seen (a counter at 50,000,000, "Magma remaining").
+         */
+        public static function ioFitText(field:TextField, smallest:int = 8, scale:Number = 1):void {
+            if (!INFERNO_ONLY || !field) {
+                return;
+            }
+            field.wordWrap = false;
+            var f:TextFormat = field.getTextFormat();
+            var size:int = int(f.size);
+            // (scale: a button stretched to its width stretches its label's field; the room is the stretched one)
+            while (size > smallest && field.textWidth > field.width * scale - 4) {
+                size--;
+                f.size = size;
+                field.setTextFormat(f);
+            }
+        }
+
+        /** Inferno-only: a wrapped field's text drawn smaller until it fits the field's height. */
+        public static function ioFitHeight(field:TextField, smallest:int = 9):void {
+            if (!INFERNO_ONLY || !field) {
+                return;
+            }
+            var f:TextFormat = field.getTextFormat();
+            var size:int = int(f.size);
+            while (size > smallest && field.textHeight > field.height - 4) {
+                size--;
+                f.size = size;
+                field.setTextFormat(f);
+            }
+        }
+
+        /** Any number of any building: admin test mode, or a wild tribe / Moloch design. */
+        public static function ioNoLimits():Boolean {
+            return ioTestMode() || ioDesignFree();
+        }
+
+        public static function ioFlag(param1:String, param2:Number):Number {
             if (_flags && _flags.hasOwnProperty(param1) && Number(_flags[param1]) > 0) {
                 return Number(_flags[param1]);
             }
@@ -769,23 +881,22 @@ package {
         }
 
         /**
-         * Inferno-only: world map coordinates are shown as depths below the surface - negative,
-         * except 0. Display only: cells, bookmarks, requests and the server keep the real values.
+         * Inferno-only: how the map prints a world coordinate. Plain numbers, 0 to 399 (the user's, 4 October;
+         * they were shown as negatives, "depths below the surface", until then). The Depths of Hell print their
+         * own numbers, 0 to 9 (IoUnderworld.label).
          */
         public static function ioCoord(param1:int):String {
-            if (INFERNO_ONLY && param1 != 0) {
-                return "-" + Math.abs(param1);
-            }
             return String(param1);
         }
 
         /**
-         * Stock outposts cannot recycle buildings or cancel construction. The server can lift that
-         * (flag io_outpostrecycle = 1), which is what makes designing outpost kits practical.
+         * Stock outposts cannot recycle buildings or cancel construction. Only in the Designer (an admin's
+         * outpost kit draft, IoDesigner) can they, so kit layouts can be reworked; never in a player's outpost.
+         * (It was a server switch, io_outpostrecycle / outpostRecycling, until 29 September.)
          * The outpost hall itself can never be recycled either way.
          */
         public static function get outpostRecycling():Boolean {
-            return Boolean(_flags) && _flags.hasOwnProperty("io_outpostrecycle") && int(_flags.io_outpostrecycle) == 1;
+            return ioDesignMode();
         }
 
         /**
@@ -836,6 +947,32 @@ package {
             return INFERNO_ONLY && Boolean(_flags) && _flags.hasOwnProperty("io_rezghul") && int(_flags.io_rezghul) == 1;
         }
 
+        /** A shiny price set on the server (InfernoOnlyConfig.prices, flags io_price_*); the stock value otherwise. */
+        public static function ioPrice(param1:String, param2:Number):Number {
+            return INFERNO_ONLY ? Number(ioFlag("io_price_" + param1, param2)) : param2;
+        }
+
+        /** A list of shiny prices from the server, or null. */
+        public static function ioPriceList(param1:String):Array {
+            var raw:* = INFERNO_ONLY && _flags ? _flags["io_price_" + param1] : null;
+            if (raw is Array) {
+                return raw as Array;
+            }
+            if (raw is String && String(raw) != "") {
+                try {
+                    return JSON.parse(String(raw)) as Array;
+                }
+                catch (e:Error) {
+                }
+            }
+            return null;
+        }
+
+        /** Seconds under which a timer finishes for free ("Close enough"). */
+        public static function get ioCloseEnough():int {
+            return int(ioPrice("closeenough", 300));
+        }
+
         /** What one Rezghul costs to hatch, in magma (server flag io_rezghulcost). */
         public static function get ioRezghulCost():int {
             return int(ioFlag("io_rezghulcost", 500000));
@@ -883,6 +1020,10 @@ package {
 
         /** Seconds needed to hatch any monster (server flag io_hatch). */
         public static function get ioHatchSeconds():Number {
+            // Admin test mode (and the Designer): hatched at once.
+            if (ioFreeBuild()) {
+                return 0;
+            }
             return ioFlag("io_hatch", 1);
         }
 
@@ -924,6 +1065,17 @@ package {
             }
             _ioPropsTuned = true;
             var _loc4_:Array = INFERNOYARDPROPS._infernoYardProps;
+            // What each Inferno defence hits, as the overworld table records it (1 ground, 2 air, 3 both).
+            // The Inferno table left it out, so the Yard Planner drew no range circle for any Inferno
+            // tower (only traps, which it finds another way). Taken from the towers' own targeting:
+            // BTOWER._targetFlyerMode, and the Compound's defenders go after ground, then air.
+            var ioAttackTypes:Object = {"21": 3, "128": 3, "129": 1, "130": 1, "132": 3, "144": 3, "145": 3};
+            var ioAttackId:String = null;
+            for (ioAttackId in ioAttackTypes) {
+                if (_loc4_[int(ioAttackId) - 1] && !_loc4_[int(ioAttackId) - 1].attackType) {
+                    _loc4_[int(ioAttackId) - 1].attackType = ioAttackTypes[ioAttackId];
+                }
+            }
             // Decorations. The Inferno table carries the overworld decorations but blocks every one of
             // them. Swap in the overworld entries (same ids, same art, and the same few event-only
             // pieces still blocked), so the Decorations tab works in the main yard and, because the
@@ -944,6 +1096,15 @@ package {
             for each (_loc1_ in _loc4_) {
                 ioScaleCosts(_loc1_.costs, ioTimeDivisor);
                 ioScaleCosts(_loc1_.fortify_costs, ioTimeDivisor);
+                // Decorations go up at once (3 October): scaling made every 0 s decoration 1 s (and one of
+                // them took 5 s), so placing one took a worker for a moment.
+                if (_loc1_.type == "decoration" && _loc1_.costs is Array) {
+                    for each (var ioDecoCost:Object in _loc1_.costs) {
+                        if (ioDecoCost && ioDecoCost.time is SecNum) {
+                            (ioDecoCost.time as SecNum).Set(0);
+                        }
+                    }
+                }
                 // Repairs: BFOUNDATION heals maxHealth / min(3600, repairTime) per tick, so this
                 // is the single place repair speed comes from. The server keeps no repair table.
                 ioScaleDurations(_loc1_.repairTime, ioTimeDivisor);
@@ -997,8 +1158,90 @@ package {
                 128: [0, 1],    // compound
                 129: [0, 4],    // quake tower
                 130: [0, 4],    // blast (cannon) tower
-                132: [0, 4]     // magma tower
+                132: [0, 4],    // magma tower
+                144: [0, 2],    // cinder coil
+                145: [0, 2]     // obsidian mortar
             };
+
+        private static var _ioAnnounceSeen:String = null;
+
+        /**
+         * Inferno-only: an announcement from the admin panel ({id, text}), shown once. The id is kept on
+         * this computer so it is not shown again after a restart.
+         */
+        private static function ioShowAnnouncement(param1:String):void {
+            var announcement:Object = null;
+            var saved:SharedObject = null;
+            try {
+                announcement = JSON.parse(param1);
+            }
+            catch (e:Error) {
+                return;
+            }
+            if (!announcement || !announcement.id || !announcement.text) {
+                return;
+            }
+            if (_ioAnnounceSeen == null) {
+                try {
+                    saved = SharedObject.getLocal("bymr_data", "/");
+                    _ioAnnounceSeen = saved.data.ioAnnounceSeen ? String(saved.data.ioAnnounceSeen) : "";
+                }
+                catch (e:Error) {
+                    _ioAnnounceSeen = "";
+                }
+            }
+            if (_ioAnnounceSeen == String(announcement.id)) {
+                return;
+            }
+            _ioAnnounceSeen = String(announcement.id);
+            try {
+                saved = SharedObject.getLocal("bymr_data", "/");
+                saved.data.ioAnnounceSeen = _ioAnnounceSeen;
+                saved.flush();
+            }
+            catch (e:Error) {
+            }
+            Message("<b>Announcement</b><br><br>" + String(announcement.text));
+        }
+
+        private static var _ioShinyApproved:Boolean = false;
+
+        /**
+         * Inferno-only: "Spend N Shiny ...? Yes / No" before anything spends shiny.
+         *
+         *     if (!GLOBAL.ioConfirmShiny(cost, "to finish this now", function():void { sameAction(sameArgs); })) {
+         *         return;
+         *     }
+         *
+         * Returns true when the caller may go ahead now: no shiny involved, or it is the approved repeat. Else
+         * it shows the question and returns false; the caller stops, and Yes runs the same action again with
+         * approval, so each action keeps its own checks and effects exactly as they were.
+         */
+        public static function ioConfirmShiny(param1:int, param2:String, param3:Function):Boolean {
+            if (!INFERNO_ONLY || param1 <= 0 || ioFreeBuild()) {
+                return true;
+            }
+            if (_ioShinyApproved) {
+                _ioShinyApproved = false;
+                return true;
+            }
+            Message("<b>Spend " + FormatNumber(param1) + " Shiny</b> " + param2 + "?", "Yes", function():void {
+                    _ioShinyApproved = true;
+                    try {
+                        param3();
+                    }
+                    finally {
+                        _ioShinyApproved = false;
+                    }
+                }, null, "No", function():void {
+                });
+            return false;
+        }
+
+        /** Whether a devil outpost can build this building type (the outpost hall aside). */
+        public static function ioOutpostBuildable(param1:int):Boolean {
+            return IO_OUTPOST_QUANTITY[param1] != null;
+        }
 
         /**
          * Inferno outposts never existed in the original game, so there is no prop table for
@@ -1038,7 +1281,11 @@ package {
                 _loc1_[_loc2_] = _loc3_;
                 _loc2_++;
             }
-            _loc1_[111] = OUTPOST_YARD_PROPS._outpostProps[111];
+            _loc1_[111] = copyBuildingProps(OUTPOST_YARD_PROPS._outpostProps[111]);
+            // Inferno-only: the outpost hall draws the Inferno's own (animated) art
+            if (INFERNOYARDPROPS._infernoYardProps[111] && INFERNOYARDPROPS._infernoYardProps[111].imageData) {
+                _loc1_[111].imageData = INFERNOYARDPROPS._infernoYardProps[111].imageData;
+            }
             return _loc1_;
         }
 
@@ -1060,8 +1307,9 @@ package {
         public static function SetBuildingProps():void {
             if (INFERNO_ONLY) {
                 ioTuneProps();
-                CREATURELOCKER.ioScaleTimes(ioTimeDivisor);
+                // Rezghul first: his Strongbox unlock time is then scaled with the others.
                 CREATURELOCKER.ioApplyRezghul();
+                CREATURELOCKER.ioScaleTimes(ioTimeDivisor);
                 if (BASE.isOutpost) {
                     if (_ioOutpostProps == null) {
                         _ioOutpostProps = ioBuildOutpostProps();
@@ -1162,7 +1410,7 @@ package {
             _mapHeight = 800;
             _zoomed = false;
             _averageAltitude = new SecNum(125);
-            _outpostCapacity = new SecNum(2000000);
+            _outpostCapacity = new SecNum(ioFlag("io_outpost_capacity", 2000000));
             _attackersCatapult = 0;
             _attackersFlinger = 0;
             _savedAttackersDeltaResources = {
@@ -1199,6 +1447,10 @@ package {
                 if (MapRoomManager.instance.isInMapRoom2or3 && Boolean(POWERUPS.CheckPowers(POWERUPS.ALLIANCE_DECLAREWAR, "NORMAL"))) {
                     ATTACK._countdown = 60 * 7;
                 }
+                // Admin test mode: no time limit worth the name (a day).
+                if (ioTestMode()) {
+                    ATTACK._countdown = 60 * 60 * 24;
+                }
                 if (MapRoomManager.instance.isInMapRoom3 && (baseMode == GLOBAL.e_BASE_MODE.ATTACK || baseMode == GLOBAL.e_BASE_MODE.WMATTACK || baseMode == GLOBAL.e_BASE_MODE.VIEW || baseMode == GLOBAL.e_BASE_MODE.WMVIEW)) {
                     GLOBAL._attackersResources = {
                             "r1": new SecNum(GLOBAL._resources.r1.Get()),
@@ -1226,6 +1478,10 @@ package {
                     if (!(INFERNO_ONLY && GLOBAL._bHousing != null && _attackersFlinger >= 1 && _attackersFlinger <= 6)) {
                         _attackersFlinger = 4;
                     }
+                }
+                // Admin test mode: every catapult shot available.
+                if (ioTestMode()) {
+                    _attackersCatapult = 4;
                 }
             }
             var musicMode:String = _loadmode;
@@ -1486,6 +1742,13 @@ package {
                         }
                     }
                     HOUSING.catchupTick(1);
+                    // Admin test mode: housed monsters are always at full health (not during a wild attack,
+                    // so defences are tested as they are).
+                    // Only in the admin's own yard: while attacking, GLOBAL.player is the yard's owner (the
+                    // defenders), who must stay killable in a practice attack.
+                    if (ioTestMode() && GLOBAL.player && !WMATTACK._inProgress && (GLOBAL.mode == e_BASE_MODE.BUILD || GLOBAL.mode == e_BASE_MODE.IBUILD)) {
+                        GLOBAL.player.healInstantAll();
+                    }
                     UPDATES.Check();
                     CREATURELOCKER.Tick();
                     HATCHERY.Tick();
@@ -1607,8 +1870,19 @@ package {
                 if (_render) {
                     _loc3_ = Number(getTimer());
                     if ((_loc4_ = _loc3_ - lastTime) > TIME_ELAPSED_THRESHHOLD && !_aiDesignMode) {
-                        LOGGER.Log("err", "TimeHax");
-                        ErrorMessage("Time Threshold Exceeded");
+                        if (INFERNO_ONLY) {
+                            // Inferno-only: the game did not run for over 5 minutes. Nearly always a phone that
+                            // was locked or switched to another app (browsers freeze the page then), not a
+                            // cheat. The stop itself stays: the yard may have changed on the server meanwhile
+                            // (attacks, other devices), so this copy must not play on or save. But it is
+                            // explained, its Reload button works (ERRORMESSAGE), and it is not a bug report.
+                            print("TimeHax: " + int(_loc4_ / 1000) + " s without a frame");
+                            ErrorMessage("You were away from the game for more than 5 minutes, so it stopped to keep your yard up to date.<br><br>Press Reload to continue.", ERROR_OOPS_ONLY, true);
+                        }
+                        else {
+                            LOGGER.Log("err", "TimeHax");
+                            ErrorMessage("Time Threshold Exceeded");
+                        }
                     }
                     if (lastTime) {
                         _loopsBanked -= _loops;
@@ -1660,7 +1934,10 @@ package {
                                 _loc11_ = InstanceManager.getInstancesByClass(BTRAP);
                                 _loc12_ = InstanceManager.getInstancesByClass(Bunker);
                                 for each (_loc15_ in _loc10_) {
-                                    _loc15_.TickAttack();
+                                    // (Hell Freezes Over: a tower iced over by an ice monster waits: BTOWER.ioIceTick)
+                                    if (!(_loc15_ is BTOWER && BTOWER(_loc15_).ioIceTick())) {
+                                        _loc15_.TickAttack();
+                                    }
                                 }
                                 for each (_loc14_ in _loc11_) {
                                     _loc14_.TickAttack();
@@ -1694,6 +1971,11 @@ package {
                             }
                             PROJECTILES.Tick();
                             FIREBALLS.Tick();
+                            // Inferno-only: attack replays, recorded and played a step at a time
+                            if (INFERNO_ONLY) {
+                                IoReplayRecorder.step();
+                                IoReplayPlayer.step();
+                            }
                             _loc7_++;
                         }
                         if (_loops > 0) {
@@ -1708,8 +1990,17 @@ package {
                     _loc2_ = int(getTimer());
                     if (!MapRoomManager.instance.isOpen) {
                         WORKERS.Tick();
+                        // Inferno-only: pets wander the yard (IoPets)
+                        IoPets.Tick();
                         EFFECTS.Tick();
-                        WMATTACK.Tick();
+                        try {
+                            WMATTACK.Tick();
+                        }
+                        catch (ioRaidError:Error) {
+                            // A raid that cannot be planned is dropped, not allowed to break every frame.
+                            LOGGER.Log("err", "Raid planning failed: " + ioRaidError + " | " + ioRaidError.getStackTrace());
+                            WMATTACK.ioAbandon();
+                        }
                         MAPROOM.Tick();
                         PATHING.Tick();
                         Smoke.Tick();
@@ -1899,19 +2190,20 @@ package {
             return param1.toString();
         }
 
-        public static function ErrorMessage(param1:String = "", param2:int = 0):Function {
+        public static function ErrorMessage(param1:String = "", param2:int = 0, ioQuiet:Boolean = false, ioKeepLogin:Boolean = true):Function {
             var em:ERRORMESSAGE;
             var err:String = param1;
             var errortype:int = param2;
             print(err + "@ " + Console.getSource(3));
             em = new ERRORMESSAGE();
-            em.Show(err, errortype);
+            em.Show(err, errortype, ioQuiet, ioKeepLogin);
             return function(param1:MouseEvent = null):void {
             };
         }
 
         public static function Message(param1:String, param2:String = null, param3:Function = null, param4:Array = null, param5:String = null, param6:Function = null, param7:Array = null, param8:int = 1, param9:Boolean = true):MESSAGE {
             var _loc10_:MESSAGE;
+            IoBugReport.Screen("message: " + param1);
             return (_loc10_ = new MESSAGE()).Show(param1, param2, param3, param4, param5, param6, param7, param8, param9);
         }
 
@@ -2021,6 +2313,13 @@ package {
             if (debugLogJSCalls) {
                 print("CallJS> func: " + param1 + " \n     args: " + JSON.stringify(param2) + " \n     exitFS: " + param3);
             }
+            if (INFERNO_ONLY && param1 == "reloadPage") {
+                // Inferno-only: "reloadPage" was a function on the old Facebook page, which the projector and
+                // the browser client don't have, so every "reload" that went through here did nothing (closing
+                // a popup once the game had stopped, for one). Load the game again, still logged in.
+                GAME.ioReload(true);
+                return;
+            }
             if (GLOBAL._local) {
                 return;
             }
@@ -2060,7 +2359,7 @@ package {
                     _loc2_ += ", ";
                 }
                 if (_loc3_ == param1.length - 2) {
-                    _loc2_ += " and ";
+                    _loc2_ += INFERNO_ONLY ? KEYS.Get("io_word_and") : " and "; // (Inferno-only: in the player's language)
                 }
                 _loc3_++;
             }
@@ -2076,7 +2375,7 @@ package {
                     _loc2_ += ", ";
                 }
                 if (_loc3_ == param1.length - 2) {
-                    _loc2_ += " and ";
+                    _loc2_ += INFERNO_ONLY ? KEYS.Get("io_word_and") : " and "; // (Inferno-only: in the player's language)
                 }
                 _loc3_++;
             }
@@ -2209,6 +2508,11 @@ package {
             _blockerList.push(_loc2_);
         }
 
+        /** BASE.Cleanup: the layers the blockers were on are gone; a later BlockerRemove must not pop one of those. */
+        public static function ioBlockersReset():void {
+            _blockerList = [];
+        }
+
         public static function BlockerRemove():void {
             var _loc1_:DisplayObject = null;
             if (_blockerList) {
@@ -2256,22 +2560,61 @@ package {
          * here, at a yard change, before it sends the new server anything it may not understand.
          * (A client that is outdated when it starts is refused at /init, on the login screen.)
          */
+        private static var _ioSessionEnded:Boolean = false;
+
+        /**
+         * Inferno-only: the server refused the login during play (HTTP 401 from URLLoaderApi): the account
+         * logged in somewhere else (the server keeps one login per account), the login expired, or the
+         * player was banned. Every later request would fail too, so stop once, say why, and offer the login
+         * page. Before this, the first failed poll showed "Base.Page: Could not authenticate" (bug report #19).
+         */
+        public static function ioSessionEnded():void {
+            if (_ioSessionEnded || _halt) {
+                return;
+            }
+            _ioSessionEnded = true;
+            print("Login no longer valid (HTTP 401)");
+            ErrorMessage("You were logged out: this account was logged in somewhere else, or the login expired.<br><br>Press Reload to log in again.", ERROR_OOPS_ONLY, true, false);
+        }
+
         private static function ioCheckBuild():void {
             if (!INFERNO_ONLY || _ioOutdatedShown || !_flags || !_flags.io_build) {
                 return;
             }
             if (Number(_flags.io_build) > IOBuild.stamp) {
                 _ioOutdatedShown = true;
-                ErrorMessage("A new version of the game has been published.<br><br>Close this window and start the game again to get it.", ERROR_ORANGE_BOX_ONLY);
+                ErrorMessage("A new version of the game has been published.<br><br>Press Reload to get it.", ERROR_OOPS_ONLY, true);
             }
         }
+
+        /**
+         * Inferno-only flags that belong to the player, not to the yard on screen. A server reply that leaves
+         * them out (an older server, a yard the server did not count as theirs) used to wipe them, and the
+         * Invite Friends button then said invites were disabled. They are kept until the server sends new ones.
+         */
+        private static const IO_STICKY_FLAGS:Array = ["io_invite", "io_invite_shiny", "io_invite_download", "io_streak"];
 
         public static function SetFlags(serverFlags:Object):void {
             var _loc2_:int = 0;
             var _loc3_:int = 0;
             var _loc4_:int = 0;
+            var ioKey:String = null;
+            if (INFERNO_ONLY && _flags && serverFlags) {
+                for each (ioKey in IO_STICKY_FLAGS) {
+                    if (!serverFlags[ioKey] && _flags[ioKey]) {
+                        serverFlags[ioKey] = _flags[ioKey];
+                    }
+                }
+            }
             _flags = serverFlags;
             ioCheckBuild();
+            if (INFERNO_ONLY) {
+                // Storage each captured outpost adds, per resource (InfernoOnlyConfig.outpostCapacity).
+                _outpostCapacity = new SecNum(ioFlag("io_outpost_capacity", 2000000));
+            }
+            if (INFERNO_ONLY && _flags.io_announce) {
+                ioShowAnnouncement(String(_flags.io_announce));
+            }
             if (INFERNO_ONLY && _flags.io_notice) {
                 // A one-time notice from the server (a referral paid out, for instance).
                 Message(String(_flags.io_notice));

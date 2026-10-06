@@ -20,10 +20,23 @@ package com.monsters.maproom_advanced {
     import flash.geom.Point;
     import flash.utils.Dictionary;
     import flash.utils.Timer;
+    import flash.utils.setTimeout;
+    import com.monsters.quests.IoQuests;
 
     public class MapRoom implements IMapRoom {
 
         internal static var _homePoint:Point;
+
+        /** Inferno-only (Outposts list, Map): where the map opens next time, instead of home. Used once. */
+        public static var ioFocus:Point = null;
+
+        /** Inferno-only: a place to mark when the map opens (one opened from chat). Used once. */
+        public static var ioMark:Point = null;
+
+        /** Admin test mode: cells changed on the server (taken, made wild) are fetched again. */
+        public static function ioClearCells():void {
+            ClearCells();
+        }
 
         private static var _zoneWidth:int = 10;
 
@@ -81,7 +94,8 @@ package com.monsters.maproom_advanced {
 
         private static var _worldID:int = 0;
 
-        internal static var _inviteBaseID:int = 0;
+        // Base ids are larger than an int holds; an int wrapped them to another base's id.
+        internal static var _inviteBaseID:Number = 0;
 
         internal static var _inviteLocation:Point = new Point();
 
@@ -94,6 +108,9 @@ package com.monsters.maproom_advanced {
         private static var _reposition:Boolean = false;
 
         private static var _popupRelocateMe:PopupRelocateMe;
+
+        /** Inferno-only: whether accepting the open invite moves to another world (set by the server check). */
+        internal static var _inviteCrossWorld:Boolean = true;
 
         private static var _empiredestroyed:Boolean = false;
 
@@ -121,7 +138,7 @@ package com.monsters.maproom_advanced {
             _migrateThread = param1;
         }
 
-        public static function set inviteBaseID(param1:int):void {
+        public static function set inviteBaseID(param1:Number):void {
             _inviteBaseID = param1;
         }
 
@@ -137,7 +154,7 @@ package com.monsters.maproom_advanced {
             _empiredestroyed = param1;
         }
 
-        public static function _Setup(param1:Point, param2:int = 0, param3:int = 0, param4:Boolean = false, param5:Thread = null):void {
+        public static function _Setup(param1:Point, param2:int = 0, param3:Number = 0, param4:Boolean = false, param5:Thread = null):void {
             _homePoint = param1;
             _worldID = param2;
             _inviteBaseID = param3;
@@ -197,16 +214,69 @@ package com.monsters.maproom_advanced {
         }
 
         public static function PreAcceptInvitation(param1:DisplayObjectContainer):void {
-            if (ALLIANCES._myAlliance) {
+            // Inferno-only invites are between alliance members, so being in an alliance is expected.
+            if (ALLIANCES._myAlliance && !GLOBAL.INFERNO_ONLY) {
                 GLOBAL.Message(KEYS.Get("msg_mustleavealliance"));
                 return;
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                ioCheckInvitation(param1);
+                return;
+            }
+            openRelocateForInvite(param1);
+        }
+
+        private static function openRelocateForInvite(param1:DisplayObjectContainer):void {
             _popupRelocateMe = new PopupRelocateMe();
             _popupRelocateMe.Setup(null, "invite");
             if (param1) {
                 GLOBAL.BlockerAdd(param1 as Sprite);
                 param1.addChild(_popupRelocateMe);
             }
+        }
+
+        /**
+         * Inferno-only: before the price popup, the server says whether the invite is still good and
+         * whether accepting it moves the player to another world. Only then are their outposts given up,
+         * so only then are they warned (and asked to confirm) first. Within one world they keep them.
+         */
+        private static function ioCheckInvitation(param1:DisplayObjectContainer):void {
+            var container:DisplayObjectContainer = param1;
+            if (!_migrateThread || _inviteBaseID == 0) {
+                return;
+            }
+            new URLLoaderApi().load(GLOBAL._baseURL + "migratecheck", [["baseid", _inviteBaseID], ["threadid", _migrateThread.data.threadid]], function(serverData:Object):void {
+                    var count:int = 0;
+                    var warning:String = null;
+                    if (!serverData || serverData.error != 0) {
+                        GLOBAL.Message(serverData && serverData.error ? String(serverData.error) : "This invitation could not be checked. Please try again.");
+                        return;
+                    }
+                    _inviteCrossWorld = int(serverData.crossWorld) == 1;
+                    if (!_inviteCrossWorld) {
+                        openRelocateForInvite(container);
+                        return;
+                    }
+                    count = int(serverData.outposts);
+                    warning = "<b>This outpost is in a different world.</b><br><br>Moving there means leaving your current world: " + (count > 0 ? "you will lose <b>all " + count + " of your outpost" + (count == 1 ? "" : "s") + "</b> and start the new world with just your main yard." : "you will start the new world with just your main yard.") + "<br><br>Do you still want to move?";
+                    GLOBAL.Message(warning, "Move anyway", function():void {
+                            openRelocateForInvite(container);
+                        });
+                }, function(e:Event):void {
+                    GLOBAL.Message("This invitation could not be checked. Please try again.");
+                });
+        }
+
+        /**
+         * Pinch to zoom (IoPinchZoom): when the world map is open, zoom it one step. Returns false when the
+         * map is not open, so the pinch goes to the yard instead.
+         */
+        public static function ioPinch(param1:Boolean, param2:Number = NaN, param3:Number = NaN):Boolean {
+            if (!_open || !_mc) {
+                return false;
+            }
+            _mc.ioPinchZoom(param1, param2, param3);
+            return true;
         }
 
         internal static function AcceptInvitation(param1:Boolean = false):void {
@@ -217,7 +287,7 @@ package com.monsters.maproom_advanced {
             var SHINYCOST:SecNum = null;
             var RESOURCECOST:SecNum = null;
             var useShiny:Boolean = param1;
-            if (ALLIANCES._myAlliance) {
+            if (ALLIANCES._myAlliance && !GLOBAL.INFERNO_ONLY) {
                 GLOBAL.Message(KEYS.Get("msg_mustleavealliance"));
                 return;
             }
@@ -239,7 +309,11 @@ package com.monsters.maproom_advanced {
                                 GLOBAL._mapHome = new Point(param1.coords[0], param1.coords[1]);
                                 _Setup(GLOBAL._mapHome);
                             }
-                            MapRoomManager.instance.BookmarksClear();
+                            // Inferno-only: bookmarks are places on this map; they only go when the move
+                            // leaves it for another world (the server clears them then too: leaveWorld).
+                            if (!GLOBAL.INFERNO_ONLY || _inviteCrossWorld) {
+                                MapRoomManager.instance.BookmarksClear();
+                            }
                             BASE._loadedFriendlyBaseID = 0;
                             GLOBAL._homeBaseID = 0;
                             GLOBAL._currentCell = null;
@@ -262,8 +336,10 @@ package com.monsters.maproom_advanced {
                 };
                 url = GLOBAL._baseURL + "migratetofriend";
                 loadvars = [["baseid", _inviteBaseID], ["threadid", _migrateThread.data.threadid]];
-                SHINYCOST = new SecNum(1200);
-                RESOURCECOST = new SecNum(10000000);
+                // The price the relocate popup shows (and the server charges).
+                SHINYCOST = new SecNum(GLOBAL.ioPrice("move_main", 1200));
+                // 30M of each resource on inferno-only servers (server: relocateInvites.ts INVITE_RESOURCE_COST).
+                RESOURCECOST = new SecNum(GLOBAL.INFERNO_ONLY ? 30000000 : 10000000);
                 if (_popupRelocateMe) {
                     _popupRelocateMe.Cleanup();
                     _popupRelocateMe.Hide();
@@ -272,6 +348,11 @@ package com.monsters.maproom_advanced {
                 if (useShiny) {
                     if (GLOBAL._credits.Get() < SHINYCOST.Get()) {
                         POPUPS.DisplayGetShiny();
+                        return;
+                    }
+                    if (!GLOBAL.ioConfirmShiny(SHINYCOST.Get(), "to move your main yard to this outpost", function():void {
+                                AcceptInvitation(true);
+                            })) {
                         return;
                     }
                     loadvars.push(["shiny", SHINYCOST.Get()]);
@@ -421,20 +502,105 @@ package com.monsters.maproom_advanced {
             }
         }
 
+        /** A bookmarks save is on its way; another change waits for it (saves arriving out of order lost changes). */
+        private static var _ioBookmarkSaving:Boolean = false;
+
+        private static var _ioBookmarkDirty:Boolean = false;
+
         internal static function BookmarksSave():void {
             var handleBMSaveSuccessful:Function = null;
             var handleBMSaveError:Function = null;
+            var done:Function = null;
+            if (GLOBAL.INFERNO_ONLY) {
+                if (_ioBookmarkSaving) {
+                    _ioBookmarkDirty = true; // sent (as it is then) when this one is answered
+                    return;
+                }
+                _ioBookmarkSaving = true;
+            }
+            done = function():void {
+                _ioBookmarkSaving = false;
+                if (_ioBookmarkDirty) {
+                    _ioBookmarkDirty = false;
+                    BookmarksSave();
+                }
+            };
             handleBMSaveSuccessful = function(param1:Object):void {
                 if (param1.error != 0) {
                     LOGGER.Log("err", "MapRoom.BookmarksSave", param1.error);
                 }
+                done();
             };
             handleBMSaveError = function(param1:IOErrorEvent):void {
                 LOGGER.Log("err", "MapRoom.BookmarksSave HTTP");
+                done();
             };
             var url:String = GLOBAL._apiURL + "player/savebookmarks";
             var loadvars:Array = [["bookmarks", JSON.stringify(_bookmarkData)]];
             new URLLoaderApi().load(url, loadvars, handleBMSaveSuccessful, handleBMSaveError);
+        }
+
+        /**
+         * Inferno-only: the bookmarks have no limit, and can be renamed and removed from the sidebar. The
+         * stored form is the stock one (mbms: how many; mbm0, mbm1...: x * 10000 + y; mbmn0...: names), all
+         * of it written again after a change.
+         */
+        internal static function ioBookmarksWrite():void {
+            var i:int = 0;
+            _bookmarkData = {};
+            while (i < _bookmarks.length) {
+                _bookmarkData["mbm" + i] = int(_bookmarks[i].location.x) * 10000 + int(_bookmarks[i].location.y);
+                _bookmarkData["mbmn" + i] = String(_bookmarks[i].name);
+                i++;
+            }
+            if (_bookmarks.length > 0) {
+                _bookmarkData["mbms"] = _bookmarks.length;
+            }
+            BookmarksSave();
+        }
+
+        /** Renames a bookmark. Returns "" when done, or why not. */
+        internal static function ioRenameBookmark(index:int, name:String):String {
+            name = String(name || "").replace(/^\s+|\s+$/g, "");
+            if (index < 0 || index >= _bookmarks.length) {
+                return "That bookmark is gone.";
+            }
+            if (name.length == 0) {
+                return KEYS.Get("newmap_bm_name");
+            }
+            if (name.length > 20) {
+                return KEYS.Get("newmap_bm_long");
+            }
+            if (_bookmarks[index].name != name) {
+                _bookmarks[index].name = name;
+                ioBookmarksWrite();
+            }
+            return "";
+        }
+
+        internal static function ioRemoveBookmark(index:int):void {
+            if (index >= 0 && index < _bookmarks.length) {
+                _bookmarks.splice(index, 1);
+                ioBookmarksWrite();
+            }
+        }
+
+        /** Adds a bookmark at a place. Returns { hide, message } as AddBookmark does ("SUCCESS" when added). */
+        internal static function ioAddBookmarkAt(cellX:int, cellY:int, name:String):Object {
+            _currentPosition = new Point(cellX, cellY);
+            return AddBookmark(name);
+        }
+
+        /** The bookmark at a place, or -1. */
+        internal static function ioBookmarkIndex(cellX:int, cellY:int):int {
+            var i:int = 0;
+            while (i < _bookmarks.length) {
+                if (_bookmarks[i].location.x == cellX && _bookmarks[i].location.y == cellY) {
+                    return i;
+                }
+                i++;
+            }
+            return -1;
         }
 
         internal static function AddBookmark(param1:String, param2:Boolean = true):Object {
@@ -459,7 +625,7 @@ package com.monsters.maproom_advanced {
                         "message": "ERROR: Bookmark point is not on the map."
                     };
             }
-            if (_bookmarks.length >= 8) {
+            if (_bookmarks.length >= 8 && !GLOBAL.INFERNO_ONLY) {
                 return {
                         "hide": true,
                         "message": KEYS.Get("newmap_bm_full")
@@ -502,6 +668,16 @@ package com.monsters.maproom_advanced {
             var addRequest:Function = null;
             var zonePoint:Point = point;
             var force:Boolean = hasForce;
+            // Inferno-only: a zone outside the world (a cell asked for past its edge) is never asked for: the server
+            // refused it (bug report #49, getarea x=-320 y=-90)
+            // (and the underworld's zone always: an outpost there is loaded from it with the map closed, IoUnderworld)
+            if (GLOBAL.INFERNO_ONLY && (!zonePoint || zonePoint.x < 0 || zonePoint.y < 0 || zonePoint.x >= _mapWidth || zonePoint.y >= _mapHeight) && !IoUnderworld.isUnderZone(zonePoint)) {
+                return;
+            }
+            // Inferno-only: while the map shows the underworld, only its one zone is asked for (IoUnderworld)
+            if (GLOBAL.INFERNO_ONLY && IoUnderworld.under && !IoUnderworld.isUnderZone(zonePoint)) {
+                return;
+            }
             var zoneID:int = zonePoint.x * 10000 + zonePoint.y;
             var getAreaURL:String = GLOBAL._mapURL + "getarea";
             var getResources:int = 0;
@@ -518,18 +694,49 @@ package com.monsters.maproom_advanced {
                 z = new objZone();
                 _zones[zoneID] = z;
             }
-            if (force || GLOBAL.Timestamp() - z.updated > 30) {
+            // Inferno-only: the world snapshot (IoMapSnapshot) is at most a minute old, so a zone on screen is
+            // asked for again after a minute (it was every 30 seconds).
+            if (force || GLOBAL.Timestamp() - z.updated > (GLOBAL.INFERNO_ONLY ? 60 : 30)) {
                 handleLoadSuccessful = function(serverData:Object):void {
                     var zoneId:int = 0;
                     var resourceIndex:int = 0;
                     var allianceData:Array = null;
                     var cell:Object = null;
-                    _pendingMapCellDataRequests.shift();
+                    var area:Object = null;
+                    // (Inferno-only: a request can be for several zones, the front of the queue)
+                    _pendingMapCellDataRequests.splice(0, Math.max(1, _ioInFlight));
+                    _ioInFlight = 0;
                     if (_pendingMapCellDataRequests.length > 0) {
                         trySendRequest();
                     }
                     if (!_open && !BASE._needCurrentCell) {
                         return;
+                    }
+                    if (serverData && serverData.io_under) {
+                        IoUnderworld.setInfo(serverData.io_under); // (Inferno-only: where the underworld and its portals are)
+                    }
+                    if (serverData && !serverData.error && serverData.areas is Array) {
+                        // Several zones: each as if it had come on its own, the map drawn again once.
+                        for each (area in serverData.areas) {
+                            zoneId = area.x * 10000 + area.y;
+                            if (!_zones[zoneId]) {
+                                _zones[zoneId] = new objZone();
+                            }
+                            _zones[zoneId].data = area.data;
+                        }
+                        serverData.data = serverData.areas.length > 0 ? serverData.areas[0].data : {};
+                        serverData.x = serverData.areas.length > 0 ? serverData.areas[0].x : 0;
+                        serverData.y = serverData.areas.length > 0 ? serverData.areas[0].y : 0;
+                        if (BASE._needCurrentCell && !_open) {
+                            // the yard's own cell: in whichever zone it is
+                            for each (area in serverData.areas) {
+                                if (area.data && area.data[BASE._currentCellLoc.x] && area.data[BASE._currentCellLoc.x][BASE._currentCellLoc.y]) {
+                                    serverData.data = area.data;
+                                    serverData.x = area.x;
+                                    serverData.y = area.y;
+                                }
+                            }
+                        }
                     }
                     if (serverData && !serverData.error && Boolean(serverData.data)) {
                         zoneId = serverData.x * 10000 + serverData.y;
@@ -553,6 +760,7 @@ package com.monsters.maproom_advanced {
                         }
                         if (MapRoom._open) {
                             MapRoom._mc.Update(true);
+                            ioPendingClickCheck();
                         }
                         else if (BASE._needCurrentCell) {
                             if (_zones && _zones[zoneId] && Boolean(_zones[zoneId].data) && Boolean(_zones[zoneId].data[BASE._currentCellLoc.x])) {
@@ -573,13 +781,39 @@ package com.monsters.maproom_advanced {
                     }
                 };
                 handleLoadError = function(param1:IOErrorEvent):void {
+                    var failed:Array = null;
+                    var request:Object = null;
+                    var failedZone:int = 0;
                     ++_saveErrors;
                     if (_saveErrors >= 3) {
                         LOGGER.Log("err", "MapRoom.RequestData HTTP");
                         GLOBAL.ErrorMessage("WorldMapRoom.RequestData HTTP");
                     }
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // The failed request left the queue stuck at its front: nothing was asked for again
+                        // until the map was closed. Its zones are asked for again on the map's next pass.
+                        failed = _pendingMapCellDataRequests.splice(0, Math.max(1, _ioInFlight));
+                        _ioInFlight = 0;
+                        for each (request in failed) {
+                            failedZone = int(request.loadvars[0][1]) * 10000 + int(request.loadvars[1][1]);
+                            if (_zones[failedZone]) {
+                                objZone(_zones[failedZone]).updated = 0;
+                            }
+                        }
+                        if (_pendingMapCellDataRequests.length > 0) {
+                            if (!requestRetryTimer) {
+                                requestRetryTimer = new Timer(1000, 1);
+                                requestRetryTimer.addEventListener(TimerEvent.TIMER, trySendRequest);
+                            }
+                            requestRetryTimer.reset();
+                            requestRetryTimer.start();
+                        }
+                    }
                 };
-                trySendRequest = function():void {
+                trySendRequest = function(... rest):void {
+                    if (_ioInFlight > 0) {
+                        return; // a request is on its way: its answer sends the next one
+                    }
                     // add any priority zones to the front of the request queue, so they can be loaded first.
                     while (_priorityMapCellsToRequest.length > 0) {
                         var point:Point = _priorityMapCellsToRequest[0];
@@ -598,13 +832,21 @@ package com.monsters.maproom_advanced {
                     }
                     // sending getarea request to server. if the zone has a cell undergoing a monster transfer, wait until it is finished first.
                     var getCellData:Object = _pendingMapCellDataRequests[0];
+                    var sendVars:Array = null;
+                    if (!getCellData) {
+                        return;
+                    }
                     if (!ZoneHasPendingTransferRequest(getCellData.loadvars[0][1] * 10000 + getCellData.loadvars[1][1])) {
                         if (requestRetryTimer) {
                             requestRetryTimer.stop();
                             requestRetryTimer.removeEventListener(TimerEvent.TIMER, trySendRequest);
                             requestRetryTimer = null;
                         }
-                        new URLLoaderApi().load(getCellData.url, getCellData.loadvars, handleLoadSuccessful, handleLoadError);
+                        sendVars = GLOBAL.INFERNO_ONLY ? ioBatch() : getCellData.loadvars;
+                        if (!GLOBAL.INFERNO_ONLY) {
+                            _ioInFlight = 1;
+                        }
+                        new URLLoaderApi().load(getCellData.url, sendVars, handleLoadSuccessful, handleLoadError);
                     }
                     else {
                         if (!requestRetryTimer) {
@@ -635,18 +877,140 @@ package com.monsters.maproom_advanced {
                 _saveErrors = 0;
                 addRequestToQueue(zonePoint, getResources);
                 if (_pendingMapCellDataRequests.length == 1) {
-                    trySendRequest();
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // At the end of this frame: the zones the map asks for in the same pass go together.
+                        setTimeout(trySendRequest, 0);
+                    }
+                    else {
+                        trySendRequest();
+                    }
                 }
             }
         }
 
+        /** How many zones at the front of the queue the request on its way is for (0: none on its way). */
+        private static var _ioInFlight:int = 0;
+
+        /** The most zones asked for in one getarea request (the server takes up to 16). */
+        private static const IO_BATCH_ZONES:int = 12;
+
+        /**
+         * Inferno-only: the zones waiting at the front of the queue, up to IO_BATCH_ZONES, in one getarea
+         * request (`zones=x,y;x,y;...`; the server answers `areas`). The game asked for one zone at a time and
+         * waited for each answer, so the map filled in one round trip per zone. A zone with a monster transfer
+         * on its way ends the run (it waits, as before). Returns the request's variables; _ioInFlight says how
+         * many queue entries it covers.
+         */
+        private static function ioBatch():Array {
+            var first:Object = _pendingMapCellDataRequests[0];
+            var vars:Array = (first.loadvars as Array).concat();
+            var zones:Array = [];
+            var resources:int = 0;
+            var i:int = 0;
+            var request:Object = null;
+            while (i < _pendingMapCellDataRequests.length && zones.length < IO_BATCH_ZONES) {
+                request = _pendingMapCellDataRequests[i];
+                if (i > 0 && ZoneHasPendingTransferRequest(int(request.loadvars[0][1]) * 10000 + int(request.loadvars[1][1]))) {
+                    break;
+                }
+                zones.push(int(request.loadvars[0][1]) + "," + int(request.loadvars[1][1]));
+                resources = Math.max(resources, int(request.loadvars[4][1]));
+                i++;
+            }
+            _ioInFlight = zones.length;
+            vars[4] = ["sendresources", resources];
+            if (zones.length > 1) {
+                vars.push(["zones", zones.join(";")]);
+            }
+            return vars;
+        }
+
         internal static function GetCell(cellX:int, cellY:int, param3:Boolean = false):Object {
+            if (GLOBAL.INFERNO_ONLY && IoUnderworld.isVoid(cellX, cellY)) {
+                return IoUnderworld.voidCell; // around the underworld's island: lava
+            }
             var zone:Object = GetCellZone(cellX, cellY);
             RequestData(zone.point, param3);
             if (_zones && _zones[zone.id] && Boolean(_zones[zone.id].data) && Boolean(_zones[zone.id].data[cellX])) {
                 return _zones[zone.id].data[cellX][cellY];
             }
+            // Inferno-only: until getarea answers for the zone, the world snapshot's cell (io_snap: 1).
+            return IoMapSnapshot.CellAt(cellX, cellY);
+        }
+
+        /** The cell as getarea sent it, or null: never the snapshot's (for what needs monsters or resources). */
+        internal static function GetZoneCell(cellX:int, cellY:int):Object {
+            var zone:Object = GetCellZone(cellX, cellY);
+            RequestData(zone.point);
+            if (_zones && _zones[zone.id] && Boolean(_zones[zone.id].data) && Boolean(_zones[zone.id].data[cellX])) {
+                return _zones[zone.id].data[cellX][cellY];
+            }
             return null;
+        }
+
+        /**
+         * Inferno-only: a cell's zone data, asked for when missing: {loaded: its zone has arrived, data: the cell
+         * as getarea sent it, or null}. (A cell outside the world counts as loaded, with no data.)
+         */
+        internal static function ioZoneCell(cellX:int, cellY:int):Object {
+            var zone:Object = GetCellZone(cellX, cellY);
+            if (zone.point.x < 0 || zone.point.y < 0 || zone.point.x >= _mapWidth || zone.point.y >= _mapHeight || IoUnderworld.isVoid(cellX, cellY)) {
+                return {"loaded": true, "data": null};
+            }
+            RequestData(zone.point);
+            var z:Object = _zones ? _zones[zone.id] : null;
+            if (!z || !z.data) {
+                return {"loaded": false, "data": null};
+            }
+            return {"loaded": true, "data": z.data[cellX] ? z.data[cellX][cellY] : null};
+        }
+
+        /** A cell clicked while it only had the snapshot's data: clicked again once its zone has arrived. */
+        private static var _ioPendingClick:Point = null;
+
+        private static var _ioPendingClickAt:int = 0;
+
+        internal static function ioClickWhenLoaded(cell:MapRoomCell):void {
+            var zone:Object = GetCellZone(cell.X, cell.Y);
+            _ioPendingClick = new Point(cell.X, cell.Y);
+            _ioPendingClickAt = GLOBAL.Timestamp();
+            if (GetPendingZoneRequestIndex(cell.X, cell.Y) > 0) {
+                _priorityMapCellsToRequest.push(zone.point); // already asked for: to the front of the queue
+            }
+            else if (GetPendingZoneRequestIndex(cell.X, cell.Y) == -1) {
+                RequestData(zone.point, true);
+            }
+        }
+
+        private static function ioPendingClickCheck():void {
+            var at:Point = _ioPendingClick;
+            var cell:MapRoomCell = null;
+            if (!at || !_mc) {
+                return;
+            }
+            if (GLOBAL.Timestamp() - _ioPendingClickAt > 15) {
+                _ioPendingClick = null; // too long ago: the player has moved on
+                return;
+            }
+            cell = _mc.ioCellAt(at.x, at.y);
+            if (!cell) {
+                _ioPendingClick = null;
+                return;
+            }
+            if (cell._ioSnap) {
+                return; // another zone arrived; still waiting for this one
+            }
+            _ioPendingClick = null;
+            cell.ioClick();
+        }
+
+        /** A new world snapshot (IoMapSnapshot): cells without getarea data yet and the world map redraw. */
+        internal static function ioSnapshotArrived():void {
+            IoMapShare.CheckPendingWorld();
+            if (_open && _mc && _mc.parent) {
+                _mc.Update(true);
+                _mc.ioSnapshotChanged();
+            }
         }
 
         internal static function Update():void {
@@ -670,7 +1034,8 @@ package com.monsters.maproom_advanced {
             }
             if (hasMonsters) {
                 // Preserve map room cell
-                var foundCell:Object = GetCell(cell.X, cell.Y);
+                // The zone's own data (with the monsters), never the world snapshot's.
+                var foundCell:Object = GetZoneCell(cell.X, cell.Y);
                 if (foundCell) {
                     _monsterSource = new MapRoomCell();
                     _monsterSource.Setup(foundCell);
@@ -1121,10 +1486,16 @@ package com.monsters.maproom_advanced {
                 SOUNDS.Play("click1");
                 _open = true;
                 _reposition = false;
+                if (GLOBAL.INFERNO_ONLY) {
+                    IoQuests.once("map_open"); // (the quest book: the map really opened)
+                }
                 if (_mc != null) {
                     _mc.Cleanup();
                     _mc = null;
                 }
+                // Map from the Outposts list: open on that outpost, not on the yard you are in.
+                var ioFocused:Boolean = ioFocus != null;
+                IoMapSnapshot.Request();
                 _mc = new MapRoomPopup();
                 _mc.Setup();
                 BASE.Cleanup();
@@ -1132,7 +1503,9 @@ package com.monsters.maproom_advanced {
                 UI2.SetupHUD();
                 if (GLOBAL._currentCell) {
                     GetCell(GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY, true);
-                    _mc.JumpTo(new Point(GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY));
+                    if (!ioFocused) {
+                        _mc.JumpTo(new Point(GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY));
+                    }
                     if (_showEnemyWait) {
                         _mc.ShowInfoEnemy(GLOBAL._currentCell as MapRoomCell, true);
                         _showEnemyWait = false;
@@ -1201,6 +1574,7 @@ package com.monsters.maproom_advanced {
 
         public function Tick():void {
             if (_open && _mc && Boolean(_mc.parent)) {
+                IoMapSnapshot.Request(); // when the server's next snapshot is out (every 5 minutes)
                 _mc.Tick();
             }
             if (_open && (!_mc || _mc && !_mc.parent) && BASE._saveCounterA == BASE._saveCounterB) {

@@ -32,11 +32,20 @@ package {
 
         override public function Fire(param1:IAttackable):void {
             super.Fire(param1);
-            SOUNDS.Play("icannon");
+            SOUNDS.Play("icannon", !isJard ? 0.8 : 0.4);
             var _loc2_:Number = 0.5 + 0.5 / maxHealth * health;
             var _loc3_:Number = 1;
             if (Boolean(GLOBAL._towerOverdrive) && GLOBAL._towerOverdrive.Get() >= GLOBAL.Timestamp()) {
                 _loc3_ = 1.25;
+            }
+            if (isJard) {
+                // Under a Candy Jar it shoots the glass, like every other tower (it used to fire through it).
+                _jarHealth.Add(-int(damage * 6 * _loc2_ * _loc3_));
+                ATTACK.Damage(_mc.x, _mc.y + _top, damage * 6 * _loc2_ * _loc3_);
+                if (_jarHealth.Get() <= 0) {
+                    KillJar();
+                }
+                return;
             }
             PROJECTILES.Spawn(new Point(_mc.x, _mc.y + _top), null, param1, _speed, int(damage * _loc2_ * _loc3_), false, _splash, Targeting.getOldStyleTargets(-1));
         }

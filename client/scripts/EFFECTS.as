@@ -80,6 +80,11 @@ package {
 
         public static function SplatParticle(param1:Number, param2:Number, param3:Number, param4:Number, param5:Number):void {
             var _loc7_:int = 0;
+            // Inferno-only: a monster's death tween can finish after its yard was left (Return Home), with the map's
+            // layers gone: the splat threw (bug report #57, "MAP._EFFECTS is null")
+            if (GLOBAL.INFERNO_ONLY && !MAP._EFFECTS) {
+                return;
+            }
             var _loc6_:ParticleSplat = MAP._EFFECTS.addChild(new ParticleSplat()) as ParticleSplat;
             _loc7_ = 1 + int(Math.random() * 5);
             _loc6_.gotoAndStop(_loc7_);

@@ -1,3 +1,5 @@
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+
 type TrainingCost = [cost: number, time: number];
 
 export interface MonsterProps {
@@ -535,8 +537,8 @@ export const monsterStats: MonsterStatsMap = {
     ],
     props: {
       speed: [1.2],
-      health: [400, 425, 450, 475, 510, 550],
-      damage: [160, 200, 200, 250, 300, 350],
+      health: [400, 425, 450, 570, 714, 880],
+      damage: [160, 200, 200, 288, 390, 490],
       cTime: [15, 10, 8, 7, 6, 5],
       cResource: [500, 1000, 2000, 4000, 6000, 10000],
       cStorage: [15],
@@ -560,8 +562,8 @@ export const monsterStats: MonsterStatsMap = {
     ],
     props: {
       speed: [1.8],
-      health: [1500, 1820, 2300, 2800, 3350, 3600],
-      damage: [80, 85, 90, 95, 100, 110],
+      health: [1500, 1820, 2300, 3360, 4690, 5760],
+      damage: [80, 85, 90, 109, 130, 154],
       cTime: [15, 16, 16, 16, 16, 16],
       cResource: [2500, 4000, 8000, 12000, 16000, 20000],
       cStorage: [15],
@@ -585,8 +587,8 @@ export const monsterStats: MonsterStatsMap = {
     ],
     props: {
       speed: [3.2],
-      health: [450, 470, 500, 540, 580, 620],
-      damage: [100, 105, 110, 120, 130, 140],
+      health: [585, 611, 650, 842, 1056, 1290],
+      damage: [100, 105, 110, 138, 169, 196],
       cTime: [100, 100, 90, 90, 90, 90],
       cResource: [3000, 3500, 4100, 4800, 5500, 7000],
       cStorage: [15],
@@ -610,8 +612,8 @@ export const monsterStats: MonsterStatsMap = {
     ],
     props: {
       speed: [2, 2, 2, 2, 2, 2],
-      health: [2000, 2400, 2800, 3200, 3600, 4000],
-      damage: [490, 530, 580, 645, 700, 775],
+      health: [1600, 1920, 2380, 3200, 3600, 4000],
+      damage: [343, 371, 435, 645, 700, 775],
       cTime: [450, 350, 250, 225, 195, 195],
       cResource: [31000, 35000, 39000, 44000, 50000, 55000],
       cStorage: [30],
@@ -635,8 +637,8 @@ export const monsterStats: MonsterStatsMap = {
     ],
     props: {
       speed: [4.5],
-      health: [3200, 3600, 4000, 4500, 5000, 5600],
-      damage: [600, 665, 730, 795, 860, 930],
+      health: [2240, 2520, 3200, 4500, 5000, 5600],
+      damage: [480, 532, 657, 795, 860, 930],
       cTime: [1800, 1920, 2040, 2160, 2280, 2400],
       cResource: [88000, 104000, 161000, 249000, 327000, 487000],
       cStorage: [40],
@@ -686,12 +688,12 @@ export const monsterStats: MonsterStatsMap = {
     props: {
       range: [240],
       speed: [1.7, 1.8, 1.9, 2, 2.1, 2.2],
-      health: [1120, 1260, 1400, 1650, 1900, 2200],
+      health: [1456, 1638, 1820, 2145, 2470, 2860],
       damage: [700, 825, 950, 1075, 1200, 1350],
       cTime: [1384, 1384, 1384, 1384, 1384, 1384],
       cResource: [60000, 90000, 145000, 200000, 330000, 450000],
-      cStorage: [80],
-      bucket: [80],
+      cStorage: [65],
+      bucket: [65],
       targetGroup: [4],
       hTime: [415],
       hResource: [18000, 27000, 43500, 60000, 99000, 135000],
@@ -711,8 +713,8 @@ export const monsterStats: MonsterStatsMap = {
     ],
     props: {
       speed: [2.5, 2.6, 2.7, 2.8, 2.9, 3],
-      health: [6200, 7600, 8700, 10900, 13100, 16000],
-      damage: [1200, 1360, 1630, 1920, 2220, 2500],
+      health: [5600, 6300, 7000, 10000, 11800, 14000],
+      damage: [1100, 1200, 1300, 1500, 1800, 2000],
       cTime: [2700],
       cResource: [425000, 476000, 580000, 700000, 910000, 1204000],
       cStorage: [100],
@@ -722,7 +724,25 @@ export const monsterStats: MonsterStatsMap = {
       hResource: [127500, 142800, 174000, 210000, 273000, 361200],
     },
   },
+
+  // Inferno-only: Korath and Drull, the champions, as ordinary monsters (client: CREATURELOCKER
+  // ioAddChampionMonsters). Every number must match the client's table exactly.
+  ...(infernoOnlyConfig.enabled ? infernoChampionMonsters() : {}),
+  ...(infernoOnlyConfig.enabled ? infernoNewMonsters() : {}),
+  ...(infernoOnlyConfig.enabled ? hellFreezesOverMonsters() : {}),
 };
+
+// Inferno-only: Rezghul as the client makes him (CREATURELOCKER.ioApplyRezghul; balance pass, 30 September):
+// 200 housing (was 250); raised monsters come back with 75% of their health and 1.0-1.2 times their damage
+// (a champion with 25%, client-side in RezghulResurrectAttack). The client sends these with every attack.
+if (infernoOnlyConfig.enabled && infernoOnlyConfig.rezghul.enabled && monsterStats.C19) {
+  Object.assign(monsterStats.C19.props, {
+    cStorage: [200],
+    bucket: [200],
+    zombieHealthMultiplier: [0.75],
+    zombieDamageMultiplier: [1, 1, 1.05, 1.1, 1.15, 1.2],
+  });
+}
 
 export const mr3MonsterStats: MR3MonsterStatsMap = {
   // Pokey
@@ -1167,3 +1187,217 @@ export const mr3MonsterStats: MR3MonsterStatsMap = {
     },
   },
 };
+
+/**
+ * Korath (IC9) and Drull (IC10): champion stats per level, 600 housing. Hatched and healed for Ashkarr's magma
+ * (2.2M-5.2M, heal 30% of that; the user's choice, 28 September).
+ */
+function infernoChampionMonsters(): MonsterStatsMap {
+  const cResource = [2_200_000, 2_600_000, 3_050_000, 3_600_000, 4_300_000, 5_200_000];
+  const hResource = [660_000, 780_000, 915_000, 1_080_000, 1_290_000, 1_560_000];
+  const trainingCosts: TrainingCost[] = [
+    [16_000_000, 86_400],
+    [19_000_000, 129_600],
+    [22_000_000, 172_800],
+    [25_000_000, 216_000],
+    [28_000_000, 259_200],
+  ];
+  const shared = { cTime: [3600], cResource, cStorage: [600], bucket: [600], targetGroup: [1], hTime: [1125], hResource };
+
+  return {
+    IC9: {
+      resource: 0,
+      time: 0,
+      trainingCosts,
+      props: {
+        speed: [1.4, 1.6, 1.8, 2, 2.3, 2.5],
+        health: [32_000, 38_400, 44_800, 51_200, 57_600, 64_000],
+        damage: [2_000, 2_400, 3_000, 3_800, 5_000, 6_500],
+        range: [35, 45, 55, 60, 65, 65],
+        ...shared,
+      },
+    },
+    IC10: {
+      resource: 0,
+      time: 0,
+      trainingCosts,
+      props: {
+        speed: [2, 2.2, 2.5, 2.8, 3.2, 3.6],
+        health: [22_000, 28_000, 34_000, 40_000, 46_000, 52_000],
+        damage: [3_000, 3_600, 4_200, 5_500, 6_500, 8_000],
+        range: [35, 45, 55, 65, 85, 90],
+        ...shared,
+      },
+    },
+  };
+}
+
+/**
+ * Inferno-only: Clinkerjaw (IC12) and Flickerfiend (IC14) (client: CREATURELOCKER ioAddNewMonsters), and Ashkarr (IC24)
+ * (client: ioAddChampionMonsters).
+ * Every number must match the client's table exactly: the client sends these props with every attack.
+ * The Academy costs the Strongbox unlock times 1, 2, 3, 4 and 6 (Sulfur and time).
+ */
+function infernoNewMonsters(): MonsterStatsMap {
+  const training = (cost: number, time: number): TrainingCost[] =>
+    [1, 2, 3, 4, 6].map((k) => [cost * k, time * k] as TrainingCost);
+  return {
+    // The Fusebug and the Emberghoul (the user's FUSEBUG_EMBERGHOUL.md, 28 September; client CREATURELOCKER
+    // ioAddNewMonsters). The Fusebug is IC15, not the spec's IC19: the Hatchery treats monsters as bare
+    // numbers and 19 is Rezghul's (C19) in the Inferno.
+    IC15: {
+      resource: 19_200,
+      time: 57_600,
+      trainingCosts: training(19_200, 57_600),
+      props: {
+        speed: [2.8],
+        health: [270, 300, 330, 442, 567, 720],
+        damage: [500, 600, 700, 977, 1300, 1680],
+        cTime: [20, 18, 16, 14, 12, 10],
+        cResource: [1500, 3000, 5000, 8000, 12000, 16000],
+        cStorage: [10],
+        bucket: [10],
+        targetGroup: [4],
+        explode: [1],
+        hTime: [6, 5, 5, 4, 4, 3],
+        hResource: [450, 900, 1500, 2400, 3600, 4800],
+      },
+    },
+    IC20: {
+      resource: 5_120_000,
+      time: 259_200,
+      trainingCosts: training(5_120_000, 259_200),
+      props: {
+        speed: [2.4, 2.5, 2.6, 2.7, 2.8, 2.9],
+        health: [3680, 4140, 4600, 5500, 6000, 6500],
+        damage: [920, 1104, 1288, 1600, 1800, 2000],
+        cTime: [2700],
+        cResource: [420000, 500000, 590000, 710000, 910000, 1210000],
+        cStorage: [100],
+        bucket: [100],
+        targetGroup: [1],
+        hTime: [810],
+        hResource: [126000, 150000, 177000, 213000, 273000, 363000],
+      },
+    },
+    IC12: {
+      resource: 96_000,
+      time: 86_400,
+      trainingCosts: training(96_000, 86_400),
+      props: {
+        speed: [1.5],
+        health: [1800, 2040, 2280, 3096, 4032, 5184],
+        damage: [180, 200, 220, 282, 351, 420],
+        cTime: [360, 320, 280, 250, 230, 210],
+        cResource: [18000, 21000, 24500, 28500, 33000, 38000],
+        cStorage: [40],
+        bucket: [40],
+        targetGroup: [1],
+        splits: [2, 2, 2, 3, 3, 3],
+        hTime: [108, 96, 84, 75, 69, 63],
+        hResource: [5400, 6300, 7350, 8550, 9900, 11400],
+      },
+    },
+    IC14: {
+      resource: 819_200,
+      time: 108_000,
+      trainingCosts: training(819_200, 108_000),
+      props: {
+        speed: [2.4, 2.4, 2.5, 2.5, 2.6, 2.7],
+        health: [2200, 2450, 2700, 3600, 4620, 5920],
+        damage: [420, 460, 505, 638, 793, 952],
+        cTime: [900, 900, 840, 840, 780, 780],
+        cResource: [60000, 75000, 95000, 120000, 150000, 190000],
+        cStorage: [35],
+        bucket: [35],
+        targetGroup: [1],
+        hTime: [270, 270, 252, 252, 234, 234],
+        hResource: [18000, 22500, 28500, 36000, 45000, 57000],
+      },
+    },
+    // Ashkarr, the Ember Herald (the user's ASHKARR.md; client CREATURELOCKER ioAddChampionMonsters): Strongbox
+    // page 5, 600 housing, unlocked and trained to level 6 for what Korath and Drull cost (resource and time 0
+    // here, as theirs: the client holds the unlock cost). Her war-cry is client-side (WarCry.as).
+    IC24: {
+      resource: 0,
+      time: 0,
+      trainingCosts: [
+        [16_000_000, 86_400],
+        [19_000_000, 129_600],
+        [22_000_000, 172_800],
+        [25_000_000, 216_000],
+        [28_000_000, 259_200],
+      ],
+      props: {
+        speed: [2, 2.1, 2.2, 2.3, 2.4, 2.5],
+        health: [25000, 30000, 35000, 40000, 45000, 50000],
+        damage: [3000, 3350, 3750, 4150, 4600, 5100],
+        cTime: [4200],
+        cResource: [2200000, 2600000, 3050000, 3600000, 4300000, 5200000],
+        cStorage: [600],
+        bucket: [600],
+        targetGroup: [1],
+        hTime: [1260],
+        hResource: [660000, 780000, 915000, 1080000, 1290000, 1560000],
+      },
+    },
+  };
+}
+
+/**
+ * Inferno-only Hell Freezes Over (services/events/hfo.ts; client CREATURELOCKER ioAddHfoMonsters). Every number
+ * must match the client's table exactly.
+ *  - IC25 Rimegrave, the ice champion: Strongbox page 5 once the event is won, then the Academy to level 6, for
+ *    what Korath, Drull and Ashkarr cost (resource and time 0 here, as theirs: the client holds the unlock cost).
+ *  - IC26-IC31 the ice cretins (Shivling, Slushgut, Rimeclaw, Sleetwing, Hailspitter, Permafrost Hulk): the
+ *    event's waves, and admins in test mode or the Designer. Players never get them. One level each.
+ */
+function hellFreezesOverMonsters(): MonsterStatsMap {
+  const cretin = (props: Partial<MonsterProps> & Pick<MonsterProps, "speed" | "health" | "damage" | "cStorage">): MonsterStat => ({
+    resource: 0,
+    time: 0,
+    trainingCosts: [],
+    props: {
+      cTime: [60],
+      cResource: [props.cStorage[0] * 500],
+      bucket: props.cStorage,
+      targetGroup: [1],
+      hTime: [20],
+      hResource: [props.cStorage[0] * 150],
+      ...props,
+    },
+  });
+  return {
+    IC25: {
+      resource: 0,
+      time: 0,
+      trainingCosts: [
+        [16_000_000, 86_400],
+        [19_000_000, 129_600],
+        [22_000_000, 172_800],
+        [25_000_000, 216_000],
+        [28_000_000, 259_200],
+      ],
+      props: {
+        speed: [1.9, 2, 2.1, 2.2, 2.3, 2.4],
+        health: [26000, 31000, 36000, 41000, 46000, 52000],
+        damage: [2600, 2950, 3300, 3700, 4100, 4600],
+        range: [40, 45, 50, 55, 60, 65],
+        attackDelay: [70],
+        cTime: [4200],
+        cResource: [2200000, 2600000, 3050000, 3600000, 4300000, 5200000],
+        cStorage: [600],
+        bucket: [600],
+        targetGroup: [1],
+        hTime: [1260],
+        hResource: [660000, 780000, 915000, 1080000, 1290000, 1560000],
+      },
+    },
+    IC26: cretin({ speed: [2.4], health: [500], damage: [110], cStorage: [10] }),
+    IC27: cretin({ speed: [1], health: [9000], damage: [240], cStorage: [60] }),
+    IC28: cretin({ speed: [2.2], health: [2600], damage: [480], cStorage: [30], targetGroup: [4] }),
+    IC29: cretin({ speed: [3], health: [1800], damage: [280], cStorage: [25] }),
+    IC30: cretin({ speed: [1.4], health: [1400], damage: [400], range: [200], cStorage: [30], targetGroup: [4] }),
+    IC31: cretin({ speed: [0.9], health: [30000], damage: [1500], attackDelay: [100], splits: [4], cStorage: [200] }),
+  };
+}

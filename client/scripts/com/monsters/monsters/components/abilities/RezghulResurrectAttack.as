@@ -11,6 +11,9 @@ package com.monsters.monsters.components.abilities {
 
         private static const k_UNRESURRECTABLE_CREATURES:Vector.<String> = Vector.<String>(["C16", "C15", "C19", "C18"]);
 
+        /** Inferno-only: the share of its health a champion comes back with. */
+        private static const k_IO_CHAMPION_HEALTH:Number = 0.25;
+
         private var m_zombiefy:Zombiefy;
 
         private var m_resurrectRange:uint;
@@ -22,7 +25,10 @@ package com.monsters.monsters.components.abilities {
         }
 
         override protected function getValidTargetsInRange(param1:uint, param2:Point, param3:int):Vector.<ITargetable> {
-            if (!owner.inBattleState) {
+            // Rezghul can die (and this ability lose its owner) while his last shot is still flying: the shot
+            // landing then threw here on every frame, which stopped the battle's frame work, so the dead
+            // monsters were never cleared and the attack never ended.
+            if (!owner || !owner.inBattleState) {
                 return null;
             }
             var targets:Vector.<ITargetable> = null;
@@ -44,6 +50,12 @@ package com.monsters.monsters.components.abilities {
             return targets;
         }
 
+        /** A champion: a monster of the Strongbox's level-5 page (Korath, Drull and Ashkarr in the Inferno). */
+        private static function ioIsChampion(param1:String):Boolean {
+            var creature:Object = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[param1] : null;
+            return creature != null && creature.page == 5;
+        }
+
         override protected function fireAt(target:ITargetable):Projectilev2 {
             var proj:Projectilev2 = super.fireAt(target);
             proj.addEventListener(ProjectileEvent.k_hit, this.onProjectileHit, false, 0, true);
@@ -57,6 +69,9 @@ package com.monsters.monsters.components.abilities {
         }
 
         private function resurrectAlliesInArea(proj:Projectilev2):void {
+            if (!owner) {
+                return;
+            }
             var idx:int = 0;
             var currentCreep:ITargetable = null;
             var deadCreepsInRange:Vector.<ITargetable> = this.getValidTargetsInRange(this.m_resurrectRange, new Point(proj.x, proj.y), m_targetFlags);
@@ -87,7 +102,15 @@ package com.monsters.monsters.components.abilities {
                         "onComplete": (newMonster._friendly ? newMonster.findDefenseTargets : newMonster.findTarget)
                     });
             GIBLETS.Create(new Point(newMonster.x, newMonster.y + 20), 1, 50, 20, 10);
-            newMonster.addComponent(this.m_zombiefy.clone());
+            // Inferno-only (balance pass, 30 September): a raised monster comes back with 75% of its health (the
+            // zombie health multiplier, CREATURELOCKER.ioApplyRezghul), a champion (Korath, Drull, Ashkarr: the
+            // Strongbox's level-5 page) with 25%.
+            if (GLOBAL.INFERNO_ONLY && ioIsChampion(monsterToRes._creatureID)) {
+                newMonster.addComponent(this.m_zombiefy.ioCloneWithHealth(k_IO_CHAMPION_HEALTH));
+            }
+            else {
+                newMonster.addComponent(this.m_zombiefy.clone());
+            }
             monsterToRes.corpseDeath();
         }
     }

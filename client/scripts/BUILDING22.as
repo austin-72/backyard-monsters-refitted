@@ -667,6 +667,11 @@ package {
         }
 
         private function RangeIndicator():void {
+            // Inferno-only: the yard may have gone in the quarter second since the mouse came over (report #61:
+            // into an attack, with no footprint layer)
+            if (GLOBAL.INFERNO_ONLY && (!MAP._BUILDINGFOOTPRINTS || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD)) {
+                return;
+            }
             var _loc1_:uint = 16777215;
             this._radiusGraphic = new Shape();
             this._radiusGraphic.graphics.beginFill(16777215, 0.1);

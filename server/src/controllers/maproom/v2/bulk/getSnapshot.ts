@@ -8,12 +8,12 @@ import type { KoaController } from "../../../../utils/KoaController.js";
  * THIS ENDPOINT IS FOR API CONSUMERS ONLY.
  * ____________________________________________________________
  *
- * Serves every occupied cell in an MR2 world in a single request.
+ * Serves an MR2 world's map in a single request: every player main yard and outpost, every damaged or
+ * destroyed wild monster camp, the owners and the world's alliances. The game gets the same snapshot
+ * from /worldmapv2/mapdata.
  *
- * Covers the part of the map that is not derivable: player main yards, their
- * outposts, and wild monster camps that have been attacked. Terrain comes from
- * /worldmapv2/terrain, and wild monster tribes and levels are pure functions of
- * the coordinates.
+ * Covers the part of the map that is not derivable: terrain comes from /worldmapv2/terrain, and wild
+ * monster tribes and levels are pure functions of the coordinates (an untouched camp is not listed).
  *
  * Auth
  *   X-API-Key   An active key from bym.api_consumer (see `bun run consumer:create`). Required.
@@ -24,26 +24,31 @@ import type { KoaController } from "../../../../utils/KoaController.js";
  * Body
  *   application/json
  *   {
- *     "worldid":     "<uuid>",
  *     "generatedAt": <unix seconds the snapshot was built>,
- *     "players":     { "<uid>": { "name": "<username>", "avatar": "<url|null>" } },
+ *     "worldid":     "<uuid>",
+ *     "nextAt":      <unix seconds the world's next snapshot is due (a fixed 5-minute clock)>,
+ *     "width":       400, "height": 400,
+ *     "players":     { "<uid>": { "name": "<username>", "avatar": "<url|null>", "alliance": <id|0>, "level": <n> } },
+ *     "alliances":   { "<alliance id>": { "name": "<name>", "image": <icon index>, "leader": <uid>,
+ *                                          "members": [ <uid>, ... ], "relationships": { "<alliance id>": -1 | 1 } } },
  *     "cells":       [ [x, y, base_type, uid, baseid, empirevalue,
- *                       flinger, catapult, damage, protected, destroyed], ... ]
+ *                       flinger, catapult, damage, protected, destroyed, level, locked, terrain], ... ]
  *   }
  *
- *   Cells are positional arrays to avoid repeating key names across six figures
- *   of rows, and reference their owner by uid rather than inlining it.
- *   base_type is 1 for an attacked wild monster camp, 2 for a main yard and 3
- *   for an outpost.
+ *   Cells are positional arrays to avoid repeating key names across six figures of rows, and reference
+ *   their owner by uid. base_type is 1 for a damaged or destroyed wild monster camp, 2 for a main yard and
+ *   3 for an outpost. level is the owner's level for a player's yard and the camp's level for a wild
+ *   monster camp. locked is 1 while a main yard can't be attacked (its owner is playing, or it is under
+ *   attack, as of the snapshot). terrain is the cell's height as stored with it (a yard keeps the height
+ *   it was placed at; /worldmapv2/terrain has every other cell's). Wild monster cells carry uid 0 and have no entry in players; their
+ *   empirevalue, flinger, catapult and protected are always 0.
  *
- *   Wild monster cells carry uid 0 and have no entry in players; their
- *   empirevalue, flinger, catapult and protected are always 0, so only damage
- *   and destroyed carry meaning.
+ *   relationships are the flags an alliance has set on others, keyed by target id: -1 hostile,
+ *   1 friendly, absent neutral. (/worldmapv2/alliances still lists every world's alliances at once.)
  *
  * Not included
- *   Resources and monsters change every tick and would make the response
- *   uncacheable and different for every caller; they stay on getarea. Truce and
- *   protection state relative to the caller is likewise per-viewer.
+ *   Resources and monsters change every tick and would make the response uncacheable and different for
+ *   every caller; they stay on getarea.
  *
  * Encoding
  *   brotli, gzip or identity, selected from Accept-Encoding, preferring brotli.
@@ -51,10 +56,9 @@ import type { KoaController } from "../../../../utils/KoaController.js";
  *   Vary: Accept-Encoding.
  *
  * Caching
- *   Rebuilt at most once every five minutes per world and served with a matching max-age
- *   and a strong ETag derived from the payload. The ETag covers the world and its
- *   occupancy alone, so it only changes when a cell does. Send the ETag back as
- *   If-None-Match to get a 304 with no body while nothing has changed.
+ *   Rebuilt once every 5 minutes per world (each world at its own moment) and served with a matching max-age and a strong ETag derived
+ *   from the payload. The ETag covers the world's map alone, so it only changes when something on it
+ *   does. Send the ETag back as If-None-Match to get a 304 with no body while nothing has changed.
  *
  * Status
  *   200   the snapshot
@@ -84,7 +88,9 @@ export const getSnapshot: KoaController = async (ctx) => {
 
   const snapshot = await getWorldSnapshot(worldid.toString());
 
-  ctx.set("Cache-Control", `private, max-age=${SNAPSHOT_MAX_AGE_SECONDS}`);
+  // (kept until the world's next one is out on the 5-minute clock)
+  const maxAge = Math.max(0, Math.min(SNAPSHOT_MAX_AGE_SECONDS, snapshot.nextAt - Math.floor(Date.now() / 1000)));
+  ctx.set("Cache-Control", `private, max-age=${maxAge}`);
   ctx.set("Vary", "Accept-Encoding");
   ctx.set("ETag", snapshot.etag);
   ctx.set("Access-Control-Expose-Headers", "ETag");
@@ -102,7 +108,7 @@ export const getSnapshot: KoaController = async (ctx) => {
 
   if (acceptEncoding && ctx.acceptsEncodings("br") === "br") {
     ctx.set("Content-Encoding", "br");
-    ctx.body = snapshot.brotli;
+    ctx.body = await snapshot.brotli();
     return;
   }
 

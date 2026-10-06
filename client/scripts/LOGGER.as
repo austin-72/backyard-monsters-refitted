@@ -1,4 +1,5 @@
 package {
+    import com.monsters.debug.IoBugReport;
     import com.monsters.enums.EnumYardType;
     import flash.events.IOErrorEvent;
 
@@ -22,6 +23,11 @@ package {
             var _loc4_:Array = null;
             if (message.search("recorddebugdata") != -1) {
                 return;
+            }
+            // Inferno-only: every error is also reported to the admins, whatever gamedebug is set to.
+            IoBugReport.Record(logType, message);
+            if (logType == "err") {
+                IoBugReport.Send(message);
             }
             if (param3 || !GLOBAL._flags || GLOBAL._flags && GLOBAL._flags.gamedebug == 1) {
                 if (!_logged[logType + message]) {

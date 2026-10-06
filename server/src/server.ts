@@ -1,5 +1,5 @@
-import { getPublishedBuild } from "./services/clientBuild.js";
 import "./config/normalizeEnv.js"; // first: every other module reads process.env.ENV as it loads
+import { getPublishedBuild } from "./services/clientBuild.js";
 import Koa, { type Next } from "koa";
 import bodyParser from "koa-bodyparser";
 import serve from "koa-static";
@@ -21,6 +21,17 @@ import { initAnticheat } from "./scripts/anticheat/anticheat.js";
 import { initialize as initVersionManifest } from "./config/VersionManifestConfig.js";
 import { startChatServer } from "./chat/chatServer.js";
 import { exitOnRedisReconnect } from "./utils/redisReconnectGuard.js";
+import { startAdminNames } from "./services/admin/admin.js";
+import { loadDesigns } from "./services/admin/designStore.js";
+import { refreshKitPictures } from "./services/kits/refreshKitPictures.js";
+import { prewarmMapLayers, startSnapshotClock } from "./services/maproom/v2/bulk/worldSnapshot.js";
+import { startLeaderboards } from "./services/leaderboards/gameLeaderboards.js";
+import { startCasinoJobs } from "./services/casino/bonePileSessions.js";
+import { startAscent } from "./services/casino/ascentRounds.js";
+import { startDerby } from "./services/casino/derbyRounds.js";
+import { startTribeReset } from "./services/maproom/v2/tribeReset.js";
+import { startWartBloom } from "./services/events/wartBloom.js";
+import { startReplayCleanup } from "./services/replays/replays.js";
 
 export const app = new Koa();
 app.proxy = true;
@@ -70,6 +81,18 @@ redis.onclose = (err) => logger.error(`Redis disconnected: ${err.message}`);
 
   await redis.connect();
 
+  startAdminNames();
+  // The layouts admins designed (services/admin/designs.ts), before any yard is made from them.
+  await loadDesigns();
+  // Kit pictures drawn again when the building art changed (services/kits/refreshKitPictures.ts), in the background.
+  setTimeout(() => refreshKitPictures(), 2000);
+
+  // Map Room 2: the world map's fixed layers, built in the background a little after startup.
+  setTimeout(() => prewarmMapLayers().catch((err) => logger.warn(`Could not prepare the world maps: ${err}`)), 15000);
+  // Map Room 2: the world snapshots' 5-minute clock, and the leaderboards made from them at each turn.
+  startLeaderboards();
+  startSnapshotClock().catch((err) => logger.warn(`Could not start the map snapshots' clock: ${err}`));
+
   startChatServer();
 
   app.use(corsCacheControl);
@@ -98,6 +121,19 @@ redis.onclose = (err) => logger.error(`Redis disconnected: ${err.message}`);
 
   await initVersionManifest();
   await initAnticheat();
+
+  // The Brimstone Pit: Bone Pile games left alone for a day are settled
+  startCasinoJobs();
+  // Balthazar's Ascent: the shared rounds' loop
+  startAscent();
+  // Magma Derby: a race every five minutes
+  startDerby();
+  // Map Room 2: tribe yards made fresh 12 hours after their last attack (Inferno-only)
+  startTribeReset();
+  // The Wart Bloom: its start and end announced in Global chat (Inferno-only)
+  startWartBloom();
+  // Attack replays: stale recordings finished, old replays forgotten (Inferno-only)
+  startReplayCleanup();
 
   // Version control: report what is published at startup (also read again whenever the file changes).
   getPublishedBuild();

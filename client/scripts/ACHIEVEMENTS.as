@@ -91,6 +91,10 @@ package {
 
         public static function Check(param1:String = "", param2:int = 0, param3:Boolean = false):void {
             var fail:Boolean = false;
+            // Inferno-only: a Designer draft (GLOBAL.ioDesign) is not the player's yard: it counts for nothing.
+            if (GLOBAL.ioDesignMode()) {
+                return;
+            }
             var i:int = 0;
             var a:Object = null;
             var block:Boolean = false;

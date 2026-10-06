@@ -43,15 +43,25 @@ const usernameSchema = z
   .regex(/^[a-zA-Z0-9_]+$/, usernameCharsetError);
 
 /**
+ * A password typed at login: any text. The rules for new passwords are checked when one is chosen
+ * (register, reset); at login a password that breaks them is simply a wrong password.
+ */
+const loginPasswordSchema = z.preprocess(
+  (input) => (input === "" ? undefined : input),
+  z.string().trim().max(256).optional()
+);
+
+/**
  * Schema to validate user login data.
  * - Email is optional.
  * - Password is optional.
  * - Token is optional.
  * - sessionType distinguishes game sessions from launcher/website sessions.
+ * The login controller answers any mismatch with "login credentials are incorrect", not a server error.
  */
 export const UserLoginSchema = z.object({
   email: emailSchema.optional(),
-  password: passwordSchema.optional(),
+  password: loginPasswordSchema,
   token: z.string().optional(),
   sessionType: z.enum([SessionType.GAME, SessionType.LAUNCHER]).default(SessionType.GAME),
 });

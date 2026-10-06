@@ -10,6 +10,9 @@ package com.monsters.baseplanner {
 
         public function callServerMethod(url:String, keyValue:Array, onComplete:Function = null):void {
             var urlLoader:URLLoaderApi;
+            // Each yard keeps its own layouts (server: controllers/yardplanner/plannerSave.ts): a layout
+            // records building ids, which differ between the main yard and every outpost.
+            keyValue = (keyValue || []).concat([["baseid", BASE._loadedBaseID]]);
             (urlLoader = new URLLoaderApi()).load(GLOBAL._apiURL + "bm/yardplanner/" + url, keyValue, onComplete);
         }
 

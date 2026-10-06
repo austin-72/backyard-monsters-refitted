@@ -50,6 +50,9 @@ export const addAllianceMember = async (
   user.alliance_role = role;
 
   if (shoutType) await emitShout({ allianceId: id, author: user, type: shoutType, body: "", em });
+
+  // A player already in chat moves into the new alliance's channel (the gateway checks the database).
+  await disconnectAllianceChat(user.userid);
 };
 
 /**

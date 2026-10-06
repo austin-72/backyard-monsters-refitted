@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "useDefineForClassFields": false,
+    "strict": false,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@game": ["src/game/index.ts"],
+      "@config": ["src/config.ts"],
+      "as3": ["src/as3/index.ts"],
+      "flash/*": ["src/flash/*"]
+    }
+  },
+  "include": ["src"]
+}

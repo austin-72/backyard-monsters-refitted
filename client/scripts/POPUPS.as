@@ -1,6 +1,8 @@
 package {
 
     import com.monsters.configs.BYMDevConfig;
+    import com.monsters.debug.IoBugReport;
+    import flash.utils.getQualifiedClassName;
     import com.monsters.display.ImageCache;
     import com.monsters.frontPage.FrontPageGraphic;
     import flash.display.Bitmap;
@@ -104,6 +106,25 @@ package {
             }
         }
 
+        /** The popup on screen, for bug reports: its class, and its title when it has one ("popup_generic "Invite a friend""). */
+        public static function ioShowing():String {
+            var cls:String = null;
+            var title:String = "";
+            if (!_mc) {
+                return "";
+            }
+            cls = getQualifiedClassName(_mc);
+            cls = cls.substr(cls.lastIndexOf(":") + 1);
+            try {
+                if (_mc.tA && _mc.tA.text) {
+                    title = " \"" + String(_mc.tA.text).replace(/\s+/g, " ").substr(0, 50) + "\"";
+                }
+            }
+            catch (e:Error) {
+            }
+            return cls + title;
+        }
+
         public static function hasPopupsOpen():Boolean {
             var _loc1_:Boolean = Boolean(GLOBAL._newBuilding) && (GLOBAL._newBuilding as BFOUNDATION)._placing == true;
             return BUILDINGS._open || STORE._open || BUILDINGOPTIONS._open || ACADEMY._open || CREATURELOCKER._open || _loc1_ || Boolean(_mc) || _open;
@@ -181,6 +202,7 @@ package {
                     _open = true;
                     AddBG();
                     _mc = GLOBAL._layerTop.addChild(message[0]) as MovieClip;
+                    IoBugReport.Screen("popup: " + ioShowing());
                     POPUPSETTINGS.AlignToCenter(_mc);
                     POPUPSETTINGS.ScaleUp(_mc);
                     try {
@@ -308,8 +330,50 @@ package {
             }
         }
 
+        /** Inferno-only: the Connection Lost popup on screen (the connection check runs every few seconds). */
+        private static var _ioNoConnection:MovieClip;
+
+        /** Inferno-only: the "Anyone home?" popup on screen. */
+        private static var _ioTimeout:MovieClip;
+
+        /** Inferno-only: whether the player has an invite link to hand out (the Invite Friends popup). */
+        private static function ioCanInvite():Boolean {
+            return GLOBAL._flags && Boolean(GLOBAL._flags.io_invite);
+        }
+
+        /**
+         * Inferno-only Invite Friends, from anywhere: the popup the Invite button on the top bar opens
+         * (UI_TOP.ioShowInvite), never Facebook's invite dialog, which isn't there.
+         */
+        private static function ioShowInvite():void {
+            if (ioCanInvite()) {
+                UI_TOP.ioShowInvite();
+            }
+            else {
+                GLOBAL.Message(KEYS.Get("disabled_invites"));
+            }
+        }
+
+        /**
+         * Inferno-only: Connection Lost and "Anyone home?" stop the game, and their one button reloads it
+         * (logged in still). Their frame loses its close button: closing either one would leave a stopped game.
+         */
+        private static function ioReloadOnly(movie:MovieClip):void {
+            (movie.mcFrame as frame).Setup(false);
+            movie.bGift.visible = true;
+            movie.bGift.Setup("Reload");
+            movie.bGift.Highlight = true;
+            movie.bGift.addEventListener(MouseEvent.CLICK, function(e:MouseEvent):void {
+                    e.stopPropagation();
+                    GAME.ioReload(true);
+                });
+        }
+
         public static function NoConnection():void {
             var movie:MovieClip = null;
+            if (GLOBAL.INFERNO_ONLY && _ioNoConnection && _ioNoConnection.parent) {
+                return; // already up
+            }
             SOUNDS.StopAll();
             _mcBG = GLOBAL._layerTop.addChild(new popup_bg2()) as popup_bg2;
             _mcBG.x = GLOBAL._SCREEN.x;
@@ -320,7 +384,14 @@ package {
             movie = new popup_timeout();
             movie.tA.htmlText = "<b>" + KEYS.Get("pop_noconnect_title") + "</b>";
             movie.tB.htmlText = KEYS.Get("pop_noconnect_body");
-            movie.bGift.visible = false;
+            if (GLOBAL.INFERNO_ONLY) {
+                movie.tB.htmlText = KEYS.Get("pop_noconnect_body") + " Then press Reload.";
+                ioReloadOnly(movie);
+                _ioNoConnection = movie;
+            }
+            else {
+                movie.bGift.visible = false;
+            }
             movie.x = GLOBAL._SCREENCENTER.x;
             movie.y = GLOBAL._SCREENCENTER.y;
             GLOBAL._layerTop.addChild(movie);
@@ -329,6 +400,9 @@ package {
 
         public static function Timeout():void {
             var _loc1_:MovieClip = null;
+            if (GLOBAL.INFERNO_ONLY && _ioTimeout && _ioTimeout.parent) {
+                return; // already up
+            }
             SOUNDS.StopAll();
             if (GLOBAL._ROOT.stage.displayState == StageDisplayState.FULL_SCREEN) {
                 print("game timed out, kicking the client out of fullscreen");
@@ -343,7 +417,14 @@ package {
             _loc1_ = new popup_timeout();
             _loc1_.tA.htmlText = "<b>" + KEYS.Get("pop_timeout_title") + "</b>";
             _loc1_.tB.htmlText = KEYS.Get("pop_timeout_body");
-            if (!GLOBAL._flags.kongregate) {
+            if (GLOBAL.INFERNO_ONLY) {
+                // Its button was Send FREE Gifts or Invite Friends To Play (Facebook dialogs, not here), on a
+                // stopped game with nothing to go on with: Reload instead.
+                _loc1_.tB.htmlText = "You've been inactive for a while, so the game stopped. Press Reload to carry on playing.";
+                ioReloadOnly(_loc1_);
+                _ioTimeout = _loc1_;
+            }
+            else if (!GLOBAL._flags.kongregate) {
                 if (GLOBAL._canGift) {
                     _loc1_.bGift.SetupKey("btn_sendfreegifts");
                     _loc1_.bGift.addEventListener(MouseEvent.CLICK, DisplayGiftSelect);
@@ -364,6 +445,21 @@ package {
         }
 
         public static function AFK():void {
+            if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only: never the Send FREE Gifts popup (no gifts here). Invite Friends, when the player
+                // has an invite link.
+                // (bug report B14: not in an attack, where it stacked on the attack's end popups; asked again
+                // once back home)
+                var home:Boolean = GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD;
+                if (!home) {
+                    return;
+                }
+                if (!GLOBAL._promptedAFK && TUTORIAL._stage > 200 && ioCanInvite()) {
+                    Invite(true);
+                }
+                GLOBAL._promptedAFK = true;
+                return;
+            }
             if (!GLOBAL._promptedAFK && TUTORIAL._stage > 200) {
                 if (GLOBAL._canGift || Boolean(GLOBAL._flags.kongregate)) {
                     Gift(true);
@@ -380,6 +476,10 @@ package {
             var GetFriends:Function;
             var popupMC:MovieClip = null;
             var showingamepopup:Boolean = param1;
+            if (GLOBAL.INFERNO_ONLY) {
+                Invite(showingamepopup); // no gifts here
+                return;
+            }
             if (GLOBAL._canGift || Boolean(GLOBAL._flags.kongregate)) {
                 if (showingamepopup) {
                     SendGift = function(param1:MouseEvent):void {
@@ -429,6 +529,26 @@ package {
             var GetFriends:Function;
             var popupMC:popup_invite_friends = null;
             var showingamepopup:Boolean = param1;
+            if (GLOBAL.INFERNO_ONLY && showingamepopup) {
+                // Its button opens the top bar's Invite Friends popup in its place (pushed to show now, so this
+                // one closes first).
+                popupMC = new popup_invite_friends();
+                popupMC.tA.htmlText = "<b>Having fun?</b>";
+                popupMC.tB.htmlText = "Invite a friend to the inferno. When they register from your link, you both get <b>"
+                    + GLOBAL.FormatNumber(Number(GLOBAL._flags.io_invite_shiny)) + " shiny</b>.";
+                popupMC.bAction.SetupKey("btn_invitefriends");
+                popupMC.bAction.addEventListener(MouseEvent.CLICK, function(e:MouseEvent):void {
+                        ioShowInvite();
+                    });
+                popupMC.bAction.Highlight = true;
+                POPUPS.Push(popupMC);
+                GLOBAL.StatSet("pi", GLOBAL.Timestamp());
+                return;
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                ioShowInvite();
+                return;
+            }
             if (showingamepopup) {
                 GetFriends = function(param1:MouseEvent):void {
                     POPUPS.Next(param1);
@@ -459,6 +579,10 @@ package {
         }
 
         public static function DisplayGiftSelect(param1:MouseEvent = null):void {
+            if (GLOBAL.INFERNO_ONLY) {
+                ioShowInvite(); // Facebook's gift dialog isn't here
+                return;
+            }
             AddBG();
             if (BYMDevConfig.instance.USE_CLIENT_WITH_CALLBACK) {
                 GLOBAL.CallJSWithClient("cc.showFeedDialog", "callbackgift", ["gift"]);
@@ -470,6 +594,10 @@ package {
         }
 
         public static function DisplayInviteSelect(param1:MouseEvent = null):void {
+            if (GLOBAL.INFERNO_ONLY) {
+                ioShowInvite(); // Facebook's invite dialog isn't here
+                return;
+            }
             AddBG();
             if (BYMDevConfig.instance.USE_CLIENT_WITH_CALLBACK) {
                 GLOBAL.CallJSWithClient("cc.showFeedDialog", "callbackgift", ["invite"]);
@@ -512,6 +640,13 @@ package {
             _loc1_.bGet.SetupKey("str_getmore_btn");
             _loc1_.bGet.addEventListener(MouseEvent.CLICK, BUY.Show);
             _loc1_.bGet.Highlight = true;
+            // Inferno-only: Shiny is not sold here, so "a few clicks away from all the Shiny you could ever want"
+            // and its Get More Shiny button (a call to the old Facebook page's shop, which does nothing) are
+            // replaced by where Shiny comes from
+            if (GLOBAL.INFERNO_ONLY) {
+                _loc1_.tB.htmlText = KEYS.Get("io_noshiny_body");
+                _loc1_.bGet.visible = false;
+            }
             return _loc1_;
         }
 
@@ -530,6 +665,11 @@ package {
                 if (_loc3_ > BASE._credits.Get()) {
                     POPUPS.Next();
                     POPUPS.DisplayGetShiny();
+                    return;
+                }
+                if (GLOBAL._selectedBuilding && !GLOBAL.ioConfirmShiny(_loc3_, "to finish your worker's current job now", function():void {
+                            DisplayWorkerNext(param1, param2);
+                        })) {
                     return;
                 }
                 if (GLOBAL._selectedBuilding) {
@@ -600,6 +740,11 @@ package {
             var popupMC:popup_pleasebuy = null;
             var Action:Function = null;
             var key:String = param1;
+            // Inferno-only: no "Want it upgraded NOW? Treat yourself to some shiny" after an Under Hall upgrade:
+            // Shiny is not sold here (its button did nothing, and its picture, purchased.png, is not on the server)
+            if (GLOBAL.INFERNO_ONLY) {
+                return;
+            }
             Action = function():void {
                 popupMC.bAction.Enabled = false;
                 popupMC.bAction.removeEventListener(MouseEvent.CLICK, Action);

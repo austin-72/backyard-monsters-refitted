@@ -38,14 +38,17 @@ export const monsterUpdateHandler = async (monsters: MonsterUpdatePayload, userS
     return;
   }
 
-  if (monsters.length > 0) {
-    const authMonsters = monsters.find(
-      ({ baseid }) => baseid.toString() === userSave.baseid
-    );
+  // Entries without a yard id (a map cell the client had no id for) or without monsters are skipped.
+  const valid = monsters.filter(
+    (entry): entry is MonsterUpdate =>
+      !!entry && typeof entry === "object" && entry.baseid != null && String(entry.baseid) !== "" &&
+      String(entry.baseid) !== "NaN" && !!entry.m && typeof entry.m === "object"
+  );
 
-    const monsterUpdates = monsters.filter(
-      ({ baseid }) => baseid.toString() != userSave.baseid
-    );
+  if (valid.length > 0) {
+    const authMonsters = valid.find(({ baseid }) => String(baseid) === String(userSave.baseid));
+
+    const monsterUpdates = valid.filter(({ baseid }) => String(baseid) !== String(userSave.baseid));
 
     if (authMonsters) userSave.monsters = authMonsters.m;
 

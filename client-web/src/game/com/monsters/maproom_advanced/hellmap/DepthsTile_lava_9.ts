@@ -1,0 +1,16 @@
+import * as as3 from "as3";
+import { int } from "as3";
+import { BitmapData } from "flash/display";
+
+/** The Depths of Hell's map art (IoUnderworld.depthsGround): depths_lava_9.png. */
+export class DepthsTile_lava_9 extends BitmapData {
+    [key: string]: any;
+
+    static {
+        as3.embed(this, { source: "/_assets/hellmap/depths_lava_9.png" });
+    }
+
+    public $ctor(param1: int = 150, param2: int = 100): void {
+        super.$ctor(param1, param2);
+    }
+}

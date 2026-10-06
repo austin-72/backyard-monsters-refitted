@@ -1,3 +1,5 @@
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+
 export interface StoreItem {
   t: string;      // Title
   d: string;      // Description
@@ -1309,3 +1311,18 @@ export const storeItems: { [key: string]: StoreItem } = {
     a: 1,
   },
 };
+
+// Inferno-only: the prices in InfernoOnlyConfig.prices win over the table above. The server charges
+// these; the client shows them (it gets the table with every base load).
+if (infernoOnlyConfig.enabled) {
+  const p = infernoOnlyConfig.prices;
+  storeItems.BIP.c = Array(storeItems.BIP.c.length).fill(p.packing);
+  storeItems.PRO1.c = [p.protection.day];
+  storeItems.PRO2.c = [p.protection.threeDays];
+  storeItems.PRO3.c = [p.protection.week];
+  storeItems.EXHI.c = [p.housingExpansion];
+  storeItems.TODI.c = [p.towerOverdrive];
+  storeItems.SP2.c = [p.reduce1h];
+  storeItems.SP3.c = [p.reduce2h];
+  storeItems.SP1.d = `If the worker has less than ${p.closeEnoughMinutes} minutes remaining you can finish now <b>for free</b>!`;
+}

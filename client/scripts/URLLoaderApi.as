@@ -9,6 +9,8 @@ package {
     import flash.net.URLRequestHeader;
     import flash.net.URLRequestMethod;
     import flash.net.URLVariables;
+    import flash.utils.getTimer;
+    import com.monsters.debug.IoBugReport;
 
     public class URLLoaderApi {
 
@@ -25,6 +27,9 @@ package {
         private var _onError:Function;
 
         private var _baseUrl:String;
+
+        /** When the request was sent (getTimer), for how long it took. */
+        private var _t0:int = 0;
 
         public function URLLoaderApi() {
             super();
@@ -110,7 +115,6 @@ package {
                 while (currentIndex < keyValuePairs.length) {
                     currentPair = keyValuePairs[currentIndex];
                     urlVariables[currentPair[0]] = currentPair[1];
-                    _data += keyValuePairs[currentIndex][0] + "=" + keyValuePairs[currentIndex][1] + "&";
                     currentIndex++;
                 }
             }
@@ -120,6 +124,7 @@ package {
             }
             urlBuilder.data = urlVariables;
             urlBuilder.method = URLRequestMethod.POST;
+            this._t0 = getTimer();
             this._req = new URLLoader(urlBuilder);
             this._req.addEventListener(Event.COMPLETE, this.fireComplete);
             this._req.addEventListener(IOErrorEvent.IO_ERROR, this.loadError);
@@ -131,47 +136,46 @@ package {
                 });
         }
 
+        /** The status only: the line about a failure is written once the answer is in (ioFailure), with what the server said. */
         private function setStatus(param1:HTTPStatusEvent):void {
             this._status = param1.status;
-            switch (this._status) {
-                case 404:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Not Found");
-                    break;
-                case 401:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Unauthorized");
-                    break;
-                case 403:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Forbidden");
-                    break;
-                case 405:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Method Not Allowed");
-                    break;
-                case 406:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Not Acceptable");
-                    break;
-                case 407:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Proxy Authentication Required");
-                    break;
-                case 408:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Request Timeout");
-                    break;
-                case 500:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Internal Server Error");
-                    break;
-                case 501:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Not Implemented");
-                    break;
-                case 502:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Bad Gateway");
-                    break;
-                case 503:
-                    LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Service Unavailable");
-                    break;
-                default:
-                    if (this._status > 400) {
-                        LOGGER.Log("err", "URLLoaderApi HTTP status " + this._status + " Other status");
-                    }
+        }
+
+        /**
+         * Inferno-only: one line for a request that failed, with what the bug reports need: the status,
+         * the request, what the server said, how long it took, and the server's reference for a failure it
+         * reported itself. Answers that are not failures are written as "log", not "err", so they are not
+         * reported: 4xx (a login that expired, a name already taken, ...), a newer client published (the
+         * init answer's versionMismatch) and 502/503/504 (the server or its proxy restarting in a deploy).
+         * No status at all: no answer came (the player's connection dropped, or the server was down). That
+         * is "log" too since 1 October (bug reports #50, #52, #55, #59: phones in a pocket, a tab put to sleep):
+         * the game already tries again (saves and polls go again, /init three times) and five saves in a row
+         * that fail still stop the game with "Base.Save HTTP", which is reported.
+         */
+        private function ioFailure(errorObj:Object):void {
+            var ms:int = getTimer() - this._t0;
+            var said:String = "";
+            var ref:String = "";
+            var expected:Boolean = false;
+            var line:String = null;
+            if (errorObj) {
+                said = String(errorObj.error || errorObj.message || "");
+                ref = errorObj.ref ? " [ref " + errorObj.ref + "]" : "";
             }
+            IoBugReport.Request(this.ioPath(), this._status, ms);
+            if (!this._status) {
+                line = "No answer from the server on " + this.ioPath() + " after " + ms + " ms (connection dropped, or the server was down)";
+            }
+            else {
+                line = "HTTP " + this._status + " on " + this.ioPath() + (said ? ": " + said.substr(0, 200) : "") + " (" + ms + " ms)" + ref;
+            }
+            expected = !this._status || (this._status >= 400 && this._status < 500) || (this._status >= 502 && this._status <= 504) || Boolean(errorObj && errorObj.versionMismatch);
+            LOGGER.Log(expected ? "log" : "err", line);
+        }
+
+        /** The request's path without the server or query (bug reports say which request failed). */
+        private function ioPath():String {
+            return String(this._url || "").replace(/^[a-z]+:\/\/[^\/]+/i, "").split("?")[0];
         }
 
         /*
@@ -196,7 +200,6 @@ package {
     * @param {IOErrorEvent} param1 - The IO error event triggered by the URLLoader.
     */
         private function loadError(param1:IOErrorEvent):void {
-            LOGGER.Log("err", "URLLoader Load Error " + this._url);
             var errorObj:Object = null;
             if (this._req && this._req.data) {
                 try {
@@ -205,6 +208,14 @@ package {
                 catch (e:Error) {
                 }
             }
+            // Inferno-only: during play, the server no longer accepts this login ("Could not authenticate":
+            // replaced by a login elsewhere, expired, banned). Other 401s (the Discord age check) keep their
+            // normal handling. Answered once for the whole game (GLOBAL.ioSessionEnded), not per request.
+            if (GLOBAL.INFERNO_ONLY && this._status == 401 && GLOBAL._loadmode && errorObj && String(errorObj.error).indexOf("Could not authenticate") == 0) {
+                GLOBAL.ioSessionEnded();
+                return;
+            }
+            this.ioFailure(errorObj);
             if (errorObj && this._onComplete != null) {
                 this._onComplete(errorObj);
             }
@@ -221,10 +232,30 @@ package {
         }
 
         private function fireComplete(param1:Event):void {
+            if (this._status < 400) {
+                IoBugReport.Request(this.ioPath(), this._status || 200, getTimer() - this._t0);
+            }
             if (this._onComplete === null) {
                 return;
             }
-            var decodedReqData:Object = JSON.parse(this._req.data);
+            var decodedReqData:Object = null;
+            try {
+                decodedReqData = JSON.parse(this._req.data);
+            }
+            catch (e:Error) {
+                // Not JSON (a proxy's error page, a cut-off answer): the caller's failure path runs, so
+                // nothing is left waiting for an answer that never comes.
+                IoBugReport.Request(this.ioPath(), this._status, getTimer() - this._t0);
+                LOGGER.Log("err", "URLLoaderApi: the answer is not JSON " + this.ioPath() + (this._status ? " (HTTP " + this._status + ")" : "")
+                    + ": " + String(this._req.data || "(empty)").replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").substr(0, 120));
+                if (this._onError != null) {
+                    this._onError(new IOErrorEvent(IOErrorEvent.IO_ERROR, false, false, "invalid JSON"));
+                }
+                return;
+            }
+            if (this._status >= 400) {
+                this.ioFailure(decodedReqData); // an error answer delivered as complete (some players do)
+            }
             if (Boolean(this._onComplete)) {
                 if (decodedReqData) {
                     this._onComplete(decodedReqData);

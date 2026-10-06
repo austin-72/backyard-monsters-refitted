@@ -18,7 +18,8 @@ import { logger } from "../../utils/logger.js";
  * actually loads the game. Nothing is paid when the two accounts were made on the same IP address:
  * the friend's registration address is compared with the inviter's registration address and with
  * the address the inviter last logged in from (accounts from before this feature have no
- * registration address on record). Each account can be referred once, and only by someone else.
+ * registration address on record). Each account can be referred once, and only by someone else. Nothing is
+ * paid either when an admin has barred the inviter from invite rewards (abuse of the link; the admin panel).
  */
 
 const CODE_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"; // no 0/o, 1/l/i: the link gets read out loud
@@ -47,9 +48,10 @@ export const getReferralCode = async (user: User): Promise<string> => {
   throw new Error("could not make a unique referral code");
 };
 
+/** The invite link: the browser client's address (referral.inviteUrl, or BASE_URL) with ?ref=<code>. */
 export const inviteLink = (code: string) => {
-  const base = (process.env.BASE_URL ?? "").replace(/\/+$/, "");
-  return `${base}/play.swf?ref=${code}`;
+  const base = (infernoOnlyConfig.referral.inviteUrl || process.env.BASE_URL || "").replace(/\/+$/, "");
+  return `${base}/?ref=${code}`;
 };
 
 /** Registration: tie the new account to the inviter whose code came with it, if it is someone else's. */
@@ -79,21 +81,32 @@ export const creditReferral = async (user: User, newSave: Save) => {
 
   const inviter = await postgres.em.findOne(User, { userid: user.referred_by }, { populate: ["save"] });
   if (!inviter?.save) {
+    user.referral_result = "no-inviter";
     await postgres.em.flush();
     return;
   }
 
   const shiny = infernoOnlyConfig.referral.shiny;
 
+  // Barred by an admin (abuse of the invite link): nothing for either side.
+  if (inviter.referral_barred) {
+    logger.info(`Referral of '${user.username}' by '${inviter.username}' not credited: the inviter is barred from invite rewards`);
+    user.referral_result = "barred";
+    await postgres.em.flush();
+    return;
+  }
+
   if (sameIp(user.registration_ip, inviter.registration_ip) || sameIp(user.registration_ip, inviter.last_ip)) {
     logger.info(`Referral of '${user.username}' by '${inviter.username}' not credited: same IP address`);
     user.referral_notice = "Your invite was noted, but invites only pay out between players on different connections.";
+    user.referral_result = "same-ip";
     await postgres.em.flush();
     return;
   }
 
   newSave.credits = (newSave.credits ?? 0) + shiny;
   inviter.save.credits = (inviter.save.credits ?? 0) + shiny;
+  user.referral_result = "paid";
 
   user.referral_notice = `You joined through ${inviter.username}'s invite: you both get ${shiny} shiny.`;
   inviter.referral_notice = `${user.username} joined through your invite link: you both get ${shiny} shiny.`;

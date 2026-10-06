@@ -2,10 +2,8 @@ import { Save } from "../../database/models/save.model.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { AttackPermission, MapRoomVersion } from "../../enums/MapRoom.js";
-import { TruceStatus } from "../../enums/TruceStatus.js";
 import { getCurrentDateTime } from "../../utils/getCurrentDateTime.js";
 import { getLastSeen } from "./getLastSeen.js";
-import { getTruces } from "./getTruces.js";
 import { isAttackActive } from "../base/isAttackActive.js";
 import { calculateBaseLevel } from "../base/calculateBaseLevel.js";
 import type { NeighbourData } from "../../types/NeighbourData.js";
@@ -45,13 +43,13 @@ const NEIGHBOUR_USER_FIELDS = ["userid", "username", "pic_square"] as const;
  * @param {Base.MAIN | Base.INFERNO} baseType - Which save type to query for live updates
  * @returns {Promise<NeighbourData[]>} - Updated neighbour data with current attack permissions
  */
-export const updateNeighbourData = async (cachedNeighbours: NeighbourData[], baseType: Base, currentUserId?: number): Promise<NeighbourData[]> => {
+export const updateNeighbourData = async (cachedNeighbours: NeighbourData[], baseType: Base, _currentUserId?: number): Promise<NeighbourData[]> => {
   if (!cachedNeighbours.length) return cachedNeighbours;
 
   const userIds = cachedNeighbours.map((neighbour) => neighbour.userid);
   const mr1Filter = baseType === BaseType.MAIN ? { mapversion: MapRoomVersion.V1 } : {};
 
-  const [neighbourUsers, neighbourSaves, lastSeens, truces] = await Promise.all([
+  const [neighbourUsers, neighbourSaves, lastSeens] = await Promise.all([
     postgres.em.find(
       User,
       { userid: { $in: userIds } },
@@ -65,8 +63,6 @@ export const updateNeighbourData = async (cachedNeighbours: NeighbourData[], bas
     ),
 
     getLastSeen(userIds, baseType),
-
-    getTruces(currentUserId, userIds),
   ]);
 
   const saves = new Map(neighbourSaves.map((save) => [save.userid, save]));
@@ -128,18 +124,6 @@ export const updateNeighbourData = async (cachedNeighbours: NeighbourData[], bas
       neighbour.basename = owner.username;
       neighbour.ownerName = owner.username;
       neighbour.pic = owner.pic_square || "";
-    }
-
-    const truce = truces.get(neighbour.userid);
-
-    if (!truce) return [neighbour];
-
-    neighbour.trucestate = truce.trucestate;
-    
-    if (truce.expires_at) neighbour.truceexpire = truce.expires_at - currentTime;
-    
-    if (truce.trucestate === TruceStatus.ACCEPTED) {
-      neighbour.attackpermitted = AttackPermission.TRUCE_ACTIVE;
     }
 
     return [neighbour];

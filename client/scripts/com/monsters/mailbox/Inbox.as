@@ -5,6 +5,8 @@ package com.monsters.mailbox {
     import flash.events.Event;
     import flash.events.IOErrorEvent;
     import flash.events.MouseEvent;
+    import flash.text.TextField;
+    import flash.text.TextFormat;
     import gs.TweenLite;
 
     public class Inbox extends Inbox_CLIP {
@@ -61,6 +63,12 @@ package com.monsters.mailbox {
                 _loc2_.useHandCursor = true;
                 _loc2_.sorter_mc.gotoAndStop(1);
                 removeChild(_loc2_);
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only: the column headings had no words (the art only has their boxes)
+                ioHeading(fromBtn, "alliance_col_from");
+                ioHeading(subjectBtn, "alliance_col_subject");
+                ioHeading(dateBtn, "alliance_col_date");
             }
             noMessages_btn.visible = false;
             noMessages_btn.addEventListener(MouseEvent.MOUSE_DOWN, this.onNewDown);
@@ -359,6 +367,20 @@ package com.monsters.mailbox {
                 currentSort = null;
                 dateBtn.dispatchEvent(new MouseEvent(MouseEvent.MOUSE_DOWN));
             };
+        }
+
+        private static function ioHeading(cell:MovieClip, key:String):void {
+            var t:TextField = new TextField();
+            t.selectable = false;
+            t.mouseEnabled = false;
+            t.defaultTextFormat = new TextFormat("Verdana", 10, 0x333333, true);
+            t.text = KEYS.Get(key);
+            t.x = 4;
+            t.width = Math.max(10, cell.width - (cell.sorter_mc ? cell.sorter_mc.width + 10 : 8));
+            t.height = t.textHeight + 4;
+            t.y = Math.round((cell.height - t.height) / 2);
+            GLOBAL.ioFitText(t, 8);
+            cell.addChildAt(t, Math.min(1, cell.numChildren));
         }
 
         private function sortHandler(param1:MouseEvent):void {

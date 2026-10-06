@@ -472,6 +472,17 @@ package com.monsters.alliances {
                     });
         }
 
+        /** Inferno-only: the members of any alliance (Browse -> Actions -> Members). onDone(response or null). */
+        public static function LoadAllianceMembers(allianceId:int, onDone:Function):void {
+            new URLLoaderApi().load(GLOBAL._allianceURL + "alliancemembers", [["alliance_id", allianceId]],
+                    function(response:Object):void {
+                        onDone(response);
+                    },
+                    function(e:IOErrorEvent):void {
+                        onDone(null);
+                    });
+        }
+
         public static function RequestJoin(allianceId:int, onDone:Function):void {
             new URLLoaderApi().load(GLOBAL._allianceURL + "requestjoin", [["alliance_id", allianceId]],
                     function(response:Object):void {
@@ -545,6 +556,129 @@ package com.monsters.alliances {
                     });
         }
 
+        // ---- Inferno-only: the redesigned window (the header, Board, Outposts, officers)
+
+        /** The player's role in their alliance: "leader", "officer" or "member" ("" before it has loaded). */
+        public static function ioRole():String {
+            if (_isLeader) {
+                return "leader";
+            }
+            return (_myAllianceData && _myAllianceData.my_role) ? String(_myAllianceData.my_role) : "";
+        }
+
+        /** The leader or an officer: they can pin, invite, recruit and kick. */
+        public static function ioIsStaff():Boolean {
+            return _isLeader || ioRole() == "officer";
+        }
+
+        /** Pins put up since the player last opened the Board (the tab's count). */
+        public static function ioUnreadPins():int {
+            return _myAllianceData ? int(_myAllianceData.unread_pins) : 0;
+        }
+
+        /** The Board was opened: its count clears without another request. */
+        public static function ioClearUnreadPins():void {
+            if (_myAllianceData) {
+                _myAllianceData.unread_pins = 0;
+            }
+        }
+
+        /** The world the player's yard is on (pins and outposts jump only to places on it). */
+        public static function ioMyWorld():String {
+            return (_myAllianceData && _myAllianceData.my_world) ? String(_myAllianceData.my_world) : "";
+        }
+
+        /** The cached alliance (header and Overview), or null. */
+        public static function ioData():Object {
+            return _myAllianceData;
+        }
+
+        /** A request of the Board, Outposts or officers; `onDone` gets the response, or null when it failed. */
+        private static function ioCall(path:String, vars:Array, onDone:Function):void {
+            new URLLoaderApi().load(GLOBAL._allianceURL + path, vars && vars.length ? vars : [["v", "1"]],
+                    function(response:Object):void {
+                        if (onDone != null) {
+                            onDone(response);
+                        }
+                    },
+                    function(e:IOErrorEvent):void {
+                        if (onDone != null) {
+                            onDone(null);
+                        }
+                    });
+        }
+
+        /** The board's pins; `seen`: the Board tab is showing them (its count clears). */
+        public static function ioLoadPins(seen:Boolean, onDone:Function):void {
+            ioCall("pins", [["seen", seen ? "1" : "0"]], onDone);
+        }
+
+        /** Pins (no id) or changes a pin: { id?, title, body, x?, y?, world? }. */
+        public static function ioSavePin(pin:Object, onDone:Function):void {
+            var vars:Array = [["title", String(pin.title || "")], ["body", String(pin.body || "")]];
+            if (pin.id) {
+                vars.push(["id", String(pin.id)]);
+            }
+            if (pin.x !== null && pin.x !== undefined && pin.x !== "" && pin.y !== null && pin.y !== undefined && pin.y !== "") {
+                vars.push(["x", String(pin.x)]);
+                vars.push(["y", String(pin.y)]);
+                if (pin.world) {
+                    vars.push(["world", String(pin.world)]);
+                }
+            }
+            ioCall("savepin", vars, function(response:Object):void {
+                    if (response != null && !response.error) {
+                        InvalidateMyAlliance();
+                    }
+                    onDone(response);
+                });
+        }
+
+        public static function ioDeletePin(id:int, onDone:Function):void {
+            ioCall("deletepin", [["id", String(id)]], function(response:Object):void {
+                    if (response != null && !response.error) {
+                        InvalidateMyAlliance();
+                    }
+                    onDone(response);
+                });
+        }
+
+        public static function ioMovePin(id:int, dir:String, onDone:Function):void {
+            ioCall("movepin", [["id", String(id)], ["dir", dir]], onDone);
+        }
+
+        /** A page of the outposts gained and lost: filters { kind, source, member, world }, `before` the last id shown. */
+        public static function ioLoadOutposts(filters:Object, before:int, onDone:Function):void {
+            var vars:Array = [];
+            for each (var k:String in ["kind", "source", "member", "world"]) {
+                if (filters && filters[k]) {
+                    vars.push([k, String(filters[k])]);
+                }
+            }
+            if (before > 0) {
+                vars.push(["before", String(before)]);
+            }
+            ioCall("outposts", vars, onDone);
+        }
+
+        /** The leader names a member an officer (or stops). */
+        public static function ioSetOfficer(userId:int, on:Boolean, onDone:Function):void {
+            ioCall("setofficer", [["userid", userId], ["on", on ? "1" : "0"]], function(response:Object):void {
+                    if (response != null && !response.error) {
+                        InvalidateMembers();
+                    }
+                    onDone(response);
+                });
+        }
+
+        /** A new pin was said in Alliance chat: the window's Board count (if it is open) catches up. */
+        public static function ioPinsChanged():void {
+            InvalidateMyAlliance();
+            if (ALLIANCEWINDOW._open) {
+                LoadMyAlliance(ALLIANCEWINDOW.RefreshTabLabels);
+            }
+        }
+
         public static function Setup(param1:int = 0):void {
             _alliances = new Object();
             if (param1 > 0) {
@@ -585,6 +719,29 @@ package com.monsters.alliances {
                 return _loc3_;
             }
             return null;
+        }
+
+        /**
+         * Inferno-only (the world map, IoMapLod): how the player stands with an alliance. 4 your own
+         * alliance, -1 hostile, 1 friendly, 0 neutral; -99 no alliance at all.
+         */
+        public static function ioRelation(allianceID:int):int {
+            var info:AllyInfo = null;
+            if (!allianceID) {
+                return -99;
+            }
+            if (_allianceID && allianceID == _allianceID) {
+                return 4;
+            }
+            info = _alliances ? _alliances[allianceID] as AllyInfo : null;
+            if (!info || !_allianceID) {
+                return 0;
+            }
+            info.Relations(_allianceID);
+            if (info.relationship < 0) {
+                return -1;
+            }
+            return info.relationship > 0 && info.relationship < 4 ? 1 : 0;
         }
 
         public static function SetAlliance(param1:Object):AllyInfo {

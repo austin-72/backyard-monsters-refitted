@@ -28,7 +28,8 @@ package com.monsters.mailbox {
 
         public var picker:FriendPicker;
 
-        public var baseID:int = 0;
+        // Base ids are larger than an int holds; an int wrapped them to another base's id.
+        public var baseID:Number = 0;
 
         public function Message(param1:String = "all") {
             super();
@@ -84,7 +85,11 @@ package com.monsters.mailbox {
 
         private function detectFS(param1:FullScreenEvent = null):void {
             if (Boolean(stage) && stage.displayState == StageDisplayState.FULL_SCREEN) {
-                fsWarning.tBody.htmlText = KEYS.Get("fswarning");
+                // Inferno-only fix: this window's warning clip (Message_CLIPB.fsWarning) holds a static text,
+                // not a "tBody" field like Thread's and the sign's, so setting it threw #1010 in Flash too.
+                if (fsWarning.tBody) {
+                    fsWarning.tBody.htmlText = KEYS.Get("fswarning");
+                }
                 addChild(fsWarning);
             }
             else if (this.contains(fsWarning)) {
@@ -162,7 +167,7 @@ package com.monsters.mailbox {
                 }
                 catch (e:*) {
                 }
-                this.displayError();
+                this.displayError(param1.error is String ? String(param1.error) : null);
             }
             else {
                 if (this.requestType == "trucerequest") {
@@ -190,8 +195,11 @@ package com.monsters.mailbox {
             this.displayError();
         }
 
-        public function displayError():void {
-            if (this.requestType == "migraterequest") {
+        public function displayError(param1:String = null):void {
+            if (param1) {
+                status_txt.htmlText = param1;
+            }
+            else if (this.requestType == "migraterequest") {
                 status_txt.htmlText = KEYS.Get("mailbox_invitepending");
             }
             else {

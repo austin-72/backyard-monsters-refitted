@@ -1,4 +1,5 @@
 import { LockMode, UniqueConstraintViolationException, type FilterQuery } from "@mikro-orm/core";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 
 import type { EntityManager, PostgreSqlDriver } from "@mikro-orm/postgresql";
 
@@ -55,7 +56,8 @@ const inboxScope = (user: User): FilterQuery<AllianceInvite> => {
     ],
   };
 
-  const leads = user.alliance_role === AllianceRole.LEADER && user.alliance_id;
+  // (Inferno-only: officers answer join requests too)
+  const leads = (user.alliance_role === AllianceRole.LEADER || (infernoOnlyConfig.enabled && user.alliance_role === AllianceRole.OFFICER)) && user.alliance_id;
 
   if (!leads) return asPlayer;
 
@@ -248,7 +250,7 @@ export const answerInvite = async (user: User, inviteId: number, status: Allianc
 
   if (invite.status !== AllianceInviteStatus.PENDING) throw inviteNotPendingErr();
 
-  const isLeader = user.alliance_role === AllianceRole.LEADER;
+  const isLeader = user.alliance_role === AllianceRole.LEADER || (infernoOnlyConfig.enabled && user.alliance_role === AllianceRole.OFFICER);
   const leadsAlliance = isLeader && user.alliance_id === invite.alliance_id;
 
   const isInvite = invite.type === AllianceInviteType.INVITE;

@@ -63,7 +63,11 @@ export const getChatChannel = (mapversion: MapRoomVersion) => CHANNELS[mapversio
 export const getOrCreateChatToken = async (userId: number): Promise<string> => {
   const existing = await redis.get(chatTokenKey(userId));
   
-  if (existing) return existing;
+  if (existing) {
+    // (kept 24 hours from the player's last load, so a long session can still sign in to chat again)
+    await redis.expire(chatTokenKey(userId), 86400);
+    return existing;
+  }
 
   const token = crypto.randomUUID();
   await redis.setex(chatTokenKey(userId), 86400, token);

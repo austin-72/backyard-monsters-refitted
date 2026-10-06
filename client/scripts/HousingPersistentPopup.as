@@ -50,7 +50,7 @@ package {
             this.m_monsterBarList = {};
             this.m_bunkerIDList = [];
             super();
-            if (!BASE.isInfernoMainYardOrOutpost) {
+            if (!BASE.isInfernoMainYardOrOutpost && !GLOBAL.INFERNO_ONLY) {
                 bTransfer.SetupKey("btn_ascendmonsters");
                 bTransfer.addEventListener(MouseEvent.CLICK, this.ascend);
             }
@@ -243,6 +243,11 @@ package {
                 if (_loc2_ > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
                 }
+                else if (!GLOBAL.ioConfirmShiny(_loc2_, "to make up the missing resources and heal", function():void {
+                            startHealWithShiny(param1);
+                        })) {
+                    return;
+                }
                 else {
                     BASE.Charge(4, _loc4_, false, _loc3_);
                     this.healQueueAdd(param1);
@@ -259,6 +264,11 @@ package {
                 if (_loc2_ > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
                 }
+                else if (!GLOBAL.ioConfirmShiny(_loc2_, "to heal all your monsters now", function():void {
+                            healInstantAllShinyCheck(param1);
+                        })) {
+                    return;
+                }
                 else {
                     this.healAll();
                     if (_loc2_ > 0) {
@@ -274,6 +284,11 @@ package {
             if (BASE._pendingPurchase.length == 0) {
                 if (_loc3_ > BASE._credits.Get()) {
                     POPUPS.DisplayGetShiny();
+                }
+                else if (!GLOBAL.ioConfirmShiny(_loc3_, "to heal this monster now", function():void {
+                            healInstantShinyCheck(param1);
+                        })) {
+                    return;
                 }
                 else {
                     this.healInstant(_loc2_);

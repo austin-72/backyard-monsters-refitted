@@ -175,15 +175,23 @@ package {
             for (_loc8_ in _loc6_) {
                 _loc2_ = _loc6_[_loc8_];
                 _loc3_ = _loc2_.creep;
+                if (Targeting.ioAirborne(_loc3_)) {
+                    continue; // a quake does not reach the air: Balthazar is immune
+                }
                 _loc4_ = int(_loc2_.dist);
-                if ((_loc5_ = param1 / _range * (_range - _loc4_)) < param1 / 3) {
-                    _loc5_ = param1 / 3;
+                // Every monster on (or under) the ground in range is hit, less the further out it is, down to a
+                // fifth of the blow at the edge (the stock tower never went below a third; balance pass,
+                // 30 September).
+                if ((_loc5_ = param1 / _range * (_range - _loc4_)) < param1 / 5) {
+                    _loc5_ = param1 / 5;
                 }
-                if (_loc5_ > _loc3_.health) {
-                    _loc5_ = _loc3_.health;
-                }
-                _loc7_ += _loc5_;
+                // The whole blow goes to the monster: its shield (a Sulfur Bomb) takes its share first, and
+                // only then is it more than the health left. The stock tower cut it to the health left
+                // first, so under a 50% shield a monster on 200 took 100, then 50, 25, ... and never died.
+                // What it counts as done is what the monster lost.
+                var ioBefore:Number = _loc3_.health;
                 _loc3_.modifyHealth(-_loc5_);
+                _loc7_ += Math.max(0, ioBefore - Math.max(0, _loc3_.health));
             }
             if ((Boolean(_loc9_ = Vacuum.getHose())) && GLOBAL.QuickDistance(_position, new Point(_loc9_.x, _loc9_.y)) < _range) {
                 _loc5_ = param1 / _range * (_range - GLOBAL.QuickDistance(_position, GLOBAL.townHall._position));
@@ -193,7 +201,41 @@ package {
             ATTACK.Damage(_mc.x, _mc.y - _top, _loc7_);
         }
 
+        /** The closest monster on (or under) the ground in range: flyers never set a Quake Tower off. */
+        override public function FindTargets(param1:int, param2:int):void {
+            _hasTargets = false;
+            if (_position == null || !_footprint || _footprint.length == 0) {
+                return;
+            }
+            // (as the stock tower: what is on the ground sets it off, not what is burrowed; its blow hits both)
+            var all:Array = Targeting.getCreepsInRange(_range, _position.add(new Point(0, _footprint[0].height / 2)), Targeting.getOldStyleTargets(0));
+            var ok:Array = [];
+            for each (var c:Object in all) {
+                if (!Targeting.ioAirborne(c.creep)) {
+                    ok.push(c);
+                }
+            }
+            if (!ok.length) {
+                return;
+            }
+            ok.sortOn(["dist"], Array.NUMERIC);
+            _targetCreeps = [];
+            var i:int = 0;
+            while (i < ok.length && i < param1) {
+                _targetCreeps.push({
+                            "creep": ok[i].creep,
+                            "dist": ok[i].dist,
+                            "position": ok[i].pos
+                        });
+                i++;
+            }
+            _hasTargets = true;
+        }
+
         private function GetCreepsInRange():Array {
+            if (_position == null || !_footprint || _footprint.length == 0) {
+                return [];
+            }
             return Targeting.getCreepsInRange(_range, _position.add(new Point(0, _footprint[0].height / 2)), attackFlags);
         }
 

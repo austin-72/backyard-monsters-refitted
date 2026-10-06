@@ -1,5 +1,7 @@
 package {
     import com.monsters.display.ImageCache;
+    import com.monsters.display.IoMenuArt;
+    import flash.geom.Rectangle;
     import com.monsters.inventory.InventoryManager;
     import com.monsters.managers.InstanceManager;
     import flash.display.Bitmap;
@@ -14,6 +16,9 @@ package {
         public var _buildingProps:Object;
 
         public var _id:int;
+
+        /** Inferno-only: the building drawn live (IoMenuArt), when it is. */
+        public var ioArt:IoMenuArt = null;
 
         public function BUILDINGBUTTON() {
             super();
@@ -100,7 +105,21 @@ package {
             if (GLOBAL._newThings && Boolean(this._buildingProps.isNew)) {
                 mcNew.visible = true;
             }
-            ImageCache.GetImageWithCallBack(_loc8_, this.ImageLoaded);
+            if (IoMenuArt.wanted(this._buildingProps) && !(GLOBAL.INFERNO_ONLY && _loc8_.indexOf("silhouette") >= 0)) {
+                // Inferno-only: drawn live from its yard art (turning towers follow the mouse, animations play); a
+                // building not unlocked yet shows its silhouette picture instead (inferno-missing-assets.zip)
+                var level:int = Boolean(BASE._buildingsStored["bl" + this._id]) ? int(BASE._buildingsStored["bl" + this._id].Get()) : 1;
+                var silhouette:Boolean = _loc8_.indexOf("silhouette") >= 0;
+                var i:int = 1;
+                while (i < mcBG.numChildren) {
+                    mcBG.getChildAt(i).visible = false; // (the picture's loading spinner)
+                    i++;
+                }
+                this.ioArt = mcBG.addChild(new IoMenuArt(this._buildingProps, level, new Rectangle(0, 35, 120, 105), silhouette)) as IoMenuArt;
+            }
+            else {
+                ImageCache.GetImageWithCallBack(_loc8_, this.ImageLoaded);
+            }
             if (this.isLocked) {
                 mcShroud.visible = true;
                 if (this._buildingProps["lockedButtonOverlay"]) {

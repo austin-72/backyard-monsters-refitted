@@ -69,6 +69,8 @@ interface WorldState {
   seats: Map<number, Seat>;
   /** Cumulative distribution of `t` over land cells, see buildCdf(). */
   cdf: Float64Array | null;
+  /** Lazy list of the Moloch stronghold cells, see molochStrongholds(). */
+  molochs?: [number, number][];
 }
 
 const worlds = new Map<string, WorldState>();
@@ -361,6 +363,33 @@ export const territoryCell = (worldid: string, cellX: number, cellY: number): Te
   const rung = top - Math.min(top, Math.floor(rank * ladder.length));
 
   return { tribe: owner.tribe, level: ladder[rung], variant: 0 };
+};
+
+/**
+ * Every Moloch stronghold cell of a world: the peak cell of each Moloch seat, kept only where the
+ * cell really resolves to Moloch (territoryCell), so this list and the map always agree.
+ *
+ * @param {string} worldid - World uuid
+ * @returns {[number, number][]} Stronghold cells as [x, y]
+ */
+export const molochStrongholds = (worldid: string): [number, number][] => {
+  const world = getWorld(worldid);
+  if (world.molochs) return world.molochs;
+
+  const cells: [number, number][] = [];
+  if (infernoOnlyConfig.moloch.enabled) {
+    const buckets = bucketCount();
+    for (let by = 0; by < buckets; by++) {
+      for (let bx = 0; bx < buckets; bx++) {
+        const seat = getSeat(world, bx, by);
+        if (!seat.moloch) continue;
+        const [x, y] = peakOf(world, seat);
+        if (territoryCell(worldid, x, y).tribe === "moloch") cells.push([x, y]);
+      }
+    }
+  }
+  world.molochs = cells;
+  return cells;
 };
 
 /** Test / tooling hook: forget memoised state (results are unaffected - they are pure). */

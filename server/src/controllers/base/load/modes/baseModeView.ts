@@ -10,7 +10,30 @@ import { MR1_TRIBE_IDS } from "../../../../game-data/tribes/v1/index.js";
  * The expiration time for a wild monster save in seconds.
  * 12 hours.
  */
-const WILD_MONSTER_EXPIRATION = 43200;
+export const WILD_MONSTER_EXPIRATION = 43200;
+
+/**
+ * A stored wild monster yard (Map Room 1/2) is rebuilt fresh once nobody has attacked it for 12 hours.
+ * Attacks keep it (baseModeAttack moves savetime to the attack's start, and every attack save moves it
+ * again), so a yard is never rebuilt, and its row deleted, under a player who is attacking it: the
+ * attack's next save would find no yard.
+ */
+export const expireWildSave = async (
+  save: Save,
+  baseid: string,
+  mapversion: MapRoomVersion,
+  worldid: string | null | undefined,
+  user: User
+) => {
+  if (mapversion === MapRoomVersion.V3 || save.wmid === 0) return save;
+  if (getCurrentDateTime() - save.savetime <= WILD_MONSTER_EXPIRATION) return save;
+
+  if (save.basesaveid) {
+    postgres.em.remove(save);
+    await postgres.em.flush();
+  }
+  return tribeSaveHandler(baseid, mapversion, worldid, user);
+};
 
 /**
  * Handles viewing the base mode for a given base ID.
@@ -29,15 +52,7 @@ export const baseModeView = async (baseid: string, mapversion: MapRoomVersion = 
 
   if (!save) save = await tribeSaveHandler(baseid, mapversion, worldid, user);
 
-  if (mapversion !== MapRoomVersion.V3 && save && save.wmid !== 0) {
-    const currentTimestamp = getCurrentDateTime();
-
-    if (currentTimestamp - save.savetime > WILD_MONSTER_EXPIRATION) {
-      postgres.em.remove(save);
-      await postgres.em.flush();
-      save = await tribeSaveHandler(baseid, mapversion, worldid, user);
-    }
-  }
+  if (save) save = await expireWildSave(save, baseid, mapversion, worldid, user);
 
   return save;
 };

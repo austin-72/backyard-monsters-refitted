@@ -1,4 +1,5 @@
 package {
+    import com.monsters.replays.IoReplayRecorder;
     import com.cc.utils.SecNum;
     import com.monsters.ai.*;
     import com.monsters.alliances.ALLIANCES;
@@ -24,6 +25,7 @@ package {
     import flash.geom.*;
     import flash.text.TextFieldAutoSize;
     import flash.utils.*;
+    import com.monsters.quests.IoQuests;
 
     public class ATTACK {
 
@@ -576,6 +578,10 @@ package {
             else {
                 Log("fling" + _flingCount, "<font color=\"#0000FF\">" + KEYS.Get("attack_log_flungin_pl", {"v1": GLOBAL.Array2String(_loc6_)}) + "</font>");
             }
+            // Inferno-only quest book: an attack's first fling
+            if (GLOBAL.INFERNO_ONLY && _flingCount == 0) {
+                IoQuests.event("fling");
+            }
             ++_flingCount;
             ATTACK._flingerBucket = {};
             _flingerCooling = _flingerCooldown;
@@ -595,6 +601,10 @@ package {
             }
             if (POWERUPS.CheckPowers(POWERUPS.ALLIANCE_DECLAREWAR, "OFFENSE")) {
                 _loc2_ += Math.floor(_loc2_ * 0.25);
+            }
+            // Admin test mode: fling as much as you like.
+            if (GLOBAL.ioTestMode()) {
+                _loc2_ = 99999999;
             }
             if (MapRoomManager.instance.isInMapRoom3 && USE_CUMULATIVE_FLINGER_CAPACITY) {
                 _loc2_ -= _flungSpace.Get();
@@ -864,6 +874,10 @@ package {
         public static function End():void {
             var _loc1_:MonsterBase = null;
             m_waitingForSaveToComplete = false;
+            // Inferno-only: the attack is over: its replay's recording ends here (one more sample: how it ended)
+            if (GLOBAL.INFERNO_ONLY && IoReplayRecorder.recording) {
+                IoReplayRecorder.stop(true);
+            }
             BucketClear();
             if (!_sentOver) {
                 if (BASE._saveOver != 1) {
@@ -984,6 +998,10 @@ package {
             else {
                 SOUNDS.PlayMusic("musicbuild");
             }
+            // Inferno-only quest book: a win, and on whom
+            if (GLOBAL.INFERNO_ONLY) {
+                IoQuests.attackEnded(_loc1_);
+            }
             GLOBAL.eventDispatcher.dispatchEvent(new AttackEvent(AttackEvent.ATTACK_OVER, _loc1_, BASE._wmID, _loot));
             if (MapRoomManager.instance.isInMapRoom2 && BASE.isOutpostMapRoom2Only || (GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.IWMATTACK)) {
                 (_loc10_ = new popup_attackend(_loc1_)).mcFrame.Setup(false);
@@ -1045,7 +1063,8 @@ package {
                 POPUPS.Push(popupMC, null, null, null, tribe.splash.split("popups/").join(""));
             }
             else {
-                POPUPS.Push(popupMC, null, null, null, "defense2.png");
+                // Inferno-only: defense2.png is not on the server (an empty frame): the Magma Tower instead
+                POPUPS.Push(popupMC, null, null, null, GLOBAL.INFERNO_ONLY ? "building-magma_tower.png" : "defense2.png");
             }
         }
 

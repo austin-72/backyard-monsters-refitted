@@ -63,6 +63,28 @@ package com.monsters.baseplanner.components {
             return this._nodeList.pop();
         }
 
+        /**
+         * Inferno-only: takes this very node out (a wall the Yard Planner's wall line placed), with no next one
+         * put on the mouse. decrement() is for placing by hand: it takes the last node, the one the mouse
+         * carried, and puts the next on the mouse. Used by the wall line it took the wrong node out (the line
+         * places walls in its own order) and left a wall on the mouse, so a wall already placed came back up
+         * in storage and was placed twice: two walls on one spot and a gap in the line.
+         */
+        public function ioRemoveExact(param1:PlannerNode):void {
+            var i:int = this._nodeList.indexOf(param1);
+            if (i == -1) {
+                i = this._nodeList.length - 1;
+            }
+            if (i >= 0) {
+                this._nodeList.splice(i, 1);
+            }
+            mc.mcLevel.tLabel.htmlText = this._nodeList.length;
+            if (this._nodeList.length <= 0) {
+                alpha = 0;
+                mc.mcFrame.gotoAndStop("off");
+            }
+        }
+
         public function isNew():Boolean {
             return this._nodeList.length < 2;
         }

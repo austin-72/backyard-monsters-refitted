@@ -310,6 +310,11 @@ package com.monsters.alliances.tabs {
                 POPUPS.DisplayGetShiny();
                 return;
             }
+            if (!GLOBAL.ioConfirmShiny(cost, "on this power-up", function():void {
+                        _onBuy(e);
+                    })) {
+                return;
+            }
 
             _onClose();
             PLEASEWAIT.Show(KEYS.Get("msg_loading"));

@@ -140,11 +140,21 @@ export const relocateOutpostErr = () =>
     isClientFriendly: true,
   });
 
+/** Inferno-only: a main yard can't move into the underworld (services/maproom/v2/underworld.ts). */
+export const underworldRelocateErr = () =>
+  new ClientSafeError({
+    message: "Main yards can't be moved into the Depths of Hell.",
+    status: Status.FORBIDDEN,
+    data: {},
+    isClientFriendly: true,
+  });
+
 export const baseUnderAttackErr = () =>
   new ClientSafeError({
     message: "This base is currently under attack by another player. Please try again later.",
     status: Status.CONFLICT,
-    data: {},
+    // (Inferno: an attack refused; the game says so and goes home instead of stopping, bug report 66)
+    data: { io_refused: "underattack" },
     isClientFriendly: false,
   });
 
@@ -152,7 +162,8 @@ export const baseProtectedErr = () =>
   new ClientSafeError({
     message: "This base is currently under damage protection and cannot be attacked.",
     status: Status.FORBIDDEN,
-    data: {},
+    // (Inferno: an attack refused; the game says so and goes home instead of stopping, bug report 66)
+    data: { io_refused: "protected" },
     isClientFriendly: false,
   });
 
@@ -160,7 +171,8 @@ export const userOnlineErr = () =>
   new ClientSafeError({
     message: "This player is currently online and cannot be attacked. Please try again later.",
     status: Status.CONFLICT,
-    data: {},
+    // (Inferno: an attack refused; the game says so and goes home instead of stopping, bug report 66)
+    data: { io_refused: "online" },
     isClientFriendly: false,
   });
 
@@ -186,14 +198,6 @@ export const townHallLevelErr = () =>
     status: Status.FORBIDDEN,
     data: {},
     isClientFriendly: true,
-  });
-
-export const truceActiveErr = () =>
-  new ClientSafeError({
-    message: "You have an active truce with this player and cannot attack them.",
-    status: Status.FORBIDDEN,
-    data: {},
-    isClientFriendly: false,
   });
 
 export const shinyLockedErr = () =>

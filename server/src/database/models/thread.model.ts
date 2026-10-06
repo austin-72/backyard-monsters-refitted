@@ -1,7 +1,6 @@
 import { Entity, Index, OneToOne, PrimaryKey, Property } from "@mikro-orm/decorators/es";
 import { v4 } from "uuid";
 import { Message } from "./message.model.js";
-import type { TruceStatus } from "../../enums/TruceStatus.js";
 
 @Index({ properties: ["userid", "threadid"] })
 @Index({ properties: ["targetid", "threadid"] })
@@ -24,12 +23,6 @@ export class Thread {
 
   @Property({ type: 'number' })
   messagecount!: number;
-
-  @Property({ type: 'number', nullable: true })
-  truce_id?: number;
-
-  @Property({ type: 'string', nullable: true })
-  trucestate?: TruceStatus;
 
   @Property({ type: Date, onCreate: () => new Date() })
   createdAt: Date = new Date();

@@ -37,4 +37,12 @@ export const inferoMonsters = [
   "IC6",    // Grokus
   "IC7",    // Sabnox
   "IC8",    // King Wormzer
+  "IC9",    // Korath (inferno-only: the champion as a monster)
+  "IC10",   // Drull (inferno-only: the champion as a monster)
+  "IC12",   // Clinkerjaw (inferno-only)
+  "IC14",   // Flickerfiend (inferno-only)
+  "IC15",   // Fusebug (inferno-only; the spec's IC19, which is Rezghul's number)
+  "IC20",   // Emberghoul (inferno-only)
+  "IC24",   // Ashkarr, the Ember Herald (inferno-only)
+  "IC25",   // Rimegrave, the ice champion (inferno-only: Hell Freezes Over)
 ];

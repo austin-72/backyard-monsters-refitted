@@ -83,3 +83,22 @@ export const buildSaveData = (save: Save, user: User, ownerSave: OwnerSave | nul
 
   return filteredSave;
 };
+
+/**
+ * The fields the game reads from a save reply (BASE.handleLoadSuccessful) and from the half-minute poll
+ * (BASE.Page). Those replies used to carry the whole yard (buildingdata, quests, stats, ...: often
+ * 100 KB+) that the game never read: sent to every player every half minute, and after every save.
+ */
+export const SAVE_REPLY_KEYS = [
+  "basesaveid", "baseid", "over", "credits", "resources", "protected", "fan", "bookmarked",
+  "installsgenerated", "updates", "savetime", "id",
+] as const;
+export const PAGE_REPLY_KEYS = [
+  ...SAVE_REPLY_KEYS, "giftsentcount", "buildingresources", "unreadmessages",
+] as const;
+
+export const pickKeys = (data: Record<string, unknown>, keys: readonly string[]) => {
+  const picked: Record<string, unknown> = {};
+  for (const key of keys) if (data[key] !== undefined) picked[key] = data[key];
+  return picked;
+};

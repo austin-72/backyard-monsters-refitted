@@ -50,10 +50,10 @@ export const joinOrCreateWorld = async (
   }
 
   // If not relocating, check if the user is already in the world
-  if (!relocate) {
-    if (save.worldid === world.uuid) return;
-    world.playerCount += 1;
-  }
+  if (!relocate && save.worldid === world.uuid) return;
+  // A relocation follows leaveWorld, which took the player off their old world's count: they count on
+  // the new one (the count was only ever made smaller by relocating).
+  world.playerCount += 1;
 
   save.usemap = 1;
   save.worldid = world.uuid;

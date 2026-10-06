@@ -166,7 +166,7 @@ package com.monsters.alliances.tabs {
                             level: int(member.level),
                             name: String(member.display_name),
                             pic_square: member.pic_square,
-                            ep: String(member.points),
+                            ep: GLOBAL.INFERNO_ONLY ? GLOBAL.FormatNumber(Number(member.points)) : String(member.points),
                             attacker: String(member.last_attacker),
                             online: status.online == true,
                             is_leader: member.is_leader == true,
@@ -213,7 +213,7 @@ package com.monsters.alliances.tabs {
             _addLabel(tableMC, KEYS.Get("alliance_col_level"), C_LVL_X, 0, C_LVL_W, HEADER_H, true, TextFormatAlign.CENTER);
             _addLabel(tableMC, KEYS.Get("alliance_col_name"), C_NAME_X + 6, 0, C_NAME_W - 6, HEADER_H, true, TextFormatAlign.LEFT);
             _addLabel(tableMC, KEYS.Get("alliance_col_status"), C_STATUS_X, 0, C_STATUS_W, HEADER_H, true, TextFormatAlign.CENTER);
-            _addLabel(tableMC, KEYS.Get("alliance_col_ep"), C_EP_X, 0, C_EP_W, HEADER_H, true, TextFormatAlign.CENTER);
+            _addLabel(tableMC, KEYS.Get(GLOBAL.INFERNO_ONLY ? "io_alliance_col_ev" : "alliance_col_ep"), C_EP_X, 0, C_EP_W, HEADER_H, true, TextFormatAlign.CENTER);
             _addLabel(tableMC, KEYS.Get("alliance_col_attacker"), C_ATK_X + 8, 0, C_ATK_W - 8, HEADER_H, true, TextFormatAlign.LEFT);
             _addLabel(tableMC, KEYS.Get("alliance_col_actions"), C_ACT_X, 0, C_ACT_W, HEADER_H, true, TextFormatAlign.CENTER);
 

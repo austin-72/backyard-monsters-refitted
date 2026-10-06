@@ -1,7 +1,9 @@
 import {
   type Resources,
+  RESOURCE_KEYS,
   updateResources,
 } from "../../../../services/base/updateResources.js";
+import { logger } from "../../../../utils/logger.js";
 import { Save } from "../../../../database/models/save.model.js";
 import { SaveKeys } from "../../../../enums/SaveKeys.js";
 
@@ -47,6 +49,19 @@ export const resourcesHandler = (save: Save, resourceDelta: ResourceDelta, optio
       resourceData = amounts;
     }
 
-    save[key] = updateResources(resourceData, save[key] ?? {});
+    const updated = updateResources(resourceData, save[key] ?? {}) as Record<string, unknown>;
+
+    // Never keep a negative amount. Spending sent by the game can land after the amount went down on the
+    // server in the meantime (another tab or device, a raid): the game used to be sent the negative number
+    // and put it back to zero itself on its next save (bug reports "Negative twigs reset").
+    for (const resource of RESOURCE_KEYS) {
+      const amount = Number(updated[resource]);
+      if (Number.isFinite(amount) && amount < 0) {
+        logger.warn(`Save ${save.basesaveid}: ${resource} would be ${amount}, kept at 0`);
+        updated[resource] = 0;
+      }
+    }
+
+    save[key] = updated as Save[typeof key];
   }
 };

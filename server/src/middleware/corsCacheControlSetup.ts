@@ -33,5 +33,11 @@ export const corsCacheControl = async (ctx: Context, next: Next) => {
     return;
   }
 
-  await next();
+  try {
+    await next();
+  } finally {
+    // Only a file that was found is kept by browsers and the CDN: a picture asked for before it was put
+    // on the server (a 404) must not stay "not found" for an hour after it arrives.
+    if (cacheable && (ctx.status < 200 || ctx.status >= 400)) ctx.set("Cache-Control", NO_STORE);
+  }
 };

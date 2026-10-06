@@ -1,6 +1,8 @@
 package com.monsters.missions {
     import com.monsters.display.ScrollSet;
     import com.monsters.maproom_manager.MapRoomManager;
+    import com.monsters.quests.IoQuestTracker;
+    import com.monsters.quests.IoQuests;
     import com.monsters.ui.UI_BOTTOM;
     import flash.display.MovieClip;
     import flash.display.Shape;
@@ -78,6 +80,9 @@ package com.monsters.missions {
         private var _closeProps:Object;
 
         private var _chatWidthDefault:Object;
+
+        /** Inferno-only: the quest book's version the rows were drawn from (IoQuestTracker). */
+        private var _ioVersion:int = -1;
 
         public function UI_MISSIONMENU() {
             this._skinnedElements = [];
@@ -276,6 +281,13 @@ package com.monsters.missions {
             if (!this._open) {
                 return;
             }
+            // Inferno-only: the rows are the quest book's (redrawn when it changes)
+            if (GLOBAL.INFERNO_ONLY) {
+                if (this._ioVersion != IoQuests.version) {
+                    this.RebuildContainer();
+                }
+                return;
+            }
             var _loc2_:Boolean = false;
             if (QUESTS._completed) {
                 for (_loc1_ in QUESTS._quests) {
@@ -326,6 +338,10 @@ package com.monsters.missions {
             var _loc3_:Array = new Array();
             var _loc4_:Array = new Array();
             this.Clear();
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioRebuild();
+                return;
+            }
             if (QUESTS._completed) {
                 for (_loc1_ in QUESTS._quests) {
                     _loc5_ = String(QUESTS._quests[_loc1_].id);
@@ -402,6 +418,19 @@ package com.monsters.missions {
                 }
                 _loc6_++;
             }
+            addChild(this._ScrollBar);
+            this._ScrollBar.Update();
+        }
+
+        /** Inferno-only: the quest book's rows (IoQuestTracker), in the dock's place for them. */
+        private function ioRebuild():void {
+            this._ioVersion = IoQuests.version;
+            this._counter = IoQuestTracker.fill(this._Missions, this._Priority);
+            this._prioritycounter = 1;
+            this.frame.mcMask.height = this._numDisplaySlots * (32 + this._ItemPaddingY);
+            this._ScrollBar.Update();
+            this.frame.y = this._maximized ? this._maxProps.y : this._openProps.y;
+            this.footer.y = this._openProps.footerY;
             addChild(this._ScrollBar);
             this._ScrollBar.Update();
         }

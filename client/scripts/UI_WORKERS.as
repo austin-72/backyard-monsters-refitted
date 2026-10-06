@@ -3,6 +3,8 @@ package {
     import flash.display.DisplayObject;
     import flash.display.MovieClip;
     import flash.events.MouseEvent;
+    import flash.geom.Point;
+    import flash.geom.Rectangle;
 
     public class UI_WORKERS {
 
@@ -26,6 +28,74 @@ package {
 
         private static var _canUseHorizontal:Boolean = false;
 
+        /** Inferno-only: a button kept in the workers' column, under the fifth worker (Moloch's Gauntlet). */
+        private static var _ioExtra:DisplayObject;
+
+        /** The gap between the fifth worker and that button. */
+        private static const IO_EXTRA_GAP:int = 14;
+
+        /** The Gauntlet button is drawn round this point of its own, its gold ring 25 across the middle. */
+        private static const IO_EXTRA_MIDDLE:Number = 20.75;
+
+        public static function ioAddUnderWorkers(param1:DisplayObject):void {
+            if (_ioExtra && _ioExtra != param1 && _ioExtra.parent) {
+                _ioExtra.parent.removeChild(_ioExtra);
+            }
+            _ioExtra = param1;
+            ioPlaceExtra();
+        }
+
+        /** Hell Freezes Over's button: under the Gauntlet's (in its place while that one is hidden). */
+        private static var _ioExtra2:DisplayObject;
+
+        public static function ioAddUnderGauntlet(param1:DisplayObject):void {
+            if (_ioExtra2 && _ioExtra2 != param1 && _ioExtra2.parent) {
+                _ioExtra2.parent.removeChild(_ioExtra2);
+            }
+            _ioExtra2 = param1;
+            ioPlaceExtra();
+        }
+
+        /** Centred under the fifth worker's button, the gap below it (it moves and hides with the column). */
+        public static function ioPlaceExtra():void {
+            if (!_mc) {
+                return;
+            }
+            var r:Rectangle = _workers && _workers.length >= 5 ? DisplayObject(_workers[4].mc).getBounds(_mc) : new Rectangle(0, 20 + 4 * _workerMCOffset, 40, 40);
+            if (_ioExtra2) {
+                if (_ioExtra2.parent != _mc) {
+                    _mc.addChild(_ioExtra2);
+                }
+                var below:Boolean = Boolean(_ioExtra) && _ioExtra.visible;
+                _ioExtra2.x = r.x + r.width / 2 - IO_EXTRA_MIDDLE;
+                _ioExtra2.y = r.y + r.height + IO_EXTRA_GAP + 25 - IO_EXTRA_MIDDLE + (below ? 66 : 0);
+            }
+            if (!_ioExtra) {
+                return;
+            }
+            if (_ioExtra.parent != _mc) {
+                _mc.addChild(_ioExtra);
+            }
+            _ioExtra.x = r.x + r.width / 2 - IO_EXTRA_MIDDLE;
+            _ioExtra.y = r.y + r.height + IO_EXTRA_GAP + 25 - IO_EXTRA_MIDDLE;
+        }
+
+        /** A tip for the button, pointing at it from the left like the workers' own. */
+        public static function ioShowTip(param1:DisplayObject, param2:String):void {
+            if (!param1 || !param1.stage) {
+                return;
+            }
+            var p:Point = GLOBAL._layerUI.globalToLocal(param1.localToGlobal(new Point(IO_EXTRA_MIDDLE, IO_EXTRA_MIDDLE)));
+            // as PopupShow, but the tip may have several lines (<br>): the bubble is sized for them
+            PopupHide();
+            _popupID = -1;
+            _popupmc = new bubblepopupRight();
+            _popupmc.Setup(_mc ? int(_mc.x - 5) : int(p.x - 30), int(p.y), "");
+            _popupmc.Update(param2, param2.split("<br>").length);
+            _popupmc.Nudge("left");
+            _popupdo = GLOBAL._layerUI.addChild(_popupmc);
+        }
+
         public function UI_WORKERS() {
             super();
         }
@@ -42,7 +112,7 @@ package {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 _maxWorkers = 5;
                 if (!BASE.isMainYard) {
-                    _maxWorkers = 1;
+                    _maxWorkers = GLOBAL.ioOutpostWorkers();
                 }
                 _loc1_ = 0;
                 while (_loc1_ < _maxWorkers) {
@@ -70,6 +140,7 @@ package {
                 }
                 _do = GLOBAL._layerUI.addChild(_mc);
             }
+            ioPlaceExtra();
             Update();
             if (!UI2._showBottom) {
                 Hide();
@@ -160,6 +231,7 @@ package {
                 _loc1_ = !!UI2._wildMonsterBar ? 20 : 0;
                 _mc.y = GLOBAL._SCREEN.top + 50 + _loc1_ + 30 * UI2.TimersVisible();
             }
+            ioPlaceExtra();
         }
 
         private static function Render():void {

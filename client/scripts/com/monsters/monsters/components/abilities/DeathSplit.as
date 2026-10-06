@@ -11,11 +11,15 @@ package com.monsters.monsters.components.abilities {
 
         private var _splitType:String;
 
-        public function DeathSplit(param1:MonsterBase, param2:String) {
+        /** Inferno-only: called with each monster that hatches (Clinkerjaw makes its Spurtz smaller and slower). */
+        private var _onSpawn:Function;
+
+        public function DeathSplit(param1:MonsterBase, param2:String, param3:Function = null) {
             super();
             this._target = param1;
             this._target.addEventListener(MonsterBase.k_DEATH_EVENT, this.split);
             this._splitType = param2;
+            this._onSpawn = param3;
         }
 
         protected function split(param1:Event = null):void {
@@ -44,6 +48,9 @@ package com.monsters.monsters.components.abilities {
                 _loc3_ = new Point(this._target._mc.x + Math.random() * 120 - 60, this._target._mc.y + Math.random() * 120 - 60);
                 if (this._target._behaviour == MonsterBase.k_sBHVR_DEFEND) {
                     (_loc6_ as CreepBase).changeModeDefend();
+                }
+                if (this._onSpawn != null && _loc6_) {
+                    this._onSpawn(_loc6_);
                 }
                 _loc4_++;
             }

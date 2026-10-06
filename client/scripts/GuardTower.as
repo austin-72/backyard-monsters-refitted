@@ -35,7 +35,7 @@ package {
             graphic.addEventListener(Event.ENTER_FRAME, this.onEnterFrame);
         }
 
-        override public function ApplyJar(param1:int):void {
+        override public function ApplyJar(param1:int, ioSeconds:Number = 0):void {
         }
 
         override protected function onEnterFrame(param1:Event):void {

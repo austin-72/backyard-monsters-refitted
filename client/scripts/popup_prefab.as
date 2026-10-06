@@ -1,20 +1,27 @@
 package {
+    import flash.text.TextField;
     import com.cc.utils.SecNum;
     import com.monsters.display.ImageCache;
     import com.monsters.managers.InstanceManager;
     import com.monsters.pathing.PATHING;
     import flash.display.Bitmap;
+    import flash.display.Shape;
+    import flash.text.TextFormat;
     import flash.display.BitmapData;
     import flash.events.Event;
     import flash.events.MouseEvent;
     import com.monsters.kits.Kit;
     import com.monsters.kits.InfernoKits;
+    import com.monsters.kits.IoTextPrompt;
 
     public class popup_prefab extends popup_prefab_CLIP {
         private var _KITS:Vector.<Kit>;
 
         // Inferno-only: six kits over two pages, sharing the popup's three columns.
         private var _ioPage:int = 0;
+
+        /** Inferno-only: the comparison table's rows, drawn for as many rows as there are (the art has ten). */
+        private var _ioTable:Shape = null;
 
         private var _ioToken:int = 0;
 
@@ -25,6 +32,9 @@ package {
         private var _ioPrev:Button_CLIP = null;
 
         private var _ioNext:Button_CLIP = null;
+
+        /** One "save this outpost here" button under each of the player's own kit columns (page 3). */
+        private var _ioSave:Array = [null, null, null, null];
 
         private var _triggered:Boolean = false;
 
@@ -64,7 +74,7 @@ package {
                 this.tCol4.htmlText = KEYS.Get("popup_prefab_col4");
             }
             this.tShiny.htmlText = "<b>" + GLOBAL.FormatNumber(BASE._credits.Get()) + " " + KEYS.Get("#r_shiny#") + "</b>";
-            this.tInstantNotice.htmlText = KEYS.Get("popup_prefab_instantnotice");
+            this.tInstantNotice.htmlText = GLOBAL.INFERNO_ONLY ? "Kits are built instantly, whether you pay with resources or shiny!" : KEYS.Get("popup_prefab_instantnotice");
         }
 
         public static function getShinyWorthFromResources(param1:Number):uint {
@@ -143,8 +153,15 @@ package {
                 if (_loc4_) {
                     this["tCol" + (_loc2_ + 1)].htmlText = InfernoKits.contentsText(this.GetBuildings(_loc3_).buildings);
                     _loc5_ = this.GetBuildings(_loc3_).costs;
-                    ImageCache.GetImageWithCallBack(InfernoKits.thumbPath(_loc3_), this.ioThumbLoaded, true, 1, "", [_loc2_, this._ioToken]);
+                    if (InfernoKits.thumbPath(_loc3_)) {
+                        ImageCache.GetImageWithCallBack(InfernoKits.thumbPath(_loc3_), this.ioThumbLoaded, true, 1, "", [_loc2_, this._ioToken]);
+                    }
+                    else if (InfernoKits.isPlayerSlot(_loc3_) && !InfernoKits.playerKit(_loc3_)) {
+                        // Empty player slot: the picture is built into the game.
+                        this.ioThumbLoaded("", new io_kit_empty(0, 0), [_loc2_, this._ioToken]);
+                    }
                     this["t" + _loc2_].htmlText = "<b>" + InfernoKits.kitName(_loc3_) + "</b>";
+                    this.ioFitTitle(this["t" + _loc2_], InfernoKits.kitName(_loc3_));
                     this["c" + _loc2_].htmlText = "<b>" + GLOBAL.FormatNumber(_loc5_[0].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[0]) + "<br>" + GLOBAL.FormatNumber(_loc5_[1].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[1]) + "<br>" + GLOBAL.FormatNumber(_loc5_[2].Get()) + " " + KEYS.Get(GLOBAL._resourceNames[2]) + "</b>";
                     this["b" + _loc2_].SetupKey("btn_useresources");
                     this["b" + _loc2_ + "s"].Setup(KEYS.Get("btn_useshiny", {"v1": _loc5_[3].Get()}));
@@ -152,10 +169,15 @@ package {
                     this.ioListen(this["img" + _loc2_], this.Enlarge(_loc3_));
                     this.ioListen(this["b" + _loc2_], this.PreSelect(_loc3_));
                     this.ioListen(this["b" + _loc2_ + "s"], this.PreBuyOutright(_loc3_, _loc5_[3].Get()));
+                    this.ioPlayerSlot(_loc2_, _loc3_);
+                }
+                else {
+                    this.ioHideSave(_loc2_);
                 }
                 _loc2_++;
             }
             this.tCol1.htmlText = InfernoKits.rowLabels();
+            this.ioTableRows(InfernoKits.rowCount);
             this.tSelect.htmlText = "<b>" + KEYS.Get("str_selectsk") + "</b>" + (_loc6_ > 1 ? "<br>Page " + (this._ioPage + 1) + " of " + _loc6_ : "");
             // Page buttons sit just above the popup, centred over it: Prev left of the middle, Next right.
             // (The frame's top edge is at y = -245 in the popup's art; its close button is in the corner,
@@ -180,6 +202,125 @@ package {
             }
         }
 
+        /** The table's top and height in the popup's art (its ten rows of 21.45). */
+        private static const IO_TABLE_TOP:Number = -114;
+
+        private static const IO_TABLE_HEIGHT:Number = 214.5;
+
+        /**
+         * Inferno-only: the table under the kits, drawn over the art's own (which has ten rows) for `rows` rows in
+         * the same space (29 September: an eleventh, the Cinder Coil and Obsidian Mortar), white and beige in turn,
+         * with the art's column lines; the four text columns' line spacing made to match.
+         */
+        private function ioTableRows(rows:int):void {
+            var i:int = 0;
+            var h:Number = IO_TABLE_HEIGHT / rows;
+            if (!this._ioTable) {
+                this._ioTable = new Shape();
+                addChildAt(this._ioTable, getChildIndex(this.t2)); // (over the art's table, under the texts)
+            }
+            var g:* = this._ioTable.graphics;
+            g.clear();
+            i = 0;
+            while (i < rows) {
+                g.beginFill(i % 2 == 0 ? 0xFFFFFF : 0xF3ECD5);
+                g.drawRect(-285, IO_TABLE_TOP + i * h, 570, h);
+                g.endFill();
+                i++;
+            }
+            g.lineStyle(1, 0xCCCCCC);
+            i = 1;
+            while (i < rows) {
+                g.moveTo(-285, IO_TABLE_TOP + i * h);
+                g.lineTo(285, IO_TABLE_TOP + i * h);
+                i++;
+            }
+            g.lineStyle(1, 0x4D4D4D);
+            g.drawRect(-285, IO_TABLE_TOP, 570, IO_TABLE_HEIGHT);
+            for each (var x:Number in [-135, 5, 145]) {
+                g.moveTo(x, IO_TABLE_TOP);
+                g.lineTo(x, IO_TABLE_TOP + IO_TABLE_HEIGHT);
+            }
+            // the text: 11 pt Verdana is 13.2 high, the rest of a row is leading
+            i = 1;
+            while (i <= 4) {
+                var t:TextField = this["tCol" + i] as TextField;
+                var f:TextFormat = t.getTextFormat();
+                f.leading = h - 13.2;
+                t.setTextFormat(f);
+                t.height = IO_TABLE_HEIGHT + 4;
+                i++;
+            }
+        }
+
+        /**
+         * Player kit columns: an empty slot offers only "Save this outpost here"; a filled one is bought like
+         * any kit and can be replaced with the outpost that is open. Other columns hide the save button.
+         */
+        private function ioPlayerSlot(param1:int, param2:int):void {
+            var column:int = param1;
+            var kitID:int = param2;
+            var filled:Boolean = InfernoKits.playerKit(kitID) != null;
+            var save:Button_CLIP = null;
+            if (!InfernoKits.isPlayerSlot(kitID)) {
+                this.ioHideSave(column);
+                return;
+            }
+            this["img" + column].buttonMode = filled && InfernoKits.thumbPath(kitID) != null;
+            // No shiny buy-out for player kits.
+            this["b" + column + "s"].visible = false;
+            if (!filled) {
+                this["c" + column].htmlText = "Save this outpost's layout here and build it again on any of your outposts. Only you can see your kits.";
+                this["b" + column].visible = false;
+                this["b" + column + "s"].visible = false;
+            }
+            save = this._ioSave[column];
+            if (!save) {
+                save = new Button_CLIP();
+                addChild(save);
+                this._ioSave[column] = save;
+            }
+            // Gold, and the same size and place in the column as the Use Resources button above it.
+            var resourcesButton:Button_CLIP = this["b" + column] as Button_CLIP;
+            save.Setup(filled ? "Replace kit" : "Save outpost here", false, int(resourcesButton.width), int(resourcesButton.height));
+            save.Highlight = true;
+            save.x = resourcesButton.x + int((resourcesButton.width - save.width) / 2);
+            save.y = filled ? this["b" + column + "s"].y : resourcesButton.y;
+            save.visible = true;
+            this.ioListen(save, function(e:MouseEvent = null):void {
+                    var slot:int = kitID - InfernoKits.PLAYER_FIRST + 1;
+                    var text:String = filled ? "This replaces \"" + InfernoKits.kitName(kitID) + "\" with this outpost's layout." : "Saves this outpost's layout into your kit slot " + slot + ".";
+                    IoTextPrompt.Show("Name your kit", text, filled ? InfernoKits.kitName(kitID) : "My Kit " + slot, 24, "Save", function(name:String):void {
+                            InfernoKits.savePlayerKit(kitID, name, function(error:String):void {
+                                    if (error) {
+                                        GLOBAL.Message(error);
+                                        return;
+                                    }
+                                    GLOBAL.Message("Kit saved. You can now build it on any of your outposts.");
+                                    ioRenderPage();
+                                });
+                        });
+                });
+        }
+
+        /** A kit name wider than its column is shortened with "..."; the full name is kept in the kit. */
+        private function ioFitTitle(param1:TextField, param2:String):void {
+            var name:String = param2;
+            if (!param1 || param1.textWidth <= param1.width - 6) {
+                return;
+            }
+            while (name.length > 3 && param1.textWidth > param1.width - 6) {
+                name = name.substr(0, name.length - 1);
+                param1.htmlText = "<b>" + name + "...</b>";
+            }
+        }
+
+        private function ioHideSave(param1:int):void {
+            if (this._ioSave[param1]) {
+                this._ioSave[param1].visible = false;
+            }
+        }
+
         private function ioTurnPage(param1:int):Function {
             var step:int = param1;
             return function(param1:MouseEvent = null):void {
@@ -201,6 +342,10 @@ package {
         public function Enlarge(param1:int):Function {
             var n:int = param1;
             return function(param1:MouseEvent = null):void {
+                if (GLOBAL.INFERNO_ONLY && InfernoKits.isPlayerSlot(n) && !InfernoKits.largePath(n)) {
+                    // An empty slot, or a kit saved before pictures were drawn.
+                    return;
+                }
                 var _loc2_:* = new popup_prefab_enlarge();
                 GLOBAL.BlockerAdd(GLOBAL._layerTop);
                 GLOBAL._layerTop.addChild(_loc2_);
@@ -237,9 +382,19 @@ package {
         }
 
         public function BuyOutright(param1:int, param2:int):void {
+            if (GLOBAL.INFERNO_ONLY && InfernoKits.isPlayerSlot(param1)) {
+                return;
+            }
             if (BASE._credits.Get() < param2) {
                 POPUPS.Next();
                 POPUPS.DisplayGetShiny();
+                return;
+            }
+            var kitID:int = param1;
+            var kitShiny:int = param2;
+            if (!GLOBAL.ioConfirmShiny(param2, "to build this kit", function():void {
+                        BuyOutright(kitID, kitShiny);
+                    })) {
                 return;
             }
             var _loc3_:Array = this.GetBuildings(param1).costs;
@@ -295,6 +450,11 @@ package {
             if (_loc6_ != _loc4_[2].Get()) {
                 _loc5_.push([_loc4_[2].Get() - _loc6_, KEYS.Get(GLOBAL._resourceNames[2])]);
             }
+            if (_loc5_.length > 0 && GLOBAL.INFERNO_ONLY && InfernoKits.isPlayerSlot(param1)) {
+                // Player kits are bought with resources only: no shiny, not even to make up a shortfall.
+                GLOBAL.Message("<b>You need an extra " + GLOBAL.Array2String(_loc5_) + " to build this kit.</b><br><br>Your own kits can only be built with resources. You can bank resources in your outposts and main yard.");
+                return;
+            }
             if (_loc5_.length > 0) {
                 _loc8_ = Math.ceil(Math.pow(Math.sqrt(_loc7_ / 2), 0.75));
                 GLOBAL.Message("<b>You need an extra " + GLOBAL.Array2String(_loc5_) + " to build this kit.</b><br><br>You can bank resources in your outposts and main yard or use " + _loc8_ + " shiny to make up the difference.", "Use " + _loc8_ + " Shiny", this.PayForKit, [param1, _loc8_]);
@@ -325,6 +485,13 @@ package {
             var _loc5_:int = 0;
             if (BASE._credits.Get() < param2) {
                 GLOBAL.Message("<b>" + KEYS.Get("pop_noshiny_title") + "</b><br>" + KEYS.Get("pop_noshiny_body"), KEYS.Get("str_getmore_btn"), BUY.Show);
+                return;
+            }
+            var topupKit:int = param1;
+            var topupShiny:int = param2;
+            if (!GLOBAL.ioConfirmShiny(param2, "to make up the missing resources and build this kit", function():void {
+                        PayForKit(topupKit, topupShiny);
+                    })) {
                 return;
             }
             var _loc3_:Array = this.GetBuildings(param1).costs;
@@ -360,15 +527,14 @@ package {
             if (GLOBAL.INFERNO_ONLY) {
                 // The server wipes the outpost and writes the kit into it; the yard is then loaded again
                 // from that save. Nothing is edited locally, so nothing old can be saved back.
+                // Every kit is finished at its levels at once, bought with resources or with shiny.
                 for each (_loc6_ in _loc3_) {
                     if (_loc6_.t != 112) {
                         if (!_loc6_.prefab) {
                             _loc6_.prefab = 1;
                         }
-                        if (param2) {
-                            _loc6_.l = _loc6_.prefab;
-                            delete _loc6_.prefab;
-                        }
+                        _loc6_.l = _loc6_.prefab;
+                        delete _loc6_.prefab;
                     }
                 }
                 ACHIEVEMENTS.Check("starterkit", 1);
@@ -423,6 +589,12 @@ package {
             var _loc2_:Object = null;
             var _loc3_:Array = [];
             var _loc4_:Array = [0, 0, 0, 0];
+            if (GLOBAL.INFERNO_ONLY && InfernoKits.isPlayerSlot(param1)) {
+                return {
+                        "buildings": InfernoKits.customBuildings(param1),
+                        "costs": InfernoKits.customCosts(param1)
+                    };
+            }
             if (GLOBAL.INFERNO_ONLY && !InfernoKits.usingCustom) {
                 // Paging test: slots 4-6 are the three stock kits again.
                 param1 = InfernoKits.stockId(param1);

@@ -1,4 +1,5 @@
 package {
+    import com.monsters.display.IoLockIcon;
     import com.monsters.display.ImageCache;
     import com.monsters.display.ScrollSet;
     import com.monsters.managers.InstanceManager;
@@ -45,7 +46,8 @@ package {
                 gotoAndStop(1);
             }
             this._juiceList = {};
-            if (MAPROOM_DESCENT.DescentPassed && BASE.isMainYard) {
+            // (Inferno-only: the main yard is the Inferno yard; there is no Inferno to bring monsters up from.)
+            if (MAPROOM_DESCENT.DescentPassed && BASE.isMainYard && !GLOBAL.INFERNO_ONLY) {
                 bAscend.visible = true;
                 bAscend.Enabled = true;
                 bAscend.SetupKey("btn_ascendmonsters");
@@ -198,7 +200,18 @@ package {
             }
             HOUSING._housingUsed.Add(-_loc3_);
             _loc7_ = Math.round(100 / Number(HOUSING._housingCapacity.Get()) * Number(HOUSING._housingUsed.Get()));
-            mcStorage.mcBar.width = 535 / HOUSING._housingCapacity.Get() * HOUSING._housingUsed.Get();
+            if (!GLOBAL.INFERNO_ONLY) {
+                mcStorage.mcBar.width = 535 / HOUSING._housingCapacity.Get() * HOUSING._housingUsed.Get();
+            }
+            else {
+                // Inferno-only: with no compound (0 / 0) the bar was NaN wide and ran out of the window (and a
+                // NaN width, once set, stays: so it is never set)
+                var ioCap:Number = Number(HOUSING._housingCapacity.Get());
+                mcStorage.mcBar.width = ioCap > 0 ? Math.max(0, Math.min(535, 535 / ioCap * Number(HOUSING._housingUsed.Get()))) : 0;
+                if (!(ioCap > 0)) {
+                    _loc7_ = 0;
+                }
+            }
             mcStorage.mcBarB.width = 1;
             tStorage.htmlText = "<b>" + GLOBAL.FormatNumber(HOUSING._housingUsed.Get()) + " / " + GLOBAL.FormatNumber(HOUSING._housingCapacity.Get()) + " (" + _loc7_ + "%)</b>";
             for (_loc8_ in this._creatureData) {
@@ -222,6 +235,14 @@ package {
                     else {
                         this._creatureList["m" + _loc1_].tInfo.htmlText = KEYS.Get("mh_item_0housed");
                         this._creatureList["m" + _loc1_].alpha = 0.5;
+                    }
+                }
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                // the padlock on every monster not unlocked yet in the Strongbox
+                for (_loc8_ in this._creatureData) {
+                    if (this._creatureList["m" + _loc8_] && this._creatureList["m" + _loc8_].mcIcon) {
+                        IoLockIcon.mark(this._creatureList["m" + _loc8_].mcIcon, IoLockIcon.lockedMonster(_loc8_));
                     }
                 }
             }
@@ -255,7 +276,7 @@ package {
                 _loc3_ = 0;
                 _loc4_ = 0;
                 for (_loc2_ in this._juiceList) {
-                    _loc6_ = _loc2_.substring(0, 2) == "IC";
+                    _loc6_ = _loc2_.substring(0, 2) == "IC" && !BASE.isInfernoMainYardOrOutpost;
                     if (!_loc6_) {
                         _loc3_ += this._juiceList[_loc2_];
                         _loc14_ = 0.6;
@@ -302,7 +323,8 @@ package {
         public function JuicerAdd(param1:String):Function {
             var isInfernoType:Boolean = false;
             var n:String = param1;
-            isInfernoType = n.substring(0, 2) == "IC";
+            // (Inferno-only: in the Inferno its own monsters are the ones juiced, 29 September; elsewhere not)
+            isInfernoType = n.substring(0, 2) == "IC" && !BASE.isInfernoMainYardOrOutpost;
             return function(param1:MouseEvent = null):void {
                 if (isInfernoType) {
                     GLOBAL.Message(KEYS.Get("msg_juicernoinferno"));
@@ -371,7 +393,7 @@ package {
                 _loc4_ = 0;
                 while (_loc4_ < _loc2_) {
                     _loc3_ = GLOBAL.player.monsterList[_loc4_].m_creatureID;
-                    _loc5_ = _loc3_.substring(0, 2) == "IC";
+                    _loc5_ = _loc3_.substring(0, 2) == "IC" && !BASE.isInfernoMainYardOrOutpost;
                     if (GLOBAL.player.monsterList[_loc4_].numCreeps > 0 && !_loc5_) {
                         this._juiceList[_loc3_] = GLOBAL.player.monsterList[_loc4_].numCreeps;
                     }

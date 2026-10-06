@@ -258,6 +258,19 @@ package {
             }
         }
 
+        /**
+         * Inferno-only: puts a button just left of this frame's close X, in the same row (the Yard Planner's
+         * Full screen). Call again after each Setup(), which clears the frame.
+         */
+        public function ioAddBesideClose(param1:DisplayObject):void {
+            if (!this._buttonClose || !this._frameMC) {
+                return;
+            }
+            param1.x = this._buttonClose.x - this._buttonClose.width - 3;
+            param1.y = this._buttonClose.y;
+            this._frameMC.addChild(param1);
+        }
+
         private function BtnHelp(param1:MouseEvent = null):void {
             if ("Help" in parent) {
                 (parent as MovieClip).Help();

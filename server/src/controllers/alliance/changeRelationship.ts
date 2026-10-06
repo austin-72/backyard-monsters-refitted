@@ -7,6 +7,7 @@ import { requireAllianceLeader } from "../../services/alliance/allianceAccess.js
 import { setAllianceRelationship } from "../../services/alliance/relationships.js";
 import { cannotChangeRelationshipErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { questBump } from "../../services/quests/questProgress.js";
 
 /**
  * Flags another alliance as Foe, Neutral or Ally, from the Browse tab.
@@ -34,6 +35,7 @@ export const changeRelationship: KoaController = async (ctx) => {
   if (mapVersionMismatch) throw cannotChangeRelationshipErr();
 
   await setAllianceRelationship(user, alliance, target, relationship);
+  void questBump(user.userid, "relation");
 
   ctx.status = Status.OK;
   ctx.body = { error: 0 };

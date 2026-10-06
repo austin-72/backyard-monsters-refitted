@@ -1230,6 +1230,11 @@ package {
                     POPUPS.DisplayGetShiny();
                     return;
                 }
+                if (!GLOBAL.ioConfirmShiny(_loc1_, "to evolve your champion now", function():void {
+                            EvolveClickB();
+                        })) {
+                    return;
+                }
                 CREATURES._guardian.levelSet(CREATURES._guardian._level.Get() + 1, _loc1_);
                 BASE.Purchase("IEV", _loc1_, "cage");
                 CHAMPIONCAGE.Hide();

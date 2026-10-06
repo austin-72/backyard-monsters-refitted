@@ -7,6 +7,8 @@ package com.monsters.chat.impl.http {
     import com.monsters.chat.ChatUser;
     import com.monsters.chat.IAuthenticationSystem;
     import com.monsters.chat.IChatSystem;
+    import com.monsters.chat.BYMChat;
+    import com.monsters.chat.impl.ChatWire;
     import com.monsters.chat.impl.ws.AllianceMessageType;
     import com.monsters.chat.impl.ws.ClientMessageType;
     import com.monsters.chat.impl.ws.ServerMessageType;
@@ -49,8 +51,9 @@ package com.monsters.chat.impl.http {
         private var _rooms:Vector.<String> = new Vector.<String>();
 
         private var _pendingUserId:String = null;
-        private var _pendingIgnoreAction:String = "show";
-        private var _pendingIgnoreTarget:String = null;
+
+        /** A login again after the server forgot the session: the channels are rejoined here, not by the game. */
+        private var _relogin:Boolean = false;
 
         public function HttpChatSystem(serverUrl:String) {
             _url = serverUrl + "chat/poll";
@@ -151,26 +154,32 @@ package com.monsters.chat.impl.http {
         // ── IChatSystem: Ignore list ──────────────────────────────────────────
 
         public function showIgnore():void {
-            _pendingIgnoreAction = "show";
-            _pendingIgnoreTarget = null;
-            sendJson({type: ClientMessageType.GET_IGNORE});
+            sendJson({type: ClientMessageType.GET_IGNORE, action: "show"});
         }
+
+        /** At login: the list, to apply quietly (nothing is written in the chat). */
         public function getIgnore():void {
-            _pendingIgnoreAction = "show";
-            _pendingIgnoreTarget = null;
-            sendJson({type: ClientMessageType.GET_IGNORE});
+            sendJson({type: ClientMessageType.GET_IGNORE, action: "sync"});
         }
 
+        /** `target` a user id; or "" with `displayName` a player's name (the /ignore command). */
         public function ignore(target:String, displayName:String):void {
-            _pendingIgnoreAction = "add";
-            _pendingIgnoreTarget = target;
-            sendJson({type: ClientMessageType.IGNORE, targetId: target});
+            if (target != null && target.length > 0) {
+                sendJson({type: ClientMessageType.IGNORE, targetId: target});
+            }
+            else {
+                sendJson({type: ClientMessageType.IGNORE, targetName: displayName});
+            }
         }
 
+        /** A user id, or a player's name (the /unignore command). */
         public function unignore(target:String):void {
-            _pendingIgnoreAction = "remove";
-            _pendingIgnoreTarget = target;
-            sendJson({type: ClientMessageType.UNIGNORE, targetId: target});
+            if (/^\d+$/.test(target)) {
+                sendJson({type: ClientMessageType.UNIGNORE, targetId: target});
+            }
+            else {
+                sendJson({type: ClientMessageType.UNIGNORE, targetName: target});
+            }
         }
 
         // ── IChatSystem: Utility ──────────────────────────────────────────────
@@ -182,96 +191,38 @@ package com.monsters.chat.impl.http {
         public function error(code:String, message:String):void {
         }
 
+        public function moderate(action:String, params:Object):void {
+            var msg:Object = {type: action};
+            for (var key:String in params) {
+                msg[key] = params[key];
+            }
+            sendJson(msg);
+        }
+
         // ── WebSocket event handlers ──────────────────────────────────────────
 
-        /** One message from the server, already parsed. Identical handling to the WebSocket transport. */
+        /** One message from the server, already parsed (ChatWire turns the rest into events, as for the socket). */
         private function handleServerMessage(msg:Object):void {
             if (!msg)
                 return;
-
-            var type:String = msg.type as String;
-
-            switch (type) {
+            switch (msg.type as String) {
                 case ServerMessageType.AUTH_OK:
                     _loggedIn = true;
-                    dispatchEvent(new ChatEvent(ChatEvent.LOGIN, true));
+                    var okParams:Dictionary = new Dictionary();
+                    okParams["displayname"] = msg.displayName != null ? String(msg.displayName) : null;
+                    okParams["role"] = msg.role != null ? String(msg.role) : null;
+                    okParams["relogin"] = _relogin || msg.refresh == true;
+                    _relogin = false;
+                    dispatchEvent(new ChatEvent(ChatEvent.LOGIN, true, okParams));
                     break;
-
                 case ServerMessageType.AUTH_FAIL:
                     _loggedIn = false;
                     var failParams:Dictionary = new Dictionary();
                     failParams["reason"] = msg.reason;
                     dispatchEvent(new ChatEvent(ChatEvent.LOGIN, false, failParams));
                     break;
-
-                case ServerMessageType.JOINED:
-                    var channelName:String = msg.channel as String;
-                    if (_rooms.indexOf(channelName) == -1)
-                        _rooms.push(channelName);
-                    var joinParams:Dictionary = new Dictionary();
-                    joinParams["channel"] = new Channel(channelName, "system");
-                    dispatchEvent(new ChatEvent(ChatEvent.JOIN, true, joinParams));
-                    if (msg.history && msg.history is Array) {
-                        var history:Array = msg.history as Array;
-                        for each (var entry:Object in history) {
-                            var histUserId:String = String(int(entry.userId));
-                            updateNameMap(histUserId, String(entry.displayName));
-                            dispatchSay(channelName, histUserId, String(entry.body), entry.picSquare as String, Number(entry.ts), String(entry.displayName), entry.messageType as String, int(entry.allianceImage));
-                        }
-                    }
-                    break;
-
-                case ServerMessageType.MESSAGE:
-                    var senderIdStr:String = String(int(msg.userId));
-                    updateNameMap(senderIdStr, msg.displayName as String);
-                    dispatchSay(msg.channel as String, senderIdStr, msg.body as String, msg.picSquare as String, Number(msg.ts), msg.displayName as String, msg.messageType as String, int(msg.allianceImage));
-                    break;
-
-                case ServerMessageType.USER_ENTER:
-                    var enterIdStr:String = String(int(msg.userId));
-                    var enterDisplayName:String = msg.displayName as String;
-                    updateNameMap(enterIdStr, enterDisplayName);
-                    var enterParams:Dictionary = new Dictionary();
-                    enterParams["user"] = new ChatUser(int(msg.userId), enterDisplayName);
-                    enterParams["room"] = new ChatRoom(0, msg.channel as String);
-                    dispatchEvent(new ChatEvent(ChatEvent.USER_ENTER, true, enterParams));
-                    break;
-
-                case ServerMessageType.USER_EXIT:
-                    var exitId:int = int(msg.userId);
-                    var exitParams:Dictionary = new Dictionary();
-                    exitParams["user"] = new ChatUser(exitId, String(exitId));
-                    exitParams["room"] = new ChatRoom(0, msg.channel as String);
-                    dispatchEvent(new ChatEvent(ChatEvent.USER_EXIT, true, exitParams));
-                    break;
-
-                case ServerMessageType.IGNORE_LIST:
-                    var rawList:Array = msg.list as Array;
-                    var ignoreParams:Dictionary = new Dictionary();
-                    ignoreParams["action"] = _pendingIgnoreAction;
-                    ignoreParams["target"] = _pendingIgnoreTarget;
-                    if (_pendingIgnoreAction == "show") {
-                        // "show" display loop expects ChatData objects with getUtfString()
-                        var chatDataList:Array = [];
-                        for each (var item:Object in rawList) {
-                            var cd:ChatData = new ChatData();
-                            cd.putUtfString("target", String(item.target));
-                            cd.putUtfString("displayname", item.displayname ? String(item.displayname) : "");
-                            chatDataList.push(cd);
-                        }
-                        ignoreParams["ignore_list"] = chatDataList;
-                    }
-                    else {
-                        // add/remove: userIsIgnored() calls indexOf(userId) on this array — must be strings
-                        var stringList:Array = [];
-                        for each (var item2:Object in rawList)
-                            stringList.push(String(item2.target));
-                        ignoreParams["ignore_list"] = stringList;
-                    }
-                    dispatchEvent(new ChatEvent(ChatEvent.IGNORE, true, ignoreParams));
-                    _pendingIgnoreAction = "show";
-                    _pendingIgnoreTarget = null;
-                    break;
+                default:
+                    ChatWire.dispatch(this, msg, _rooms);
             }
         }
 
@@ -287,26 +238,6 @@ package com.monsters.chat.impl.http {
             }
             sendJson({type: ClientMessageType.AUTH, userId: int(userId), token: token});
             _pendingUserId = null;
-        }
-
-        private function updateNameMap(userId:String, displayName:String):void {
-            var params:Dictionary = new Dictionary();
-            params["userid"] = userId;
-            params["displayname"] = displayName;
-            dispatchEvent(new ChatEvent(ChatEvent.UPDATE_NAME, true, params));
-        }
-
-        private function dispatchSay(channelName:String, userId:String, body:String, picSquare:String = null, ts:Number = 0, displayName:String = null, messageType:String = null, allianceImage:int = 0):void {
-            var params:Dictionary = new Dictionary();
-            params["channel"] = new Channel(channelName, "system");
-            params["user"] = userId;
-            params["message"] = body;
-            params["picsquare"] = picSquare;
-            params["ts"] = ts;
-            params["messagetype"] = messageType == null ? AllianceMessageType.MESSAGE : messageType;
-            params["allianceimage"] = allianceImage;
-            params["displayname"] = displayName;
-            dispatchEvent(new ChatEvent(ChatEvent.SAY, true, params));
         }
 
         private function sendJson(obj:Object):void {
@@ -346,7 +277,7 @@ package com.monsters.chat.impl.http {
             loader.addEventListener(Event.COMPLETE, function(e:Event):void {
                     _inFlight = false;
                     _failures = 0;
-                    onPollReply(String(loader.data));
+                    onPollReply(String(loader.data), sending);
                 });
             var failed:Function = function(e:Event):void {
                     _inFlight = false;
@@ -365,11 +296,12 @@ package com.monsters.chat.impl.http {
             }
         }
 
-        private function onPollReply(raw:String):void {
+        private function onPollReply(raw:String, sent:Array):void {
             var reply:Object = null;
             var incoming:Array = null;
             var room:String = null;
             var rejoin:Vector.<String> = null;
+            var item:Object = null;
             try {
                 reply = JSON.parse(raw);
             }
@@ -380,13 +312,21 @@ package com.monsters.chat.impl.http {
                 return;
             if (reply.fresh == 1 && _sid != null && _loggedIn && _userId != null) {
                 // The server forgot this session (it restarted, or the game sat paused too long). Do what
-                // a dropped socket would need: authenticate again and rejoin the channels we were in.
+                // a dropped socket would need: authenticate again and rejoin the channels we were in. An
+                // alliance channel is asked for as "alliance" (the server works out which is the player's:
+                // it refuses its real name), and what was sent into the forgotten session goes again.
                 _loggedIn = false;
+                _relogin = true;
                 rejoin = _rooms.slice();
+                _rooms.length = 0;
                 _sid = String(reply.sid);
                 sendAuth(_userId);
                 for each (room in rejoin)
-                    sendJson({type: ClientMessageType.JOIN, channel: room});
+                    sendJson({type: ClientMessageType.JOIN, channel: BYMChat.isAllianceChannel(room) ? "alliance" : room});
+                for each (item in sent || []) {
+                    if (item && item.type != ClientMessageType.AUTH && item.type != ClientMessageType.JOIN && item.type != ClientMessageType.PING)
+                        sendJson(item);
+                }
                 return;
             }
             _sid = String(reply.sid);

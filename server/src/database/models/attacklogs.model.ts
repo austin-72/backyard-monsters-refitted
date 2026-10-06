@@ -3,6 +3,7 @@ import type { JsonObject } from "../../types/JsonObject.js";
 
 @Index({ properties: ["attacker_userid", "attacktime"] })
 @Index({ properties: ["defender_userid", "attacktime"] })
+@Index({ properties: ["attacker_userid", "baseid"] })
 @Entity({ tableName: "attack_logs" })
 export class AttackLogs {
   @PrimaryKey({ type: 'number' })
@@ -43,4 +44,25 @@ export class AttackLogs {
 
   @Property({ type: Date })
   attacktime: Date = new Date();
+
+  // Inferno-only (3 October, migration 20261010): the yard attacked and how the attack ended, written by
+  // the attack's saves (services/base/createAttackLog.ts updateAttackLog). defender_userid 0: a tribe yard.
+
+  @Property({ type: 'string', nullable: true })
+  baseid?: string | null;
+
+  @Property({ type: 'number', nullable: true })
+  level?: number | null;
+
+  @Property({ type: 'number', default: 0 })
+  damage: number = 0;
+
+  @Property({ type: 'number', default: 0 })
+  destroyed: number = 0;
+
+  @Property({ type: 'boolean', default: false })
+  ended: boolean = false;
+
+  @Property({ type: Date, nullable: true })
+  endtime?: Date | null;
 }

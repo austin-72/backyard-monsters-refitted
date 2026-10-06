@@ -1,3 +1,4 @@
+import { infernoOnlyConfig } from "./InfernoOnlyConfig.js";
 import { AllianceMessageType, AlliancePowerupType, AllianceStance } from "../enums/Alliance.js";
 
 export interface PowerupRules {
@@ -34,27 +35,28 @@ export const STANCE_LABEL: Record<AllianceStance, string> = {
  * The rules governing each alliance power-up - how long it runs once started, how
  * long it takes to charge, and what an hour off that charge costs in Shiny.
  */
+// Inferno-only: every power-up recharges in 4 days (stock: Armament 7, Conquest 5, Declare War 7).
 export const POWERUP_RULES: PowerupRules[] = [
   {
     powerup_id: 1,
     type: AlliancePowerupType.ARMAMENT,
     running_time: 12 * 3600,
-    recharge_time: 7 * 24 * 3600,
-    hourly_cost: 20,
+    recharge_time: (infernoOnlyConfig.enabled ? 4 : 7) * 24 * 3600,
+    hourly_cost: infernoOnlyConfig.enabled ? infernoOnlyConfig.prices.powerupHour : 20,
   },
   {
     powerup_id: 2,
     type: AlliancePowerupType.CONQUEST,
     running_time: 6 * 3600,
-    recharge_time: 5 * 24 * 3600,
-    hourly_cost: 20,
+    recharge_time: (infernoOnlyConfig.enabled ? 4 : 5) * 24 * 3600,
+    hourly_cost: infernoOnlyConfig.enabled ? infernoOnlyConfig.prices.powerupHour : 20,
   },
   {
     powerup_id: 3,
     type: AlliancePowerupType.DECLARE_WAR,
     running_time: 12 * 3600,
-    recharge_time: 7 * 24 * 3600,
-    hourly_cost: 20,
+    recharge_time: (infernoOnlyConfig.enabled ? 4 : 7) * 24 * 3600,
+    hourly_cost: infernoOnlyConfig.enabled ? infernoOnlyConfig.prices.powerupHour : 20,
   },
 ];
 

@@ -1,6 +1,7 @@
 import { Status } from "../../enums/StatusCodes.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { User } from "../../database/models/user.model.js";
-import { requireAllianceLeader } from "../../services/alliance/allianceAccess.js";
+import { requireAllianceLeader, requireAllianceStaff } from "../../services/alliance/allianceAccess.js";
 import { getSuggestedMembers } from "../../services/alliance/suggestedMembers.js";
 import type { KoaController } from "../../utils/KoaController.js";
 
@@ -14,7 +15,8 @@ import type { KoaController } from "../../utils/KoaController.js";
  */
 export const suggestedMembers: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
-  const alliance = await requireAllianceLeader(user);
+  // (Inferno-only: officers recruit too)
+  const alliance = infernoOnlyConfig.enabled ? await requireAllianceStaff(user) : await requireAllianceLeader(user);
 
   const members = await getSuggestedMembers(alliance);
 

@@ -1,3 +1,5 @@
+import { getMaintenance, isAdmin } from "../../services/admin/admin.js";
+import { ClientSafeError } from "../../middleware/clientSafeError.js";
 import { discordRequired } from "../../config/InfernoOnlyConfig.js";
 import bcrypt from "bcrypt";
 import JWT, { type SignOptions } from "jsonwebtoken";
@@ -18,6 +20,7 @@ import { Status } from "../../enums/StatusCodes.js";
 import { UserLoginSchema } from "../../schemas/AuthSchemas.js";
 import { Env } from "../../enums/Env.js";
 import { fetchDiscordAvatar } from "../../services/discord/fetchDiscordAvatar.js";
+import { endTestMode, isTestModeOn } from "../../services/admin/testMode.js";
 
 type SessionLifetime = NonNullable<SignOptions["expiresIn"]>;
 
@@ -58,7 +61,11 @@ const authenticateWithToken = async (token: string) => {
  * @throws {Error} - Throws an error if authentication fails or if the request body is invalid.
  */
 export const login: KoaController = async (ctx) => {
-  let { email, password, token, sessionType } = UserLoginSchema.parse(ctx.request.body);
+  // A mistyped email the game's form lets through (john..doe@x.com) or a password that breaks the rules for
+  // new ones is a failed login, not a server error (it answered 500 "Something went wrong").
+  const parsed = UserLoginSchema.safeParse(ctx.request.body);
+  if (!parsed.success) throw emailPasswordErr();
+  let { email, password, token, sessionType } = parsed.data;
   let user: User | null = null;
 
   if (token) {
@@ -71,6 +78,7 @@ export const login: KoaController = async (ctx) => {
   }
 
   if (!user) {
+    if (!email || !password) throw emailPasswordErr();
     user = await postgres.em.findOne(User, { email });
     if (!user) throw emailPasswordErr();
 
@@ -78,7 +86,27 @@ export const login: KoaController = async (ctx) => {
     if (!isMatch) throw emailPasswordErr();
   }
 
-  if (user.banned) throw userPermaBannedErr();
+  if (user.banned) {
+    // Inferno-only: a ban from the admin panel carries the reason the player is shown.
+    if (user.ban_reason) {
+      throw new ClientSafeError({ message: `Your account has been banned: ${user.ban_reason}`, status: Status.FORBIDDEN, data: {}, isClientFriendly: true });
+    }
+    throw userPermaBannedErr();
+  }
+
+  // Maintenance mode from the admin panel: nobody but admins logs in, and they are told why.
+  const maintenance = await getMaintenance();
+  if (maintenance && !isAdmin(user)) {
+    throw new ClientSafeError({ message: maintenance, status: Status.FORBIDDEN, data: {}, isClientFriendly: true });
+  }
+
+  // Admin test mode ends with the session it was switched on in: a new login puts the account back.
+  // A failure here must not stop the login (it is tried again at the next one).
+  try {
+    if (await isTestModeOn(user.userid)) await endTestMode(user, "logged in again");
+  } catch (err) {
+    logger.error(`Test mode: could not put ${user.username}'s account back at login: ${err}`);
+  }
 
   // Generate and set the token
   const sessionLifeTime = process.env.SESSION_LIFETIME || "30d";

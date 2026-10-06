@@ -1,4 +1,5 @@
 package {
+    import com.monsters.events.hfo.IoHfoWaves;
     import com.monsters.interfaces.ITargetable;
     import com.monsters.maproom_manager.MapRoomManager;
     import com.monsters.monsters.MonsterBase;
@@ -149,15 +150,20 @@ package {
 
         public function FindTargets(param1:int, param2:int = 1):void {
             this._hasTargets = false;
-            if (_lvl.Get() <= 0 && health <= 0) {
+            // Was "level 0 and destroyed": a bunker still being built (level 0) under attack then looked up
+            // stats[-1] and stopped the game (bug reports: "reading 'range'"). Either one means no targets,
+            // as in the Monster Bunker (BUILDING22).
+            var stats:Array = GLOBAL._buildingProps[127].stats;
+            var level:int = Math.min(_lvl.Get(), stats.length);
+            if (level <= 0 || health <= 0) {
                 this._targetCreeps = [];
                 this._targetFlyers = [];
                 return;
             }
-            var _loc3_:Array = Targeting.getCreepsInRange(GLOBAL._buildingProps[127].stats[_lvl.Get() - 1].range, _position.add(new Point(0, _footprint[0].height / 2)), Targeting.getOldStyleTargets(0));
+            var _loc3_:Array = Targeting.getCreepsInRange(stats[level - 1].range, _position.add(new Point(0, _footprint[0].height / 2)), Targeting.getOldStyleTargets(0));
             this._targetCreeps = this.addTargetCreeps(param1, _loc3_, param2);
             if (this.canTargetAir()) {
-                _loc3_ = Targeting.getCreepsInRange(GLOBAL._buildingProps[127].stats[_lvl.Get() - 1].range, _position.add(new Point(0, _footprint[0].height / 2)), Targeting.getOldStyleTargets(2));
+                _loc3_ = Targeting.getCreepsInRange(stats[level - 1].range, _position.add(new Point(0, _footprint[0].height / 2)), Targeting.getOldStyleTargets(2));
                 this._targetFlyers = this.addTargetCreeps(param1, _loc3_, param2);
             }
             else {
@@ -243,10 +249,17 @@ package {
             var _loc8_:uint = 0;
             var _loc9_:int = 0;
             super.TickAttack();
-            if (health > 0) {
+            if (health > 0 && _lvl.Get() > 0) {
                 this._capacity = _buildingProps.capacity[_lvl.Get() - 1];
             }
-            var _loc1_:Array = this.getUnusedCreatures();
+            // Hell Freezes Over: the Compound is frozen solid while a wave is on; its monsters can't come out
+            if (GLOBAL.INFERNO_ONLY && IoHfoWaves.compoundFrozen) {
+                this._targetCreeps = [];
+                this._targetFlyers = [];
+                this._hasTargets = false;
+                return;
+            }
+            var _loc1_:Array = null; // the defenders not sent out yet: only needed when sending (below)
             var _loc2_:Boolean = false;
             var _loc3_:int = 0;
             while (_loc3_ < this._targetCreeps.length) {
@@ -273,6 +286,7 @@ package {
             ++this._tickNumber;
             if ((this._targetFlyers.length > 0 || this._targetCreeps.length > 0) && this._tickNumber % 30 == 0) {
                 _loc4_ = null;
+                _loc1_ = this.getUnusedCreatures();
                 this._targetCreeps.sortOn(["dist"], Array.NUMERIC);
                 this._targetFlyers.sortOn(["dist"], Array.NUMERIC);
                 if (this._targetFlyers.length > 0) {
@@ -291,9 +305,14 @@ package {
                     _loc9_ = int((_loc8_ = _loc1_.length) - 1);
                     while (_loc9_ >= 0) {
                         _loc5_ = this._targetCreeps[0].creep;
-                        _loc6_ = _loc1_[_loc3_];
+                        // The first defender still unused (this was an index left over from the flyer loop:
+                        // with flyers targeted, some defenders were never sent and nothing was sent instead).
+                        _loc6_ = _loc1_[0];
+                        if (!_loc6_) {
+                            break;
+                        }
                         this.dispatchCreature(_loc6_, _loc5_);
-                        _loc1_.splice(_loc3_, 1);
+                        _loc1_.splice(0, 1);
                         _loc9_--;
                     }
                 }
@@ -308,7 +327,7 @@ package {
         public function EjectCreeps(param1:Point, param2:Number):void {
             var creep:CreepBase = null;
             var waiting:Array = null;
-            if (health <= 0 || _countdownUpgrade.Get() != 0) {
+            if (health <= 0 || _countdownUpgrade.Get() != 0 || GLOBAL.INFERNO_ONLY && IoHfoWaves.compoundFrozen) {
                 return;
             }
             waiting = this.getUnusedCreatures();
@@ -403,6 +422,11 @@ package {
         }
 
         private function RangeIndicator():void {
+            // Inferno-only: the yard may have gone in the quarter second since the mouse came over (report #61:
+            // into an attack, with no footprint layer)
+            if (GLOBAL.INFERNO_ONLY && (!MAP._BUILDINGFOOTPRINTS || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD)) {
+                return;
+            }
             var _loc1_:uint = 16777215;
             this._radiusGraphic = new Shape();
             this._radiusGraphic.graphics.beginFill(16777215, 0.1);

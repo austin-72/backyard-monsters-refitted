@@ -36,7 +36,8 @@ The kits are not affected: they are built into the client and also live in
 
 Ctrl+Shift+B > **BYMR - Release**. It stamps the build with the date and time (`stamp-build.cmd`), compiles
 BYMR - Stable, and publishes it (`publish-client.cmd` copies `bin\bymr-stable.swf` into
-`server\public\client\`). The server reads the stamp out of the published SWF and logs
+`server\public\client\`), then builds the browser client from the same stamped sources
+(`publish-web.cmd`, into `server\public\web\`; see `WEB-CLIENT.md`). The server reads the stamp out of the published SWF and logs
 `Published client build: <stamp>`; from then on a client with an older stamp is asked to restart, on the
 login screen if it is just starting, at its next yard change if it was already running. Nothing to
 configure and nothing to bump by hand. If the log instead says the client carries no build stamp, the
@@ -69,13 +70,17 @@ outposts, send mail, make and join an alliance.
 
 ## 5. Backups
 
-`server\backup-db.cmd` writes a dated dump into `server\backups`. Add it to Windows Task Scheduler
-to run nightly.
+Nothing to do: the `backup` service backs the database up every day into `server\backups` (14 daily, 8
+weekly, 12 monthly kept). Check it once: after `docker compose up -d` there is a `bym-<date>.dump` in
+`server\backups` within a minute. Consider `BACKUP_DIR` in `server\.env` pointing at a OneDrive folder, so a
+copy lives off this computer. `backup-db.cmd` backs up on demand; `restore-db.cmd` puts one back
+(RUNNING-INFERNO-ONLY.md, "Backups"). (Before this, `backup-db.cmd` was an empty file: no backups were
+being made.)
 
 ## Already done in this build
 
 - The six kits are built into the client. A server's own `inferno-kits.json` still overrides them.
-- Outposts can no longer recycle buildings (`outpostRecycling: false`); the kit paging test is off.
+- Outposts cannot recycle buildings (only an admin's kit draft in the Designer can); the kit paging test is off.
 - Login tokens are verified in every mode, and passwords are never written to the log.
 - The tutorial is skipped in production too. New accounts get an avatar from this server, not
   from the upstream project's CDN.

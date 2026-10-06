@@ -4,6 +4,7 @@ package {
     import com.monsters.maproom_manager.IMapRoomCell;
     import com.monsters.maproom_manager.MapRoomManager;
     import com.monsters.monsters.components.CModifiableProperty;
+    import com.monsters.quests.IoQuests;
     import flash.display.MovieClip;
     import flash.events.*;
 
@@ -459,6 +460,10 @@ package {
                 BASE.CalcResources();
                 if (_loc1_.Get() > QUESTS._global.singleclickbank) {
                     QUESTS._global.singleclickbank = _loc1_.Get();
+                }
+                // Inferno-only quest book: the biggest bank in one click
+                if (GLOBAL.INFERNO_ONLY && !GLOBAL._catchup) {
+                    IoQuests.best("bank", _loc1_.Get());
                 }
                 if (!GLOBAL._catchup) {
                     QUESTS.Check();

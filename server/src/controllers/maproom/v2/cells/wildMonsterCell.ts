@@ -11,11 +11,12 @@ type Cell = Loaded<WorldMapCell, "save", WildMonsterCellFields>;
 export const wildMonsterCell = async (cell: Cell, worldId: string) => {
   const [cellX, cellY] = [cell.x, cell.y];
 
-  const { tribe, level } = tribeForCell(worldId, cellX, cellY);
+  const { tribe, level, under } = tribeForCell(worldId, cellX, cellY);
 
   const baseid = generateBaseId(worldId, cellX, cellY);
   
   return {
+    ...(under && { u: 1 }),
     uid: 0,
     b: MapRoomCell.WM,
     i: cell.terrainHeight,

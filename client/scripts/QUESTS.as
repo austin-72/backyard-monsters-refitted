@@ -1,6 +1,7 @@
 package {
 
     import com.monsters.maproom_manager.MapRoomManager;
+    import com.monsters.quests.IoQuestBook;
     import com.monsters.siege.SiegeWeapons;
     import com.monsters.siege.weapons.Decoy;
     import com.monsters.siege.weapons.Jars;
@@ -1631,6 +1632,10 @@ package {
             var block:Boolean = false;
             var n:String = param1;
             var v:int = param2;
+            // Inferno-only: a Designer draft (GLOBAL.ioDesign) is not the player's yard: it completes nothing.
+            if (GLOBAL.ioDesignMode()) {
+                return;
+            }
             try {
                 if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && MapRoomManager.instance.isInMapRoom3 && BASE.isMainYardOrInfernoMainYard || GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !MapRoomManager.instance.isInMapRoom3) {
                     if (Boolean(n) && _global[n] < v) {
@@ -2006,7 +2011,21 @@ package {
             }
         }
 
+        /** Inferno-only: the old quest list, from the quest book's link (Show opens the book instead). */
+        private static var _ioOld:Boolean = false;
+
+        public static function ioShowOld():void {
+            _ioOld = true;
+            Show();
+            _ioOld = false;
+        }
+
         public static function Show(param1:MouseEvent = null):void {
+            // Inferno-only: the Quests button opens the quest book (com/monsters/quests/IoQuestBook.as)
+            if (GLOBAL.INFERNO_ONLY && !_ioOld) {
+                IoQuestBook.Show();
+                return;
+            }
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 if (GLOBAL._newBuilding) {
                     GLOBAL._newBuilding.Cancel();

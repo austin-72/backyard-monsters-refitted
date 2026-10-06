@@ -1,4 +1,8 @@
 package {
+    import com.monsters.walls.IoWallUpgrade;
+    import com.monsters.walls.IoTrapRearm;
+    import com.monsters.events.hfo.IoHfoIce;
+    import com.monsters.casino.CasinoWindow;
     import com.monsters.alliances.tabs.AllianceMessagePopup;
     import com.monsters.managers.InstanceManager;
     import com.monsters.maproom3.popups.MapRoom3ConfirmMigrationPopup;
@@ -11,6 +15,7 @@ package {
     import flash.events.Event;
     import flash.events.MouseEvent;
     import flash.geom.Point;
+    import flash.geom.Rectangle;
     import flash.text.TextField;
     import flash.text.TextFieldAutoSize;
 
@@ -41,7 +46,7 @@ package {
             _props = GLOBAL._buildingProps[_building._type - 1];
             _mc = MAP._BUILDINGINFO.addChild(new buildingInfoData()) as MovieClip;
             _mc.tName.autoSize = TextFieldAutoSize.CENTER;
-            var _loc2_:* = "<b>" + KEYS.Get(_props.name) + "</b>";
+            var _loc2_:* = "<b>" + KEYS.Get(_building is IoHfoIce ? IoHfoIce(_building).nameKey : _props.name) + "</b>";
             var effectiveLvl:int = _building.getEffectiveLevel();
             if (_building._lvl.Get() > 0 && _props.costs && _props.costs.length > 1) {
                 if (Boolean(_props.names) && _props.names.length > 1) {
@@ -58,6 +63,19 @@ package {
                 }
             }
             _mc.tName.htmlText = _loc2_;
+            // Inferno-only (bug report A10): the name centred over the buttons (x 6, 110 wide: the menu's
+            // frame is wider when it has an info box beside them), and a long one ("Infernal Academy") made
+            // smaller to stay over them
+            if (GLOBAL.INFERNO_ONLY) {
+                if (_mc.tName.textWidth > 120) {
+                    _mc.tName.autoSize = TextFieldAutoSize.NONE;
+                    _mc.tName.width = 124;
+                    GLOBAL.ioFitText(_mc.tName, 8);
+                }
+                // (by its drawn box: the library's text box starts 29 px right of the field's x)
+                var ioNameBox:Rectangle = _mc.tName.getBounds(_mc);
+                _mc.tName.x += 6 + 55 - (ioNameBox.x + ioNameBox.width / 2);
+            }
             _mc.removeEventListener(Event.ENTER_FRAME, Tick);
             _mc.addEventListener(Event.ENTER_FRAME, Tick);
             if (GLOBAL._zoomed) {
@@ -234,6 +252,10 @@ package {
                             else if (_props.id == 116) {
                                 _loc1_.push(["btn_openlab", 30, true]);
                             }
+                            else if (_props.id == BRIMSTONEPIT.ID && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                                // Inferno-only: the casino, from the player's own yard
+                                _loc1_.push([BRIMSTONEPIT.OPEN_BUTTON, 30, true]);
+                            }
                             else if (_props.id == 119) {
                                 _loc1_.push(["btn_openchamber", 30, true]);
                             }
@@ -251,12 +273,21 @@ package {
                             if (_props.type != "decoration" && _props.id != MAPROOM.TYPE && !_loc3_) {
                                 _loc1_.push(["btn_upgrade", 30]);
                             }
+                            // Inferno-only: spent traps re-armed, all at once (IoTrapRearm, 3 October)
+                            if (GLOBAL.INFERNO_ONLY && _building is BTRAP && IoTrapRearm.disarmed().length > 0) {
+                                _loc1_.push(["io_btn_rearm", 30, 1]);
+                            }
                             if (_props.type == "wall" && !_loc3_) {
                                 _loc1_.push(["btn_upgradeall", 30, 1]);
+                                // Inferno-only: every wall upgraded at once for resources (IoWallUpgrade, 3 October)
+                                if (GLOBAL.INFERNO_ONLY && !GLOBAL.ioDesignMode()) {
+                                    _loc1_.push(["io_btn_wallsres", 30, 1]);
+                                }
                             }
                             if (_props.type == "resource" && !_loc3_) {
                                 if (!GLOBAL._harvesterOverdrive || GLOBAL._harvesterOverdrive < GLOBAL.Timestamp()) {
-                                    _loc1_.push(["btn_speedup", 30, 1]);
+                                    // (Inferno-only, bug report B23: it opens Production Overdrive, and says so)
+                                    _loc1_.push([GLOBAL.INFERNO_ONLY ? "io_btn_overdrive" : "btn_speedup", 30, 1]);
                                 }
                             }
                             if (TUTORIAL._stage >= 200) {
@@ -285,7 +316,11 @@ package {
                 else {
                     _loc1_.push(["btn_help", 30]);
                 }
-                if (_props.type == "mushroom") {
+                if (_building is IoHfoIce) {
+                    // Hell Freezes Over's ice: a worker is sent to break it
+                    _loc1_.push(["hfo_btn_break", 30, true]);
+                }
+                else if (_props.type == "mushroom") {
                     _loc1_.push(["btn_pick", 30, true]);
                 }
                 _loc7_ = _mc.tName.y + _mc.tName.height + 5;
@@ -299,7 +334,7 @@ package {
                     if (BASE.isInfernoMainYardOrOutpost) {
                         _loc1_ = [[INFERNOPORTAL.EXIT_BUTTON, 30, true]];
                     }
-                    else if (MAPROOM_DESCENT.DescentPassed) {
+                    else if (MAPROOM_DESCENT.DescentPassed && !GLOBAL.INFERNO_ONLY) {
                         _loc1_ = [[INFERNOPORTAL.ENTER_BUTTON, 30, true], [INFERNOPORTAL.ASCENSION_BUTTON, 30, false]];
                     }
                     else {
@@ -548,6 +583,9 @@ package {
             if (param1.target.labelKey == SiegeFactory.SIEGE_BUTTON) {
                 SiegeFactory.Show();
             }
+            if (param1.target.labelKey == BRIMSTONEPIT.OPEN_BUTTON) {
+                CasinoWindow.Show();
+            }
             if (param1.target.labelKey == SiegeLab.SIEGE_BUTTON) {
                 SiegeLab.Show();
             }
@@ -571,6 +609,12 @@ package {
             if (param1.target.labelKey == "btn_fortify") {
                 BUILDINGOPTIONS.Show(_building, "fortify");
             }
+            if (param1.target.labelKey == "io_btn_rearm") {
+                IoTrapRearm.Show();
+            }
+            if (param1.target.labelKey == "io_btn_wallsres") {
+                IoWallUpgrade.Show();
+            }
             if (param1.target.labelKey == "btn_upgradeall") {
                 if (BASE.isInfernoMainYardOrOutpost) {
                     STORE.ShowB(1, 0, ["BLK2I", "BLK3I"]);
@@ -582,7 +626,7 @@ package {
             if (param1.target.labelKey == "btn_more") {
                 BUILDINGOPTIONS.Show(_building, "more");
             }
-            if (param1.target.labelKey == "btn_pick") {
+            if (param1.target.labelKey == "btn_pick" || param1.target.labelKey == "hfo_btn_break") {
                 MUSHROOMS.PickWorker(_building);
             }
             if (param1.target.labelKey == "btn_speedup") {
@@ -607,6 +651,9 @@ package {
                 else if (_props.type == "resource") {
                     STORE.ShowB(3, 1, ["POD"]);
                 }
+            }
+            if (param1.target.labelKey == "io_btn_overdrive") {
+                STORE.ShowB(3, 1, ["POD"]);
             }
             if (param1.target.labelKey == "btn_viewmessage") {
                 SIGNS.ShowMessage(_building);

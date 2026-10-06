@@ -1,10 +1,12 @@
 package {
+    import com.monsters.display.IoLockIcon;
     import com.monsters.display.ImageCache;
     import com.monsters.display.ScrollSet;
     import flash.display.Bitmap;
     import flash.display.BitmapData;
     import flash.display.MovieClip;
     import flash.display.Sprite;
+    import flash.events.Event;
     import flash.events.MouseEvent;
     import flash.geom.Point;
     import flash.geom.Rectangle;
@@ -82,13 +84,16 @@ package {
                     this._monsterSlots.push(_loc10_);
                     ImageCache.GetImageWithCallBack("monsters/" + _loc5_[_loc7_].id + "-medium.jpg", this.IconLoaded, true, 1, "", [_loc10_]);
                     if (Boolean(CREATURELOCKER._lockerData[_loc5_[_loc7_].id]) && CREATURELOCKER._lockerData[_loc5_[_loc7_].id].t == 2) {
-                        _loc10_.addEventListener(MouseEvent.MOUSE_DOWN, this.QueueAdd(_loc9_));
+                        _loc10_.addEventListener(MouseEvent.MOUSE_DOWN, GLOBAL.INFERNO_ONLY ? this.ioHoldStart(_loc9_) : this.QueueAdd(_loc9_));
                         _loc10_.alpha = 1;
                         _loc10_.buttonMode = true;
                     }
                     else {
                         _loc10_.alpha = 0.5;
                         _loc10_.buttonMode = false;
+                        if (GLOBAL.INFERNO_ONLY) {
+                            IoLockIcon.mark(_loc10_, true); // (the padlock, the tile grey)
+                        }
                     }
                     _loc1_++;
                 }
@@ -296,7 +301,9 @@ package {
                         if (!_hatchery._inProduction) {
                             _hatchery.StartProduction();
                         }
-                        BASE.Save();
+                        if (!_ioHolding) {
+                            BASE.Save(); // (held down: saved once when it's let go)
+                        }
                     }
                     RenderQueue();
                 }
@@ -306,7 +313,70 @@ package {
         private function Charge(param1:String):void {
             BASE.Charge(4, CREATURES.GetProperty(param1, "cResource"));
             ResourcePackages.Create(BASE.isInfernoMainYardOrOutpost ? 8 : 4, this._hatchery, CREATURES.GetProperty(param1, "cResource"), true);
-            BASE.Save();
+            if (!this._ioHolding) {
+                BASE.Save(); // (while a monster is held down, saved once when it's let go)
+            }
+        }
+
+        // ---- Inferno-only (3 October): hold a monster down to keep adding it, as the Incubation Control
+        // Station does. The first press adds one; held for about a third of a second, one more every other
+        // frame, until it is let go, the queue is full or the magma runs out.
+
+        private var _ioHolding:Boolean = false;
+
+        private var _ioHoldN:int = 0;
+
+        private var _ioHoldTick:int = 0;
+
+        private function ioHoldStart(n:int):Function {
+            return function(e:MouseEvent = null):void {
+                ioHoldStop();
+                _ioHoldN = n;
+                _ioHoldTick = 0;
+                _ioHolding = true;
+                QueueAdd(n)();
+                addEventListener(Event.ENTER_FRAME, ioHoldTick);
+                addEventListener(Event.REMOVED_FROM_STAGE, ioHoldStop);
+                if (stage) {
+                    stage.addEventListener(MouseEvent.MOUSE_UP, ioHoldStop);
+                }
+            };
+        }
+
+        /** Room for one more of this monster: an entry of it under 20, or a free entry. */
+        private function ioHasRoom(id:String):Boolean {
+            var q:Array = this._hatchery._monsterQueue;
+            for each (var entry:Array in q) {
+                if (entry[0] == id && entry[1] < 20) {
+                    return true;
+                }
+            }
+            return q.length < 1 + this._hatchery._lvl.Get();
+        }
+
+        private function ioHoldTick(e:Event = null):void {
+            this._ioHoldTick++;
+            if (this._ioHoldTick < 12 || this._ioHoldTick % 2 != 0) {
+                return;
+            }
+            var id:String = ioMonsterId(this._ioHoldN);
+            if (!this.ioHasRoom(id) || !BASE.Charge(4, CREATURES.GetProperty(id, "cResource"), true)) {
+                this.ioHoldStop();
+                return;
+            }
+            QueueAdd(this._ioHoldN)();
+        }
+
+        private function ioHoldStop(e:Event = null):void {
+            removeEventListener(Event.ENTER_FRAME, this.ioHoldTick);
+            removeEventListener(Event.REMOVED_FROM_STAGE, this.ioHoldStop);
+            if (stage) {
+                stage.removeEventListener(MouseEvent.MOUSE_UP, this.ioHoldStop);
+            }
+            if (this._ioHolding) {
+                this._ioHolding = false;
+                BASE.Save();
+            }
         }
 
         public function QueueRemove(param1:int):Function {

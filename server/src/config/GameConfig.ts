@@ -84,9 +84,8 @@ export const devConfig = {
    */
   allowedMessageType: {
     [MessageType.MESSAGE]: true,
-    [MessageType.TRUCE_REQUEST]: true,
-    [MessageType.TRUCE_ACCEPT]: true,
-    [MessageType.TRUCE_REJECT]: true,
+    // Relocation invites: only on inferno-only servers (see controllers/mail/sendMessage.ts).
     [MessageType.MIGRATE_REQUEST]: false,
+    [MessageType.MIGRATE_REVOKE]: false,
   },
 };

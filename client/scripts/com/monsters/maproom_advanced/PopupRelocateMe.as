@@ -53,9 +53,15 @@ package com.monsters.maproom_advanced {
                     MapRoom.AcceptInvitation(true);
                 };
                 this.mcInstant.bAction.addEventListener(MouseEvent.CLICK, _onInstantClick);
-                this.RESOURCECOST = new SecNum(10000000);
-                this.SHINYCOST = new SecNum(1200);
-                this.tDescription.htmlText = "<font color=\"#CC0000\">" + KEYS.Get("msg_moveyard_warn") + "</font>";
+                this.RESOURCECOST = new SecNum(GLOBAL.INFERNO_ONLY ? 30000000 : 10000000);
+                this.SHINYCOST = new SecNum(GLOBAL.ioPrice("move_main", 1200));
+                if (GLOBAL.INFERNO_ONLY && !MapRoom._inviteCrossWorld) {
+                    // Same world: only the main yard moves; the player keeps every outpost.
+                    this.tDescription.htmlText = "Your main yard will move onto this outpost. Your own outposts stay yours.";
+                }
+                else {
+                    this.tDescription.htmlText = "<font color=\"#CC0000\">" + KEYS.Get("msg_moveyard_warn") + "</font>";
+                }
             }
             else {
                 _onInstantClick = function(param1:MouseEvent):void {
@@ -63,7 +69,7 @@ package com.monsters.maproom_advanced {
                 };
                 this.mcInstant.bAction.addEventListener(MouseEvent.CLICK, _onInstantClick);
                 this.RESOURCECOST = new SecNum(30000000);
-                this.SHINYCOST = new SecNum(1500);
+                this.SHINYCOST = new SecNum(GLOBAL.ioPrice("move_outpost", 1500));
                 this.tDescription.htmlText = "<font color=\"#CC0000\">" + KEYS.Get("msg_movetooutpost_warn") + "</font>";
             }
             this.mcInstant.tDescription.htmlText = "<b>" + KEYS.Get("map_relocateinstant") + "</b>";
@@ -130,7 +136,11 @@ package com.monsters.maproom_advanced {
                         LOGGER.Stat([45, useShiny ? SHINYCOST.Get() : 0]);
                         Hide();
                         MapRoom._mc._popupInfoMine.Hide();
-                        MapRoomManager.instance.BookmarksClear();
+                        // Inferno-only: moving the main yard to one of your outposts stays on this map, so
+                        // the bookmarks stay (they are cleared only when leaving the world).
+                        if (!GLOBAL.INFERNO_ONLY) {
+                            MapRoomManager.instance.BookmarksClear();
+                        }
                         GLOBAL._mapOutpost.shift();
                         if (param1.coords && param1.coords.length == 2 && param1.coords[0] > -1 && param1.coords[1] > -1) {
                             GLOBAL._mapHome = new Point(param1.coords[0], param1.coords[1]);
@@ -178,6 +188,11 @@ package com.monsters.maproom_advanced {
                 if (GLOBAL._credits.Get() < this.SHINYCOST.Get()) {
                     this.Hide();
                     POPUPS.DisplayGetShiny();
+                    return;
+                }
+                if (!GLOBAL.ioConfirmShiny(this.SHINYCOST.Get(), "to move here", function():void {
+                            RelocateConfirm(true);
+                        })) {
                     return;
                 }
                 relocateVars.push(["shiny", this.SHINYCOST.Get()]);

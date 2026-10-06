@@ -7,6 +7,7 @@ import { World } from "../../database/models/world.model.js";
 import { postgres } from "../../server.js";
 import { invalidateWorldsCache } from "../maproom/knownWorlds.js";
 import { usernameUniqueErr } from "../../errors/errors.js";
+import { isReservedAdminName, usernameTakenIgnoringCase } from "../admin/admin.js";
 
 /** How long a player must wait between username changes. */
 export const USERNAME_CHANGE_COOLDOWN_MONTHS = 6;
@@ -63,6 +64,10 @@ export const renameUser = async (user: User, username: string): Promise<Date> =>
       const existing = await em.findOne(User, { username });
 
       if (existing) throw usernameUniqueErr();
+      // Also a name that differs from another account's only in capitals (an admin's name above all).
+      if (await usernameTakenIgnoringCase(username, user.userid)) throw usernameUniqueErr();
+      // The configured admin names are reserved, in any capitals (services/admin/admin.ts).
+      if (isReservedAdminName(username)) throw usernameUniqueErr();
 
       await em.nativeUpdate(User, { userid: user.userid }, { username, username_changed_at: changedAt });
       await em.nativeUpdate(Save, { saveuserid: user.userid }, { name: username });

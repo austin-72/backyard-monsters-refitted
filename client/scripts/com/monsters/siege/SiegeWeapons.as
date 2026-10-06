@@ -50,8 +50,11 @@ package com.monsters.siege {
         }
 
         public static function activateWeapon(param1:String, param2:Number = 0, param3:Number = 0):Boolean {
-            var _loc4_:SiegeWeapon;
-            if (!(_loc4_ = getWeapon(param1)).activate(param2, param3)) {
+            var _loc4_:SiegeWeapon = getWeapon(param1);
+            // A Catapult shot earlier in this attack may have left its numbers on this weapon
+            // (ioActivate / ioDropJars); a weapon from the stockpile uses its own level's values.
+            _loc4_.ioOverride = null;
+            if (!_loc4_.activate(param2, param3)) {
                 return false;
             }
             activeWeaponID = param1;

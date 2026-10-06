@@ -110,9 +110,31 @@ package {
                             // "shadow":["shadow.2.jpg",new Point(-39,16)], // original
                             "shadow": ["shadow.2.jpg", new Point(-39, 7)],
                             "topdamaged": ["top.2.damaged.png", new Point(-37, -27)],
-                            // "shadowdamaged":["shadow.2.damaged.jpg",new Point(-39,19)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-57, 8)]
+                            // "shadowdamaged":["shadow.2.damaged.jpg",new Point(-39,19)], (never shipped)
+                            // Inferno-only: levels 3-5 had no damaged or destroyed shadow; both made for them (29 September:
+                            // the standing shadow cut shorter with a broken edge, and the rubble's own shadow)
+                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-39, 7)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-47, 2)],
                             // "shadowdestroyed":["shadow.2.destroyed.jpg",new Point(-60,19)]
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-58, -8)]
+                        },
+                        6: {
+                            "anim": ["anim.3.png", new Rectangle(-44, -52, 90, 111), 50],
+                            "top": ["top.3.png", new Point(-35, -12)],
+                            "shadow": ["shadow.3.jpg", new Point(-44, 3)],
+                            "topdamaged": ["top.3.damaged.png", new Point(-37, -34)],
+                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-44, 3)], // (made: the pack reused shadow.3.jpg)
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-50, 0)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-64, -14)]
+                        },
+                        10: {
+                            "anim": ["anim.4.png", new Rectangle(-44, -65, 91, 124), 50],
+                            "top": ["top.4.png", new Point(-37, -19)],
+                            "shadow": ["shadow.4.jpg", new Point(-47, 2)],
+                            "topdamaged": ["top.4.damaged.png", new Point(-39, -41)],
+                            "shadowdamaged": ["shadow.4.damaged.jpg", new Point(-47, 2)], // (made: the pack reused shadow.4.jpg)
+                            "topdestroyed": ["top.4.destroyed.png", new Point(-54, -4)],
+                            "shadowdestroyed": ["shadow.4.destroyed.jpg", new Point(-68, -18)]
                         }
                     },
                     "buildingbuttons": ["bone_crusher.v2"],
@@ -127,7 +149,7 @@ package {
                     "produce": [2, 4, 7, 11, 16, 22, 29, 37, 46, 56],
                     "cycleTime": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
                     "capacity": [720, 2160, 5670, 13365, 29160, 60142, 118918, 227584, 424414, 775018],
-                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 45000, 85000, 165000],
+                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 34000, 52000, 80000],
                     "repairTime": [30, 60, 120, 240, 480, 960, 1920, 3840, 7680, 15360]
                 }, {
                     "id": 2,
@@ -234,6 +256,24 @@ package {
                             "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-43, 5)],
                             "topdestroyed": ["top.2.destroyed.png", new Point(-43, -9)],
                             "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-46, 17)]
+                        },
+                        6: {
+                            "anim": ["anim.3.png", new Rectangle(-40, -62, 77, 115), 45],
+                            "top": ["top.3.png", new Point(-34, -57)],
+                            "shadow": ["shadow.3.jpg", new Point(-47, 3)],
+                            "topdamaged": ["top.3.damaged.png", new Point(-39, -62)],
+                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-48, 1)],
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-50, -12)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-52, 13)]
+                        },
+                        10: {
+                            "anim": ["anim.4.png", new Rectangle(-40, -75, 77, 128), 45],
+                            "top": ["top.4.png", new Point(-34, -67)],
+                            "shadow": ["shadow.4.jpg", new Point(-50, 2)],
+                            "topdamaged": ["top.4.damaged.png", new Point(-39, -72)],
+                            "shadowdamaged": ["shadow.4.damaged.jpg", new Point(-51, 0)],
+                            "topdestroyed": ["top.4.destroyed.png", new Point(-54, -16)],
+                            "shadowdestroyed": ["shadow.4.destroyed.jpg", new Point(-55, 12)]
                         }
                     },
                     "buildingbuttons": ["coal_producer.v2"],
@@ -248,7 +288,7 @@ package {
                     "produce": [2, 4, 7, 11, 16, 22, 29, 37, 46, 56],
                     "cycleTime": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
                     "capacity": [720, 2160, 5670, 13365, 29160, 60142, 118918, 227584, 424414, 775018],
-                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 45000, 85000, 165000],
+                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 34000, 52000, 80000],
                     "repairTime": [30, 60, 120, 240, 480, 960, 1920, 3840, 7680, 15360]
                 }, {
                     "id": 3,
@@ -355,6 +395,24 @@ package {
                             "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-28, 30)],
                             "topdestroyed": ["top.2.destroyed.png", new Point(-45, -6)],
                             "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-42, 12)]
+                        },
+                        6: {
+                            "anim": ["anim.3.png", new Rectangle(-40, -60, 71, 118), 45],
+                            "top": ["top.3.png", new Point(-11, -44)],
+                            "shadow": ["shadow.3.jpg", new Point(-28, 24)],
+                            "topdamaged": ["top.3.damaged.png", new Point(-40, -62)],
+                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-31, 27)],
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-45, -6)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-45, 9)]
+                        },
+                        10: {
+                            "anim": ["anim.4.png", new Rectangle(-40, -60, 71, 118), 45],
+                            "top": ["top.4.png", new Point(-11, -44)],
+                            "shadow": ["shadow.4.jpg", new Point(-31, 23)],
+                            "topdamaged": ["top.4.damaged.png", new Point(-40, -62)],
+                            "shadowdamaged": ["shadow.4.damaged.jpg", new Point(-34, 26)],
+                            "topdestroyed": ["top.4.destroyed.png", new Point(-45, -6)],
+                            "shadowdestroyed": ["shadow.4.destroyed.jpg", new Point(-48, 8)]
                         }
                     },
                     "buildingbuttons": ["sulfur.v2"],
@@ -369,7 +427,7 @@ package {
                     "produce": [2, 4, 7, 11, 16, 22, 29, 37, 46, 56],
                     "cycleTime": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
                     "capacity": [720, 2160, 5670, 13365, 29160, 60142, 118918, 227584, 424414, 775018],
-                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 45000, 85000, 165000],
+                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 34000, 52000, 80000],
                     "repairTime": [30, 60, 120, 240, 480, 960, 1920, 3840, 7680, 15360]
                 }, {
                     "id": 4,
@@ -469,23 +527,31 @@ package {
                             "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-41, 6)]
                         },
                         3: {
-                            // "anim":["anim.1.2.png",new Rectangle(-37,-66,59,52),49],
-                            // "anim2":["anim.2.2.png",new Rectangle(-1,-4,40,63),49],
-                            // "top":["top.2.png",new Point(-40,-15)],
-                            // "shadow":["shadow.2.jpg",new Point(-36,4)],
-                            // "topdamaged":["top.2.damaged.png",new Point(-48,-35)],
-                            // "shadowdamaged":["shadow.2.damaged.jpg",new Point(-38,23)],
-                            // "topdestroyed":["top.2.destroyed.png",new Point(-67,-8)]
-                            // "shadowdestroyed":["shadow.2.destroyed.jpg",new Point(-70,18)]
-                            "anim": ["anim.1.v2.png", new Rectangle(9.2, 12.6, 25, 31), 49],
-                            "anim2": ["anim.2.v2.png", new Rectangle(-32, 9, 36, 26), 49],
-                            "anim3": ["anim.3.v2.png", new Rectangle(-18, -60, 34, 58), 49],
-                            "top": ["top.1.v2.png", new Point(-35, -15)],
-                            "shadow": ["shadow.1.v2.jpg", new Point(-36, 4)],
-                            "topdamaged": ["top.1.damaged.v2.png", new Point(-39, -36)],
-                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-49, 2)],
-                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-37, -2)],
-                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-41, 6)]
+                            "anim": ["anim.2.v3.png", new Rectangle(-45, -68, 83, 120), 49],
+                            "top": ["top.2.v3.png", new Point(-45, -23)],
+                            "shadow": ["shadow.2.v3.jpg", new Point(-45, -2)],
+                            "topdamaged": ["top.2.v3.damaged.png", new Point(-45, -44)],
+                            "shadowdamaged": ["shadow.2.v3.damaged.jpg", new Point(-58, -4)],
+                            "topdestroyed": ["top.2.v3.destroyed.png", new Point(-47, -7)],
+                            "shadowdestroyed": ["shadow.2.v3.destroyed.jpg", new Point(-53, 0)]
+                        },
+                        6: {
+                            "anim": ["anim.3.png", new Rectangle(-54, -68, 92, 120), 49],
+                            "top": ["top.3.png", new Point(-54, -23)],
+                            "shadow": ["shadow.3.jpg", new Point(-46, -2)],
+                            "topdamaged": ["top.3.damaged.png", new Point(-56, -44)],
+                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-59, -4)],
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-47, -9)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-54, -1)]
+                        },
+                        10: {
+                            "anim": ["anim.4.png", new Rectangle(-54, -68, 94, 120), 49],
+                            "top": ["top.4.png", new Point(-54, -40)],
+                            "shadow": ["shadow.4.jpg", new Point(-47, -3)],
+                            "topdamaged": ["top.4.damaged.png", new Point(-56, -44)],
+                            "shadowdamaged": ["shadow.4.damaged.jpg", new Point(-60, -5)],
+                            "topdestroyed": ["top.4.destroyed.png", new Point(-47, -12)],
+                            "shadowdestroyed": ["shadow.4.destroyed.jpg", new Point(-56, -1)]
                         }
                     },
                     "buildingbuttons": ["magma_producer.v2"],
@@ -500,7 +566,7 @@ package {
                     "produce": [2, 4, 7, 11, 16, 22, 29, 37, 46, 56],
                     "cycleTime": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10],
                     "capacity": [720, 2160, 5670, 13365, 29160, 60142, 118918, 227584, 424414, 775018],
-                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 45000, 85000, 165000],
+                    "hp": [500, 950, 1800, 3400, 6500, 12000, 24000, 34000, 52000, 80000],
                     "repairTime": [30, 60, 120, 240, 480, 960, 1920, 3840, 7680, 15360]
                 }, {
                     "id": 5,
@@ -545,38 +611,38 @@ package {
                             "re": [[14, 1, 4], [11, 1, 1]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/flinger/",
+                        "baseurl": "buildings/iflinger/",
                         1: {
-                            "top": ["top.1.png", new Point(-46, -43)],
-                            "shadow": ["shadow.1.jpg", new Point(-50, 20)],
-                            "topdamaged": ["top.1.damaged.png", new Point(-63, -36)],
-                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-63, 23)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-75, -3)],
-                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-70, 24)]
+                            "top": ["top.1.png", new Point(-58, -31)],
+                            "shadow": ["shadow.1.jpg", new Point(-48, 15)],
+                            "topdamaged": ["top.1.damaged.png", new Point(-51, -31)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-49, 15)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-52, 15)],
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-49, 18)]
                         },
                         2: {
-                            "top": ["top.2.png", new Point(-45, -40)],
-                            "shadow": ["shadow.2.jpg", new Point(-48, 19)],
-                            "topdamaged": ["top.2.damaged.png", new Point(-63, -18)],
-                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-63, 26)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-75, -3)],
-                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-70, 24)]
+                            "top": ["top.2.png", new Point(-58, -40)],
+                            "shadow": ["shadow.2.jpg", new Point(-49, 12)],
+                            "topdamaged": ["top.2.damaged.png", new Point(-52, -36)],
+                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-49, 12)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-52, 15)],
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-49, 18)]
                         },
                         3: {
-                            "top": ["top.3.png", new Point(-47, -45)],
-                            "shadow": ["shadow.3.jpg", new Point(-44, 20)],
-                            "topdamaged": ["top.3.damaged.png", new Point(-75, -37)],
-                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-73, 23)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-75, -3)],
-                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-70, 24)]
+                            "top": ["top.3.png", new Point(-60, -41)],
+                            "shadow": ["shadow.3.jpg", new Point(-50, 12)],
+                            "topdamaged": ["top.3.damaged.png", new Point(-52, -41)],
+                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-49, 12)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-52, 15)],
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-49, 18)]
                         },
                         4: {
-                            "top": ["top.4.png", new Point(-45, -66)],
-                            "shadow": ["shadow.4.jpg", new Point(-47, 22)],
-                            "topdamaged": ["top.4.damaged.png", new Point(-76, -53)],
-                            "shadowdamaged": ["shadow.4.damaged.jpg", new Point(-76, 23)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-75, -3)],
-                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-70, 24)]
+                            "top": ["top.4.png", new Point(-63, -61)],
+                            "shadow": ["shadow.4.jpg", new Point(-53, 11)],
+                            "topdamaged": ["top.4.damaged.png", new Point(-54, -46)],
+                            "shadowdamaged": ["shadow.4.damaged.jpg", new Point(-49, 8)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-52, 15)],
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-49, 18)]
                         }
                     },
                     "upgradeImgData": {
@@ -730,7 +796,7 @@ package {
                     },
                     "quantity": [0, 2, 2, 3, 4, 5, 5],
                     "capacity": [7500, 15000, 30000, 60000, 120000, 240000, 480000, 960000, 1920000, 3840000],
-                    "hp": [750, 1400, 2550, 4750, 8800, 16250, 30000, 55600, 105000, 190000],
+                    "hp": [750, 1400, 2550, 4750, 8800, 16250, 30000, 40000, 60000, 90000],
                     "repairTime": [30, 60, 120, 240, 480, 960, 1920, 3840, 7680, 15360]
                 }, {
                     "id": 7,
@@ -738,7 +804,7 @@ package {
                     "order": 1,
                     "buildStatus": 0,
                     "type": "mushroom",
-                    "name": "#b_mushroom#",
+                    "name": "#b_wart#",
                     "size": 10,
                     "attackgroup": 0,
                     "tutstage": 0,
@@ -747,7 +813,7 @@ package {
                     "block": true,
                     "thumbImgData": {
                         "baseurl": "buildingthumbs/",
-                        1: {"img": "7.png"}
+                        1: {"img": "7_inferno.png"}
                     },
                     "quantity": [0],
                     "hp": [10],
@@ -793,17 +859,29 @@ package {
                             "r4": new SecNum(0),
                             "time": new SecNum(129600),
                             "re": [[14, 1, 4]]
+                        }, {
+                            // Inferno-only: level 5 opens Strongbox page 5 (Korath and Drull). Four times
+                            // level 4's cost, as each level before it; 3 days before buildTimeDivisor.
+                            "r1": new SecNum(1843200),
+                            "r2": new SecNum(2355200),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(259200),
+                            "re": [[14, 1, 5]]
                         }],
                     "imageData": {
                         "baseurl": "buildings/imonsterlab/",
                         1: {
                             "anim": ["anim.1.v2.png", new Rectangle(-42, -41, 86, 88), 31],
                             "top": ["top.1.v2.png", new Point(-56, 8)],
-                            // "shadow":["shadow.1.v2.jpg",new Point(-81,10)],
-                            "topdamaged": ["top.1.damaged.v2.png", new Point(-56, -31)],
-                            // "shadowdamaged":["shadow.1.damaged.v2.jpg",new Point(-76,8)],
-                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-53, 10)]
-                            // "shadowdestroyed":["shadow.1.destroyed.v2.jpg",new Point(-83,13)]
+                            // Inferno-only (29 September, inferno-missing-assets.zip): a shadow at last, and damaged and
+                            // destroyed art made from the locker's own (the damaged one with its lid, the animation not
+                            // being drawn damaged)
+                            "shadow": ["shadow.1.v2.jpg", new Point(-62, 50)],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-59, -38)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-62, 50)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-87, 6)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-92, 59)]
                         }
                     },
                     "buildingbuttons": ["monster_locker.v2"],
@@ -815,8 +893,8 @@ package {
                         }
                     },
                     "quantity": [0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-                    "hp": [4000, 16000, 32000, 64000],
-                    "repairTime": [480, 1920, 3840, 15360]
+                    "hp": [4000, 16000, 32000, 64000, 128000],
+                    "repairTime": [480, 1920, 3840, 15360, 30720]
                 }, {
                     "id": 9,
                     "group": 2,
@@ -853,15 +931,16 @@ package {
                             "re": [[14, 1, 1], [128, 1, 1]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/monsterjuiceloosener/",
+                        "baseurl": "buildings/imonsterjuiceloosener/",
                         1: {
+                            // (29 September: inferno_juicer_v2.zip, restyled at the overworld size; the anim's box unchanged)
                             "anim": ["anim.2.png", new Rectangle(-30, -17, 60, 39), 51],
-                            "top": ["top.2.png", new Point(-44, -8)],
-                            "shadow": ["shadow.2.jpg", new Point(-44, 16)],
-                            "topdamaged": ["top.2.damaged.png", new Point(-59, -8)],
-                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-59, 21)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-55, 0)],
-                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-49, 17)]
+                            "top": ["top.2.png", new Point(-46, -7)],
+                            "shadow": ["shadow.2.jpg", new Point(-46, 4)],
+                            "topdamaged": ["top.2.damaged.png", new Point(-62, -7)],
+                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-67, 4)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-57, 2)],
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-61, 5)]
                         }
                     },
                     "upgradeImgData": {
@@ -898,14 +977,14 @@ package {
                             "re": [[14, 1, 3]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/yardplanner/",
+                        "baseurl": "buildings/iyardplanner/",
                         1: {
-                            "top": ["top.1.png", new Point(-45, -29)],
-                            "shadow": ["shadow.1.jpg", new Point(-57, 16)],
-                            "topdamaged": ["top.1.damaged.png", new Point(-58, -27)],
-                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-46, 23)],
-                            "topdestroyed": ["top.1.destroyed.png", new Point(-52, 6)],
-                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-50, 32)]
+                            "top": ["top.1.png", new Point(-51, -34)],
+                            "shadow": ["shadow.1.jpg", new Point(-57, 12)],
+                            "topdamaged": ["top.1.damaged.png", new Point(-64, -25)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-66, 12)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-73, 3)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-78, 18)]
                         }
                     },
                     "upgradeImgData": {
@@ -941,14 +1020,14 @@ package {
                             "re": [[14, 1, 1]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/maproom/",
+                        "baseurl": "buildings/imaproom/",
                         1: {
-                            "top": ["top.1.png", new Point(-58, -67)],
-                            "shadow": ["shadow.1.jpg", new Point(-68, 15)],
-                            "topdamaged": ["top.1.damaged.png", new Point(-73, -44)],
-                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-67, 23)],
-                            "topdestroyed": ["top.1.destroyed.png", new Point(-70, 0)],
-                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-67, 27)]
+                            "top": ["top.1.png", new Point(-65, -70)],
+                            "shadow": ["shadow.1.jpg", new Point(-70, 6)],
+                            "topdamaged": ["top.1.damaged.png", new Point(-73, -45)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-78, 9)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-64, 9)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-64, 15)]
                         }
                     },
                     "upgradeImgData": {
@@ -984,14 +1063,14 @@ package {
                             "re": [[14, 1, 1]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/generalstore/",
+                        "baseurl": "buildings/igeneralstore/",
                         1: {
-                            "top": ["top.1.png", new Point(-40, -37)],
-                            "shadow": ["shadow.1.jpg", new Point(-44, 13)],
-                            "topdamaged": ["top.1.damaged.png", new Point(-44, -49)],
-                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-44, 15)],
-                            "topdestroyed": ["top.1.destroyed.png", new Point(-49, -28)],
-                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-48, 13)]
+                            "top": ["top.1.png", new Point(-43, -35)],
+                            "shadow": ["shadow.1.jpg", new Point(-40, 4)],
+                            "topdamaged": ["top.1.damaged.png", new Point(-47, -34)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-52, 4)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-42, -3)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-42, 10)]
                         }
                     },
                     "upgradeImgData": {
@@ -1307,14 +1386,14 @@ package {
                             "re": [[14, 1, 3], [13, 3, 2]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/hatcherycontrolcenter/",
+                        "baseurl": "buildings/ihatcherycontrolcenter/",
                         1: {
-                            "top": ["top.1.png", new Point(-40, -58)],
-                            "shadow": ["shadow.1.jpg", new Point(-51, 20)],
-                            "topdamaged": ["top.1.damaged.png", new Point(-51, -59)],
-                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-50, 25)],
-                            "topdestroyed": ["top.1.destroyed.png", new Point(-53, -7)],
-                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-57, 24)]
+                            "top": ["top.1.png", new Point(-46, -53)],
+                            "shadow": ["shadow.1.jpg", new Point(-47, 20)],
+                            "topdamaged": ["top.1.damaged.png", new Point(-47, -38)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-47, 24)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-45, -7)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-50, 22)]
                         }
                     },
                     "upgradeImgData": {
@@ -1346,7 +1425,7 @@ package {
                             "r3": new SecNum(0),
                             "r4": new SecNum(0),
                             "time": new SecNum(5),
-                            "re": [[14, 1, 2]]
+                            "re": [[14, 1, 1]] // (from Under Hall 1: it allows 10 now)
                         }, {
                             "r1": new SecNum(0),
                             "r2": new SecNum(10000),
@@ -1399,7 +1478,9 @@ package {
                         2: {"img": "iron_wall.v3.jpg"},
                         3: {"img": "steel_wall.v3.jpg"}
                     },
-                    "quantity": [0, 0, 30, 60, 120, 200, 220],
+                    // (main yard, by Under Hall level; the user's, 4 October: +10/+20/+30/+40/+60/+80, was 0/30/60/120/200/220.
+                    // Outposts keep their own 200, GLOBAL.IO_OUTPOST_QUANTITY)
+                    "quantity": [0, 10, 50, 90, 160, 260, 300],
                     "hp": [1000, 2300, 5750, 18000, 27000],
                     "repairTime": [5, 5, 5, 5, 5]
                 }, {
@@ -1720,43 +1801,43 @@ package {
                     "description": "bi_snipertower_desc",
                     "stats": [ {
                             "range": 300,
-                            "damage": 100,
+                            "damage": 250,
                             "rate": 80,
                             "speed": 10,
                             "splash": 0
                         }, {
                             "range": 308,
-                            "damage": 210,
+                            "damage": 410,
                             "rate": 80,
                             "speed": 10,
                             "splash": 0
                         }, {
                             "range": 316,
-                            "damage": 320,
+                            "damage": 422,
                             "rate": 80,
                             "speed": 10,
                             "splash": 0
                         }, {
                             "range": 324,
-                            "damage": 430,
+                            "damage": 516,
                             "rate": 80,
                             "speed": 12,
                             "splash": 0
                         }, {
                             "range": 332,
-                            "damage": 540,
+                            "damage": 648,
                             "rate": 80,
                             "speed": 15,
                             "splash": 0
                         }, {
                             "range": 340,
-                            "damage": 650,
+                            "damage": 754,
                             "rate": 80,
                             "speed": 17,
                             "splash": 0
                         }, {
                             "range": 348,
-                            "damage": 760,
+                            "damage": 950,
                             "rate": 80,
                             "speed": 18,
                             "splash": 0
@@ -2356,29 +2437,46 @@ package {
                             "r4": new SecNum(0),
                             "time": new SecNum(86400),
                             "re": [[14, 1, 6], [8, 1, 4]]
+                        }, {
+                            // Inferno-only 5th level: trains Korath, Drull and Rezghul to level 6.
+                            "r1": new SecNum(1600000),
+                            "r2": new SecNum(1600000),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(172800),
+                            "re": [[14, 1, 6], [8, 1, 4]]
                         }],
                     "imageData": {
                         "baseurl": "buildings/iacademy/",
+                        // Inferno-only (29 September, evening): the Academy animates and has every shadow. Made here:
+                        // anim1.1 (the level-2 nozzle's turning drum, set onto level 1), anim2.1 and anim2.2 (a light
+                        // sweeping over the golden dome, then resting), shadow.1.damaged and shadow.1.destroyed (from
+                        // level 2's). Level 2's own anim1.2 and damaged / destroyed shadows were there, switched off.
                         1: {
-                            // "anim":["anim1.1.png",new Rectangle(11,-2,22,17),44],
-                            // "anim2":["anim2.1.png",new Rectangle(-32,-49,53,84),44],
+                            // "anim":["anim1.1.png",new Rectangle(11,-2,22,17),44], (never shipped)
+                            // "anim2":["anim2.1.png",new Rectangle(-32,-49,53,84),44], (never shipped)
+                            "anim": ["anim1.1.png", new Rectangle(2, -7, 44, 26), 47],
+                            "anim2": ["anim2.1.png", new Rectangle(-19, -37, 48, 66), 44],
                             "top": ["top.1.png", new Point(-50, -55)],
                             // "shadow":["shadow.1.jpg",new Point(-50,23)],
                             "shadow": ["shadow.1.jpg", new Point(-50, -30)],
                             "topdamaged": ["top.1.damaged.png", new Point(-48, -21)],
-                            // "shadowdamaged":["shadow.1.jpg",new Point(-50,23)],
-                            "topdestroyed": ["top.1.destroyed.png", new Point(-59, -21)]
-                            // "shadowdestroyed":["shadow.1.jpg",new Point(-50,23)]
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-50, -30)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-59, -21)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-50, -30)]
                         },
                         2: {
-                            // "anim":["anim1.2.png",new Rectangle(1,-18,44,26),47],
-                            // "anim2":["anim2.2.png",new Rectangle(-39,-96,67,117),47],
+                            // "anim2":["anim2.2.png",new Rectangle(-39,-96,67,117),47], (never shipped)
+                            "anim": ["anim1.2.png", new Rectangle(1, -18, 44, 26), 47],
+                            "anim2": ["anim2.2.png", new Rectangle(-35, -63, 67, 89), 47],
                             "top": ["top.2.png", new Point(-56, -95)],
                             "shadow": ["shadow.2.jpg", new Point(-61, -30)],
                             "topdamaged": ["top.2.damaged.png", new Point(-56, -91)],
                             // "shadowdamaged":["shadow.2.damaged.jpg",new Point(-58,8)],
-                            "topdestroyed": ["top.2.destroyed.png", new Point(-59, -76)]
+                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-61, -30)],
+                            "topdestroyed": ["top.2.destroyed.png", new Point(-59, -76)],
                             // "shadowdestroyed":["shadow.2.destroyed.jpg",new Point(-73,-17)]
+                            "shadowdestroyed": ["shadow.2.destroyed.jpg", new Point(-61, -30)]
                         }
                     },
                     "buildingbuttons": ["inferno_monster_academy"],
@@ -2391,8 +2489,8 @@ package {
                         2: {"img": "inferno_monster_academy.jpg"}
                     },
                     "quantity": [1, 1, 1, 1, 2, 2, 2],
-                    "hp": [6000, 10000, 14000, 20000],
-                    "repairTime": [3800, 7680, 10640, 21280]
+                    "hp": [6000, 10000, 14000, 20000, 28000],
+                    "repairTime": [3800, 7680, 10640, 21280, 30000]
                 }, {
                     "id": 27,
                     "group": 999,
@@ -3256,30 +3354,30 @@ package {
                             "re": [[14, 1, 6], [5, 1, 1], [11, 1, 2]]
                         }],
                     "imageData": {
-                        "baseurl": "buildings/catapult/",
+                        "baseurl": "buildings/icatapult/",
                         1: {
-                            "top": ["top.1.png", new Point(-43, 12)],
-                            "shadow": ["shadow.1.jpg", new Point(-42, 28)],
-                            "topdamaged": ["top.1.damaged.png", new Point(-40, 12)],
-                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-39, 28)],
-                            "topdestroyed": ["top.3.destroyed.png", new Point(-48, 9)],
-                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-47, 23)]
+                            "top": ["top.1.png", new Point(-46, 10)],
+                            "shadow": ["shadow.1.jpg", new Point(-39, 24)],
+                            "topdamaged": ["top.1.damaged.png", new Point(-57, 10)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-59, 24)],
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-59, 6)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-61, 19)]
                         },
                         2: {
-                            "top": ["top.2.png", new Point(-44, -21)],
-                            "shadow": ["shadow.2.jpg", new Point(-49, 19)],
-                            "topdamaged": ["top.2.damaged.png", new Point(-43, -16)],
-                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-41, 29)],
-                            "topdestroyed": ["top.3.destroyed.png", new Point(-48, 9)],
-                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-47, 23)]
+                            "top": ["top.2.png", new Point(-47, -30)],
+                            "shadow": ["shadow.2.jpg", new Point(-37, 16)],
+                            "topdamaged": ["top.2.damaged.png", new Point(-59, -30)],
+                            "shadowdamaged": ["shadow.2.damaged.jpg", new Point(-61, 17)],
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-59, 6)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-61, 19)]
                         },
                         3: {
-                            "top": ["top.3.png", new Point(-43, -29)],
-                            "shadow": ["shadow.3.jpg", new Point(-39, 27)],
-                            "topdamaged": ["top.3.damaged.png", new Point(-51, -29)],
-                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-51, 30)],
-                            "topdestroyed": ["top.3.destroyed.png", new Point(-48, 9)],
-                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-47, 23)]
+                            "top": ["top.3.png", new Point(-47, -30)],
+                            "shadow": ["shadow.3.jpg", new Point(-37, 16)],
+                            "topdamaged": ["top.3.damaged.png", new Point(-59, -30)],
+                            "shadowdamaged": ["shadow.3.damaged.jpg", new Point(-61, 17)],
+                            "topdestroyed": ["top.3.destroyed.png", new Point(-59, 6)],
+                            "shadowdestroyed": ["shadow.3.destroyed.jpg", new Point(-61, 19)]
                         }
                     },
                     "upgradeImgData": {
@@ -5274,6 +5372,22 @@ package {
                     "sale": 0,
                     "description": "outpost_desc",
                     "block": true,
+                    // Inferno-only: the outpost hall's own art, animated (29 September, inferno_outpost.zip): the
+                    // brazier's fire and the banner, 24 frames, whole and damaged (BUILDING112.TickFast). An
+                    // outpost's table (GLOBAL.ioBuildOutpostProps) takes it from here.
+                    "imageData": {
+                        "baseurl": "buildings/ioutpost/",
+                        1: {
+                            "anim": ["anim.1.png", new Rectangle(-22, -42, 74, 49), 24],
+                            "top": ["top.1.png", new Point(-72, -50)],
+                            "shadow": ["shadow.1.jpg", new Point(-77, 15)],
+                            "animdamaged": ["anim.1.damaged.png", new Rectangle(-31, -38, 64, 48), 24],
+                            "topdamaged": ["top.1.damaged.png", new Point(-75, -46)],
+                            "shadowdamaged": ["shadow.1.damaged.jpg", new Point(-80, 15)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-74, -5)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-77, 18)]
+                        }
+                    },
                     "quantity": [0]
                 }, {
                     "id": 113,
@@ -5980,7 +6094,7 @@ package {
                         },
                         4: {
                             "top": ["top.4.v2.png", new Point(-140, -114)],
-                            "shadow": ["shadow.v2.4.jpg", new Point(-140, 11)]
+                            "shadow": ["shadow.4.v2.jpg", new Point(-140, 11)] // (was "shadow.v2.4.jpg", a typo)
                         },
                         5: {
                             "top": ["top.5.v2.png", new Point(-160, -172)],
@@ -6064,7 +6178,7 @@ package {
                         1: {"img": "monster_housing.v2.jpg"}
                     },
                     "quantity": [0, 1, 1, 1, 1, 1, 1],
-                    "capacity": [200, 300, 520, 780, 1140, 1820],
+                    "capacity": [200, 300, 520, 1000, 1800, 2000],
                     "hp": [4000, 14000, 25000, 43000, 75000, 130000],
                     "repairTime": [100, 200, 300, 400, 500, 600]
                 }, {
@@ -6082,27 +6196,27 @@ package {
                     "block": false,
                     "stats": [ {
                             "range": 160,
-                            "damage": 1100,
+                            "damage": 1452,
                             "rate": 15
                         }, {
                             "range": 170,
-                            "damage": 1680,
+                            "damage": 2016,
                             "rate": 15
                         }, {
                             "range": 180,
-                            "damage": 2220,
+                            "damage": 2664,
                             "rate": 15
                         }, {
                             "range": 190,
-                            "damage": 2880,
+                            "damage": 3341,
                             "rate": 15
                         }, {
                             "range": 200,
-                            "damage": 3640,
+                            "damage": 4222,
                             "rate": 15
                         }, {
                             "range": 210,
-                            "damage": 4400,
+                            "damage": 5500,
                             "rate": 15
                         }],
                     "costs": [ {
@@ -6232,44 +6346,44 @@ package {
                     "sale": 0,
                     "description": "bi_cannontower_desc",
                     "stats": [ {
-                            "range": 160,
-                            "damage": 20,
+                            "range": 180,
+                            "damage": 65,
                             "rate": 40,
                             "speed": 5,
                             "splash": 30
                         }, {
-                            "range": 170,
-                            "damage": 40,
+                            "range": 190,
+                            "damage": 101,
                             "rate": 40,
                             "speed": 6,
                             "splash": 35
                         }, {
-                            "range": 180,
-                            "damage": 60,
+                            "range": 200,
+                            "damage": 103,
                             "rate": 40,
                             "speed": 7,
                             "splash": 40
                         }, {
-                            "range": 190,
-                            "damage": 80,
+                            "range": 210,
+                            "damage": 125,
                             "rate": 40,
                             "speed": 8,
                             "splash": 45
                         }, {
-                            "range": 200,
-                            "damage": 100,
+                            "range": 220,
+                            "damage": 156,
                             "rate": 40,
                             "speed": 8,
                             "splash": 50
                         }, {
-                            "range": 210,
-                            "damage": 120,
+                            "range": 230,
+                            "damage": 181,
                             "rate": 40,
                             "speed": 8,
                             "splash": 55
                         }, {
-                            "range": 220,
-                            "damage": 140,
+                            "range": 240,
+                            "damage": 228,
                             "rate": 40,
                             "speed": 8,
                             "splash": 60
@@ -6503,37 +6617,37 @@ package {
                     "block": false,
                     "stats": [ {
                             "range": 180,
-                            "damage": 180,
+                            "damage": 202,
                             "rate": 20,
                             "speed": 14,
                             "splash": 0
                         }, {
                             "range": 190,
-                            "damage": 240,
+                            "damage": 245,
                             "rate": 20,
                             "speed": 15,
                             "splash": 0
                         }, {
                             "range": 200,
-                            "damage": 300,
+                            "damage": 306,
                             "rate": 20,
                             "speed": 16,
                             "splash": 0
                         }, {
                             "range": 210,
-                            "damage": 360,
+                            "damage": 355,
                             "rate": 20,
                             "speed": 17,
                             "splash": 0
                         }, {
                             "range": 220,
-                            "damage": 420,
+                            "damage": 414,
                             "rate": 20,
                             "speed": 18,
                             "splash": 0
                         }, {
                             "range": 230,
-                            "damage": 480,
+                            "damage": 510,
                             "rate": 20,
                             "speed": 19,
                             "splash": 0
@@ -6617,12 +6731,13 @@ package {
                             "anim2": ["anim.2.v2.png", new Rectangle(-17, 26, 38, 19), 31],
                             "top": ["top.1.v2.png", new Point(-34, -9)],
                             "shadow": ["shadow.1.v2.jpg", new Point(-31, 10)],
-                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-28.6, -47.6, 52, 43), 31],
-                            "animdamaged2": ["anim.2.damaged.v2.png", new Rectangle(-21, 28, 38, 19), 31],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-28.6, -43, 52, 43), 31],
+                            "anim2damaged": ["anim.2.damaged.v2.png", new Rectangle(-21, 28, 38, 19), 31],
                             "topdamaged": ["top.1.damaged.v2.png", new Point(-38, -4)],
                             "shadowdamaged": ["shadow.1.v2.jpg", new Point(-38, 16)],
-                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-36, 6)]
-                            // "shadowdestroyed":["shadow.1.destroyed.v2.jpg",new Point(-36,22)]
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-36, 6)],
+                            // "shadowdestroyed":["shadow.1.destroyed.v2.jpg",new Point(-36,22)] (never shipped; made 29 September)
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-48, 2)]
                         }
                     },
                     "buildingbuttons": ["magma_tower.v2"],
@@ -6652,7 +6767,8 @@ package {
                             "back": ["fort70_B4.png", new Point(-61, -36)]
                         }
                     },
-                    "quantity": [0, 0, 0, 1, 2, 2, 3],
+                    // (main yard, by Under Hall level; the user's, 5 October: 4 at Under Hall 6, was 3. Outposts: GLOBAL.IO_OUTPOST_QUANTITY)
+                    "quantity": [0, 0, 0, 1, 2, 2, 4],
                     "hp": [15000, 22000, 30000, 49000, 59000, 70000],
                     "repairTime": [1440, 2880, 5760, 11520, 23000, 46000, 92000]
                 }, {
@@ -6846,6 +6962,475 @@ package {
                     "quantity": [0],
                     "hp": [100],
                     "repairTime": [1]
+                
+                }, {
+                    // Inferno-only: 136 is an overworld (Map Room 3) building; kept here, never buildable, so
+                    // the table stays one entry per id up to the Brimstone Pit (141): it is read as
+                    // _buildingProps[id - 1], and some loops go over every entry.
+                    "id": 136,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: 137 is an overworld (Map Room 3) building; kept here, never buildable, so
+                    // the table stays one entry per id up to the Brimstone Pit (141): it is read as
+                    // _buildingProps[id - 1], and some loops go over every entry.
+                    "id": 137,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: 138 is an overworld (Map Room 3) building; kept here, never buildable, so
+                    // the table stays one entry per id up to the Brimstone Pit (141): it is read as
+                    // _buildingProps[id - 1], and some loops go over every entry.
+                    "id": 138,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: 139 is an overworld (Map Room 3) building; kept here, never buildable, so
+                    // the table stays one entry per id up to the Brimstone Pit (141): it is read as
+                    // _buildingProps[id - 1], and some loops go over every entry.
+                    "id": 139,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: 140 is an overworld (Map Room 3) building; kept here, never buildable, so
+                    // the table stays one entry per id up to the Brimstone Pit (141): it is read as
+                    // _buildingProps[id - 1], and some loops go over every entry.
+                    "id": 140,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: the Brimstone Pit, the casino (BRIMSTONEPIT, com/monsters/casino). Main yard
+                    // only (not in IO_OUTPOST_QUANTITY). Its games open with its level (server config
+                    // CasinoConfig.ts; level 6 opens Korath's Fortune). Levels 2-6 show level 1's art until theirs is made.
+                    "id": 141,
+                    "group": 2,
+                    "order": 20,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "Brimstone Pit",
+                    "size": 90,
+                    "attackgroup": 2,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "Moloch's own gambling den. Wager Shiny against the house. The house always wins... usually.",
+                    "block": false,
+                    "cls": BRIMSTONEPIT,
+                    "costs": [{
+                            "r1": new SecNum(50000),
+                            "r2": new SecNum(50000),
+                            "r3": new SecNum(25000),
+                            "r4": new SecNum(10000),
+                            "time": new SecNum(14400),
+                            "re": [[14, 1, 1]]
+                        }, {
+                            "r1": new SecNum(150000),
+                            "r2": new SecNum(150000),
+                            "r3": new SecNum(75000),
+                            "r4": new SecNum(30000),
+                            "time": new SecNum(43200),
+                            "re": [[14, 1, 2]]
+                        }, {
+                            "r1": new SecNum(400000),
+                            "r2": new SecNum(400000),
+                            "r3": new SecNum(200000),
+                            "r4": new SecNum(80000),
+                            "time": new SecNum(86400),
+                            "re": [[14, 1, 3]]
+                        }, {
+                            "r1": new SecNum(1000000),
+                            "r2": new SecNum(1000000),
+                            "r3": new SecNum(500000),
+                            "r4": new SecNum(200000),
+                            "time": new SecNum(172800),
+                            "re": [[14, 1, 4]]
+                        }, {
+                            "r1": new SecNum(2500000),
+                            "r2": new SecNum(2500000),
+                            "r3": new SecNum(1200000),
+                            "r4": new SecNum(500000),
+                            "time": new SecNum(259200),
+                            "re": [[14, 1, 5]]
+                        }, {
+                            "r1": new SecNum(5000000),
+                            "r2": new SecNum(5000000),
+                            "r3": new SecNum(2500000),
+                            "r4": new SecNum(1000000),
+                            "time": new SecNum(345600),
+                            "re": [[14, 1, 6]]
+                        }],
+                    "imageData": {
+                        "baseurl": "buildings/ibrimstonepit/",
+                        1: {
+                            "anim": ["anim.1.v2.png", new Rectangle(-51, 9, 83, 50), 60],
+                            "anim2": ["anim2.1.v2.png", new Rectangle(-40, -27, 80, 50), 80],
+                            "top": ["top.1.v2.png", new Point(-64, -31)],
+                            "shadow": ["shadow.1.v2.jpg", new Point(-69, 4)],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-53, 1, 85, 58), 60],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-64, -39)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-69, 4)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-64, 8)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-69, 6)]
+                        },
+                        2: {
+                            "anim": ["anim.1.v2.png", new Rectangle(-51, 9, 83, 50), 60],
+                            "anim2": ["anim2.1.v2.png", new Rectangle(-40, -27, 80, 50), 80],
+                            "top": ["top.1.v2.png", new Point(-64, -31)],
+                            "shadow": ["shadow.1.v2.jpg", new Point(-69, 4)],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-53, 1, 85, 58), 60],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-64, -39)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-69, 4)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-64, 8)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-69, 6)]
+                        },
+                        3: {
+                            "anim": ["anim.1.v2.png", new Rectangle(-51, 9, 83, 50), 60],
+                            "anim2": ["anim2.1.v2.png", new Rectangle(-40, -27, 80, 50), 80],
+                            "top": ["top.1.v2.png", new Point(-64, -31)],
+                            "shadow": ["shadow.1.v2.jpg", new Point(-69, 4)],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-53, 1, 85, 58), 60],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-64, -39)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-69, 4)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-64, 8)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-69, 6)]
+                        },
+                        4: {
+                            "anim": ["anim.1.v2.png", new Rectangle(-51, 9, 83, 50), 60],
+                            "anim2": ["anim2.1.v2.png", new Rectangle(-40, -27, 80, 50), 80],
+                            "top": ["top.1.v2.png", new Point(-64, -31)],
+                            "shadow": ["shadow.1.v2.jpg", new Point(-69, 4)],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-53, 1, 85, 58), 60],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-64, -39)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-69, 4)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-64, 8)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-69, 6)]
+                        },
+                        5: {
+                            "anim": ["anim.1.v2.png", new Rectangle(-51, 9, 83, 50), 60],
+                            "anim2": ["anim2.1.v2.png", new Rectangle(-40, -27, 80, 50), 80],
+                            "top": ["top.1.v2.png", new Point(-64, -31)],
+                            "shadow": ["shadow.1.v2.jpg", new Point(-69, 4)],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-53, 1, 85, 58), 60],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-64, -39)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-69, 4)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-64, 8)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-69, 6)]
+                        },
+                        6: {
+                            "anim": ["anim.1.v2.png", new Rectangle(-51, 9, 83, 50), 60],
+                            "anim2": ["anim2.1.v2.png", new Rectangle(-40, -27, 80, 50), 80],
+                            "top": ["top.1.v2.png", new Point(-64, -31)],
+                            "shadow": ["shadow.1.v2.jpg", new Point(-69, 4)],
+                            "animdamaged": ["anim.1.damaged.v2.png", new Rectangle(-53, 1, 85, 58), 60],
+                            "topdamaged": ["top.1.damaged.v2.png", new Point(-64, -39)],
+                            "shadowdamaged": ["shadow.1.damaged.v2.jpg", new Point(-69, 4)],
+                            "topdestroyed": ["top.1.destroyed.v2.png", new Point(-64, 8)],
+                            "shadowdestroyed": ["shadow.1.destroyed.v2.jpg", new Point(-69, 6)]
+                        }
+                    },
+                    "buildingbuttons": ["brimstone_pit.v2"],
+                    "upgradeImgData": {
+                        "baseurl": "buildingbuttons/",
+                        1: {"img": "brimstone_pit.v2.jpg", "silhouette_img": "brimstone_pit.v2.silhouette.jpg"},
+                        2: {"img": "brimstone_pit.v2.jpg", "silhouette_img": "brimstone_pit.v2.silhouette.jpg"},
+                        3: {"img": "brimstone_pit.v2.jpg", "silhouette_img": "brimstone_pit.v2.silhouette.jpg"},
+                        4: {"img": "brimstone_pit.v2.jpg", "silhouette_img": "brimstone_pit.v2.silhouette.jpg"},
+                        5: {"img": "brimstone_pit.v2.jpg", "silhouette_img": "brimstone_pit.v2.silhouette.jpg"},
+                        6: {"img": "brimstone_pit.v2.jpg", "silhouette_img": "brimstone_pit.v2.silhouette.jpg"}
+                    },
+                    "quantity": [0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    "hp": [4000, 16000, 32000, 64000, 128000, 256000],
+                    "repairTime": [480, 1920, 3840, 15360, 30720, 61440]
+                }, {
+                    // Inferno-only: 142 is not used (kept so the table stays one entry per id up to the new towers).
+                    "id": 142,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: 143 is not used (kept so the table stays one entry per id up to the new towers).
+                    "id": 143,
+                    "group": 2,
+                    "order": 999,
+                    "buildStatus": 0,
+                    "type": "special",
+                    "name": "",
+                    "size": 10,
+                    "attackgroup": 999,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "",
+                    "block": true,
+                    "costs": [ {
+                            "r1": new SecNum(0),
+                            "r2": new SecNum(0),
+                            "r3": new SecNum(0),
+                            "r4": new SecNum(0),
+                            "time": new SecNum(0),
+                            "re": []
+                        }],
+                    "buildingbuttons": [],
+                    "imageData": {},
+                    "quantity": [0],
+                    "hp": [100],
+                    "repairTime": [1]
+                }, {
+                    // Inferno-only: the Cinder Coil (newtowers.md): a 0.4 s charge, then an arc of fire that
+                    // leaps from monster to monster (INFERNO_CINDER_COIL). One 32-frame aim strip, no top
+                    // ("noTop": the damaged strips load without a damaged top).
+                    "id": 144,
+                    "group": 3,
+                    "order": 14,
+                    "buildStatus": 0,
+                    "type": "tower",
+                    "name": "#bi_cindercoil#",
+                    "size": 64,
+                    "attackgroup": 1,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "bi_cindercoil_desc",
+                    "block": false,
+                    "cls": INFERNO_CINDER_COIL,
+                    "stats": [
+                        {"range": 190, "damage": 198, "rate": 30, "speed": 0, "splash": 0, "ext": {"jumps": 2, "jumpRadius": 70}},
+                        {"range": 200, "damage": 252, "rate": 30, "speed": 0, "splash": 0, "ext": {"jumps": 3, "jumpRadius": 70}},
+                        {"range": 210, "damage": 336, "rate": 30, "speed": 0, "splash": 0, "ext": {"jumps": 3, "jumpRadius": 70}},
+                        {"range": 220, "damage": 406, "rate": 30, "speed": 0, "splash": 0, "ext": {"jumps": 4, "jumpRadius": 70}},
+                        {"range": 230, "damage": 499, "rate": 30, "speed": 0, "splash": 0, "ext": {"jumps": 5, "jumpRadius": 70}},
+                        {"range": 240, "damage": 650, "rate": 30, "speed": 0, "splash": 0, "ext": {"jumps": 6, "jumpRadius": 70}}],
+                    "costs": [
+                        {"r1": new SecNum(150000), "r2": new SecNum(250000), "r3": new SecNum(100000), "r4": new SecNum(0), "time": new SecNum(18000), "re": [[14, 1, 3]]},
+                        {"r1": new SecNum(600000), "r2": new SecNum(1000000), "r3": new SecNum(400000), "r4": new SecNum(0), "time": new SecNum(86400), "re": [[14, 1, 4]]},
+                        {"r1": new SecNum(1800000), "r2": new SecNum(3000000), "r3": new SecNum(1200000), "r4": new SecNum(0), "time": new SecNum(172800), "re": [[14, 1, 4]]},
+                        {"r1": new SecNum(3450000), "r2": new SecNum(5750000), "r3": new SecNum(2300000), "r4": new SecNum(0), "time": new SecNum(345600), "re": [[14, 1, 5]]},
+                        {"r1": new SecNum(7200000), "r2": new SecNum(12000000), "r3": new SecNum(4800000), "r4": new SecNum(0), "time": new SecNum(518400), "re": [[14, 1, 5]]},
+                        {"r1": new SecNum(10200000), "r2": new SecNum(17000000), "r3": new SecNum(6800000), "r4": new SecNum(0), "time": new SecNum(777600), "re": [[14, 1, 6]]}],
+                    "fortify_costs": [
+                        {"r1": new SecNum(165000), "r2": new SecNum(275000), "r3": new SecNum(110000), "r4": new SecNum(0), "time": new SecNum(18000), "re": [[14, 1, 5]]},
+                        {"r1": new SecNum(660000), "r2": new SecNum(1100000), "r3": new SecNum(440000), "r4": new SecNum(0), "time": new SecNum(86400), "re": [[14, 1, 6]]},
+                        {"r1": new SecNum(2000000), "r2": new SecNum(3300000), "r3": new SecNum(1300000), "r4": new SecNum(0), "time": new SecNum(172800), "re": [[14, 1, 7]]},
+                        {"r1": new SecNum(3800000), "r2": new SecNum(6350000), "r3": new SecNum(2550000), "r4": new SecNum(0), "time": new SecNum(345600), "re": [[14, 1, 8]]}],
+                    "imageData": {
+                        "baseurl": "buildings/icindercoil/",
+                        "noTop": true,
+                        1: {
+                            "anim": ["anim.1.png", new Rectangle(-42, -67, 82, 127), 32],
+                            "animdamaged": ["anim.1.damaged.png", new Rectangle(-42, -67, 82, 127), 32],
+                            "anim2": ["anim.2.png", new Rectangle(-35, -69, 71, 93), 12],
+                            "anim2damaged": ["anim.2.damaged.png", new Rectangle(-35, -69, 71, 93), 12],
+                            "shadow": ["shadow.1.jpg", new Point(-37, 14)],
+                            "shadowdamaged": ["shadow.1.jpg", new Point(-37, 14)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-43, 9)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-38, 15)]
+                        }
+                    },
+                    "buildingbuttons": ["cinder_coil"],
+                    "upgradeImgData": {
+                        "baseurl": "buildingbuttons/",
+                        1: {"img": "cinder_coil.jpg", "silhouette_img": "cinder_coil.silhouette.jpg"}
+                    },
+                    "fortImgData": {
+                        "baseurl": "buildings/fortifications/",
+                        1: {"front": ["fort70_F1.png", new Point(-73, 21)], "back": ["fort70_B1.png", new Point(-70, -10)]},
+                        2: {"front": ["fort70_F2.png", new Point(-69, 22)], "back": ["fort70_B2.png", new Point(-65, -12)]},
+                        3: {"front": ["fort70_F3.png", new Point(-72, 10)], "back": ["fort70_B3.png", new Point(-68, -12)]},
+                        4: {"front": ["fort70_F4.png", new Point(-70, -11)], "back": ["fort70_B4.png", new Point(-61, -36)]}
+                    },
+                    "quantity": [0, 0, 0, 1, 2, 2, 3],
+                    "hp": [12000, 18000, 26000, 38000, 50000, 62000],
+                    "repairTime": [1440, 2880, 5760, 11520, 23000, 46000]
+                }, {
+                    // Inferno-only: the Obsidian Mortar (newtowers.md): slow shells lobbed at where the target
+                    // stood, splash 100% to 50%, nothing inside 100 (INFERNO_OBSIDIAN_MORTAR).
+                    "id": 145,
+                    "group": 3,
+                    "order": 15,
+                    "buildStatus": 0,
+                    "type": "tower",
+                    "name": "#bi_obsidianmortar#",
+                    "size": 64,
+                    "attackgroup": 1,
+                    "tutstage": 200,
+                    "sale": 0,
+                    "description": "bi_obsidianmortar_desc",
+                    "block": false,
+                    "cls": INFERNO_OBSIDIAN_MORTAR,
+                    "stats": [
+                        {"range": 300, "damage": 356, "rate": 90, "speed": 6, "splash": 35, "ext": {"minRange": 100}},
+                        {"range": 320, "damage": 454, "rate": 90, "speed": 6, "splash": 39, "ext": {"minRange": 100}},
+                        {"range": 340, "damage": 605, "rate": 90, "speed": 7, "splash": 42, "ext": {"minRange": 100}},
+                        {"range": 355, "damage": 752, "rate": 90, "speed": 7, "splash": 46, "ext": {"minRange": 100}},
+                        {"range": 370, "damage": 940, "rate": 90, "speed": 8, "splash": 49, "ext": {"minRange": 100}},
+                        {"range": 385, "damage": 1238, "rate": 90, "speed": 8, "splash": 56, "ext": {"minRange": 100}}],
+                    "costs": [
+                        {"r1": new SecNum(200000), "r2": new SecNum(150000), "r3": new SecNum(150000), "r4": new SecNum(0), "time": new SecNum(18000), "re": [[14, 1, 3]]},
+                        {"r1": new SecNum(800000), "r2": new SecNum(600000), "r3": new SecNum(600000), "r4": new SecNum(0), "time": new SecNum(86400), "re": [[14, 1, 4]]},
+                        {"r1": new SecNum(2400000), "r2": new SecNum(1800000), "r3": new SecNum(1800000), "r4": new SecNum(0), "time": new SecNum(172800), "re": [[14, 1, 4]]},
+                        {"r1": new SecNum(4600000), "r2": new SecNum(3450000), "r3": new SecNum(3450000), "r4": new SecNum(0), "time": new SecNum(345600), "re": [[14, 1, 5]]},
+                        {"r1": new SecNum(9600000), "r2": new SecNum(7200000), "r3": new SecNum(7200000), "r4": new SecNum(0), "time": new SecNum(518400), "re": [[14, 1, 5]]},
+                        {"r1": new SecNum(13600000), "r2": new SecNum(10200000), "r3": new SecNum(10200000), "r4": new SecNum(0), "time": new SecNum(777600), "re": [[14, 1, 6]]}],
+                    "fortify_costs": [
+                        {"r1": new SecNum(220000), "r2": new SecNum(165000), "r3": new SecNum(165000), "r4": new SecNum(0), "time": new SecNum(18000), "re": [[14, 1, 5]]},
+                        {"r1": new SecNum(880000), "r2": new SecNum(660000), "r3": new SecNum(660000), "r4": new SecNum(0), "time": new SecNum(86400), "re": [[14, 1, 6]]},
+                        {"r1": new SecNum(2650000), "r2": new SecNum(2000000), "r3": new SecNum(2000000), "r4": new SecNum(0), "time": new SecNum(172800), "re": [[14, 1, 7]]},
+                        {"r1": new SecNum(5050000), "r2": new SecNum(3800000), "r3": new SecNum(3800000), "r4": new SecNum(0), "time": new SecNum(345600), "re": [[14, 1, 8]]}],
+                    "imageData": {
+                        "baseurl": "buildings/iobsidianmortar/",
+                        "noTop": true,
+                        1: {
+                            "anim": ["anim.1.png", new Rectangle(-44, -37, 88, 93), 32],
+                            "animdamaged": ["anim.1.damaged.png", new Rectangle(-44, -37, 88, 93), 32],
+                            "shadow": ["shadow.1.jpg", new Point(-46, 12)],
+                            "shadowdamaged": ["shadow.1.jpg", new Point(-46, 12)],
+                            "topdestroyed": ["top.1.destroyed.png", new Point(-37, 3)],
+                            "shadowdestroyed": ["shadow.1.destroyed.jpg", new Point(-34, 13)]
+                        }
+                    },
+                    "buildingbuttons": ["obsidian_mortar"],
+                    "upgradeImgData": {
+                        "baseurl": "buildingbuttons/",
+                        1: {"img": "obsidian_mortar.jpg", "silhouette_img": "obsidian_mortar.silhouette.jpg"}
+                    },
+                    "fortImgData": {
+                        "baseurl": "buildings/fortifications/",
+                        1: {"front": ["fort70_F1.png", new Point(-73, 21)], "back": ["fort70_B1.png", new Point(-70, -10)]},
+                        2: {"front": ["fort70_F2.png", new Point(-69, 22)], "back": ["fort70_B2.png", new Point(-65, -12)]},
+                        3: {"front": ["fort70_F3.png", new Point(-72, 10)], "back": ["fort70_B3.png", new Point(-68, -12)]},
+                        4: {"front": ["fort70_F4.png", new Point(-70, -11)], "back": ["fort70_B4.png", new Point(-61, -36)]}
+                    },
+                    "quantity": [0, 0, 0, 1, 1, 2, 2],
+                    "hp": [14000, 20000, 28000, 40000, 52000, 65000],
+                    "repairTime": [1440, 2880, 5760, 11520, 23000, 46000]
                 }];
 
         public function INFERNOYARDPROPS() {

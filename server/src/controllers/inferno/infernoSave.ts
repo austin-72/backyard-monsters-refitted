@@ -13,6 +13,7 @@ import type { KoaController } from "../../utils/KoaController.js";
 import { logger } from "../../utils/logger.js";
 import { BaseSaveSchema } from "../../schemas/BaseSaveSchema.js";
 import { academyHandler } from "../base/save/handlers/academyHandler.js";
+import { updateAttackLog } from "../../services/base/createAttackLog.js";
 import { attackLootHandler } from "../base/save/handlers/attackLootHandler.js";
 import { buildingDataHandler } from "../base/save/handlers/buildingDataHandler.js";
 import { defenderLootHandler } from "../base/save/handlers/defenderLootHandler.js";
@@ -55,6 +56,13 @@ export const infernoSave: KoaController = async (ctx) => {
     const isAttack = !isOwner && baseSave.attackid !== 0;
 
     if (!isOwner && baseSave.attackid === 0) throw permissionErr();
+
+    // Only the player whose attack was loaded last (infernoModeAttack), and recently, writes to the yard.
+    if (isAttack) {
+      const last = baseSave.attacks?.at(-1);
+      if (!last || last.name !== user.username || getCurrentDateTime() - (last.starttime ?? 0) > 30 * 60)
+        throw permissionErr();
+    }
 
     const storedHealthData = baseSave.buildinghealthdata;
 
@@ -128,6 +136,9 @@ export const infernoSave: KoaController = async (ctx) => {
     }
 
     if (isAttack) postgres.em.persist(userSave);
+
+    // Inferno-only: the attacker's attack log gets the damage, loot and report so far (createAttackLog.ts).
+    if (isAttack) await updateAttackLog(user, baseSave, { over: saveData.over, lootreport: body.lootreport });
 
     if (isAttack) baseSave.attackid = saveData.over ? 0 : baseSave.attackid;
 

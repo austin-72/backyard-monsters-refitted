@@ -54,7 +54,10 @@ package com.monsters.ai {
             if (_loc5_.length > 0) {
                 _loc5_.sortOn("distance", Array.NUMERIC);
                 param1.targetBuilding = _loc5_[0].building;
-                param1.targetHP += param1.targetBuilding._hp.Get();
+                // No building class has had an _hp field since the Refitted refactor (health lives in
+                // `health`); this planner never ran against a player's yard before, so it went unnoticed.
+                // Reading it threw on every frame of a raid and broke the yard (mouse stuck dragging).
+                param1.targetHP += Number(param1.targetBuilding.health);
                 if (param1.targetHP > 50000) {
                     param1.targetHP = 50000;
                 }
@@ -137,8 +140,10 @@ package com.monsters.ai {
                 _loc15_ = 1;
             }
             var _loc16_:String = String(WMATTACK._infernoAnything[int((WMATTACK._infernoAnything.length - 1) * _loc15_)]);
-            var _loc17_:String = String(WMATTACK._infernoTanks[int((WMATTACK._tanks.length - 1) * _loc15_)]);
-            var _loc18_:String = String(WMATTACK._infernoDps[int((WMATTACK._dps.length - 1) * _loc15_)]);
+            // Indexed by their own lengths (the stock code used the overworld lists' lengths, which can run
+            // past the end of these).
+            var _loc17_:String = String(WMATTACK._infernoTanks[int((WMATTACK._infernoTanks.length - 1) * _loc15_)]);
+            var _loc18_:String = String(WMATTACK._infernoDps[int((WMATTACK._infernoDps.length - 1) * _loc15_)]);
             var _loc19_:String = String(WMATTACK._infernoHunters[int((WMATTACK._infernoHunters.length - 1) * _loc15_)]);
             var _loc20_:Number = 0;
             var _loc21_:Object = {};
@@ -201,6 +206,46 @@ package com.monsters.ai {
             param1.dps = _loc26_;
             param1.anything = _loc27_;
             param1.distances = _loc21_;
+            if (WMATTACK._ioPlan) {
+                this.ioUsePlan(param1, _loc22_);
+            }
+        }
+
+        /**
+         * Inferno wild attack from the server config (WMATTACK._ioPlan): its monsters instead of the ones
+         * worked out from the yard. They set off at distances that bring them in together, as above: the
+         * slowest starts `reach` away, the others further out by their speed.
+         */
+        private function ioUsePlan(param1:Solution, reach:Number):void {
+            var plan:Object = WMATTACK._ioPlan;
+            var attack:Object = {};
+            var distances:Object = {};
+            var id:String = null;
+            var slowest:Number = 0;
+            var speed:Number = NaN;
+            for (id in plan.monsters) {
+                if (CREATURELOCKER._creatures[id] && int(plan.monsters[id]) > 0) {
+                    attack[id] = int(plan.monsters[id]);
+                    speed = this.ioSpeed(id, int(plan.level));
+                    if (slowest == 0 || speed < slowest) {
+                        slowest = speed;
+                    }
+                }
+            }
+            for (id in attack) {
+                distances[id] = reach / slowest * this.ioSpeed(id, int(plan.level));
+            }
+            param1.attack = attack;
+            param1.distances = distances;
+            param1.tanks = {};
+            param1.dps = {};
+            param1.anything = attack;
+        }
+
+        private function ioSpeed(id:String, level:int):Number {
+            var speeds:Array = CREATURELOCKER._creatures[id].props.speed as Array;
+            var speed:Number = Number(speeds[Math.max(0, Math.min(speeds.length - 1, level - 1))]);
+            return speed > 0 ? speed : 1;
         }
     }
 }

@@ -23,7 +23,9 @@ import type { SocketData } from "./chatState.js";
  * is random and only names the queue; it grants nothing the token did not.
  */
 
-const IDLE_MS = 40_000; // a client polls every few seconds; this long without one and it is gone
+// A client polls every few seconds; this long without one and it is gone. Browsers slow a background
+// tab's timers to about once a minute, so less than that ended (and re-joined) those sessions every minute.
+const IDLE_MS = 90_000;
 const MAX_QUEUE = 400; // messages held for a client that stopped polling, before old ones drop
 const MAX_MESSAGES_PER_POLL = 20;
 const MAX_SESSIONS = 5_000;

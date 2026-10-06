@@ -41,5 +41,8 @@ package com.monsters.chat {
         function list(filter:String = null):void;
         function members(channel:Channel):void;
         function error(code:String, message:String):void;
+
+        /** Inferno-only: a moderation request ("delete": channel, id; "mute": targetId or targetName, minutes). */
+        function moderate(action:String, params:Object):void;
     }
 }

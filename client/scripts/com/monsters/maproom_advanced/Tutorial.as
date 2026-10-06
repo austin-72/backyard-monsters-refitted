@@ -86,7 +86,8 @@ package com.monsters.maproom_advanced {
         }
 
         private function ImageLoaded(param1:String, param2:BitmapData):void {
-            if (this._currImageUrl == param1) {
+            // (The picture can arrive after the window was closed: bug report #32.)
+            if (this._currImageUrl == param1 && this._bigPopup) {
                 this._bigPopup.mcImageContainer.addChild(new Bitmap(param2));
             }
         }
@@ -100,7 +101,11 @@ package com.monsters.maproom_advanced {
         private function HideBigDialog():void {
             if (this._bigPopup) {
                 GLOBAL.BlockerRemove();
-                GLOBAL._layerTop.removeChild(this._bigPopup);
+                // Inferno-only: the dialog may already be gone (closed with the map, or by the popup queue);
+                // removing it again threw (bug report #62)
+                if (!GLOBAL.INFERNO_ONLY || this._bigPopup.parent == GLOBAL._layerTop) {
+                    GLOBAL._layerTop.removeChild(this._bigPopup);
+                }
                 this._bigPopup = null;
             }
         }

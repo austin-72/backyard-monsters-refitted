@@ -1,6 +1,7 @@
-import type { FilterQuery } from "@mikro-orm/core";
+import { QueryOrder, type FilterQuery, type QueryOrderMap } from "@mikro-orm/core";
 
 import { Status } from "../../enums/StatusCodes.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { AllianceStance } from "../../enums/Alliance.js";
 import { Alliance } from "../../database/models/alliance.model.js";
 import { User } from "../../database/models/user.model.js";
@@ -47,10 +48,15 @@ export const searchAlliances: KoaController = async (ctx) => {
     where.map_version = mapVersion;
   }
 
+  // (Inferno: by empire value, as the leaderboards rank players)
+  const orderBy: QueryOrderMap<Alliance> = infernoOnlyConfig.enabled
+    ? { stats: { empire_value: QueryOrder.DESC }, id: QueryOrder.ASC }
+    : { stats: { empire_points: QueryOrder.DESC }, id: QueryOrder.ASC };
+
   const searchOptions = {
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    orderBy: { stats: { empire_points: "DESC" }, id: "ASC" },
+    orderBy,
     populate: ["stats"],
   } as const;
 
@@ -62,7 +68,7 @@ export const searchAlliances: KoaController = async (ctx) => {
   const allianceIds = alliances.map((alliance) => alliance.id);
   const relationships: RelationshipLookup = await findRelationships(user.alliance_id, allianceIds);
 
-  const rankField = world ? "world_rank" : "global_rank";
+  const rankField = infernoOnlyConfig.enabled ? (world ? "value_world_rank" : "value_global_rank") : world ? "world_rank" : "global_rank";
 
   const results = alliances.map((alliance) => ({
     alliance_id: alliance.id,
@@ -73,7 +79,7 @@ export const searchAlliances: KoaController = async (ctx) => {
     leader_baseid: leaders.get(alliance.leader_userid),
     rank: alliance.stats?.[rankField],
     relationship: relationships.get(alliance.id) ?? AllianceStance.NEUTRAL,
-    ep: alliance.stats?.empire_points,
+    ep: infernoOnlyConfig.enabled ? alliance.stats?.empire_value : alliance.stats?.empire_points,
   }));
 
   ctx.status = Status.OK;

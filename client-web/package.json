@@ -1,0 +1,21 @@
+{
+  "name": "bymr-client-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Backyard Monsters Refitted client for the browser (TypeScript), converted from the Flash client",
+  "type": "module",
+  "scripts": {
+    "convert": "tsx tools/as3-to-ts/cli.ts",
+    "assets": "tsx tools/swf-assets/cli.ts",
+    "build": "tsx tools/build.ts",
+    "dev": "tsx tools/build.ts && tsx tools/dev-server.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "watch": "tsx tools/watch.ts",
+    "check": "tsx tools/check-build.ts",
+    "publish": "tsx tools/publish.ts"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "tsx": "^4.20.0"
+  }
+}
