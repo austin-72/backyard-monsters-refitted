@@ -29,6 +29,11 @@ export class BUILDING15 extends BFOUNDATION {
         this.UpdateHousedCreatureTargets();
     }
 
+    /** (Inferno-only, #296: its monsters wander round where the Yard Planner put it) */
+    public override ioPlannerMoved(): void {
+        this.UpdateHousedCreatureTargets();
+    }
+
     public override Description(): void {
         super.Description();
         let effectiveLevel: int = this.getEffectiveLevel();

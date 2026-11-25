@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { Vector, int, uint } from "as3";
 import { Sprite } from "flash/display";
 import { Event } from "flash/events";
-import { BasePlanner, BasePlannerTransferRow, BasePlannerTransfer_CLIP, BaseTemplate, ScalableFrame } from "@game";
+import { BasePlanner, BasePlannerEvent, BasePlannerTransferEvent, BasePlannerTransferRow, BasePlannerTransfer_CLIP, BaseTemplate, ScalableFrame } from "@game";
 
 export class BasePlannerTransferPopup extends BasePlannerTransfer_CLIP {
     static {
@@ -16,6 +16,22 @@ export class BasePlannerTransferPopup extends BasePlannerTransfer_CLIP {
 
     public $ctor(): void {
         super.$ctor();
+        if (BasePlannerTransferRow.ioSlotButtons) {
+            // (Inferno-only, QoL #680: wider, for each row's Rename and Delete at its right)
+            this.mcFrame.width = this.mcFrame.width + BasePlannerTransferRow.IO_EXTRA_WIDTH;
+            this.tTitle.x += BasePlannerTransferRow.IO_EXTRA_WIDTH / 2;
+            this.mcFrame.resize();
+        }
+    }
+
+    /** Inferno-only (QoL #680): a row's Rename and Delete, sent on as IO_RENAME / IO_DELETE with its slot. */
+    protected ioWireRow(param1: BasePlannerTransferRow): void {
+        param1.addEventListener(BasePlannerTransferRow.IO_RENAME_CLICK, (e: Event): void => {
+            this.dispatchEvent(new BasePlannerTransferEvent(BasePlannerEvent.IO_RENAME, param1.slot));
+        });
+        param1.addEventListener(BasePlannerTransferRow.IO_DELETE_CLICK, (e: Event): void => {
+            this.dispatchEvent(new BasePlannerTransferEvent(BasePlannerEvent.IO_DELETE, param1.slot));
+        });
     }
 
     public updateList(param1: Vector<BaseTemplate>): void {
@@ -37,6 +53,7 @@ export class BasePlannerTransferPopup extends BasePlannerTransfer_CLIP {
             }
             _loc6_.bTransfer.SetupKey("basePlanner_btnSaveLayout");
             _loc6_.addEventListener(BasePlannerTransferPopup.CLICKED_TRANSFER, as3.bind(this, this.clickedTransfer));
+            this.ioWireRow(_loc6_);
             _loc6_.y = _loc2_;
             this._rowsContainer.addChild(_loc6_);
             _loc2_ = (_loc2_ + (_loc6_.height + 5)) >>> 0;

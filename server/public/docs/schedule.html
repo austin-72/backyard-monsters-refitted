@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>When things happen - Inferno Map Room 2</title>
+  <meta name="description" content="When the daily resets, the Wart Bloom, Moloch's Gauntlet and the other recurring events of Inferno Map Room 2 happen, and in which time zone.">
+  <meta name="theme-color" content="#1a0503">
+  <meta name="color-scheme" content="dark">
+  <!-- Written by hand (QoL #646). Its style is the one server/scripts/shinyPage.ts writes into shiny.html: keep the three pages the same. -->
+  <style>
+    @font-face { font-family: "Groboldov"; src: url("/web/fonts/groboldov.woff") format("woff"); font-display: swap; }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; min-height: 100vh; color: #f2dcc8; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(ellipse at 50% -10%, rgba(255, 90, 20, .24), transparent 65%), #0d0403; }
+    .page { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
+    .top .home { font: 400 17px "Groboldov", Impact, sans-serif; color: #ffd8b0; text-decoration: none; text-shadow: 0 2px 0 #2d0602; }
+    h1 { margin: 22px 0 10px; font: 400 clamp(28px, 6vw, 42px)/1.1 "Groboldov", Impact, sans-serif; letter-spacing: .3px;
+      background: linear-gradient(#ffe9a0, #ff9a3a 55%, #e0401a); -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 2px 0 #2d0602); }
+    h2 { margin: 30px 0 10px; font: 400 21px/1.2 "Groboldov", Impact, sans-serif; color: #ffb36b; text-shadow: 0 2px 0 #2d0602; }
+    h3 { margin: 0 0 6px; font-size: 17px; line-height: 1.35; color: #ffd8b0; }
+    p { margin: 0 0 12px; }
+    a { color: #ffc27a; }
+    a:hover { color: #ffe9a0; }
+    .lead { color: #e8c9ad; }
+    .note { font-size: 14px; color: #c9a98f; }
+    .card { background: rgba(40, 8, 4, .72); border: 1px solid #6a2410; border-radius: 10px; padding: 14px 16px; margin: 0 0 12px; }
+    .card p:last-child { margin-bottom: 0; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 0 0 12px; background: rgba(40, 8, 4, .72);
+      border: 1px solid #6a2410; border-radius: 10px; overflow: hidden; }
+    th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-top: 1px solid rgba(106, 36, 16, .7); }
+    thead th { border-top: 0; background: rgba(106, 36, 16, .4); color: #ffd8b0; font-weight: 600; font-size: 14px; }
+    .num { text-align: right; white-space: nowrap; }
+    td.num { color: #ffe9a0; font-weight: 600; }
+    .sub { display: block; margin-top: 2px; font-size: 14px; color: #c9a98f; }
+    footer { margin-top: 36px; padding-top: 14px; border-top: 1px solid #6a2410; font-size: 14px; color: #c9a98f; }
+    footer nav { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 8px; }
+    footer a[aria-current] { color: #f2dcc8; font-weight: 600; text-decoration: none; }
+    @media (max-width: 480px) { th, td { padding: 8px 9px; } .card { padding: 12px 13px; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <a class="home" href="/">Inferno Map Room 2</a>
+      <a href="/">Back to the game</a>
+    </header>
+    <main>
+      <h1>When things happen</h1>
+      <p class="lead">Almost everything runs on UTC (London's winter time, also called GMT). The one exception is the Wart Bloom, which follows US Central time (Chicago).</p>
+
+      <h2>Every day, at midnight UTC</h2>
+      <table>
+        <thead><tr><th scope="col">What</th><th scope="col">What happens at the new day</th></tr></thead>
+        <tbody>
+          <tr><td>Daily Reward</td><td>A new reward can be collected from the popup on your main yard. Collect every day to keep your streak; missing a whole UTC day starts it again at day 1.</td></tr>
+          <tr><td>Daily quests</td><td>Three new daily quests in the Quest Book. Yesterday's quests that you finished but didn't collect can still be collected for one more day.</td></tr>
+          <tr><td>Moloch's Favor</td><td>A new free Magma Slots spin in the Brimstone Pit.</td></tr>
+          <tr><td>Siege: the Daily</td><td>A new yard and army in the Devil's Arcade, the same for everyone, with three tries a day.</td></tr>
+          <tr><td>Valgos Golf: the Daily</td><td>A new course of nine holes, the same for everyone, with its own board for the day.</td></tr>
+          <tr><td>Hellgate Defense 2: the Daily Challenge</td><td>A new map and two modifiers, with their own board.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Every week</h2>
+
+      <section class="card" id="wart-bloom">
+        <h3>The Wart Bloom: every weekend</h3>
+        <p>From Friday 6 pm until Sunday midnight, US Central time (daylight saving included): 54 hours. Warts grow 3 times as fast in your main yard (not in outposts), and the time you're offline counts too.</p>
+        <p>In UTC that is Friday 23:00 to Monday 05:00 while the US is on daylight saving time (from the second Sunday in March to the first Sunday in November), and Saturday 00:00 to Monday 06:00 the rest of the year. Its start and end are announced in Global chat, and the game shows when it ends in your own time.</p>
+      </section>
+
+      <section class="card" id="flight">
+        <h3>Balthazar's Flight: a new course every Monday</h3>
+        <p>The Devil's Arcade flyer has one course for everyone from Monday 00:00 UTC to the end of Sunday, with a board for the week.</p>
+      </section>
+
+      <h2>Every month</h2>
+
+      <section class="card" id="gauntlet">
+        <h3>Moloch's Gauntlet: the first 7 days of each month</h3>
+        <p>Open from 00:00 UTC on the 1st until 00:00 UTC on the 8th, played from your main yard. Its button shows from 7 days before it opens. Progress starts again on the 1st of every month, so every stage's reward can be won again; admins can open or close it early.</p>
+      </section>
+
+      <h2>Once a year</h2>
+
+      <section class="card" id="trick-or-treat">
+        <h3>Trick or Treat: 30 October to 2 November</h3>
+        <p>Open from midnight on 30 October until midnight at the end of 2 November, US Central time (05:00 UTC on 30 October to 06:00 UTC on 3 November), from the button under Moloch's Gauntlet's on your main yard. Its button shows from 3 days before. A trick you still have to face comes when you're home, even after it ends. Everyone who knocked on a door gets 6 Mini-Pumpkins the first time they come home after it ends (within 30 days).</p>
+      </section>
+
+      <h2>Other timers</h2>
+      <table>
+        <thead><tr><th scope="col">What</th><th scope="col">When</th></tr></thead>
+        <tbody>
+          <tr><td>Wild tribe attacks on your main yard</td><td>At most one every 23 hours, only while you're playing and never in your first minute after signing in. From yard level 3; never on outposts.</td></tr>
+          <tr><td>Wild monster yards on the map</td><td>Made fresh again 12 hours after their last attack.</td></tr>
+          <tr><td>Magma Derby (Brimstone Pit)</td><td>A race every 5 minutes.</td></tr>
+        </tbody>
+      </table>
+    </main>
+    <footer>
+      <nav aria-label="Help pages">
+        <a href="/faq">FAQ</a>
+        <a href="/shiny">Shiny</a>
+        <a href="/schedule" aria-current="page">When things happen</a>
+        <a href="/guide">Player guide</a>
+        <a href="/rules">Rules</a>
+        <a href="/">Play</a>
+      </nav>
+      <p>Inferno Map Room 2, a Backyard Monsters Refitted server.</p>
+    </footer>
+  </div>
+</body>
+</html>

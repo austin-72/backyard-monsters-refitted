@@ -27,7 +27,7 @@ import type { BuildingData, BuildingDataMap, BuildingHealthData } from "../../ty
 type HealthData = BuildingHealthData | null | undefined;
 
 /**
- * The client caps its load replay at 30 days (BASE.as), so a save never credits more than that.
+ * The client caps its load replay at 30 days (BASE.ts), so a save never credits more than that.
  */
 const MAX_ELAPSED_SECONDS = 60 * 60 * 24 * 30;
 

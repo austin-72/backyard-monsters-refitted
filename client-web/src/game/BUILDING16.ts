@@ -178,7 +178,7 @@ export class BUILDING16 extends HatcheryBase {
             return;
         }
         if (BASE._credits.Get() >= this._finishCost.Get()) {
-            if (!GLOBAL.ioConfirmShiny(this._finishCost.Get() | 0, "to finish all hatching now", as3.bind(this, this.FinishNow))) {
+            if (!GLOBAL.ioConfirmShiny(this._finishCost.Get() | 0, KEYS.Get("io_t3k_for_hatch_all_now"), as3.bind(this, this.FinishNow))) {
                 return;
             }
             _loc1_ = [];
@@ -259,6 +259,10 @@ export class BUILDING16 extends HatcheryBase {
     }
 
     public override RecycleC(): void {
+        // (Inferno-only, QoL #437: the queue's Magma comes back, as for an Incubator)
+        if (GLOBAL.INFERNO_ONLY) {
+            BUILDING13.ioRefundQueue(this);
+        }
         GLOBAL._bHatcheryCC = null;
         super.RecycleC();
     }

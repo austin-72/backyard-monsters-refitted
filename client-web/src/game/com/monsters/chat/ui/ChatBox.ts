@@ -4,13 +4,14 @@ import { DisplayObject, MovieClip, Shape, Sprite, StageDisplayState } from "flas
 import { Event, FocusEvent, MouseEvent, TimerEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
 import { TextField, TextFieldAutoSize, TextFieldType, TextFormat, TextFormatAlign } from "flash/text";
-import { Timer } from "flash/utils";
-import { AbstractChatBox, BYMChat, Button, Button_CLIP, Chat, ChatBox_CLIP, ChatBox_msg_CLIP, ChatBox_msg_name_CLIP, Circ, Expo, GLOBAL, IChatDisplay, IoMapShare, LOGGER, LOGIN, MAP, MapRoom3, Quad, SOUNDS, ScrollSet, TUTORIAL, TweenLite, bubblepopupRight } from "@game";
+import { getTimer, Timer } from "flash/utils";
+import { Point } from "flash/geom";
+import { AbstractChatBox, BYMChat, Button, Button_CLIP, Chat, ChatBox_CLIP, ChatBox_msg_CLIP, ChatBox_msg_name_CLIP, Circ, Expo, GLOBAL, IChatDisplay, IoDave, IoEmotePicker, IoEmotes, IoMapShare, IoWhosOnline, KEYS, LOGGER, LOGIN, MAP, MapRoom3, Quad, SOUNDS, ScrollSet, TUTORIAL, TweenLite, bubblepopupRight } from "@game";
 
 export class ChatBox extends AbstractChatBox implements IChatDisplay {
     static {
         as3.implement(this, [IChatDisplay]);
-        as3.fields(this, { _shell: null, _maximized: false, _open: true, _animating: false, _useAlerts: false, _mask: null, _thumb: null, _display: null, _panel: null, _thumbWidth: 15, _thumbHeight: 15, _scrollbar: null, _sendBtn: null, _headerBar: null, _alertsCounter: 0, _chatWidth: 0, _chatHistory: null, _chatMessages: null, _skinnedElements: null, _skinTag: 1, fmt_nameOffset: null, _enabled: true, _runOnce: 0, _originProps: null, _maxProps: null, _openProps: null, _closeProps: null, _chatWidthDefault: null, _chatWidthShort: null, _ioY: 0, _ioParity: 0, _ioClock: null, _ioInited: false, _ioBase: null, _ioExtra: 0, _ioLineH: 15, _ioCounter: null, _ioTabs: null, _ioTabGlobal: null, _ioTabAlliance: null });
+        as3.fields(this, { _ioLayoutDue: false, _ioLayoutStick: false, _shell: null, _maximized: false, _open: true, _animating: false, _useAlerts: false, _mask: null, _thumb: null, _display: null, _panel: null, _thumbWidth: 15, _thumbHeight: 15, _scrollbar: null, _sendBtn: null, _headerBar: null, _alertsCounter: 0, _chatWidth: 0, _chatHistory: null, _chatMessages: null, _skinnedElements: null, _skinTag: 1, fmt_nameOffset: null, _enabled: true, _runOnce: 0, _originProps: null, _maxProps: null, _openProps: null, _closeProps: null, _chatWidthDefault: null, _chatWidthShort: null, _ioY: 0, _ioParity: 0, _ioClock: null, _ioInited: false, _ioBase: null, _ioExtra: 0, _ioLineH: 15, _ioCounter: null, _ioTabs: null, _ioTabGlobal: null, _ioTabAlliance: null, _ioWho: null, _ioFxOn: false, _ioFxAt: 0, _ioPill: null, _ioUnseen: 0, _ioUnseenMention: false, _ioChat2Hidden: false, _ioChat2Online: -1, _ioChat2Chip: null, _ioChat2TabArgs: null });
     }
 
     private static _popupignore: bubblepopupRight = null;
@@ -19,14 +20,23 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
 
     // ---- Inferno-only: the lines, drawn as they come (BYMChat keeps the transcripts)
     /** Each kind of line's background and text colour: [background, text]; players' lines use the clip's. */
-    private static readonly IO_STYLE: any = { "mention": [0xFFE3A0, null], "announce": [0xF4C14B, "#3A2200"], "casino": [0xE7CCFA, "#4A1470"], "milestone": [0xC4E6FA, "#0D3D5C"], "event": [0xD4EDB4, "#2C4A0C"], "system": [0xEDE7DA, "#5A5246"], "ignorelist": [0xF1E9DA, "#333333"], "shout_joined": [0xCDEFC4, "#1F5A17"], "shout_left": [0xE1E1E1, "#555555"], "shout_kicked": [0xF6C9C2, "#7A1A10"], "shout_promoted": [0xCFDFFF, "#1B3F7A"], "shout_created": [0xFFE0B5, "#7A4A00"], "shout_relationship": [0xE5D4F4, "#4E2A6E"], "shout_powerup_activated": [0xFFF0A8, "#6A5200"], "shout_powerup_purchase": [0xD5F1EC, "#145A50"], "shout_pinned": [0xFBE2C8, "#7A3300"], "shout_officer": [0xD9E4F7, "#24406E"] };
+    private static readonly IO_STYLE: any = { "mention": [0xFFE3A0, null], "announce": [0xF4C14B, "#3A2200"], "casino": [0xE7CCFA, "#4A1470"], "milestone": [0xC4E6FA, "#0D3D5C"], "event": [0xD4EDB4, "#2C4A0C"], "system": [0xEDE7DA, "#5A5246"], "ignorelist": [0xF1E9DA, "#333333"], "shout_joined": [0xCDEFC4, "#1F5A17"], "shout_left": [0xE1E1E1, "#555555"], "shout_kicked": [0xF6C9C2, "#7A1A10"], "shout_promoted": [0xCFDFFF, "#1B3F7A"], "shout_created": [0xFFE0B5, "#7A4A00"], "shout_relationship": [0xE5D4F4, "#4E2A6E"], "shout_powerup_activated": [0xFFF0A8, "#6A5200"], "shout_powerup_purchase": [0xD5F1EC, "#145A50"], "shout_powerup_state": [0xFFF0A8, "#6A5200"], "shout_pinned": [0xFBE2C8, "#7A3300"], "shout_officer": [0xD9E4F7, "#24406E"] };
 
-    /** The text's width: the time ("2m") takes the last 30 pixels of the line. */
-    private static readonly IO_TEXT_W: int = 300;
+    /**
+     * The text's width; the time ("2m") takes the next 30 pixels, ending just short of the scroll bar (13 October: the
+     * box 40 pixels wider; the time was under the scroll bar, and 12 more pixels to the right on a line with a dot).
+     */
+    private static readonly IO_TEXT_W: int = 336;
+    /** Inferno-only (13 October): room for the online dot before a player's line. */
+    public static readonly IO_DOT_W: number = 12;
 
     private static readonly IO_TIME_W: int = 30;
 
-    private static readonly IO_MAX_LINES: int = 60;
+    /** An emote's size in a chat line (14 October). */
+    public static readonly IO_EMOTE: int = 36;
+
+    // (QoL #147: 120; the alliance keeps 200 lines and 50 notices now)
+    private static readonly IO_MAX_LINES: int = 120;
 
     // ---- Inferno-only: the box typed in: 200 characters, growing (up to six lines) so all of it shows
     private static readonly IO_MAX_CHARS: int = 200;
@@ -77,13 +87,25 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
     private _ioTabGlobal: TextField;
     private _ioTabAlliance: TextField;
 
+    /** Inferno-only (13 October): the bar's Who's Online? button. */
+    private _ioWho: Sprite;
+
+    /** Inferno-only (QoL #477): whether the player appears offline, and how many are online (-1: not known yet). */
+    private _ioChat2Hidden: boolean;
+    private _ioChat2Online: int;
+    /** QoL #477: the "Offline" chip after the tabs, while the player appears offline. */
+    private _ioChat2Chip: Sprite;
+    /** The tabs' last state (ioSetTabs), to draw them again when the presence changes. */
+    private _ioChat2TabArgs: any[];
+
     public $ctor(): void {
         this._skinnedElements = [];
         this._originProps = { "screenHeight": 240, "screenWidth": 380 };
         this._maxProps = { "screenHeight": 470, "maskHeight": 470 - 12, "y": -(470 + 30), "scrollerY": -470, "scrollHeight": 470 - 16, "inputY": -12 };
         this._openProps = { "screenHeight": 240, "maskHeight": 136, "y": -178, "scrollerY": -148, "scrollHeight": 120, "inputY": -12 };
         this._closeProps = { "screenHeight": 114, "maskHeight": 105, "y": 0, "scrollerY": 30, "scrollHeight": 105, "inputY": 27 };
-        this._chatWidthDefault = { "sizeW": 380, "headerW": 380, "headerX": -5, "titleTxtX": 70, "alertX": 220, "arrowUpX": 343, "arrowUpY": 16, "arrowDownX": 325, "arrowDownY": 13, "borderW": 380, "mcMaskW": 348, "tOutputW": 330, "mcScreenW": 350, "inputWoodBgW": 380, "inputTxtBgW": 310, "inputTxtW": 310, "sendBtnX": 331, "scrollerX": 347, "ignoreBtnX": 315 };
+        // Inferno-only (13 October, the user's): 40 pixels wider (it was 380)
+        this._chatWidthDefault = GLOBAL.INFERNO_ONLY ? { "sizeW": 420, "headerW": 420, "headerX": -5, "titleTxtX": 90, "alertX": 260, "arrowUpX": 368, "arrowUpY": 16, "arrowDownX": 350, "arrowDownY": 13, "borderW": 420, "mcMaskW": 388, "tOutputW": 370, "mcScreenW": 390, "inputWoodBgW": 420, "inputTxtBgW": 310, "inputTxtW": 310, "sendBtnX": 371, "scrollerX": 387, "ignoreBtnX": 355 } : { "sizeW": 380, "headerW": 380, "headerX": -5, "titleTxtX": 70, "alertX": 220, "arrowUpX": 343, "arrowUpY": 16, "arrowDownX": 325, "arrowDownY": 13, "borderW": 380, "mcMaskW": 348, "tOutputW": 330, "mcScreenW": 350, "inputWoodBgW": 380, "inputTxtBgW": 310, "inputTxtW": 310, "sendBtnX": 331, "scrollerX": 347, "ignoreBtnX": 315 };
         this._chatWidthShort = { "sizeW": 390, "headerW": 390, "headerX": -5, "titleTxtX": 80, "alertX": 230, "arrowUpX": 343, "arrowUpY": 16, "arrowDownX": 325, "arrowDownY": 13, "borderW": 380, "mcMaskW": 350, "tOutputW": 320, "mcScreenW": 360, "inputWoodBgW": 390, "inputTxtBgW": 310, "inputTxtW": 305, "sendBtnX": 333, "scrollerX": 350, "ignoreBtnX": 315 };
         super.$ctor(new ChatBox_CLIP());
         if (!this._useAlerts) {
@@ -165,7 +187,8 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
     }
 
     private onInputFocus(param1: Event): void {
-        if (this.stage.displayState == StageDisplayState.FULL_SCREEN) {
+        // (Inferno-only, QoL #161: typing works in full screen in a browser; only Flash needed to leave it)
+        if (!GLOBAL.INFERNO_ONLY && this.stage.displayState == StageDisplayState.FULL_SCREEN) {
             GLOBAL.goFullScreen(null);
         }
         this.forceFocus();
@@ -184,6 +207,16 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         this.background.arrowUp.buttonMode = true;
         this.background.arrowUp.useHandCursor = true;
         this.background.arrowUp.gotoAndStop("on" + this._skinTag);
+        if (GLOBAL.INFERNO_ONLY && this.background.header) {
+            // (QoL #546, 14 October: the whole header opens and closes the chat, not only its 12 px arrow)
+            this.background.header.buttonMode = true;
+            this.background.header.useHandCursor = true;
+            this.background.header.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                if (e.target == this.background.header || (e.target && e.target.parent == this.background.header)) {
+                    this.background.arrowUp.dispatchEvent(new MouseEvent(MouseEvent.CLICK, false, false));
+                }
+            });
+        }
         this.background.arrowDown.mouseChildren = false;
         this.background.arrowDown.buttonMode = true;
         this.background.arrowDown.useHandCursor = true;
@@ -197,6 +230,8 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         this.background.mcToggle.gotoAndStop(this._enabled ? "close" + this._skinTag : "on" + this._skinTag);
         this.input.addEventListener(FocusEvent.FOCUS_IN, as3.bind(this, this.onInputFocus));
         this.input.maxChars = 100;
+        // (QoL #204: a phone's keyboard says Send)
+        this.input.ioEnterKey = "send";
         this.ClearAlert();
         this.UpdateAlert();
         this.background.alert.visible = false;
@@ -369,6 +404,8 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             this.ioScrollToBottom();
             // (opened: the newest lines)
             this.ioTickTimes();
+            // (QoL #477: folded, the bar says how many are online)
+            this.ioChat2Redraw();
         } else {
             this._scrollbar.ScrollTo(1, false);
         }
@@ -412,6 +449,54 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             this._sendBtn.x = Number(this._chatWidthDefault.sendBtnX);
             this._scrollbar.x = Number(this._chatWidthDefault.scrollerX);
             this._chatWidth = this._chatWidthDefault.sizeW | 0;
+            // (Inferno-only: the box 40 wider; its on/off button moves with the arrows, once)
+            if (GLOBAL.INFERNO_ONLY && this.background.mcToggle && !(this as any)._ioToggleMoved) {
+                this.background.mcToggle.x += 40;
+                (this as any)._ioToggleMoved = true;
+            }
+            this.ioPlaceEmoteButton();
+        }
+    }
+
+    /**
+     * Inferno-only (14 October, the user's): the emote button, between the box typed in and Say (the box 32 narrower
+     * for it); it opens the emote picker above the chat.
+     */
+    private _ioEmoteBtn: Sprite;
+
+    private ioPlaceEmoteButton(): void {
+        if (!GLOBAL.INFERNO_ONLY || !this.inputbar || !this._sendBtn) {
+            return;
+        }
+        if (!this._ioEmoteBtn) {
+            let b: Sprite = new Sprite();
+            b.name = "ioEmoteButton";
+            b.buttonMode = true;
+            let bg: Shape = new Shape();
+            bg.graphics.lineStyle(1, 0x3A2412, 1);
+            bg.graphics.beginFill(0xE8C98A, 1);
+            bg.graphics.drawRoundRect(0, 0, 28, 26, 8, 8);
+            bg.graphics.endFill();
+            b.addChild(bg);
+            let face: Sprite = IoEmotes.make("grin", 22);
+            face.x = 3;
+            face.y = 2;
+            b.addChild(face);
+            b.addEventListener(MouseEvent.MOUSE_DOWN, (e: MouseEvent): void => {
+                e.stopPropagation();
+                let at: any = b.localToGlobal(new Point(0, 0));
+                let chatLeft: any = this.background.localToGlobal(new Point(0, 0));
+                IoEmotePicker.ignoreDownOn = b;
+                IoEmotePicker.Toggle(chatLeft.x + 4, at.y);
+            });
+            this.inputbar.addChild(b);
+            this._ioEmoteBtn = b;
+        }
+        // (QoL #563: the box 8 px shorter, so the emote button has room either side and a miss doesn't press Say)
+        this._ioEmoteBtn.x = this.inputbar.inputTxtBG.x + this.inputbar.inputTxtBG.width + 4;
+        this._ioEmoteBtn.y = this._sendBtn.y;
+        if (this._ioCounter) {
+            this._ioCounter.x = this.inputbar.inputTxtBG.x + this.inputbar.inputTxtBG.width - 62;
         }
     }
 
@@ -427,6 +512,15 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             if (this._scrollbar.parent != this) {
                 this.addChild(this._scrollbar);
             }
+            // (nothing laid out since last time: the bar and the scroll stay as they are. The game asks for this once a
+            // second (UI2.Update); measuring 60 lines' height five times over was a 3-6 ms hitch every second.)
+            let last: any = this._chatHistory.length ? this._chatHistory[this._chatHistory.length - 1] : null;
+            // (the last line's place and height too: a line laid out again later, its font arrived, moves the bottom)
+            let key: string = this._chatHistory.length + "|" + (last ? last.$uid + ":" + last.y + ":" + last.height : 0) + "|" + this._shell.y + "|" + this._open + "|" + this._chatWidth + "|" + (this._chatMessages ? (this._chatMessages as any).$uid + ":" + this._chatMessages.numChildren : -1) + "|" + this._shell.numChildren + "|" + (this.background.mcMask ? this.background.mcMask.scaleY + ":" + this.background.mcMask.y : "");
+            if (!this._animating && key === (this as any)._ioLayoutKey) {
+                return;
+            }
+            (this as any)._ioLayoutKey = this._animating ? null : key;
             this.ioAfterLayout(this.ioAtBottom());
             return;
         }
@@ -496,6 +590,12 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
     }
 
     public override push(param1: string, param2: string = null, param3: string = null, param4: string = null, param5: boolean = false): void {
+        if (GLOBAL.INFERNO_ONLY) {
+            // (24 October: the Inferno lays its lines out as they come (ioAppend); a line given the old way went into the
+            // history without being drawn, and pushed the drawn ones out of step. Shown as the game's own line now.)
+            this.ioAppend({ "html": "<i>" + param1 + "</i>", "kind": "system", "ts": BYMChat.ioNow() });
+            return;
+        }
         let _loc9_: ChatBox_msg_name_CLIP = null;
         let _loc6_: string = null;
         if ((_loc6_ = param2) != null) {
@@ -567,7 +667,10 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
 
     /** Adds a line at the bottom. The view stays where the player scrolled to, unless it was at the newest. */
     public ioAppend(param1: any, param2: boolean = false): void {
-        let stick: boolean = param2 || this.ioAtBottom();
+        // (21 October: lines arriving together (a channel's history when the game starts: dozens at once) are laid out
+        // once, after the last: each laid all of them out again (the lines' height measured, the bar, the scroll), a
+        // half-second freeze at the start. Whether the view follows them is told by the first.)
+        let stick: boolean = param2 || (this._ioLayoutDue ? this._ioLayoutStick : this.ioAtBottom());
         let line: ChatBox_msg_CLIP = this.ioMakeLine(param1);
         line.y = this._ioY;
         this._chatMessages.addChild(line);
@@ -591,21 +694,104 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             }
         }
         if (!param2) {
-            this.ioAfterLayout(stick || param1.kind == "own");
+            let follow: boolean = stick || param1.kind == "own";
+            if (this._ioLayoutDue) {
+                this._ioLayoutStick = this._ioLayoutStick || follow;
+            } else {
+                this._ioLayoutDue = true;
+                this._ioLayoutStick = follow;
+                setTimeout((): void => {
+                    if (!this._ioLayoutDue) {
+                        return;
+                    }
+                    this._ioLayoutDue = false;
+                    if (this._chatMessages && this._scrollbar && this.background && this.background.mcMask) {
+                        this.ioAfterLayout(this._ioLayoutStick);
+                    }
+                }, 0);
+            }
+            if (!stick && param1.kind != "own") {
+                this.ioCountUnseen(param1.kind == "mention");
+            }
         }
     }
+
+    /** A line came in below the view (QoL #144): the pill counts it, gold when one mentions the player. */
+    private ioCountUnseen(param1: boolean): void {
+        if (!GLOBAL.INFERNO_ONLY || !this.background || !this.background.mcMask) {
+            return;
+        }
+        this._ioUnseen++;
+        this._ioUnseenMention = this._ioUnseenMention || param1;
+        if (!this._ioPill) {
+            this._ioPill = new Sprite();
+            this._ioPill.name = "ioChatNewPill";
+            this._ioPill.buttonMode = true;
+            this._ioPill.useHandCursor = true;
+            this._ioPill.mouseChildren = false;
+            let label: TextField = new TextField();
+            label.name = "ioChatNewPillText";
+            label.defaultTextFormat = new TextFormat("Verdana", 11, 0xFFF4E0, true);
+            label.autoSize = TextFieldAutoSize.LEFT;
+            label.selectable = false;
+            label.mouseEnabled = false;
+            this._ioPill.addChild(label);
+            this._ioPill.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                e.stopPropagation();
+                this.ioScrollToBottom();
+                this.ioHidePill();
+            });
+            this._ioPill.addEventListener(Event.ENTER_FRAME, (e: Event): void => {
+                if (this._ioPill.visible && (!this._open || this.ioAtBottom())) {
+                    this.ioHidePill();
+                }
+            });
+        }
+        let text: TextField = as3.as(this._ioPill.getChildAt(0), TextField);
+        text.text = KEYS.Get("io_chat_new_lines", { "v1": this._ioUnseen });
+        let w: number = Math.ceil(text.textWidth) + 22;
+        let h: number = 20;
+        text.x = 11;
+        text.y = (h - text.textHeight) / 2 - 2;
+        text.textColor = (this._ioUnseenMention ? 0x3A2200 : 0xFFF4E0) >>> 0;
+        let g: any = this._ioPill.graphics;
+        g.clear();
+        g.lineStyle(1, (this._ioUnseenMention ? 0x8A5A00 : 0xFFB35A) >>> 0, 1);
+        g.beginFill((this._ioUnseenMention ? 0xFFD24A : 0x5A1E08) >>> 0, 0.95);
+        g.drawRoundRect(0, 0, w, h, h);
+        g.endFill();
+        let mask: any = this.background.mcMask;
+        this._ioPill.x = Math.round(mask.x + (mask.width - w) / 2);
+        this._ioPill.y = Math.round(mask.y + mask.height - h - 6);
+        this.background.addChild(this._ioPill);
+        this._ioPill.visible = this._open;
+    }
+
+    private ioHidePill(): void {
+        this._ioUnseen = 0;
+        this._ioUnseenMention = false;
+        if (this._ioPill) {
+            this._ioPill.visible = false;
+        }
+    }
+
+    /** Inferno-only (21 October): lines appended this moment, laid out once after the last (ioAppend), and whether to follow them. */
+    private _ioLayoutDue: boolean;
+    private _ioLayoutStick: boolean;
 
     /** The transcript of the tab now showing, all at once. */
     public ioSetLines(param1: any[]): void {
         if (!this._chatMessages) {
             return;
         }
+        this._ioLayoutDue = false;
         while (this._chatMessages.numChildren > 0) {
             this._chatMessages.removeChildAt(0);
         }
         this._chatHistory = [];
         this._ioY = 0;
         this._ioParity = 0;
+        this.ioHidePill();
         this._chatMessages.x = Number(this.background.mcMask.x);
         this._chatMessages.y = Number(this.background.mcMask.y);
         let from: int = Math.max(0, param1.length - ChatBox.IO_MAX_LINES) | 0;
@@ -623,11 +809,55 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         if (style && style[1]) {
             html = "<font color=\"" + style[1] + "\">" + html + "</font>";
         }
+        // (14 October: emotes, [e:id], out of the text: drawn as pictures below)
+        let emotes: string[] = IoEmotes.idsIn(html);
+        let emoteOnly: boolean = false;
+        if (emotes.length) {
+            html = IoEmotes.strip(html);
+            let label: string = param1.label ? String(param1.label) : "";
+            let rest: string = html.indexOf(label) >= 0 ? html.substr(html.indexOf(label) + label.length) : html;
+            emoteOnly = rest.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/\s+/g, "") == "";
+        }
         let places: any = IoMapShare.RenderChat(html);
-        line.txt.width = ChatBox.IO_TEXT_W;
+        // (13 October: a player's line starts with a dot, green online, grey not: the text moves over for it)
+        let dotW: number = param1.dot ? ChatBox.IO_DOT_W : 0;
+        line.txt.x += dotW;
+        line.txt.width = ChatBox.IO_TEXT_W - dotW;
         line.txt.htmlText = places ? String(places.html) : html;
         line.txt.autoSize = TextFieldAutoSize.LEFT;
         let h: number = Math.ceil(line.txt.height);
+        if (emotes.length) {
+            // after the name when the line is only emotes; else a row under the text
+            let size: int = ChatBox.IO_EMOTE;
+            let ex: number;
+            let ey: number;
+            if (emoteOnly && param1.label) {
+                // (just after the name's last letter, its ":", as the field drew it)
+                let shown: string = line.txt.text.replace(/\s+$/, "");
+                let end: any = shown.length > 0 ? line.txt.getCharBoundaries(shown.length - 1) : null;
+                if (end) {
+                    ex = line.txt.x + end.x + end.width + 6;
+                } else {
+                    let probe: TextField = new TextField();
+                    probe.defaultTextFormat = line.txt.defaultTextFormat;
+                    probe.autoSize = TextFieldAutoSize.LEFT;
+                    probe.htmlText = String(param1.label);
+                    ex = line.txt.x + probe.textWidth + 8;
+                }
+                ey = line.txt.y + 1;
+                h = Math.max(h, size + 4);
+            } else {
+                ex = line.txt.x + 2;
+                ey = line.txt.y + Math.ceil(line.txt.textHeight) + 3;
+                h = Math.ceil(ey + size + 3);
+            }
+            for (let k: int = 0; k < emotes.length; k++) {
+                let pic: Sprite = IoEmotes.make(emotes[k], size);
+                pic.x = ex + k * (size + 4);
+                pic.y = ey;
+                line.addChild(pic);
+            }
+        }
         let fullW: number = line.bg.width;
         line.bg.height = h;
         if (kind == "own") {
@@ -652,7 +882,7 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         line.ioH = h;
         line.ioTs = Number(param1.ts);
         line.isOwnMessage = kind == "own";
-        line.msgData = { "msg": html, "username": param1.name, "userid": param1.user, "msgtype": kind == "ignorelist" ? "IgnoreList" : "Default", "lineId": param1.id, "channel": param1.channel, "role": param1.role };
+        line.msgData = { "msg": html, "username": param1.name, "userid": param1.user, "msgtype": kind == "ignorelist" ? "IgnoreList" : "Default", "lineId": param1.id, "channel": param1.channel, "role": param1.role, "tag": param1.tag, "aid": param1.aid, "dot": param1.dot, "body": param1.body };
         if (line.ioTs > 0) {
             let time: TextField = new TextField();
             let tf: TextFormat = new TextFormat(line.txt.defaultTextFormat.font, 10, 0x8A8070);
@@ -662,11 +892,23 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             time.mouseEnabled = false;
             time.width = ChatBox.IO_TIME_W;
             time.height = 16;
-            time.x = line.txt.x + ChatBox.IO_TEXT_W;
+            time.x = line.txt.x - dotW + ChatBox.IO_TEXT_W;
             time.y = line.txt.y + 1;
             time.text = ChatBox.ioAgo(Number(line.ioTs));
             line.addChild(time);
             line.ioTime = time;
+        }
+        if (dotW > 0) {
+            let dot: Shape = new Shape();
+            dot.name = "ioDot";
+            let on: boolean = param1.dot == "on";
+            dot.graphics.lineStyle(1, (on ? 0x1E7A12 : 0x6E6E6E) >>> 0, 1);
+            dot.graphics.beginFill((on ? 0x35C21F : 0xA8A8A8) >>> 0, 1);
+            dot.graphics.drawCircle(0, 0, 3.5);
+            dot.graphics.endFill();
+            dot.x = line.txt.x - dotW + 6;
+            dot.y = line.txt.y + 9;
+            line.addChild(dot);
         }
         if (param1.label && param1.user) {
             let hit: ChatBox_msg_name_CLIP = new ChatBox_msg_name_CLIP();
@@ -674,7 +916,7 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             hit.label.autoSize = TextFieldAutoSize.LEFT;
             hit.bg.width = hit.label.textWidth;
             hit.label.visible = false;
-            hit.x = 0;
+            hit.x = dotW;
             hit.y = 0;
             hit.buttonMode = true;
             hit.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.OnMsgNameMouseDown));
@@ -683,7 +925,70 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         if (places) {
             IoMapShare.DecorateChat(line, line.txt, as3.as(places.links, Array));
         }
+        if (param1.fx && param1.fxHtml) {
+            // (the html as given, not as the field reads it back: that is rewritten, and the name would not be found in it)
+            line.ioFx = { "look": String(param1.fx), "text": String(param1.fxText), "now": String(param1.fxHtml), "html": places ? String(places.html) : html };
+            this.ioFxWatch();
+        }
         return line;
+    }
+
+    private _ioFxOn: boolean;
+
+    private _ioFxAt: int;
+    /** QoL #144: "3 new ↓" over the bottom of the lines while the player reads further up. */
+    private _ioPill: Sprite;
+    private _ioUnseen: int;
+    private _ioUnseenMention: boolean;
+
+    /** Starts drawing the moving name effects (12 October: opened by inviting friends) again as time goes. */
+    private ioFxWatch(): void {
+        if (this._ioFxOn) {
+            return;
+        }
+        this._ioFxOn = true;
+        this.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.ioFxTick));
+    }
+
+    private ioFxTick(e: Event = null): void {
+        let now: int = getTimer();
+        if (now - this._ioFxAt < 80) {
+            return;
+        }
+        this._ioFxAt = now;
+        let any: boolean = false;
+        let mask: any = this.background ? this.background.mcMask : null;
+        let shown: boolean = this.visible && this.stage != null && this._chatMessages != null;
+        for (let o of as3.values(this._chatHistory)) {
+            let line: ChatBox_msg_CLIP = as3.as(o, ChatBox_msg_CLIP);
+            let fx: any = line ? line.ioFx : null;
+            if (!fx || !line.parent) {
+                continue;
+            }
+            any = true;
+            if (!shown) {
+                continue;
+            }
+            // only the lines in view (the list scrolls inside the mask)
+            if (mask && mask.parent) {
+                let r: any = line.getBounds(mask.parent);
+                if (r.y + r.height < mask.y || r.y > mask.y + mask.height) {
+                    continue;
+                }
+            }
+            let next: string = IoDave.fxHtml(String(fx.look), String(fx.text), now);
+            let at: int = String(fx.html).indexOf(String(fx.now)) | 0;
+            if (at < 0) {
+                continue;
+            }
+            fx.html = String(fx.html).substr(0, at) + next + String(fx.html).substr(at + String(fx.now).length);
+            fx.now = next;
+            line.txt.htmlText = String(fx.html);
+        }
+        if (!any) {
+            this._ioFxOn = false;
+            this.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.ioFxTick));
+        }
     }
 
     /** "now", "33s", "2m", "4h", "3d": how long ago a line was said. */
@@ -826,6 +1131,9 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         this.inputbar.inputTxtBG.height = this._ioBase.txtBg + extra;
         this.input.height = Number(this._ioBase.input + extra);
         this._sendBtn.y = Number(this._ioBase.send + extra);
+        if (this._ioEmoteBtn) {
+            this._ioEmoteBtn.y = this._sendBtn.y;
+        }
         this.background.y = props.y - extra;
         this._scrollbar.y = props.scrollerY - extra;
     }
@@ -856,6 +1164,59 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         return tab;
     }
 
+    /** Inferno-only (13 October): the bar's Who's Online? button (IoWhosOnline), made once. */
+    private ioWhoButton(): Sprite {
+        if (this._ioWho) {
+            if (this._ioWho.parent != this.background) {
+                this.background.addChild(this._ioWho);
+            }
+            return this._ioWho;
+        }
+        let b: Sprite = new Sprite();
+        b.name = "ioWhosOnline";
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        let t: TextField = new TextField();
+        t.selectable = false;
+        t.autoSize = TextFieldAutoSize.LEFT;
+        t.embedFonts = true;
+        // (13 October, the user's: smaller)
+        t.defaultTextFormat = new TextFormat("Groboldov", 10, 0xFFFFFF, true);
+        t.filters = [new GlowFilter(0x000000, 1, 2, 2, 8, 1)];
+        t.text = KEYS.Get("io_tr_who_title");
+        t.x = 8;
+        t.y = 0;
+        b.addChild(t);
+        let draw: Function = (over: boolean): void => {
+            b.graphics.clear();
+            if (GLOBAL.INFERNO_ONLY && this._ioChat2Hidden) {
+                // (QoL #477: appearing offline: a hollow grey dot, as on the list)
+                b.graphics.lineStyle(1.5, 0x9A9A9A >>> 0, 1);
+                b.graphics.beginFill(0x8A8A8A >>> 0, 0);
+            } else {
+                b.graphics.beginFill(0x35C21F >>> 0, 1);
+                b.graphics.lineStyle(1, 0x0E4A08 >>> 0, 1);
+            }
+            b.graphics.drawCircle(3, 7.5, 2.5);
+            b.graphics.endFill();
+            t.textColor = over ? 0xFFD24A : 0xFFFFFF;
+        };
+        (b as any).ioDraw = draw;
+        draw(false);
+        b.addEventListener(MouseEvent.MOUSE_OVER, (e: MouseEvent): void => {
+            draw(true);
+        });
+        b.addEventListener(MouseEvent.MOUSE_OUT, (e: MouseEvent): void => {
+            draw(false);
+        });
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            IoWhosOnline.Show();
+        });
+        this._ioWho = b;
+        this.background.addChild(b);
+        return b;
+    }
+
     private ioTabClick(param1: MouseEvent): void {
         if (Chat._bymChat != null) {
             SOUNDS.Play("click1");
@@ -868,6 +1229,7 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         if (!GLOBAL.INFERNO_ONLY || !this.background) {
             return;
         }
+        this._ioChat2TabArgs = [param1, param2, param3, param4, param5];
         if (!this._ioTabs) {
             this._ioTabs = new Sprite();
             this._ioTabGlobal = this.ioMakeTab("global");
@@ -877,20 +1239,166 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
             this.background.addChild(this._ioTabs);
         }
         this.background.tTitle.visible = false;
-        this.ioTabText(this._ioTabGlobal, "Global", param2, param1 == BYMChat.IO_GLOBAL, param4);
-        this.ioTabText(this._ioTabAlliance, "Alliance", param3, param1 == BYMChat.IO_ALLIANCE, param5);
-        // Centred where the title was, a divider between the two.
+        this.ioTabText(this._ioTabGlobal, KEYS.Get("io_t3m_ch_tab_global"), param2, param1 == BYMChat.IO_GLOBAL, param4);
+        this.ioTabText(this._ioTabAlliance, KEYS.Get("io_t3m_ch_tab_alliance"), param3, param1 == BYMChat.IO_ALLIANCE, param5);
+        // (13 October: Who's Online? on the bar's left)
+        let who: Sprite = this.ioWhoButton();
+        this.ioChat2WhoLabel(who);
+        who.x = 8;
+        who.y = (this.background.tTitle.y + (this.background.tTitle.height - 15) / 2) | 0;
+        // Centred where the title was (clear of Who's Online?), a divider between the two.
         let gap: int = 14;
         let total: number = this._ioTabGlobal.width + gap + this._ioTabAlliance.width;
-        let left: number = this.background.tTitle.x + this.background.tTitle.width / 2 - total / 2;
+        let left: number = Math.max(this.background.tTitle.x + this.background.tTitle.width / 2 - total / 2, who.x + who.width + 12);
         this._ioTabGlobal.parent.x = left | 0;
         this._ioTabAlliance.parent.x = (left + this._ioTabGlobal.width + gap) | 0;
         this._ioTabGlobal.parent.y = this._ioTabAlliance.parent.y = (this.background.tTitle.y + (this.background.tTitle.height - this._ioTabGlobal.height) / 2) | 0;
+        // (QoL #561: each takes a click over the bar's full height and up to the divider; the words alone were
+        // 9 to 10 px tall to hit)
+        let top: number = this.background.tTitle.y - 3;
+        let tall: number = this.background.tTitle.height + 6;
+        for (let h of [this._ioTabGlobal.parent, this._ioTabAlliance.parent, who]) {
+            let hs: Sprite = as3.as(h, Sprite);
+            let tf: TextField = null;
+            for (let k: int = 0; k < hs.numChildren && !tf; k++) {
+                tf = as3.as(hs.getChildAt(k), TextField);
+            }
+            let tw: number = tf ? tf.x + tf.width : hs.width;
+            let g: any = hs.graphics;
+            if (h == who) {
+                // (its own graphics are its green dot, redrawn on hover: the hit area is a layer under it)
+                let layer: Shape = as3.as(who.getChildByName("ioWhoHit"), Shape);
+                if (!layer) {
+                    layer = new Shape();
+                    layer.name = "ioWhoHit";
+                    who.addChildAt(layer, 0);
+                }
+                g = layer.graphics;
+            }
+            g.clear();
+            g.beginFill(0, 0);
+            g.drawRect(-gap / 2, top - hs.y, tw + gap, tall);
+            g.endFill();
+        }
         this._ioTabs.graphics.clear();
         this._ioTabs.graphics.lineStyle(1, 10066329, 0.8);
         let dividerX: int = (left + this._ioTabGlobal.width + gap / 2) | 0;
         this._ioTabs.graphics.moveTo(dividerX, this._ioTabGlobal.parent.y + 3);
         this._ioTabs.graphics.lineTo(dividerX, this._ioTabGlobal.parent.y + this._ioTabGlobal.height - 3);
+        this.ioChat2PlaceChip();
+    }
+
+    /**
+     * Inferno-only (QoL #477): whether the player appears offline (Who's Online's button) and how many players are
+     * online now, from BYMChat (every minute) and Who's Online. The chip and the folded bar's count follow.
+     */
+    public ioChat2Presence(param1: boolean, param2: int): void {
+        if (!GLOBAL.INFERNO_ONLY) {
+            return;
+        }
+        if (param1 == this._ioChat2Hidden && param2 == this._ioChat2Online) {
+            return;
+        }
+        this._ioChat2Hidden = param1;
+        this._ioChat2Online = param2;
+        this.ioChat2Redraw();
+    }
+
+    /** The bar drawn again with the presence as it is now. */
+    private ioChat2Redraw(): void {
+        if (!GLOBAL.INFERNO_ONLY || !this._ioChat2TabArgs) {
+            return;
+        }
+        let a: any[] = this._ioChat2TabArgs;
+        this.ioSetTabs(as3.str(a[0]), a[1] | 0, a[2] | 0, a[3] | 0, a[4] | 0);
+    }
+
+    /** QoL #477: Who's Online? on the bar, or "12 online" while the chat is folded (once the count is known). */
+    private ioChat2WhoLabel(param1: Sprite): void {
+        let t: TextField = null;
+        for (let k: int = 0; k < param1.numChildren && !t; k++) {
+            t = as3.as(param1.getChildAt(k), TextField);
+        }
+        if (!t) {
+            return;
+        }
+        let want: string = !this._open && this._ioChat2Online >= 0 ? KEYS.Get("io_chat2_online_n", { "v1": this._ioChat2Online }) : KEYS.Get("io_tr_who_title");
+        if (t.text != want) {
+            t.text = want;
+        }
+        let draw: any = (param1 as any).ioDraw;
+        if (draw != null) {
+            draw(false);
+        }
+    }
+
+    /**
+     * QoL #477: "Offline" after the tabs while the player appears offline (a click opens Who's Online, where its button
+     * turns it off). Kept clear of the bar's arrows and on/off button; with no room there, the Who's Online dot (hollow
+     * grey) says it alone.
+     */
+    private ioChat2PlaceChip(): void {
+        let want: boolean = this._ioChat2Hidden && this._ioTabAlliance != null;
+        if (want && !this._ioChat2Chip) {
+            let chip: Sprite = new Sprite();
+            chip.name = "ioChat2OfflineChip";
+            chip.buttonMode = true;
+            chip.mouseChildren = false;
+            let t: TextField = new TextField();
+            t.name = "ioChat2OfflineChipText";
+            t.defaultTextFormat = new TextFormat("Verdana", 9, 0xE8E0D8, true);
+            t.autoSize = TextFieldAutoSize.LEFT;
+            t.selectable = false;
+            t.mouseEnabled = false;
+            t.text = KEYS.Get("io_chat2_offline_chip");
+            t.x = 13;
+            t.y = 0;
+            chip.addChild(t);
+            let w: number = Math.ceil(t.width) + 17;
+            let h: number = Math.max(14, Math.ceil(t.height));
+            chip.graphics.lineStyle(1, 0x9A9A9A, 1);
+            chip.graphics.beginFill(0x3A3A3A, 0.95);
+            chip.graphics.drawRoundRect(0, 0, w, h, h, h);
+            chip.graphics.endFill();
+            chip.graphics.lineStyle(1.5, 0xB8B8B8, 1);
+            chip.graphics.beginFill(0, 0);
+            chip.graphics.drawCircle(7, h / 2, 2.5);
+            chip.graphics.endFill();
+            chip.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                e.stopPropagation();
+                IoWhosOnline.Show();
+            });
+            this._ioChat2Chip = chip;
+        }
+        if (!this._ioChat2Chip) {
+            return;
+        }
+        let place: boolean = want;
+        if (want) {
+            let tab: DisplayObject = this._ioTabAlliance.parent;
+            let x: number = tab.x + this._ioTabAlliance.width + 10;
+            // (left of whatever is next on the bar: the arrows and the on/off button)
+            let limit: number = this.background.header ? this.background.header.x + this.background.header.width - 4 : x + this._ioChat2Chip.width;
+            for (let o of [this.background.arrowUp, this.background.arrowDown, this.background.mcToggle]) {
+                let d: DisplayObject = as3.as(o, DisplayObject);
+                if (d && d.visible && d.parent) {
+                    let r: any = d.getBounds(this.background);
+                    if (r.width > 0 && r.x > tab.x) {
+                        limit = Math.min(limit, r.x - 6);
+                    }
+                }
+            }
+            place = x + this._ioChat2Chip.width <= limit;
+            this._ioChat2Chip.x = Math.round(x);
+            this._ioChat2Chip.y = Math.round(tab.y + (this._ioTabAlliance.height - this._ioChat2Chip.height) / 2);
+        }
+        if (place) {
+            if (this._ioChat2Chip.parent != this.background) {
+                this.background.addChild(this._ioChat2Chip);
+            }
+        } else if (this._ioChat2Chip.parent) {
+            this._ioChat2Chip.parent.removeChild(this._ioChat2Chip);
+        }
     }
 
     private ioTabText(param1: TextField, param2: string, param3: int, param4: boolean, param5: int = 0): void {
@@ -1006,7 +1514,7 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
     }
 
     public OnMsgIgnoreRollOver(param1: MouseEvent): void {
-        let _loc2_: string = param1.currentTarget.parent.msgData.msgtype == "IgnoreList" ? "Click to unignore user" : "Click to ignore user";
+        let _loc2_: string = param1.currentTarget.parent.msgData.msgtype == "IgnoreList" ? KEYS.Get("io_t3m_ch_click_unignore") : KEYS.Get("io_t3m_ch_click_ignore");
         let _loc3_: number = Number(param1.currentTarget.y + param1.currentTarget.height / 2);
         ChatBox.PopupShow((param1.currentTarget.x - 10) | 0, _loc3_ | 0, _loc2_, as3.as(param1.currentTarget.parent, MovieClip));
     }

@@ -19,7 +19,7 @@ import {
 } from "./chatRooms.js";
 import { clients, type ChatClient, type SocketData } from "./chatState.js";
 import { refreshDisplayName } from "./chatIdentity.js";
-import { deleteLine, muteFromChat } from "./chatModeration.js";
+import { deleteLine, muteFromChat, purgeLines, reportLine } from "./chatModeration.js";
 import { ALLIANCE_CHANNEL_ALIAS } from "../config/ChatConfig.js";
 import { initTransport, subscribeControl } from "./chatTransport.js";
 import { ChannelType, ChatControlType } from "../enums/Chat.js";
@@ -56,6 +56,12 @@ const handleControlMessage = (payload: string) => {
     if (who) void refreshDisplayName(who, true).catch((err) => logger.warn(`Chat: user ${message.userId} could not be refreshed: ${err}`));
     return;
   }
+  if (message.type === ChatControlType.Muted) {
+    const who = clients.get(message.userId);
+    // (QoL #153: `fresh`: muted just now, not a line refused: the game says so at once, wherever the player is)
+    if (who) send(who.ws, { type: ServerMessageType.Error, code: ErrorCode.Muted, minutes: message.minutes, reason: message.reason || undefined, fresh: true });
+    return;
+  }
   if (message.type !== ChatControlType.AllianceEvict) return;
 
   const client = clients.get(message.userId);
@@ -85,7 +91,13 @@ const reconcileAlliance = async (client: ChatClient) => {
     }
     if (resolved && !client.channels.has(resolved.key)) {
       joinChannel(client, resolved.key, resolved.info);
-      const history = await getChannelHistory(resolved.key, resolved.info);
+      // (13 October: a history that fails to load still lets the player in, with an empty tab, and says why in the log)
+      let history: Awaited<ReturnType<typeof getChannelHistory>> = [];
+      try {
+        history = await getChannelHistory(resolved.key, resolved.info);
+      } catch (err) {
+        logger.error(`Chat: ${resolved.key}'s history for user ${client.userId} failed: ${(err as Error)?.stack ?? err}`);
+      }
       send(client.ws, { type: ServerMessageType.Joined, channel: resolved.key, history });
     }
   } catch (err) {
@@ -164,7 +176,17 @@ const dispatch = async (ws: ServerWebSocket<SocketData>, data: string | Buffer) 
       return;
 
     case ClientMessageType.Mute:
-      await muteFromChat(client, message.targetId, message.targetName, message.minutes);
+      await muteFromChat(client, message.targetId, message.targetName, message.minutes, message.reason);
+      return;
+
+    // Inferno-only (QoL #153): a player's last lines deleted by a moderator
+    case ClientMessageType.Purge:
+      await purgeLines(client, message.channel, message.targetId, message.count);
+      return;
+
+    // Inferno-only (QoL #152): a line reported to the admins
+    case ClientMessageType.Report:
+      await reportLine(client, message.channel, message.id, message.targetId, typeof message.text === "string" ? message.text : undefined);
       return;
 
     case ClientMessageType.Say:

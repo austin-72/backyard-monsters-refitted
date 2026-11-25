@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { int, uint } from "as3";
 import { Bitmap, BitmapData, DisplayObject, IBitmapDrawable } from "flash/display";
 import { Point } from "flash/geom";
-import { BFOUNDATION, BYMConfig, CREATURES, CreepBase, CreepSkinManager, ITargetable, LoanShark, MAP, MonsterBase, ProjectileUtils, Projectilev2, RasterData, ResurrectProjectile, RezghulResurrectAttack, SPRITES, Targeting, Zombiefy } from "@game";
+import { BFOUNDATION, BYMConfig, CREATURES, CreepBase, CreepSkinManager, GLOBAL, ITargetable, IoTeleport, LoanShark, MAP, MonsterBase, ProjectileUtils, Projectilev2, RasterData, ResurrectProjectile, RezghulResurrectAttack, SPRITES, Targeting, Zombiefy } from "@game";
 
 export class Rezghul extends CreepBase {
     static {
@@ -40,6 +40,10 @@ export class Rezghul extends CreepBase {
         _loc14_ = new ResurrectProjectile();
         let _loc15_: RezghulResurrectAttack = new RezghulResurrectAttack(300, CREATURES.GetProperty(this._creatureID, Rezghul.k_RESSURECT_COOLDOWN, param5, this._friendly) | 0, Targeting.getFriendlyFlag(this) | Targeting.k_TARGETS_GROUND, 50, _loc14_, _loc13_);
         this.addComponent(_loc15_);
+        // (Inferno-only, 21 November, the user's: he teleports up to 5 blocks along his way every 15 seconds: IoTeleport)
+        if (GLOBAL.INFERNO_ONLY) {
+            this.addComponent(new IoTeleport(), IoTeleport.NAME);
+        }
     }
 
     protected override rangedAttack(param1: ITargetable): ITargetable {

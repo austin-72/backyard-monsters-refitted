@@ -1,5 +1,6 @@
 import { redis } from "../../server.js";
 import { BaseType } from "../../enums/Base.js";
+import { hiddenPlayers } from "../user/presence.js";
 
 type LastSeenList = Map<number, number>;
 
@@ -23,4 +24,14 @@ export const getLastSeen = async (ownerIds: number[], type: BaseType.MAIN | Base
   });
 
   return map;
+};
+
+/**
+ * Inferno-only (14 October, QoL #5): as getLastSeen, without the players who chose "appear offline" in Who's
+ * Online. The alliance Members tab and the header's online count showed them green.
+ */
+export const getLastSeenVisible = async (ownerIds: number[], type: BaseType.MAIN | BaseType.INFERNO): Promise<LastSeenList> => {
+  const [seen, hidden] = await Promise.all([getLastSeen(ownerIds, type), hiddenPlayers().catch(() => new Set<number>())]);
+  for (const id of hidden) seen.delete(id);
+  return seen;
 };

@@ -3,7 +3,7 @@ import { int, uint } from "as3";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { Dictionary } from "flash/utils";
-import { BASE, BFOUNDATION, BYMConfig, CHAMPIONCAGE, CHAMPIONCHAMBERPOPUP, CREATURES, ChampionBase, GLOBAL, GRID, KEYS, LOGGER, MAP, POPUPS, SOUNDS, SecNum, popup_monster } from "@game";
+import { BASE, BFOUNDATION, BYMConfig, CHAMPIONCAGE, CHAMPIONCHAMBERPOPUP, CREATURES, ChampionBase, GLOBAL, GRID, KEYS, LOGGER, MAP, POPUPS, SOUNDS, SecNum, popup_monster, IoSocial } from "@game";
 
 export class CHAMPIONCHAMBER extends BFOUNDATION {
     static {
@@ -206,9 +206,14 @@ export class CHAMPIONCHAMBER extends BFOUNDATION {
                         };
                     };
                     mc = new popup_monster();
-                    mc.bSpeedup.SetupKey("btn_warnyourfriends");
-                    mc.bSpeedup.addEventListener(MouseEvent.CLICK, StreamPost(KEYS.Get("chamber_thawstreamtitle", { "v1": CHAMPIONCAGE._guardians["G" + type].name }), KEYS.Get("chamber_thawstreamdesc", { "v1": CHAMPIONCAGE._guardians["G" + type].name }), "G" + type + "_L6-90.png"));
-                    mc.bSpeedup.Highlight = true;
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // (QoL #140: Share in chat, not "Warn your friends")
+                        IoSocial.ioWarnShare(mc.bSpeedup, KEYS.Get("io_soc_share_champion", { "v1": CHAMPIONCAGE._guardians["G" + type].name }));
+                    } else {
+                        mc.bSpeedup.SetupKey("btn_warnyourfriends");
+                        mc.bSpeedup.addEventListener(MouseEvent.CLICK, StreamPost(KEYS.Get("chamber_thawstreamtitle", { "v1": CHAMPIONCAGE._guardians["G" + type].name }), KEYS.Get("chamber_thawstreamdesc", { "v1": CHAMPIONCAGE._guardians["G" + type].name }), "G" + type + "_L6-90.png"));
+                        mc.bSpeedup.Highlight = true;
+                    }
                     mc.bAction.visible = false;
                     mc.tText.htmlText = KEYS.Get("chamber_thawstreamdesc", { "v1": CHAMPIONCAGE._guardians["G" + type].name });
                     POPUPS.Push(mc, null, null, null, "G" + type + "_L" + level + "-150.png");

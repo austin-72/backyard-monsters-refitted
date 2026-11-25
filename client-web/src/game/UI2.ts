@@ -286,7 +286,8 @@ export class UI2 extends ASObject {
                     let isWMI2Active: boolean = activeEvent == SPECIALEVENT && SPECIALEVENT.invasionpop == 4;
                     let isEventActive: boolean = isWMI1Active || isWMI2Active;
 
-                    if (!activeEvent || (activeEvent == SPECIALEVENT && SPECIALEVENT.GetTimeUntilEnd() < 0) || (activeEvent == SPECIALEVENT_WM1 && (SPECIALEVENT_WM1.GetTimeUntilEnd() < 0 || SPECIALEVENT_WM1.wave > SPECIALEVENT_WM1.numWaves || SPECIALEVENT_WM1.invasionpop == 4 && SPECIALEVENT_WM1.wave > SPECIALEVENT_WM1.BONUSWAVE2))) {
+                    // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff: their countdown hidden, as after one)
+                    if (GLOBAL.ioInvasionsOff || !activeEvent || (activeEvent == SPECIALEVENT && SPECIALEVENT.GetTimeUntilEnd() < 0) || (activeEvent == SPECIALEVENT_WM1 && (SPECIALEVENT_WM1.GetTimeUntilEnd() < 0 || SPECIALEVENT_WM1.wave > SPECIALEVENT_WM1.numWaves || SPECIALEVENT_WM1.invasionpop == 4 && SPECIALEVENT_WM1.wave > SPECIALEVENT_WM1.BONUSWAVE2))) {
                         if (Boolean(UI2._top.mcSpecialEvent) && UI2._top.mcSpecialEvent.visible) {
                             UI2._top.mcSpecialEvent.visible = false;
                         }
@@ -444,12 +445,12 @@ export class UI2 extends ASObject {
             UI2._top.mcMusic.y = _loc1_ + 24;
             UI2._top.mcSave.y = _loc1_ + 24 + 24;
             UI2._top.mcFullscreen.gotoAndStop(1 + 2);
-            if (GLOBAL._ROOT.stage.displayState == StageDisplayState.NORMAL) {
+            if (GLOBAL.INFERNO_ONLY || GLOBAL._ROOT.stage.displayState == StageDisplayState.NORMAL) {
                 UI2._top.mcZoom.gotoAndStop(1 + 3);
             } else {
                 UI2._top.mcZoom.gotoAndStop(3 + 3);
             }
-            if (GLOBAL._ROOT.stage.displayState != StageDisplayState.FULL_SCREEN) {
+            if (GLOBAL.INFERNO_ONLY || GLOBAL._ROOT.stage.displayState != StageDisplayState.FULL_SCREEN) {
                 if (GLOBAL._zoomed) {
                     UI2._top.mcZoom.gotoAndStop(2 + 3);
                 }
@@ -461,12 +462,12 @@ export class UI2 extends ASObject {
             UI2._top.mcMusic.y = _loc1_;
             UI2._top.mcSave.y = _loc1_;
             UI2._top.mcFullscreen.gotoAndStop(1);
-            if (GLOBAL._ROOT.stage.displayState == StageDisplayState.NORMAL) {
+            if (GLOBAL.INFERNO_ONLY || GLOBAL._ROOT.stage.displayState == StageDisplayState.NORMAL) {
                 UI2._top.mcZoom.gotoAndStop(1);
             } else {
                 UI2._top.mcZoom.gotoAndStop(3);
             }
-            if (GLOBAL._ROOT.stage.displayState != StageDisplayState.FULL_SCREEN) {
+            if (GLOBAL.INFERNO_ONLY || GLOBAL._ROOT.stage.displayState != StageDisplayState.FULL_SCREEN) {
                 if (GLOBAL._zoomed) {
                     UI2._top.mcZoom.gotoAndStop(2);
                 }

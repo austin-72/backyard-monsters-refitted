@@ -57,7 +57,7 @@ export class BUILDING9 extends BFOUNDATION {
             _loc5_ = 1;
         }
         this._guardian = 0;
-        BASE.Fund(4, Math.ceil(CREATURES.GetProperty(param2, "cResource") * _loc5_ * param3), false, null, param2.substr(0, 1) == "I" && !BASE.isInfernoMainYardOrOutpost);
+        BASE.Fund(4, Math.ceil(CREATURES.GetProperty(param2, "cResource") * _loc5_ * param3), GLOBAL.INFERNO_ONLY, null, param2.substr(0, 1) == "I" && !BASE.isInfernoMainYardOrOutpost);
         this._lastType = _loc4_ ? 8 : 4;
         ResourcePackages.Create(this._lastType, this, Math.ceil(CREATURES.GetProperty(param2, "cResource") * _loc5_) | 0);
     }

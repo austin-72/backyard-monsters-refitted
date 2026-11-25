@@ -1,3 +1,5 @@
+import { Status } from "../../../../enums/StatusCodes.js";
+import { ClientSafeError } from "../../../../middleware/clientSafeError.js";
 import { BaseMode, BaseType } from "../../../../enums/Base.js";
 import { MapRoomCell, MapRoomVersion } from "../../../../enums/MapRoom.js";
 import { World } from "../../../../database/models/world.model.js";
@@ -15,14 +17,13 @@ import { getGeneratedCells, cellKey } from "../../../../services/maproom/v3/gene
 import { infernoOnlyConfig } from "../../../../config/InfernoOnlyConfig.js";
 import { createAttackLog } from "../../../../services/base/createAttackLog.js";
 import { updateResources, Operation } from "../../../../services/base/updateResources.js";
-import { isAttackActive } from "../../../../services/base/isAttackActive.js";
-import { baseUnderAttackErr, baseProtectedErr, userOnlineErr, shinyLockedErr } from "../../../../errors/errors.js";
-import { redis } from "../../../../server.js";
+import { shinyLockedErr } from "../../../../errors/errors.js";
 import { MR1_TRIBE_IDS } from "../../../../game-data/tribes/v1/index.js";
 import { expireWildSave } from "./baseModeView.js";
 import { registerAttacker } from "../../../../services/maproom/v1/registerAttacker.js";
 import { isShinyLocked } from "../../../../services/user/shinyLock.js";
-import { isTestMode, isTestModeOn } from "../../../../services/admin/testMode.js";
+import { checkAttackTarget } from "../../../../services/maproom/v2/attackRefusal.js";
+import { isTestMode } from "../../../../services/admin/testMode.js";
 import {
   generateNoise,
   getTerrainHeight,
@@ -53,12 +54,16 @@ interface BaseModeAttack {
  */
 export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: BaseModeAttack) => {
   const userSave = user.save!;
+  // (18 October, SUSPECTED-BUGS.md) an attack with no map version was recorded, and then failed with a 500
+  if (infernoOnlyConfig.enabled && !mapversion)
+    throw new ClientSafeError({ message: "That attack request isn't valid (no map version).", status: Status.BAD_REQUEST, data: {}, isClientFriendly: true });
   let save: Save | null = null;
 
   if (mapversion === MapRoomVersion.V1 && MR1_TRIBE_IDS.has(baseid)) {
     save = await tribeSaveHandler(baseid, mapversion, null, user);
   } else {
-    save = await postgres.em.findOne(Save, { baseid });
+    // (16 October: the oldest, when a yard was made twice: the same copy every time, bug report #96)
+    save = await postgres.em.findOne(Save, { baseid }, { orderBy: { basesaveid: "asc" } });
     if (!save) save = await tribeSaveHandler(baseid, mapversion, userSave.worldid, user);
   }
 
@@ -68,11 +73,19 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
 
   // Map Room 2 range first, before anything is written: it was checked after the attack was recorded (the
   // attacker's protection gone, the yard marked under attack) and failed with a 500.
-  if (!practice && mapversion === MapRoomVersion.V2) {
+  // (13 October) a player's yard is on the Map Room 2 map whatever version the attacker's game says: with mapversion=1
+  // sent, the range wasn't checked at all (any yard on any world could be attacked)
+  const rangeV2 = mapversion === MapRoomVersion.V2 || (infernoOnlyConfig.enabled && (save.type === BaseType.MAIN || save.type === BaseType.OUTPOST));
+  if (!practice && rangeV2) {
     const at =
       (await postgres.em.findOne(WorldMapCell, { baseid })) ??
       ({ x: parseInt(baseid.slice(-6, -3)), y: parseInt(baseid.slice(-3)), baseid } as unknown as WorldMapCell);
-    await validateRange(user, save, mapversion, { attackCell: at });
+    await validateRange(user, save, MapRoomVersion.V2, { attackCell: at });
+  } else if (!practice && infernoOnlyConfig.enabled && save.type === BaseType.TRIBE && mapversion === MapRoomVersion.V1) {
+    // (18 October, SUSPECTED-BUGS.md) a wild monster yard on the map, whatever version the game says: with
+    // mapversion=1 sent, its range was never checked (any stored tribe or Moloch yard on the world, at any distance)
+    const cell = await postgres.em.findOne(WorldMapCell, { baseid, map_version: MapRoomVersion.V2 });
+    if (cell) await validateRange(user, save, MapRoomVersion.V2, { attackCell: cell });
   }
 
   // A wild monster yard: rebuilt if nobody attacked it for 12 hours (as viewing it does), and its
@@ -88,20 +101,9 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
   // The attack's saves write nothing to it either (baseSave.ts). A tribe yard seen for the first time is
   // still stored with its map cell, as viewing it does.
 
-  if (save.type !== BaseType.TRIBE && !practice) {
-    if (save.protected > getCurrentDateTime()) throw baseProtectedErr();
-
-    // An admin testing (services/admin/testMode.ts): their yards hold the test shiny and resources.
-    if (await isTestModeOn(save.saveuserid)) throw baseProtectedErr();
-
-    if (isAttackActive(save)) throw baseUnderAttackErr();
-
-    if (save.type === BaseType.MAIN) {
-      const lastSeen = await redis.get(`last-seen:${BaseType.MAIN}:${save.userid}`);
-      if (lastSeen && parseInt(lastSeen) >= getCurrentDateTime() - 60) throw userOnlineErr();
-    }
-    // (No truces: they were taken out of the game, 4 October.)
-  }
+  // (protection, an admin testing, under attack, its player online: services/maproom/v2/attackRefusal.ts, which the
+  // map's check before an attack leaves it uses too. No truces: they were taken out of the game, 4 October.)
+  if (save.type !== BaseType.TRIBE && !practice) await checkAttackTarget(save);
 
   if (!practice && save.attacks.length > 3) save.attacks = save.attacks.slice(-2);
 
@@ -125,7 +127,8 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
   if (!practice) save.attackid = Math.floor(Math.random() * 99999) + 1;
 
   if (mapversion !== MapRoomVersion.V1) {
-    let cell = await postgres.em.findOne(WorldMapCell, { baseid });
+    // (16 October: the yard's own cell when it has one, else the oldest: a yard made twice had two, bug report #96)
+    let cell = save.cell ?? (await postgres.em.findOne(WorldMapCell, { baseid }, { orderBy: { cellid: "asc" } }));
 
     if (!cell) {
       const cellX = parseInt(baseid.slice(-6, -3));
@@ -204,5 +207,5 @@ export const baseModeAttack = async ({ user, baseid, mapversion, attackCost }: B
     await createAttackLog(user, null, save);
   }
 
-  return mapversion === MapRoomVersion.V2 ? save : await validateRange(user, save, mapversion, { baseid });
+  return rangeV2 ? save : await validateRange(user, save, mapversion, { baseid });
 };

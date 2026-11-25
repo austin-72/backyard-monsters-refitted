@@ -1,4 +1,6 @@
+import { isAttackActive } from "../../base/isAttackActive.js";
 import { raw } from "@mikro-orm/core";
+import { mainYardUnderAttack, withMoveLock } from "./moveGuard.js";
 
 import { isUnder } from "./underworld.js";
 import { User } from "../../../database/models/user.model.js";
@@ -202,7 +204,11 @@ export const declineInvite = async (user: User, baseid: string, threadid: number
  * The recipient accepts: their main yard moves onto the inviter's outpost. Returns the new coordinates,
  * or { cantMoveTill, currenttime } when they moved too recently (the client explains the wait).
  */
-export const acceptInvite = async (
+export const acceptInvite = (user: User, baseid: string, threadid: number, payWithShiny: boolean) =>
+  // (13 October) one move at a time (accepted twice at once, both left the old world), and none mid-attack
+  withMoveLock(user.userid, (message) => new InviteError(message), () => acceptInviteLocked(user, baseid, threadid, payWithShiny));
+
+const acceptInviteLocked = async (
   user: User,
   baseid: string,
   threadid: number,
@@ -213,6 +219,7 @@ export const acceptInvite = async (
   await postgres.em.populate(user, ["save"]);
   const save = user.save!;
   const now = getCurrentDateTime();
+  if (mainYardUnderAttack(save)) throw new InviteError("Your yard is being attacked. Move when the attack is over.");
 
   if (save.cantmovetill && save.cantmovetill > now) {
     return { cantMoveTill: save.cantmovetill, currenttime: now };
@@ -231,6 +238,8 @@ export const acceptInvite = async (
     throw new InviteError("That outpost no longer belongs to the player who invited you.");
   }
   if (isUnder(outpost.x, outpost.y)) throw new InviteError("Nobody can move to an outpost in the Depths of Hell.");
+  // (18 October, SUSPECTED-BUGS.md) not while it is being attacked: the attack's saves would write into the new yard
+  if (isAttackActive(outpost.save)) throw new InviteError("That outpost is being attacked right now. Try again once the attack is over.");
 
   // Price: the same as moving your main yard onto one of your own outposts.
   if (payWithShiny) {
@@ -254,46 +263,57 @@ export const acceptInvite = async (
     throw new InviteError("That world is full.");
   }
 
-  // Moving between worlds gives up the old empire: home cell and every outpost there.
-  if (crossWorld) await leaveWorld(user, save);
+  // (18 October, SUSPECTED-BUGS.md: "Accepting an invite from another world can leave the player off the map after
+  // paying": the old world was left, and the price paid, in a transaction of its own before the move's) the price,
+  // leaving the old world and the move in one transaction: if the move fails, nothing of it happened
+  const paidFrom = { credits: save.credits, resources: save.resources };
+  try {
+    await postgres.em.transactional(async (em) => {
+      // Moving between worlds gives up the old empire: home cell and every outpost there.
+      if (crossWorld) await leaveWorld(user, save);
 
-  await postgres.em.transactional(async (em) => {
-    let home = crossWorld
-      ? null
-      : await em.findOne(WorldMapCell, { uid: user.userid, base_type: MapRoomCell.HOMECELL, world: world.uuid });
+      let home = crossWorld
+        ? null
+        : await em.findOne(WorldMapCell, { uid: user.userid, base_type: MapRoomCell.HOMECELL, world: world.uuid });
 
-    if (!home) {
-      home = new WorldMapCell(world, x, y, terrainHeight);
-      home.uid = user.userid;
-      home.base_type = MapRoomCell.HOMECELL;
-      home.baseid = save.baseid;
-      save.cell = home;
-    }
+      if (!home) {
+        home = new WorldMapCell(world, x, y, terrainHeight);
+        home.uid = user.userid;
+        home.base_type = MapRoomCell.HOMECELL;
+        home.baseid = save.baseid;
+        save.cell = home;
+      }
 
-    home.x = x;
-    home.y = y;
-    home.terrainHeight = terrainHeight;
+      home.x = x;
+      home.y = y;
+      home.terrainHeight = terrainHeight;
 
-    save.worldid = world.uuid;
-    save.usemap = 1;
-    save.homebase = [x.toString(), y.toString()];
-    save.cantmovetill = now + COOLDOWN;
+      save.worldid = world.uuid;
+      save.usemap = 1;
+      save.homebase = [x.toString(), y.toString()];
+      save.cantmovetill = now + COOLDOWN;
 
-    // The outpost leaves the inviter's empire.
-    const inviterSave = inviter.save!;
-    inviterSave.outposts = inviterSave.outposts.filter((entry) => entry[2] !== baseid);
-    if (inviterSave.buildingresources) delete inviterSave.buildingresources[`b${outpost.save!.baseid}`];
+      // The outpost leaves the inviter's empire.
+      const inviterSave = inviter.save!;
+      inviterSave.outposts = inviterSave.outposts.filter((entry) => entry[2] !== baseid);
+      if (inviterSave.buildingresources) delete inviterSave.buildingresources[`b${outpost.save!.baseid}`];
 
-    if (crossWorld) {
-      await em.nativeUpdate(World, { uuid: world.uuid }, { playerCount: raw("player_count + 1") });
-    }
+      if (crossWorld) {
+        await em.nativeUpdate(World, { uuid: world.uuid }, { playerCount: raw("player_count + 1") });
+      }
 
-    invite.migratestate = "accepted";
+      invite.migratestate = "accepted";
 
-    em.persist([home, save, inviterSave, invite]);
-    em.remove([outpost.save!, outpost]);
-    await em.flush();
-  });
+      em.persist([home, save, inviterSave, invite]);
+      em.remove([outpost.save!, outpost]);
+      await em.flush();
+    });
+  } catch (e) {
+    // (the price given back on the copy too, so nothing later in the request writes it)
+    save.credits = paidFrom.credits;
+    save.resources = paidFrom.resources;
+    throw e;
+  }
 
   if (crossWorld) await invalidateWorldsCache();
 

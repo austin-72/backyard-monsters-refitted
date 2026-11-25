@@ -2,6 +2,7 @@ import { Status } from "../../enums/StatusCodes.js";
 import { User } from "../../database/models/user.model.js";
 import { requireAllianceMember } from "../../services/alliance/allianceAccess.js";
 import { alliancePowerup } from "../../services/alliance/powerups.js";
+import { powerupRow } from "../../services/alliance/powerups.js";
 import type { KoaController } from "../../utils/KoaController.js";
 
 /**
@@ -24,15 +25,7 @@ export const getPowerups: KoaController = async (ctx) => {
 
   const resolved = await alliancePowerup(alliance.id);
 
-  const powerups = resolved.map(({ rules, status }) => ({
-    powerup_id: rules.powerup_id,
-    type: rules.type,
-    active: status.active,
-    endTime: status.end_time,
-    hourly_cost: rules.hourly_cost,
-    total_running_time: rules.running_time,
-    total_recharge_time: rules.recharge_time,
-  }));
+  const powerups = resolved.map(powerupRow);
 
   ctx.status = Status.OK;
   ctx.body = { error: 0, powerups };

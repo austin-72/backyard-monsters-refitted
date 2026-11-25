@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { MouseEvent } from "flash/events";
-import { BASE, BUILDINGSPOPUP, GLOBAL, MapRoomManager, SOUNDS } from "@game";
+import { BASE, BUILDINGSPOPUP, GLOBAL, KEYS, MapRoomManager, SOUNDS } from "@game";
 
 export class BUILDINGS extends ASObject {
     public static _mc: BUILDINGSPOPUP = null;
@@ -51,6 +51,30 @@ export class BUILDINGS extends ASObject {
                 BUILDINGS._mc.ShowInfo(BUILDINGS._buildingID);
             }
         }
+    }
+
+    /**
+     * Inferno-only (QoL #300, 14 October): "Build it" from a message about a building the yard hasn't got (the
+     * General Store, the Map Room): the Buildings window, open at that building.
+     */
+    public static ioShowBuilding(type: int): void {
+        if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+            return;
+        }
+        BUILDINGS.Hide();
+        BUILDINGS._buildingID = type;
+        BUILDINGS.Show();
+    }
+
+    /** The message about a missing building, with its Build it button (Inferno; else the message alone). */
+    public static ioNeed(text: string, type: int): void {
+        if (!GLOBAL.INFERNO_ONLY || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+            GLOBAL.Message(text);
+            return;
+        }
+        GLOBAL.Message(text, KEYS.Get("io_build_it"), (): void => {
+            BUILDINGS.ioShowBuilding(type);
+        });
     }
 
     public static Hide(param1: MouseEvent = null): void {

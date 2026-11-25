@@ -1,9 +1,10 @@
 import * as as3 from "as3";
 import { int, uint } from "as3";
+import { DisplayObject, Shape } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { DropShadowFilter } from "flash/filters";
 import { Point, Rectangle } from "flash/geom";
-import { BasePlannerNodeEvent, BasePlannerPopup_DisplayItem_Building, Console, GLOBAL, KEYS, PLANNER, PlannerDesignView, PlannerItem, PlannerNode } from "@game";
+import { BasePlannerNodeEvent, BasePlannerPopup_DisplayItem_Building, Console, GLOBAL, IoPlannerIcons, KEYS, PLANNER, PlannerDesignView, PlannerItem, PlannerNode } from "@game";
 
 export class BuildingItem extends PlannerItem {
     static {
@@ -26,10 +27,11 @@ export class BuildingItem extends PlannerItem {
 
     /**
      * The icon clip has one frame per building id, but only the overworld buildings were ever
-     * drawn: the frames of the Inferno-only ids are blank. They borrow the icon of the overworld
-     * building they correspond to.
+     * drawn: the frames of some Inferno-only ids are blank or a stand-in. Those have their own
+     * pictograms now (IoPlannerIcons: the Compound and the Blast Tower used to borrow the Housing's
+     * and the Cannon Tower's); an id listed here would borrow another's frame.
      */
-    private static readonly ICON_ALIASES: any = { 130: 20, 128: 15 };
+    private static readonly ICON_ALIASES: any = {};
     public props: any;
     public node: PlannerNode;
     public category: string;
@@ -63,7 +65,17 @@ export class BuildingItem extends PlannerItem {
         if (this.category == BuildingItem.TYPE_TRAP && this.node.type == 117) {
             this.mc.mcBG.gotoAndStop("htrap");
         }
-        this.mc.mcIcon.gotoAndStop(BuildingItem.iconFrameFor(this.node.type));
+        // (Inferno-only, 8 October: the Inferno buildings the icon clip has nothing of their own for draw their own
+        // pictogram, IoPlannerIcons, just above the clip)
+        if (IoPlannerIcons.has(this.node.type)) {
+            this.mc.mcIcon.gotoAndStop(1);
+            this.mc.mcIcon.visible = false;
+            let ioIcon: Shape = IoPlannerIcons.make(this.node.type);
+            ioIcon.name = "ioIcon";
+            this.mc.addChildAt(ioIcon, (this.mc.getChildIndex(as3.cast(this.mc.mcIcon, DisplayObject)) + 1) | 0);
+        } else {
+            this.mc.mcIcon.gotoAndStop(BuildingItem.iconFrameFor(this.node.type));
+        }
         this.mc.mcInvalid.visible = false;
         this.toggleMoreInfo(false);
     }

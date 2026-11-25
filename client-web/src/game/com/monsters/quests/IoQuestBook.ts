@@ -3,10 +3,10 @@ import { ASObject, int, uint } from "as3";
 import { GradientType, Graphics, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
-import { Matrix } from "flash/geom";
+import { Matrix, Rectangle } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { getTimer } from "flash/utils";
-import { BASE, CasinoUI, GLOBAL, IoAllianceUi, IoQuestArt, IoQuests, KEYS, POPUPSETTINGS, QUESTS, SOUNDS } from "@game";
+import { getTimer, setTimeout } from "flash/utils";
+import { LOGIN, IoWin, BASE, CasinoUI, GLOBAL, IoAllianceUi, IoKit, IoQuestArt, IoQuests, IoToast, KEYS, POPUPSETTINGS, QUESTS, SOUNDS } from "@game";
 
 /**
  * Inferno-only: the quest book (the user's design of 2 October: "something like a tree of quests"), opened
@@ -24,7 +24,7 @@ import { BASE, CasinoUI, GLOBAL, IoAllianceUi, IoQuestArt, IoQuests, KEYS, POPUP
  */
 export class IoQuestBook extends ASObject {
     static {
-        as3.fields(this, { mc: null, _catRows: null, _catLayer: null, _canvas: null, _content: null, _edges: null, _nodes: null, _nodeSprites: null, _panel: null, _chestStrip: null, _top: null, _status: null, _hideToggle: null, _hint: null, _collectAll: null, _selected: null, _version: -1, _dragging: false, _dragFromX: 0, _dragFromY: 0, _dragMoved: false, _contentW: 0, _contentH: 0, _statusUntil: 0 });
+        as3.fields(this, { mc: null, _ioDailyHead: null, _catRows: null, _catLayer: null, _canvas: null, _content: null, _edges: null, _nodes: null, _nodeSprites: null, _panel: null, _chestStrip: null, _top: null, _status: null, _hideToggle: null, _hint: null, _collectAll: null, _selected: null, _version: -1, _dragging: false, _dragFromX: 0, _dragFromY: 0, _dragMoved: false, _contentW: 0, _contentH: 0, _statusUntil: 0 });
     }
 
     public static W: int; // const
@@ -77,7 +77,7 @@ export class IoQuestBook extends ASObject {
             IoQuestBook.NODE_R = 22;
             IoQuestBook.NODE_DX = 88;
             IoQuestBook.LEVEL_DY = 86;
-            IoQuestBook.GLYPHS = { "daily": "star", "start": "flag", "yard": "hall", "monsters": "egg", "battles": "sword", "map": "map", "outposts": "outpost", "alliances": "banner", "social": "chat", "events": "gift", "pit": "dice" };
+            IoQuestBook.GLYPHS = { "daily": "star", "start": "flag", "yard": "hall", "monsters": "egg", "battles": "sword", "map": "map", "outposts": "outpost", "alliances": "banner", "social": "chat", "events": "gift", "arcade": "joystick", "pit": "dice" };
             IoQuestBook._open = null;
             IoQuestBook._cat = "start";
             IoQuestBook._hideDone = false;
@@ -89,6 +89,9 @@ export class IoQuestBook extends ASObject {
     private _canvas: Sprite;
     private _content: Sprite;
     private _edges: Shape;
+
+    /** (13 October) the daily quests' countdown, when that page is shown: refreshed by IoQuests.update. */
+    private _ioDailyHead: TextField;
     private _nodes: Sprite;
     private _nodeSprites: any;
     private _panel: Sprite;
@@ -170,28 +173,30 @@ export class IoQuestBook extends ASObject {
         old.name = "ioQuestOld";
         old.x = IoQuestBook.CAT_X;
         old.y = IoQuestBook.H / 2 - 24;
+        // (QoL #143: the player guide, as on the login page)
+        let guide: Sprite = as3.as(this.mc.addChild(IoQuestBook.textLink(KEYS.Get("io_guide_link"), (): void => {
+            GLOBAL.gotoURL(GLOBAL.serverUrl + (GLOBAL.INFERNO_ONLY && LOGIN.token ? "guide/more#k=" + encodeURIComponent(LOGIN.token) : "guide")); // (QoL #653: the guide, with the chapters this player may read)
+        })), Sprite);
+        guide.name = "ioQuestGuide";
+        guide.x = old.x + old.width + 18;
+        guide.y = old.y;
         // close
-        let x: Sprite = as3.as(this.mc.addChild(new Sprite()), Sprite);
-        x.name = "ioQuestClose";
-        x.buttonMode = true;
-        x.mouseChildren = false;
-        x.graphics.lineStyle(2, 14708778, 1);
-        x.graphics.beginFill(2755078, 1);
-        x.graphics.drawCircle(0, 0, 14);
-        x.graphics.endFill();
-        x.graphics.lineStyle(3, 16766346, 1);
-        x.graphics.moveTo(-5, -5);
-        x.graphics.lineTo(5, 5);
-        x.graphics.moveTo(5, -5);
-        x.graphics.lineTo(-5, 5);
+        // (the kit's close button, 11 October)
+        let x: Sprite = as3.as(this.mc.addChild(IoKit.closeButton("ioQuestClose", 14, (e: any): void => {})), Sprite);
         x.x = IoQuestBook.W / 2 - 24;
         x.y = -IoQuestBook.H / 2 + 24;
         x.addEventListener(MouseEvent.CLICK, as3.bind(this, this.close));
         this.mc.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.tick));
         GLOBAL.BlockerAdd(GLOBAL._layerTop);
+        // (QoL #464: a click on the backdrop closes it)
+        GLOBAL.ioBackdropCloses((): void => {
+            this.close();
+        });
         GLOBAL._layerTop.addChild(this.mc);
         POPUPSETTINGS.AlignToCenter(this.mc);
-        POPUPSETTINGS.ScaleUp(this.mc);
+        IoWin.fit(this.mc, IoQuestBook.W, IoQuestBook.H); // (QoL #466: fits a small stage)
+        // (12 October: no growing in: the whole book, tree and glows, was drawn again at every step of it, a few
+        // stuttering frames instead of a smooth pop; it opens at once)
         this.redraw(true);
     }
 
@@ -201,6 +206,11 @@ export class IoQuestBook extends ASObject {
             return;
         }
         if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+            // (QoL #674: a click on the dock while visiting says why nothing opens)
+            let m: string = String(GLOBAL.mode);
+            if (GLOBAL.INFERNO_ONLY && /view/i.test(m)) {
+                IoToast.Show(KEYS.Get("io_quest_book_home"), 4000);
+            }
             return;
         }
         if (IoQuestBook._open && (!IoQuestBook._open.mc || !IoQuestBook._open.mc.stage)) {
@@ -221,10 +231,15 @@ export class IoQuestBook extends ASObject {
             }
             return;
         }
-        if (GLOBAL._newBuilding) {
-            GLOBAL._newBuilding.Cancel();
-        }
+        // (QoL #470: a building in the hand is kept, out of sight, until the book closes)
+        GLOBAL.ioHoldPut();
+        // (the deselect would cancel it: it is kept aside meanwhile)
+        let held: any = GLOBAL.INFERNO_ONLY ? GLOBAL._newBuilding : null;
+        GLOBAL._newBuilding = held ? null : GLOBAL._newBuilding;
         BASE.BuildingDeselect();
+        if (held) {
+            GLOBAL._newBuilding = held;
+        }
         SOUNDS.Play("click1");
         IoQuestBook._open = new IoQuestBook(focus && focus.indexOf("daily:") != 0 ? focus : null);
         IoQuests.refresh(GLOBAL.Timestamp() - IoQuests.fetchedAt > 15);
@@ -250,6 +265,8 @@ export class IoQuestBook extends ASObject {
         bg.graphics.drawRoundRect(-IoQuestBook.W / 2, -IoQuestBook.H / 2, IoQuestBook.W, IoQuestBook.H, 22, 22);
         bg.graphics.endFill();
         bg.filters = [new GlowFilter(0xFF4A00, 0.55, 18, 18, 2, 2)];
+        // (12 October: its inside is opaque, so a live yard under it is not drawn again under it: DisplayObject.ioOccludes)
+        this.mc.ioOccludes(new Rectangle(-IoQuestBook.W / 2 + 12, -IoQuestBook.H / 2 + 12, IoQuestBook.W - 24, IoQuestBook.H - 24));
         let art: Sprite = as3.as(this.mc.addChild(new Sprite()), Sprite);
         art.alpha = 0.55;
         CasinoUI.picture(art, "leaderboards/bg.jpg", -IoQuestBook.W / 2 + 6, -IoQuestBook.H / 2 + 6, IoQuestBook.W - 12, IoQuestBook.H - 12);
@@ -258,6 +275,8 @@ export class IoQuestBook extends ASObject {
         mask.graphics.drawRoundRect(-IoQuestBook.W / 2 + 6, -IoQuestBook.H / 2 + 6, IoQuestBook.W - 12, IoQuestBook.H - 12, 18, 18);
         mask.graphics.endFill();
         art.mask = mask;
+        // (the kit's forged rim, 11 October)
+        IoKit.rim(this.mc, "ioQuestRim", -IoQuestBook.W / 2, -IoQuestBook.H / 2, IoQuestBook.W, IoQuestBook.H, bg);
     }
 
     // ---- drawing it all (again when the book changes)
@@ -273,6 +292,7 @@ export class IoQuestBook extends ASObject {
             CasinoUI.removeAll(this._chestStrip);
             let wait: TextField = as3.as(this._nodes.addChild(CasinoUI.label(KEYS.Get("io_quest_loading"), 14, CasinoUI.ASH, true, IoQuestBook.CANVAS_W, TextFormatAlign.CENTER)), TextField);
             wait.y = IoQuestBook.CANVAS_H / 2 - 12;
+            IoWin.watchLoading(wait); // (QoL #447)
             this._content.x = this._content.y = 0;
             return;
         }
@@ -309,6 +329,14 @@ export class IoQuestBook extends ASObject {
         let line: TextField = as3.as(this._top.addChild(CasinoUI.label(KEYS.Get("io_quest_book_line", { "v1": claimed, "v2": total, "v3": chestsDone, "v4": Math.max(0, chests.length - 1) }), 11, CasinoUI.GOLD, true, (barW + 40) | 0, TextFormatAlign.LEFT)), TextField);
         line.x = x0;
         line.y = y0;
+        // (QoL #122: the Shiny the book still holds: quests and chests not collected, classified ones left out)
+        let toEarn: int = IoQuestBook.ioShinyToEarn(book);
+        if (toEarn > 0) {
+            let more: TextField = as3.as(this._top.addChild(CasinoUI.label(KEYS.Get("io_quest_shiny_left", { "v1": GLOBAL.FormatNumber(toEarn) }), 10, CasinoUI.ASH, false, (barW + 40) | 0, TextFormatAlign.LEFT)), TextField);
+            more.name = "ioQuestShinyLeft";
+            more.x = x0;
+            more.y = y0 + 33;
+        }
         // the book's own chest
         if (bookChest) {
             let bc: Sprite = this.chestButton(bookChest, 34);
@@ -324,11 +352,30 @@ export class IoQuestBook extends ASObject {
         this._collectAll.y = -IoQuestBook.H / 2 + 46;
     }
 
+    /** QoL #122: the Shiny still to collect from the book (quests and chests), classified quests left out. */
+    public static ioShinyToEarn(book: any): int {
+        let n: int = 0;
+        if (!book) {
+            return 0;
+        }
+        for (let q of as3.values(as3.as(book.quests, Array) || [])) {
+            if (q.state != "claimed" && q.state != "classified" && q.reward && q.reward.shiny) {
+                n = (n + (q.reward.shiny | 0)) | 0;
+            }
+        }
+        for (let c of as3.values(as3.as(book.chests, Array) || [])) {
+            if (c.state != "claimed" && c.reward && c.reward.shiny) {
+                n = (n + (c.reward.shiny | 0)) | 0;
+            }
+        }
+        return n;
+    }
+
     private drawCategories(): void {
         CasinoUI.removeAll(this._catLayer);
         this._catRows = {};
         let book: any = IoQuests.book;
-        let cats: any[] = ["daily"].concat(book && book.categories ? as3.as(book.categories, Array) : ["start", "yard", "monsters", "battles", "map", "outposts", "alliances", "social", "events", "pit"]);
+        let cats: any[] = ["daily"].concat(book && book.categories ? as3.as(book.categories, Array) : ["start", "yard", "monsters", "battles", "map", "outposts", "alliances", "social", "events", "arcade", "pit"]);
         let y: int = (IoQuestBook.CANVAS_Y - 28) | 0;
         for (const $value of as3.values(cats)) {
             let cat: string = as3.str($value);
@@ -338,6 +385,10 @@ export class IoQuestBook extends ASObject {
             if (book) {
                 if (cat == "daily") {
                     for (let d of as3.values(book.daily.quests)) {
+                        if (d.yesterday) {
+                            ready++;
+                            continue;
+                        }
                         all++;
                         if (d.state == "claimed") {
                             done++;
@@ -384,12 +435,30 @@ export class IoQuestBook extends ASObject {
         row.name = "ioQuestCat:" + cat;
         row.buttonMode = true;
         row.mouseChildren = false;
-        let m: Matrix = new Matrix();
-        m.createGradientBox(IoQuestBook.CAT_W, 30, Math.PI / 2, 0, 0);
-        row.graphics.lineStyle(1, (on ? 0xFFE0A0 : 0x7A5A48) >>> 0, 1);
-        row.graphics.beginGradientFill(GradientType.LINEAR, on ? [0xE08A30, 0x9A3010] : [0x3A2A26, 0x1E1614], [1, 1], [0, 255], m);
-        row.graphics.drawRoundRect(0, 0, IoQuestBook.CAT_W, 30, 8, 8);
-        row.graphics.endFill();
+        let hot: boolean = false;
+        let drawRow: Function = (): void => {
+            row.graphics.clear();
+            // the kit's buttons (11 October): molten for the open one, obsidian (lit when pointed at) for the rest
+            if (IoKit.slice(row.graphics, on ? "btn_molten" : (hot ? "btn_obsidian_h" : "btn_obsidian"), 0, 0, IoQuestBook.CAT_W, 30)) {
+                return;
+            }
+            let m: Matrix = new Matrix();
+            m.createGradientBox(IoQuestBook.CAT_W, 30, Math.PI / 2, 0, 0);
+            row.graphics.lineStyle(1, (on ? 0xFFE0A0 : 0x7A5A48) >>> 0, 1);
+            row.graphics.beginGradientFill(GradientType.LINEAR, on ? [0xE08A30, 0x9A3010] : [0x3A2A26, 0x1E1614], [1, 1], [0, 255], m);
+            row.graphics.drawRoundRect(0, 0, IoQuestBook.CAT_W, 30, 8, 8);
+            row.graphics.endFill();
+        };
+        drawRow();
+        IoKit.whenLoaded(["btn_molten", "btn_obsidian", "btn_obsidian_h"], drawRow);
+        row.addEventListener(MouseEvent.ROLL_OVER, (e: MouseEvent): void => {
+            hot = true;
+            drawRow();
+        });
+        row.addEventListener(MouseEvent.ROLL_OUT, (e: MouseEvent): void => {
+            hot = false;
+            drawRow();
+        });
         let g: Sprite = as3.as(row.addChild(IoQuestArt.glyph(as3.str(IoQuestBook.GLYPHS[cat] || "star"), 18)), Sprite);
         g.x = 15;
         g.y = 15;
@@ -593,8 +662,9 @@ export class IoQuestBook extends ASObject {
         s.mouseChildren = false;
         let state: string = String(q.state);
         let g: Graphics = s.graphics;
-        let fill: uint = (state == "claimed" ? 0x3A2A16 : state == "ready" ? 0x6A3A10 : state == "locked" ? 0x1E1A1A : 0x2A1A16) >>> 0;
-        let ring: uint = (state == "claimed" ? 0xC89A4A : state == "ready" ? 0xFFD58A : state == "locked" ? 0x4A4440 : 0x8A4A2A) >>> 0;
+        let secret: boolean = state == "classified";
+        let fill: uint = (secret ? 0x1A1424 : state == "claimed" ? 0x3A2A16 : state == "ready" ? 0x6A3A10 : state == "locked" ? 0x1E1A1A : 0x2A1A16) >>> 0;
+        let ring: uint = (secret ? 0x6A5A8A : state == "claimed" ? 0xC89A4A : state == "ready" ? 0xFFD58A : state == "locked" ? 0x4A4440 : 0x8A4A2A) >>> 0;
         g.lineStyle(q.optional ? 2 : 3, ring, 1);
         g.beginFill(fill, 1);
         g.drawCircle(0, 0, IoQuestBook.NODE_R);
@@ -616,7 +686,7 @@ export class IoQuestBook extends ASObject {
             s.filters = [new GlowFilter(0xFFB040, 0.9, 14, 14, 2, 2)];
             s["ioReady"] = true;
         }
-        let name: TextField = IoAllianceUi.text(IoQuests.title(q), 9, (state == "locked" ? 0x7A6A60 : state == "claimed" ? 0xC8B898 : CasinoUI.GOLD) >>> 0, state == "ready", (IoQuestBook.NODE_DX - 6) | 0, TextFormatAlign.CENTER, false, true);
+        let name: TextField = IoAllianceUi.text(IoQuests.title(q), 9, (secret ? 0x9A8AB8 : state == "locked" ? 0x7A6A60 : state == "claimed" ? 0xC8B898 : CasinoUI.GOLD) >>> 0, state == "ready", (IoQuestBook.NODE_DX - 6) | 0, TextFormatAlign.CENTER, false, true);
         name.x = -(IoQuestBook.NODE_DX - 6) / 2;
         name.y = IoQuestBook.NODE_R + 4;
         if (name.height > 30) {
@@ -786,6 +856,69 @@ export class IoQuestBook extends ASObject {
         return b;
     }
 
+    private static ioDailyHeadText(): string {
+        let daily: any = IoQuests.book.daily;
+        let left: int = ((daily.endsIn | 0) - (GLOBAL.Timestamp() - IoQuests.fetchedAt)) | 0;
+        // (Inferno-only, QoL #569: to the second, as it ticks; it moved in 2-minute jumps and sat at "1m")
+        // (and, QoL #567, when that is on the player's own clock)
+        // (16 October: the clock time it comes at is in the panel beside it, io_quest_daily_info_io: with it here the
+        // line ran past the list's edge, "(at 19:00 your ti")
+        return KEYS.Get("io_quest_daily_head", { "v1": GLOBAL.INFERNO_ONLY ? IoQuestBook.ioClock(left) : IoQuestBook.hoursMinutes(left) });
+    }
+
+    /** "5h 12m 08s", "4m 05s", "0m 00s". */
+    private static ioClock(sec: int): string {
+        sec = Math.max(0, sec) | 0;
+        let h: int = (sec / 3600) | 0;
+        let m: int = ((sec % 3600) / 60) | 0;
+        let s: int = sec % 60;
+        let ss: string = (s < 10 ? "0" : "") + s + "s";
+        return h > 0 ? h + "h " + (m < 10 ? "0" : "") + m + "m " + ss : m + "m " + ss;
+    }
+
+    /**
+     * Inferno-only (QoL #569): the daily countdown ticks every second while it shows; at 0 the book is asked for
+     * again (the new day's quests), once.
+     */
+    private ioTickDaily(head: TextField): void {
+        let last: int = 0;
+        let asked: boolean = false;
+        let tick: Function = null;
+        tick = (e: Event): void => {
+            if (!head.stage || this._ioDailyHead != head) {
+                head.removeEventListener(Event.ENTER_FRAME, tick);
+                return;
+            }
+            let now: int = getTimer();
+            if (now - last < 1000) {
+                return;
+            }
+            last = now;
+            if (!IoQuests.book || !IoQuests.book.daily) {
+                return;
+            }
+            head.text = IoQuestBook.ioDailyHeadText();
+            let left: int = ((IoQuests.book.daily.endsIn | 0) - (GLOBAL.Timestamp() - IoQuests.fetchedAt)) | 0;
+            if (left <= 0 && !asked) {
+                asked = true;
+                IoQuests.refresh(true);
+            }
+        };
+        head.addEventListener(Event.ENTER_FRAME, tick);
+    }
+
+    /**
+     * Inferno-only (13 October): the same book came again (IoQuests.update draws nothing): only the daily quests'
+     * countdown, if that page is open, moves on (it had stopped since the book is no longer built again each time).
+     */
+    public static ioRefreshCountdown(): void {
+        let b: IoQuestBook = IoQuestBook._open;
+        if (!b || !b._ioDailyHead || !b._ioDailyHead.parent || !IoQuests.book || !IoQuests.book.daily) {
+            return;
+        }
+        b._ioDailyHead.text = IoQuestBook.ioDailyHeadText();
+    }
+
     // ---- today's daily quests
     private drawDaily(): void {
         CasinoUI.removeAll(this._nodes);
@@ -796,13 +929,19 @@ export class IoQuestBook extends ASObject {
         this._contentH = IoQuestBook.CANVAS_H;
         this._content.x = this._content.y = 0;
         let daily: any = IoQuests.book.daily;
-        let head: TextField = as3.as(this._nodes.addChild(CasinoUI.label(KEYS.Get("io_quest_daily_head", { "v1": IoQuestBook.hoursMinutes(((daily.endsIn | 0) - (GLOBAL.Timestamp() - IoQuests.fetchedAt)) | 0) }), 12, CasinoUI.GOLD, true, (IoQuestBook.CANVAS_W - 20) | 0, TextFormatAlign.LEFT)), TextField);
+        let head: TextField = as3.as(this._nodes.addChild(CasinoUI.label(IoQuestBook.ioDailyHeadText(), 12, CasinoUI.GOLD, true, (IoQuestBook.CANVAS_W - 20) | 0, TextFormatAlign.LEFT)), TextField);
+        this._ioDailyHead = head;
+        if (GLOBAL.INFERNO_ONLY) {
+            // (a longer language kept to the list's width)
+            GLOBAL.ioFitText(head, 10);
+            this.ioTickDaily(head);
+        }
         head.x = 12;
         head.y = 8;
         let y: int = 34;
         for (let d of as3.values(daily.quests)) {
             this._nodes.addChild(this.dailyCard(d, y));
-            y += 72;
+            y += IoQuestBook.DAILY_H + 8;
         }
         // all three: the bonus
         let bonus: any = daily.bonus;
@@ -810,10 +949,19 @@ export class IoQuestBook extends ASObject {
         card.y = y + 4;
         card.x = 10;
         let w: int = (IoQuestBook.CANVAS_W - 20) | 0;
-        card.graphics.lineStyle(1.5, (bonus.state == "ready" ? 0xFFD58A : 0x7A5A48) >>> 0, 1);
-        card.graphics.beginFill(2759184, 0.9);
-        card.graphics.drawRoundRect(0, 0, w, 56, 10, 10);
-        card.graphics.endFill();
+        // (the UI kit's obsidian panel, a gold line round a ready one; 11 October)
+        if (IoKit.panel(card.graphics, 0, 0, w, 56)) {
+            if (bonus.state == "ready") {
+                card.graphics.lineStyle(1.5, 0xFFD58A, 1);
+                card.graphics.drawRoundRect(1, 1, w - 2, 56 - 2, 12, 12);
+                card.graphics.lineStyle();
+            }
+        } else {
+            card.graphics.lineStyle(1.5, (bonus.state == "ready" ? 0xFFD58A : 0x7A5A48) >>> 0, 1);
+            card.graphics.beginFill(2759184, 0.9);
+            card.graphics.drawRoundRect(0, 0, w, 56, 10, 10);
+            card.graphics.endFill();
+        }
         let cb: Sprite = as3.as(card.addChild(this.chestButton({ "state": bonus.state }, 28)), Sprite);
         cb.x = 24;
         cb.y = 28;
@@ -839,7 +987,7 @@ export class IoQuestBook extends ASObject {
     }
 
     /** Words that can be clicked, underlined, in the book's gold. */
-    private static textLink(label: string, onClick: Function): Sprite {
+    public static textLink(label: string, onClick: Function): Sprite {
         let s: Sprite = new Sprite();
         let t: TextField = CasinoUI.label(label, 10, CasinoUI.ASH, false, 220, TextFormatAlign.LEFT);
         t.htmlText = "<u>" + label + "</u>";
@@ -857,39 +1005,114 @@ export class IoQuestBook extends ASObject {
         return s;
     }
 
+    /**
+     * A daily quest's card's height. (16 October: 70, two lines for what the quest asks; one line cut it off: "Chat in
+     * Global 3 times today (a minute apart, and not the")
+     */
+    private static readonly DAILY_H: int = 70;
+
     private dailyCard(d: any, y: int): Sprite {
         let card: Sprite = new Sprite();
         card.name = "ioQuestDaily:" + d.id;
         card.x = 10;
         card.y = y;
         let w: int = (IoQuestBook.CANVAS_W - 20) | 0;
-        card.graphics.lineStyle(1.5, (d.state == "ready" ? 0xFFD58A : 0x7A5A48) >>> 0, 1);
-        card.graphics.beginFill(1971218, 0.95);
-        card.graphics.drawRoundRect(0, 0, w, 64, 10, 10);
-        card.graphics.endFill();
+        // (the UI kit's obsidian panel, a gold line round a ready one; 11 October)
+        let ch: int = IoQuestBook.DAILY_H;
+        if (IoKit.panel(card.graphics, 0, 0, w, ch)) {
+            if (d.state == "ready") {
+                card.graphics.lineStyle(1.5, 0xFFD58A, 1);
+                card.graphics.drawRoundRect(1, 1, w - 2, ch - 2, 12, 12);
+                card.graphics.lineStyle();
+            }
+        } else {
+            card.graphics.lineStyle(1.5, (d.state == "ready" ? 0xFFD58A : 0x7A5A48) >>> 0, 1);
+            card.graphics.beginFill(1971218, 0.95);
+            card.graphics.drawRoundRect(0, 0, w, ch, 10, 10);
+            card.graphics.endFill();
+        }
         if (d.state == "ready") {
             card.filters = [new GlowFilter(0xFFB040, 0.7, 10, 10, 2, 2)];
         }
         let g: Sprite = as3.as(card.addChild(IoQuestArt.glyph(String(d.icon), 30, d.state == "claimed")), Sprite);
         g.x = 26;
-        g.y = 32;
+        g.y = (ch / 2) | 0;
         let t: TextField = as3.as(card.addChild(CasinoUI.label(IoQuests.title(d), 12, CasinoUI.GOLD, true, (w - 170) | 0, TextFormatAlign.LEFT)), TextField);
         t.x = 50;
         t.y = 4;
         // (up to the button, and smaller when that is still too short: longer languages were cut off)
         let desc: TextField = as3.as(card.addChild(CasinoUI.label(IoQuests.describe(d), 10, 14733504, false, (w - 162) | 0, TextFormatAlign.LEFT)), TextField);
         desc.x = 50;
-        desc.y = 21;
-        GLOBAL.ioFitText(desc);
-        IoQuestBook.bar(card.graphics, 50, 40, 120, 8, Number((d.target | 0) > 0 ? Number(d.value) / Number(d.target) : 0));
+        desc.y = 20;
+        // (two lines, and smaller only when two are still too few)
+        desc.wordWrap = true;
+        desc.multiline = true;
+        desc.height = 28;
+        GLOBAL.ioFitHeight(desc, 8);
+        let barY: int = desc.numLines > 1 ? 48 : 40;
+        IoQuestBook.bar(card.graphics, 50, barY, 120, 8, Number((d.target | 0) > 0 ? Number(d.value) / Number(d.target) : 0));
         let p: TextField = as3.as(card.addChild(CasinoUI.label(GLOBAL.FormatNumber(Number(d.value)) + " / " + GLOBAL.FormatNumber(Number(d.target)), 9, CasinoUI.ASH, false, 80, TextFormatAlign.LEFT)), TextField);
         p.x = 176;
-        p.y = 36;
+        p.y = barY - 4;
         let rw: TextField = as3.as(card.addChild(CasinoUI.label(IoQuests.rewardText(d.reward), 9, CasinoUI.ASH, false, (w - 120) | 0, TextFormatAlign.LEFT)), TextField);
         rw.x = 50;
-        rw.y = 48;
+        rw.y = barY + 9;
         this.stateButton(card, String(d.state), "daily:" + d.id, w, String(d.go || ""));
+        // (Inferno-only, QoL #119: the day's free reroll, on a daily quest still to do: under Go there, which moves up)
+        if (IoQuests.rerollFree && String(d.state) == "progress" && !d.yesterday) {
+            rw.width = w - 170;
+            GLOBAL.ioFitText(rw);
+            this.ioRerollButton(card, d, w);
+        }
         return card;
+    }
+
+    /** QoL #119: Reroll on a daily quest's card; a first click asks again ("Sure?"), the second swaps it. */
+    private ioRerollButton(card: Sprite, d: any, w: int): void {
+        let armed: boolean = false;
+        let id: string = String(d.id);
+        // (the card's Go there, if it has one: CasinoUI.button names a button by its text)
+        let go: Sprite = as3.as(card.getChildByName("casinoButton:" + KEYS.Get("io_quest_go")), Sprite);
+        if (go) {
+            go.y = 6;
+        }
+        let b: Sprite = null;
+        b = as3.as(card.addChild(CasinoUI.button(KEYS.Get("io_q2_reroll"), 96, go ? 22 : 26, (e: MouseEvent): void => {
+            if (IoQuests.rerolling) {
+                return;
+            }
+            if (!armed) {
+                armed = true;
+                CasinoUI.relabel(b, KEYS.Get("io_q2_reroll_sure"));
+                this.say(KEYS.Get("io_q2_reroll_ask"), 4);
+                setTimeout((): void => {
+                    if (armed && b.stage) {
+                        armed = false;
+                        CasinoUI.relabel(b, KEYS.Get("io_q2_reroll"));
+                    }
+                }, 4000);
+                return;
+            }
+            armed = false;
+            CasinoUI.enable(b, false);
+            this.say(KEYS.Get("io_q2_rerolling"), 0);
+            IoQuests.reroll(id, (to: string, error: string): void => {
+                if (!this.mc || !this.mc.stage) {
+                    return;
+                }
+                if (!to) {
+                    this.say(error, 6);
+                    CasinoUI.enable(b, true);
+                    CasinoUI.relabel(b, KEYS.Get("io_q2_reroll"));
+                    return;
+                }
+                let fresh: any = IoQuests.quest("daily:" + to);
+                this.say(KEYS.Get("io_q2_rerolled", { "v1": fresh ? IoQuests.title(fresh) : "" }), 6);
+            });
+        }, !IoQuests.rerolling, go ? 10 : 11)), Sprite);
+        b.name = "ioQRerollBtn:" + id;
+        b.x = w - 106;
+        b.y = go ? 34 : 19;
     }
 
     /** Collect (ready), Go there (still to do and there is somewhere to go), or Collected. */
@@ -921,7 +1144,14 @@ export class IoQuestBook extends ASObject {
         let w: int = IoQuestBook.PANEL_W;
         let y: int = 12;
         if (IoQuestBook._cat == "daily") {
-            IoAllianceUi.addText(this._panel, KEYS.Get("io_quest_daily_info"), 12, y, 11, 14733504, false, (w - 24) | 0, TextFormatAlign.LEFT, false, true);
+            // (Inferno-only, 16 October: when they change on the player's own clock, as the countdown counts to it; it
+            // said "midnight (UTC)")
+            let info: TextField = IoAllianceUi.addText(this._panel, GLOBAL.INFERNO_ONLY ? KEYS.Get("io_quest_daily_info_io", { "v1": GLOBAL.ioNewDayAt() }) : KEYS.Get("io_quest_daily_info"), 12, y, 11, 14733504, false, (w - 24) | 0, TextFormatAlign.LEFT, false, true);
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #119: the day's free reroll, there or used)
+                let more: TextField = IoAllianceUi.addText(this._panel, KEYS.Get(IoQuests.rerollFree ? "io_q2_reroll_info" : "io_q2_reroll_info_used"), 12, (info.y + info.height + 10) | 0, 10, CasinoUI.ASH, false, (w - 24) | 0, TextFormatAlign.LEFT, false, true);
+                more.name = "ioQRerollInfo";
+            }
             return;
         }
         let q: any = this._selected ? IoQuests.quest(this._selected) : null;
@@ -931,8 +1161,9 @@ export class IoQuestBook extends ASObject {
         }
         let state: string = String(q.state);
         let ring: Sprite = as3.as(this._panel.addChild(new Sprite()), Sprite);
-        ring.graphics.lineStyle(3, (state == "ready" ? 0xFFD58A : state == "claimed" ? 0xC89A4A : state == "locked" ? 0x4A4440 : 0x8A4A2A) >>> 0, 1);
-        ring.graphics.beginFill(1970704, 1);
+        let secret: boolean = state == "classified";
+        ring.graphics.lineStyle(3, (secret ? 0x6A5A8A : state == "ready" ? 0xFFD58A : state == "claimed" ? 0xC89A4A : state == "locked" ? 0x4A4440 : 0x8A4A2A) >>> 0, 1);
+        ring.graphics.beginFill((secret ? 0x1A1424 : 0x1E1210) >>> 0, 1);
         ring.graphics.drawCircle(0, 0, 34);
         ring.graphics.endFill();
         ring.x = w / 2;
@@ -946,13 +1177,35 @@ export class IoQuestBook extends ASObject {
         title.name = "ioQuestPanelTitle";
         y = (y + (title.height + 2)) | 0;
         let stateLine: string = KEYS.Get("io_quest_state_" + state);
-        let st: TextField = IoAllianceUi.addText(this._panel, stateLine, 10, y, 10, (state == "ready" ? 0xFFB040 : state == "claimed" ? CasinoUI.WIN : CasinoUI.ASH) >>> 0, true, (w - 20) | 0, TextFormatAlign.CENTER);
+        let st: TextField = IoAllianceUi.addText(this._panel, stateLine, 10, y, 10, (secret ? 0x9A8AB8 : state == "ready" ? 0xFFB040 : state == "claimed" ? CasinoUI.WIN : CasinoUI.ASH) >>> 0, true, (w - 20) | 0, TextFormatAlign.CENTER);
         y = (y + (st.height + 6)) | 0;
         let desc: TextField = IoAllianceUi.addText(this._panel, IoQuests.describe(q), 12, y, 11, 15260872, false, (w - 24) | 0, TextFormatAlign.LEFT, false, true);
         y = (y + (desc.height + 6)) | 0;
+        // a classified quest: what it is stays secret (no progress, no reward shown) until something happens
+        if (secret) {
+            let hint: TextField = IoAllianceUi.addText(this._panel, KEYS.Get("io_quest_classified_hint"), 12, y, 10, 10128056, false, (w - 24) | 0, TextFormatAlign.LEFT, false, true);
+            y = (y + (hint.height + 6)) | 0;
+            return;
+        }
         if (state == "locked") {
             let parent: any = q.parent ? IoQuests.quest(String(q.parent)) : null;
             let lk: TextField = IoAllianceUi.addText(this._panel, KEYS.Get("io_quest_needs", { "v1": parent ? IoQuests.title(parent) : "?" }), 12, y, 10, 13148288, false, (w - 24) | 0, TextFormatAlign.LEFT, false, true);
+            if (parent) {
+                // (QoL #124: the quest it needs, a click away)
+                lk.htmlText = KEYS.Get("io_quest_needs", { "v1": "<u>" + String(IoQuests.title(parent)).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") + "</u>" });
+                let go: Sprite = new Sprite();
+                go.name = "ioQuestNeeds";
+                go.graphics.beginFill(0, 0);
+                go.graphics.drawRect(lk.x, lk.y, lk.width, lk.height);
+                go.graphics.endFill();
+                go.buttonMode = true;
+                let parentId: string = String(parent.id);
+                go.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                    SOUNDS.Play("click1");
+                    IoQuestBook.Show(null, parentId);
+                });
+                this._panel.addChild(go);
+            }
             y = (y + (lk.height + 6)) | 0;
         } else if (state != "claimed") {
             IoQuestBook.bar(this._panel.graphics, 12, y + 2, w - 24, 10, Number((q.target | 0) > 0 ? Number(q.value) / Number(q.target) : 0));
@@ -970,11 +1223,14 @@ export class IoQuestBook extends ASObject {
         }
         // the buttons, at the foot
         let by: int = (IoQuestBook.CANVAS_H + 64 - 42) | 0;
+        // (QoL #118: the top of the buttons there, for Track in the dock above them)
+        let footTop: int = (IoQuestBook.CANVAS_H + 64 - 8) | 0;
         if (state == "ready") {
             let c: Sprite = as3.as(this._panel.addChild(CasinoUI.button(KEYS.Get("io_quest_collect"), (w - 24) | 0, 32, this.claimFn(String(q.id)), !IoQuests.claiming, 14)), Sprite);
             c.name = "ioQuestCollect";
             c.x = 12;
             c.y = by;
+            footTop = by;
             by -= 38;
         }
         if (q.go && state != "claimed") {
@@ -982,6 +1238,25 @@ export class IoQuestBook extends ASObject {
             g.name = "ioQuestGo";
             g.x = 12;
             g.y = by + 4;
+            footTop = (by + 4) | 0;
+        }
+        // (Inferno-only, QoL #118, 15 October: Track in the dock, up to IoQuests.TRACK_MAX quests still to do; the dock
+        // shows them after the ready ones instead of the closest to done)
+        if (GLOBAL.INFERNO_ONLY && (state == "progress" || state == "locked")) {
+            let qid: string = String(q.id);
+            let on: boolean = IoQuests.isTracked(qid);
+            let track: Sprite = as3.as(this._panel.addChild(CasinoUI.toggle(KEYS.Get(on ? "io_q2_tracked" : "io_q2_track"), (w - 24) | 0, 24, (e: MouseEvent): void => {
+                let now: boolean = IoQuests.isTracked(qid);
+                if (!IoQuests.setTracked(qid, !now)) {
+                    this.say(KEYS.Get("io_q2_track_full", { "v1": IoQuests.TRACK_MAX }), 5);
+                    return;
+                }
+                this.say(KEYS.Get(now ? "io_q2_track_off" : "io_q2_track_on"), 4);
+            })), Sprite);
+            track.name = "ioQTrackToggle";
+            CasinoUI.choose(track, on);
+            track.x = 12;
+            track.y = (footTop - 30) | 0;
         }
     }
 
@@ -1088,5 +1363,6 @@ export class IoQuestBook extends ASObject {
         if (IoQuestBook._open == this) {
             IoQuestBook._open = null;
         }
+        GLOBAL.ioHoldBack();
     }
 }

@@ -201,6 +201,9 @@ function isUintValue(v: any): boolean {
 
 export function is(v: any, type: any): boolean {
   if (type == null) return true;
+  // (an instance of a class, the usual case: before the switch over the built-in types; a battle asks
+  // "is this a BitmapData" for every thing drawn in every redrawn rectangle. A Vector is an Array in JS, not in AS3.)
+  if (type !== Array && typeof type === "function" && v instanceof type) return true;
   switch (type) {
     case int: return isIntValue(v);
     case uint: return isUintValue(v);
@@ -543,7 +546,7 @@ export function vsetLength(v: any, n: any): any {
   if ((v as any).$fixed) throw new RangeError("Error #1126: Cannot change the length of a fixed Vector.");
   const len = n >>> 0, old = v.length;
   v.length = len;
-  for (let j = old; j < len; j++) v[j] = elemDefault((v as any).$type);
+  if (len > old) { const d = elemDefault((v as any).$type); for (let j = old; j < len; j++) v[j] = d; }
   return n;
 }
 
@@ -558,7 +561,9 @@ export class Vector<T> extends Array<T> {
     this.$type = type;
     this.$fixed = false;
     const n = length >>> 0;
-    for (let i = 0; i < n; i++) (this as any)[i] = elemDefault(type);
+    // (19 October: the default once, not for every slot: a battle's paths each made a list of 67,600)
+    const d = elemDefault(type);
+    for (let i = 0; i < n; i++) (this as any)[i] = d;
     this.$fixed = !!fixed;
   }
   static from(src: any, type: any = null): Vector<any> {
@@ -585,9 +590,17 @@ export class Vector<T> extends Array<T> {
     if ((this as any).$fixed) throw new RangeError("Error #1126: Cannot change the length of a fixed Vector.");
   }
   push(...items: T[]): number {
-    this.checkFixed();
-    const r = this.raw();
-    for (const x of items) Array.prototype.push.call(r, elemCoerce((r as any).$type, x));
+    // (the game pushes onto its lists thousands of times a frame in a battle: no iterator, the type read once,
+    // an untyped list's items pushed as they are)
+    const r: any = this.raw();
+    if (r.$fixed) this.checkFixed();
+    const t = r.$type;
+    if (t == null || t === Object || t === Function) {
+      if (items.length === 1) Array.prototype.push.call(r, items[0]);
+      else Array.prototype.push.apply(r, items);
+    } else {
+      for (let i = 0; i < items.length; i++) Array.prototype.push.call(r, elemCoerce(t, items[i]));
+    }
     return r.length;
   }
   unshift(...items: T[]): number {

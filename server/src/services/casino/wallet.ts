@@ -7,6 +7,8 @@ import { postgres } from "../../server.js";
 import { casinoErr } from "./access.js";
 import { configuredAdmins } from "../admin/admin.js";
 import { fairStream, hashSeed, newClientSeed, newServerSeed, wholeShiny, type FairStream } from "./rng.js";
+import { luckFor, luckRoll } from "./luck.js";
+import { sharedView } from "./sharedView.js";
 
 export type Em = typeof postgres.em;
 
@@ -60,6 +62,11 @@ export interface Played<T> {
   multiplier: number;
   outcome: T;
   payout?: number;
+  /**
+   * A result luck never draws again, whatever it pays on its own: a jackpot (its multiplier is 0, the pool is
+   * paid on top by `settle`; 8 October, the user's: "Fix it so they can jackpot").
+   */
+  keep?: boolean;
 }
 
 /**
@@ -90,7 +97,18 @@ export const playInstant = async <T>(user: User, game: string, requestId: string
     if (!bal.length) throw casinoErr("Your yard could not be found.", Status.CONFLICT);
     if (bal[0].credits < charge) throw casinoErr("You do not have enough Shiny for that bet.", Status.CONFLICT);
     const rng = fairStream(seed.server_seed, seed.client_seed, seed.nonce);
-    const played = play(rng);
+    let played = play(rng);
+    // luck (silent, luck.ts): a result that pays back less than the stake is drawn again, once, with the
+    // bet's next numbers, with the chance of the player's luck (never a jackpot: `keep`)
+    const luck = await luckFor(em, user.userid, stake);
+    let lucky = false;
+    if (luck > 0) {
+      const back = played.payout != null ? played.payout : stake * Math.min(played.multiplier, casinoConfig.maxMultiplier);
+      if (!played.keep && back < stake && luckRoll(luck, rng)) {
+        played = play(rng);
+        lucky = true;
+      }
+    }
     let multiplier = Math.min(played.multiplier, casinoConfig.maxMultiplier);
     // part of a Shiny paid by chance, from the bet's next number (wholeShiny)
     let payout = wholeShiny(played.payout != null ? Math.min(played.payout, stake * casinoConfig.maxMultiplier) : stake * multiplier, rng.next());
@@ -104,15 +122,19 @@ export const playInstant = async <T>(user: User, game: string, requestId: string
       payout += s.bonus;
       outcome = s.outcome;
     }
+    // (Shiny and payouts are 32-bit in the database: a win, the jackpot's bonus with it, held to the most there can
+    // be, and the balance too (LEAST below). One over it threw after the game was drawn, which undid it all and so
+    // told the player the next spin was a big one; on Ascent and Dice it stopped the round settling; 9 October)
+    payout = Math.min(payout, 2147483647);
     if (played.payout != null || bonus > 0) multiplier = Math.min(payout / stake, 99_999_999);
     const paid = await sqlAll<{ credits: number }>(em,
-      `UPDATE bym.save SET credits = credits - ? + ? WHERE userid = ? AND type = ? AND credits >= ? RETURNING credits`,
+      `UPDATE bym.save SET credits = LEAST(credits::bigint - ? + ?, 2147483647) WHERE userid = ? AND type = ? AND credits >= ? RETURNING credits`,
       [charge, payout, user.userid, BaseType.MAIN, charge]);
     if (paid.length !== 1) throw casinoErr("You do not have enough Shiny for that bet.", Status.CONFLICT);
     await sqlAll(em,
-      `INSERT INTO bym.casino_bet (user_id, request_id, game, stake, payout, multiplier, outcome, seed_hash, client_seed, nonce, status, settled_at)
-       VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, 'settled', now()) RETURNING id`,
-      [user.userid, requestId, game, charge, payout, multiplier.toFixed(2), JSON.stringify(outcome), seed.server_seed_hash, seed.client_seed, seed.nonce]);
+      `INSERT INTO bym.casino_bet (user_id, request_id, game, stake, payout, multiplier, outcome, seed_hash, client_seed, nonce, status, settled_at, luck, lucky)
+       VALUES (?, ?, ?, ?, ?, ?, CAST(? AS jsonb), ?, ?, ?, 'settled', now(), ?, ?) RETURNING id`,
+      [user.userid, requestId, game, charge, payout, multiplier.toFixed(2), JSON.stringify(outcome), seed.server_seed_hash, seed.client_seed, seed.nonce, luck.toFixed(4), lucky]);
     await sqlAll(em, `UPDATE bym.casino_seed SET nonce = nonce + 1 WHERE user_id = ? RETURNING nonce`, [user.userid]);
     return { outcome, stake, payout, multiplier, credits: paid[0].credits, nonce: seed.nonce, replayed: false, jackpot: bonus > 0 };
   });
@@ -124,6 +146,28 @@ export const playInstant = async <T>(user: User, game: string, requestId: string
 };
 
 /**
+ * Inferno-only (QoL #504): the player's bets still open on round `roundId` (Magma Derby, Balthazar's Ascent, Devil's
+ * Dice) paid back, in the caller's transaction, which has the round locked and has checked it hasn't started. Each is
+ * kept in the ledger as 'refunded', paid back its stake ("taken_back" in its outcome; the History tab shows it as
+ * given back, and refunded bets count nowhere else: luck, leaderboards, the round's players). Only bets still open
+ * are touched, by the one UPDATE, so a bet is paid back once however often it is asked for.
+ */
+export const refundOpenBets = async (em: Em, roundId: string | number, userid: number): Promise<{ count: number; stake: number; credits: number }> => {
+  const rows = await sqlAll<{ stake: number }>(em,
+    `UPDATE bym.casino_bet SET status = 'refunded', payout = stake, multiplier = 1, settled_at = now(), outcome = outcome || '{"taken_back": true}'::jsonb
+      WHERE round_id = ? AND user_id = ? AND status = 'open' RETURNING stake`,
+    [roundId, userid]);
+  const stake = rows.reduce((a, b) => a + (Number(b.stake) || 0), 0);
+  if (stake > 0) {
+    const paid = await sqlAll<{ credits: number }>(em,
+      `UPDATE bym.save SET credits = LEAST(credits::bigint + ?, 2147483647) WHERE userid = ? AND type = ? RETURNING credits`, [stake, userid, BaseType.MAIN]);
+    return { count: rows.length, stake, credits: paid[0]?.credits ?? 0 };
+  }
+  const bal = await sqlAll<{ credits: number }>(em, `SELECT credits FROM bym.save WHERE userid = ? AND type = ?`, [userid, BaseType.MAIN]);
+  return { count: rows.length, stake, credits: bal[0]?.credits ?? 0 };
+};
+
+/**
  * Changes the player's seeds: the server seed in use is shown (so every bet made on it can be checked)
  * and replaced with a new one, whose hash is shown; the client seed becomes the one given (or a new
  * random one); the count of bets starts again.
@@ -131,6 +175,11 @@ export const playInstant = async <T>(user: User, game: string, requestId: string
 export const rotateSeed = async (userid: number, clientSeed: string | null) =>
   postgres.em.fork().transactional(async (em) => {
     const old = await lockSeed(em, userid);
+    // (13 October) not while a game drawn from this seed is still open (Bone Pile, Higher or Lower, the Undertaker's
+    // Offer, Cinderjack): the seed shown would give away its hidden piles, cards or coffins. (A game is started under
+    // the seed row's lock, as this is, so none can start between this check and the new seed.)
+    const open = await sqlAll<{ game: string }>(em, `SELECT game FROM bym.casino_session WHERE user_id = ? AND status = 'open' LIMIT 1`, [userid]);
+    if (open.length) throw casinoErr("Finish the game you have open first: its seed is shown when you change seeds.", Status.CONFLICT);
     await sqlAll(em, `INSERT INTO bym.casino_seed_reveal (user_id, server_seed, server_seed_hash, client_seed, nonces) VALUES (?, ?, ?, ?, ?) RETURNING id`,
       [userid, old.server_seed, old.server_seed_hash, old.client_seed, old.nonce]);
     const seed = newServerSeed();
@@ -146,11 +195,23 @@ export const revealedSeeds = async (userid: number, limit = 10) =>
     `SELECT server_seed, server_seed_hash, client_seed, nonces, revealed_at FROM bym.casino_seed_reveal WHERE user_id = ? ORDER BY revealed_at DESC LIMIT ?`,
     [userid, limit], "all")) as { server_seed: string; server_seed_hash: string; client_seed: string; nonces: number; revealed_at: string }[];
 
-/** The player's last bets, newest first. */
-export const betHistory = async (userid: number, limit: number) =>
+/**
+ * The player's last bets, newest first. (QoL #392) `before`, a bet's id: the bets before it (the History tab's Older);
+ * and each bet's outcome as its short fields only (a cup, a risk, a winner, a cash-out: strings, numbers, true/false, and
+ * lists of up to five of them), for the bet's details: not its paths, grids, cards or layouts.
+ */
+export const betHistory = async (userid: number, limit: number, before = 0) =>
   (await postgres.em.getConnection().execute(
-    `SELECT id, game, stake, payout, multiplier, nonce, client_seed, seed_hash, created_at FROM bym.casino_bet WHERE user_id = ? ORDER BY id DESC LIMIT ?`,
-    [userid, limit], "all")) as Record<string, unknown>[];
+    `SELECT id, game, stake, payout, multiplier, nonce, client_seed, seed_hash, created_at, status,
+            CASE WHEN jsonb_typeof(outcome) = 'object' THEN (
+              SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(outcome) e
+               WHERE CASE WHEN jsonb_typeof(e.value) = 'array'
+                          THEN jsonb_array_length(e.value) <= 5
+                               AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(e.value) x WHERE jsonb_typeof(x) IN ('object', 'array'))
+                          ELSE jsonb_typeof(e.value) IN ('string', 'number', 'boolean') END
+            ) END AS outcome
+       FROM bym.casino_bet WHERE user_id = ? ${before > 0 ? "AND id < ?" : ""} ORDER BY id DESC LIMIT ?`,
+    before > 0 ? [userid, before, limit] : [userid, limit], "all")) as Record<string, unknown>[];
 
 /** Whether the player's Moloch's Favor for today (UTC) is still there. */
 export const favorReady = async (userid: number): Promise<boolean> => {
@@ -164,7 +225,8 @@ type LiveRow = { id: string; game: string; stake: number; payout: number; multip
 /**
  * The Live tab, every player's bets but the admins' (infernoOnlyConfig.admins): the latest, newest first
  * (what it paid; nothing yet on a Derby or Ascent bet still open), the day's biggest wins (the most over
- * the stake in the last 24 hours) and the last jackpots. Names only.
+ * the stake in the last 24 hours) and the last jackpots. Names only. Read once for everyone with the tab open every
+ * second and a half (sharedView.ts; 9 October): the day's biggest wins go through every winning bet of the day.
  */
 export const liveBets = async (userid: number, limit: number) => {
   const admins = configuredAdmins();
@@ -189,10 +251,15 @@ export const liveBets = async (userid: number, limit: number) => {
     jackpot: Boolean(b.jackpot),
     at: new Date(b.created_at).getTime(),
   });
+  const rows = await sharedView(`live:${limit}`, 1500, async () => ({
+    bets: await q("TRUE", "b.id DESC", limit),
+    top: await q("b.created_at > now() - interval '24 hours' AND b.payout > b.stake", "b.payout - b.stake DESC, b.id DESC", 10),
+    jackpots: await q("(b.outcome->>'line') = 'jackpot'", "b.id DESC", 5),
+  }));
   return {
-    bets: (await q("TRUE", "b.id DESC", limit)).map(view),
-    top: (await q("b.created_at > now() - interval '24 hours' AND b.payout > b.stake", "b.payout - b.stake DESC, b.id DESC", 10)).map(view),
-    jackpots: (await q("(b.outcome->>'line') = 'jackpot'", "b.id DESC", 5)).map(view),
+    bets: rows.bets.map(view),
+    top: rows.top.map(view),
+    jackpots: rows.jackpots.map(view),
   };
 };
 
@@ -203,25 +270,48 @@ export const jackpotPool = async (): Promise<number> => {
 };
 
 /**
- * The Slots jackpot's part of a spin, in the spin's transaction: `jackpotRate` of the stake goes into the
- * pool (the row stays locked to the end, so spins everywhere take their turn at it); on three King
- * Wormzer the pool is paid once for every `jackpotFullBet` staked (a smaller bet wins that share of it,
- * a bigger one more than all of it) and goes back to the seed if less is left. The pool stops growing at `jackpotMax` (what goes in past it is the house's).
- * Two winners at once cannot both be paid the same pool. Korath's Fortune shares the pool: the whole stake
- * goes in at the same rate, and a jackpot line wins the share of its own bet (`lineStake`, a fifth of the
+ * The Slots jackpot's part of a spin that wins it, in the spin's transaction: the spin's `jackpotRate` of the
+ * stake goes into the pool, and the pool is paid once for every `jackpotFullBet` staked (a smaller bet wins that
+ * share of it, a bigger one more than all of it) and goes back to the seed if less is left. The row stays locked
+ * to the end, so two winners at once cannot both be paid the same pool. Korath's Fortune shares the pool: the whole
+ * stake goes in at the same rate, and a jackpot line wins the share of its own bet (`lineStake`, a fifth of the
  * stake), so a Shiny bet on either machine is worth the same part of the pool.
+ *
+ * A spin that does not win it adds its part after its bet is written (`feedJackpot`), not here: every spin on
+ * the server used to lock the pool's row from here to the end of its transaction, so spins everywhere waited
+ * their turn at it, each holding one of the database's connections, and with a few players on the slots the rest
+ * of the server waited for connections too (9 October, the user's: "Make gambling not slow the server down for
+ * other users").
  */
 export const settleJackpot = async (em: Em, stake: number, won: boolean, userid: number, lineStake: number = stake): Promise<{ bonus: number; pool: number; share: number }> => {
+  if (!won) return { bonus: 0, pool: 0, share: 0 };
   const rules = casinoConfig.slots;
   const add = stake * rules.jackpotRate;
   const rows = await sqlAll<{ pool: string }>(em,
     `INSERT INTO bym.casino_jackpot (id, pool) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET pool = LEAST(bym.casino_jackpot.pool + ?, ?), updated_at = now() RETURNING pool`,
     [Math.min(casinoConfig.jackpotSeed + add, casinoConfig.jackpotMax), add, casinoConfig.jackpotMax]);
   const pool = Number(rows[0].pool);
-  if (!won) return { bonus: 0, pool: Math.floor(pool), share: 0 };
   const share = lineStake / rules.jackpotFullBet;
   const bonus = Math.floor(pool * share);
   const left = Math.max(casinoConfig.jackpotSeed, pool - bonus);
   await sqlAll(em, `UPDATE bym.casino_jackpot SET pool = ?, last_winner_user_id = ?, last_won_at = now(), updated_at = now() WHERE id = 1 RETURNING pool`, [left, userid]);
   return { bonus, pool: Math.floor(left), share };
+};
+
+/**
+ * A spin's part of the pool (`jackpotRate` of `stake`) added once its bet is written, in one statement of its own
+ * (its lock on the pool's row lasts only that statement); the pool after it. The pool stops growing at `jackpotMax`
+ * (what goes in past it is the house's). Should the statement fail, the bet stands and the pool is only shown.
+ */
+export const feedJackpot = async (stake: number): Promise<number> => {
+  const add = stake * casinoConfig.slots.jackpotRate;
+  if (!(add > 0)) return jackpotPool();
+  try {
+    const rows = (await postgres.em.getConnection().execute(
+      `INSERT INTO bym.casino_jackpot (id, pool) VALUES (1, ?) ON CONFLICT (id) DO UPDATE SET pool = LEAST(bym.casino_jackpot.pool + ?, ?), updated_at = now() RETURNING pool`,
+      [Math.min(casinoConfig.jackpotSeed + add, casinoConfig.jackpotMax), add, casinoConfig.jackpotMax], "all")) as { pool: string }[];
+    return Math.floor(Math.min(Number(rows[0].pool), casinoConfig.jackpotMax));
+  } catch (e) {
+    return jackpotPool();
+  }
 };

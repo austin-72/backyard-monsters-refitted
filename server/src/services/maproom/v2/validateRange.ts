@@ -109,6 +109,13 @@ const validateRangeV2 = async (user: User, save: Save, options: RangeOptions) =>
   const [cellX, cellY] = [attackCell.x, attackCell.y];
   const worldid = user.save!.worldid;
 
+  // (13 October) a cell on another world is out of range whatever its place (only x and y were compared)
+  const cellWorld = (attackCell as { world?: { uuid?: string } | null }).world?.uuid;
+  if (cellWorld && worldid && cellWorld !== worldid) {
+    await logReport(user, `${user.username} attacked a base on another world: ${attackCell.baseid}`);
+    throw outOfRangeErr();
+  }
+
   // Inferno-only: the underworld (services/maproom/v2/underworld.ts). A cell there is only ever reached through
   // it (the square check below would wrap 505 to 105 and let any yard near 105 attack it); a cell up here can
   // also be reached from an underworld outpost next to a portal near it.
@@ -125,7 +132,9 @@ const validateRangeV2 = async (user: User, save: Save, options: RangeOptions) =>
 
   if (underworld && underworldReaches(worldid!, cellX, cellY, await rangeYards(user))) return save;
 
-  const message = `${user.username} attacked out of range base: ${attackCell.baseid}`;
+  // (21 October: what the server saw, so a report can be told from a cheat: each yard's distance and reach)
+  const why = await rangeDetail(cellX, cellY, homebase, outposts ?? [], flinger).catch(() => "");
+  const message = `${user.username} attacked out of range base: ${attackCell.baseid} (${cellX}, ${cellY})${why ? `: ${why}` : ""}`;
   await logReport(user, message);
 
   throw outOfRangeErr();
@@ -177,20 +186,45 @@ const stockInRange = async (
   const outpostSaves = await postgres.em.find(
     Save,
     { baseid: { $in: outpostsInRange.map((outpost) => outpost.baseid) } },
-    { fields: ["flinger"] },
+    { fields: ["flinger", "baseid"] },
   );
 
+  // (18 October, SUSPECTED-BUGS.md) each outpost's own Flinger for its own distance: every outpost's range was
+  // tried against every outpost's distance, so a far outpost with a big Flinger lent its range to a near one.
   for (const outpostSave of outpostSaves) {
     const outpostRange = getOutpostRange(outpostSave.flinger);
     const totalRange = withDeclareWar(outpostRange);
 
-    for (const { dx, dy } of outpostsInRange) {
+    for (const { baseid, dx, dy } of outpostsInRange) {
+      if (String(baseid) !== String(outpostSave.baseid)) continue;
       if (Math.abs(dx) <= totalRange && Math.abs(dy) <= totalRange) {
         return true;
       }
     }
   }
   return false;
+};
+
+/**
+ * (21 October) For an out of range report: the main yard's distance from the cell and how far it reaches (with
+ * Declare War's), and the nearest of the outposts the server knows of with its own.
+ */
+const rangeDetail = async (cellX: number, cellY: number, homebase: string[], outposts: [number, number, string][], flinger: number) => {
+  const [homeX, homeY] = homebase.map(Number);
+  const parts = [
+    `main yard (${homeX}, ${homeY}) ${getDistanceFromMain(cellX, cellY, homeX, homeY)} away, reaches ${withDeclareWar(getMainYardRange(flinger))} (Flinger ${Number(flinger) || 0})`,
+  ];
+  const over = outposts.filter(([x, y]) => isOver(Number(x), Number(y)));
+  if (over.length) {
+    const near = over
+      .map(([x, y, id]) => ({ x: Number(x), y: Number(y), id: String(id), d: getDistanceFromMain(cellX, cellY, Number(x), Number(y)) }))
+      .sort((a, b) => a.d - b.d)[0];
+    const row = await postgres.em.findOne(Save, { baseid: near.id }, { fields: ["flinger", "baseid"] });
+    parts.push(`nearest of ${over.length} outpost(s) (${near.x}, ${near.y}) ${near.d} away, reaches ${withDeclareWar(getOutpostRange(Number(row?.flinger) || 0))} (Flinger ${Number(row?.flinger) || 0})`);
+  } else {
+    parts.push("no outposts");
+  }
+  return parts.join("; ");
 };
 
 /**
@@ -254,7 +288,8 @@ export const getMainYardRange = (flinger: number) => {
     case 4:
       return 10;
     default:
-      return 10;
+      // (18 October, SUSPECTED-BUGS.md: anything unexpected, text or NaN, had the most range)
+      return Number(flinger) > 4 ? 10 : 0;
   }
 };
 
@@ -271,6 +306,6 @@ export const getOutpostRange = (flinger: number) => {
     case 4:
       return 4;
     default:
-      return 4;
+      return Number(flinger) > 4 ? 4 : 0;
   }
 };

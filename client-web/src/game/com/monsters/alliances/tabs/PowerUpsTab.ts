@@ -4,11 +4,11 @@ import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { Event, MouseEvent, TimerEvent } from "flash/events";
 import { TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { Timer } from "flash/utils";
-import { ALLIANCES, AllianceConstants, AllianceTabBase, Button_CLIP, GLOBAL, ImageCache, KEYS, PLEASEWAIT, SOUNDS, SpeedUpPopup } from "@game";
+import { ALLIANCES, AllianceConstants, AllianceTabBase, Button_CLIP, GLOBAL, ImageCache, IoShopPicker, KEYS, PLEASEWAIT, SOUNDS, SpeedUpPopup } from "@game";
 
 /**
  * Alliance Power-Ups tab. Lists the alliance power-ups (Armament, Conquest,
- * Declare War) as stacked rows inside a single white panel. Each row shows the
+ * Declare War; Inferno-only: Harvest Moon, Builders' Guild) as stacked rows inside a single white panel. Each row shows the
  * power-up icon, its name and description, a progress bar, and an action.
  *
  * A row is in one of three states, matching the original:
@@ -24,7 +24,7 @@ import { ALLIANCES, AllianceConstants, AllianceTabBase, Button_CLIP, GLOBAL, Ima
  */
 export class PowerUpsTab extends AllianceTabBase {
     static {
-        as3.fields(this, { _data: null, _rows: null, _timer: null });
+        as3.fields(this, { _data: null, _rows: null, _timer: null, _descSize: 13, _askedPlans: null });
     }
 
     // Mirrors the base class's instance CONTENT_W as a class const so the
@@ -92,8 +92,16 @@ export class PowerUpsTab extends AllianceTabBase {
     private _rows: any[];
     private _timer: Timer;
 
+    /** Inferno-only (22 October): planned starts already asked about once they came. */
+    private _askedPlans: any;
+
+    /** Inferno-only (22 October): the planned start's button's height. */
+    private static readonly PLAN_H: int = 24;
+    private _descSize: int;
+
     public $ctor(): void {
         this._rows = [];
+        this._askedPlans = {};
         super.$ctor();
         this.addEventListener(Event.REMOVED_FROM_STAGE, as3.bind(this, this._onRemoved));
     }
@@ -147,6 +155,14 @@ export class PowerUpsTab extends AllianceTabBase {
                 this._fetch();
                 return;
             }
+            // (Inferno-only, 22 October: a planned start has come: the server starts it within 15 seconds; asked again
+            // 20 seconds on, once)
+            let planKey: string = row.data.powerup_id + ":" + row.data.plan_at;
+            if ((row.data.plan_at | 0) > 0 && GLOBAL.Timestamp() >= (row.data.plan_at | 0) + 20 && !this._askedPlans[planKey]) {
+                this._askedPlans[planKey] = true;
+                this._fetch();
+                return;
+            }
 
             let state: string = this._stateOf(row.data);
             this._paintBar(row, state);
@@ -169,6 +185,19 @@ export class PowerUpsTab extends AllianceTabBase {
             this.removeChildAt(0);
         }
         this._rows = [];
+        // (Inferno-only, 22 October: five power-ups with Harvest Moon and Builders' Guild: the rows a little shorter so
+        // all five fit the tab, the descriptions a size smaller)
+        let compact: boolean = this._data.length > 4;
+        PowerUpsTab.ROW_H = compact ? 84 : 104;
+        PowerUpsTab.ICON_SIZE = compact ? 70 : 88;
+        PowerUpsTab.TEXT_X = (PowerUpsTab.ROW_PAD + PowerUpsTab.ICON_SIZE + 12) | 0;
+        PowerUpsTab.TITLE_Y = compact ? 3 : 4;
+        PowerUpsTab.DESC_Y = compact ? 21 : 24;
+        PowerUpsTab.DESC_H = compact ? 32 : 36;
+        PowerUpsTab.BAR_H = compact ? 20 : 22;
+        PowerUpsTab.BAR_Y = (PowerUpsTab.ROW_H - (compact ? 6 : 8) - PowerUpsTab.BAR_H) | 0;
+        PowerUpsTab.BTN_H = compact ? 28 : 32;
+        this._descSize = compact ? 11 : 13;
 
         let panelH: int = (PowerUpsTab.ROW_H * this._data.length) | 0;
 
@@ -234,7 +263,7 @@ export class PowerUpsTab extends AllianceTabBase {
         tDesc.height = PowerUpsTab.DESC_H;
         tDesc.x = PowerUpsTab.TEXT_X;
         tDesc.y = rowY + PowerUpsTab.DESC_Y;
-        tDesc.defaultTextFormat = new TextFormat("Verdana", 13, 0x333333);
+        tDesc.defaultTextFormat = new TextFormat("Verdana", this._descSize, 0x333333);
         tDesc.text = KEYS.Get(type + "_description");
 
         let bar: MovieClip = as3.as(container.addChild(new MovieClip()), MovieClip);
@@ -266,7 +295,12 @@ export class PowerUpsTab extends AllianceTabBase {
         actionMC.x = btnX;
         actionMC.y = rowY + PowerUpsTab.BAR_Y + PowerUpsTab.BAR_H - PowerUpsTab.BTN_H;
 
-        let row: any = { data: data, barFill: barFill, barW: barW, tBar: tBar, actionMC: actionMC, state: null };
+        // (Inferno-only, 22 October: a planned start's button, over the action, for whoever may start power-ups)
+        let planMC: MovieClip = as3.as(container.addChild(new MovieClip()), MovieClip);
+        planMC.x = btnX;
+        planMC.y = actionMC.y - PowerUpsTab.PLAN_H - 6;
+
+        let row: any = { data: data, barFill: barFill, barW: barW, tBar: tBar, actionMC: actionMC, planMC: planMC, state: null };
         this._rows.push(row);
 
         row.state = this._stateOf(data);
@@ -305,6 +339,10 @@ export class PowerUpsTab extends AllianceTabBase {
             caption = KEYS.Get("powerup_ready_in") + " " + this._formatTime(remaining);
         }
 
+        // (Inferno-only, 22 October: a planned start said on the bar)
+        if (GLOBAL.INFERNO_ONLY && state != PowerUpsTab.STATE_ACTIVE && (data.plan_at | 0) > 0) {
+            caption = KEYS.Get(state == PowerUpsTab.STATE_READY ? "io_pu_bar_planned_ready" : "io_pu_bar_planned", { "v1": caption, "v2": GLOBAL.ioClock(data.plan_at | 0), "v3": (data.plan_tier | 0) == 2 ? KEYS.Get("io_pu_tier2_short") : "" });
+        }
         if (fraction < 0) {
             fraction = 0;
         }
@@ -338,6 +376,7 @@ export class PowerUpsTab extends AllianceTabBase {
         while (actionMC.numChildren > 0) {
             actionMC.removeChildAt(0);
         }
+        this._buildPlan(row);
 
         if (row.state == PowerUpsTab.STATE_ACTIVE) {
             return;
@@ -353,8 +392,10 @@ export class PowerUpsTab extends AllianceTabBase {
 
         let activateBtn: Button_CLIP = as3.as(actionMC.addChild(new Button_CLIP()), Button_CLIP);
         activateBtn.Setup(KEYS.Get("button_activate"), false, PowerUpsTab.BTN_W, PowerUpsTab.BTN_H);
+        activateBtn.name = "ioPowerupActivate";
 
-        if (ALLIANCES._isLeader) {
+        // (Inferno-only, QoL #174: an officer too, when the leader lets officers start power-ups)
+        if (ALLIANCES._isLeader || (GLOBAL.INFERNO_ONLY && ALLIANCES.ioCan("powerups"))) {
             activateBtn.Highlight = true;
             activateBtn.addEventListener(MouseEvent.CLICK, this._makeActivateHandler(row.data));
             return;
@@ -367,8 +408,14 @@ export class PowerUpsTab extends AllianceTabBase {
         blocker.graphics.beginFill(16777215, 0);
         blocker.graphics.drawRect(0, 0, PowerUpsTab.BTN_W, PowerUpsTab.BTN_H);
         blocker.graphics.endFill();
+        blocker.name = "ioPowerupActivateBlocked";
         blocker.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
             SOUNDS.Play("click1");
+            // (Inferno-only, QoL #174: an officer is told it is the leader's switch)
+            if (GLOBAL.INFERNO_ONLY && ALLIANCES.ioRole() == "officer") {
+                GLOBAL.Message(KEYS.Get("io_al7_perm_no_powerups"));
+                return;
+            }
             GLOBAL.Message(KEYS.Get("alliance_err_powerup_leader_only"));
         });
     }
@@ -452,21 +499,136 @@ export class PowerUpsTab extends AllianceTabBase {
     private _makeActivateHandler(data: any): Function {
         return (e: MouseEvent): void => {
             SOUNDS.Play("click1");
-            PLEASEWAIT.Show(KEYS.Get("msg_loading"));
+            // (Inferno-only, QoL #499: asked first, with how long it runs and how long it then recharges; a click
+            // spent the charge at once)
+            // (22 October, the user's pick "B": at Tier I or Tier II, each with how long it runs and then charges)
+            if (GLOBAL.INFERNO_ONLY) {
+                this._pickTier(data, KEYS.Get("io_pu_start_title", { "v1": KEYS.Get(String(data.type) + "_name") }), KEYS.Get("io_pu_start_pick"), (tier: int): void => {
+                    this._activate(data, tier);
+                });
+                return;
+            }
+            this._activate(data);
+        };
+    }
 
-            ALLIANCES.ActivatePowerup(data.powerup_id | 0, (response: any): void => {
-                PLEASEWAIT.Hide();
+    /** Inferno-only (22 October): Tier I or Tier II picked (IoShopPicker), each with how long it runs and then charges. */
+    private _pickTier(data: any, title: string, text: string, then: Function): void {
+        let choices: any[] = [];
+        for (let t of as3.values(data.tiers ?? [{ "tier": 1, "run": data.total_running_time, "recharge": data.total_recharge_time }])) {
+            let tier: int = t.tier | 0;
+            choices.push({ "label": KEYS.Get(tier == 2 ? "io_pu_tier2" : "io_pu_tier1", { "v1": GLOBAL.ioDuration(t.run | 0), "v2": GLOBAL.ioDuration(t.recharge | 0) }), "onPick": (): void => {
+                then(tier);
+            } });
+        }
+        IoShopPicker.Show(title, text, choices);
+    }
 
-                if (response == null || response.error) {
-                    GLOBAL.Message((response && response.error) ? String(response.error) : KEYS.Get("alliance_err_generic"));
+    /**
+     * Inferno-only (22 October, the user's pick "C"): over the action, for whoever may start power-ups (not while one
+     * runs): Plan start (a time, then a tier), or, with one planned, Cancel plan.
+     */
+    private _buildPlan(row: any): void {
+        let planMC: MovieClip = as3.as(row.planMC, MovieClip);
+        if (!planMC) {
+            return;
+        }
+        while (planMC.numChildren > 0) {
+            planMC.removeChildAt(0);
+        }
+        if (!GLOBAL.INFERNO_ONLY || row.state == PowerUpsTab.STATE_ACTIVE || !(ALLIANCES._isLeader || ALLIANCES.ioCan("powerups"))) {
+            return;
+        }
+        let data: any = row.data;
+        let planned: boolean = (data.plan_at | 0) > 0;
+        let b: Button_CLIP = as3.as(planMC.addChild(new Button_CLIP()), Button_CLIP);
+        b.Setup(KEYS.Get(planned ? "io_pu_plan_cancel_btn" : "io_pu_plan_btn"), false, PowerUpsTab.BTN_W, PowerUpsTab.PLAN_H);
+        b.name = planned ? "ioPowerupPlanCancel" : "ioPowerupPlan";
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            if (planned) {
+                GLOBAL.Message(KEYS.Get("io_pu_plan_cancel_ask", { "v1": KEYS.Get(String(data.type) + "_name"), "v2": GLOBAL.ioClock(data.plan_at | 0) }), KEYS.Get("io_pu_plan_cancel_btn"), (): void => {
+                    this._plan(data, 0, 1);
+                }, null, KEYS.Get("io_powerup_not_now"), null);
+                return;
+            }
+            this._pickTime(data);
+        });
+    }
+
+    /** The times a start can be planned for: from when it's charged (and 5 minutes on) to 7 days ahead, in the player's clock. */
+    private _pickTime(data: any): void {
+        let now: number = GLOBAL.Timestamp();
+        let ready: number = Math.max(now + 300, (data.endTime | 0) + 60);
+        let last: number = now + 7 * 86400 - 60;
+        let at: any[] = [];
+        let add = (t: number, label: string): void => {
+            t = Math.floor(t / 60) * 60;
+            if (t < ready || t > last) {
+                return;
+            }
+            for (let a of at) {
+                if (Math.abs(a[0] - t) < 600) {
                     return;
                 }
-
-                if (response.powerups != null) {
-                    this._data = as3.as(response.powerups, Array);
-                    this._render();
-                }
-            });
+            }
+            at.push([t, label]);
         };
+        if ((data.endTime | 0) > now) {
+            add(Math.ceil(ready / 60) * 60, KEYS.Get("io_pu_plan_when_charged", { "v1": GLOBAL.ioClock(Math.ceil(ready / 60) * 60) }));
+        }
+        for (let h of [1, 3, 6]) {
+            add(now + h * 3600, KEYS.Get("io_pu_plan_in_hours", { "v1": h, "v2": GLOBAL.ioClock(now + h * 3600) }));
+        }
+        // (8 PM in the player's clock: today, tomorrow, then each of the next days, to fill the list)
+        let d: Date = new Date(now * 1000);
+        d.setHours(20, 0, 0, 0);
+        for (let i: int = 0; i < 8 && at.length < 10; i++) {
+            add(d.getTime() / 1000, GLOBAL.ioClock(d.getTime() / 1000));
+            d.setDate(d.getDate() + 1);
+        }
+        at.sort((a: any, b: any): number => a[0] - b[0]);
+        let choices: any[] = at.map((a: any): any => ({ "label": a[1], "onPick": (): void => {
+            this._pickTier(data, KEYS.Get("io_pu_plan_title", { "v1": KEYS.Get(String(data.type) + "_name") }), KEYS.Get("io_pu_plan_pick_tier", { "v1": GLOBAL.ioClock(a[0]) }), (tier: int): void => {
+                this._plan(data, a[0], tier);
+            });
+        } }));
+        if (!choices.length) {
+            GLOBAL.Message(KEYS.Get("io_pu_plan_none"));
+            return;
+        }
+        IoShopPicker.Show(KEYS.Get("io_pu_plan_title", { "v1": KEYS.Get(String(data.type) + "_name") }), KEYS.Get("io_pu_plan_pick_time"), choices);
+    }
+
+    private _plan(data: any, at: number, tier: int): void {
+        PLEASEWAIT.Show(KEYS.Get("msg_loading"));
+        ALLIANCES.ioPlanPowerup(data.powerup_id | 0, at, tier, (response: any): void => {
+            PLEASEWAIT.Hide();
+            if (response == null || response.error) {
+                GLOBAL.Message((response && response.error) ? String(response.error) : KEYS.Get("alliance_err_generic"));
+                return;
+            }
+            if (response.powerups != null) {
+                this._data = as3.as(response.powerups, Array);
+                this._render();
+            }
+        });
+    }
+
+    private _activate(data: any, tier: int = 1): void {
+        PLEASEWAIT.Show(KEYS.Get("msg_loading"));
+        ALLIANCES.ActivatePowerup(data.powerup_id | 0, (response: any): void => {
+            PLEASEWAIT.Hide();
+
+            if (response == null || response.error) {
+                GLOBAL.Message((response && response.error) ? String(response.error) : KEYS.Get("alliance_err_generic"));
+                return;
+            }
+
+            if (response.powerups != null) {
+                this._data = as3.as(response.powerups, Array);
+                this._render();
+            }
+        }, tier);
     }
 }

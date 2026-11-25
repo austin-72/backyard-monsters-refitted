@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { Bitmap, BitmapData, IBitmapDrawable, Sprite } from "flash/display";
 import { Point } from "flash/geom";
-import { BYMConfig, GLOBAL, MAP, RasterData, SPRITES } from "@game";
+import { BYMConfig, GLOBAL, IoSkins, MAP, RasterData, SPRITES } from "@game";
 
 /**
  * Inferno-only (attack replays): a champion of the champion cage in a replay, drawn from its sprite as the
@@ -30,6 +30,12 @@ export class IoReplaySprite extends Sprite {
         this._spriteID = spriteID;
         this.mouseEnabled = false;
         this.mouseChildren = false;
+        // (16 October) a skinned champion's sheet ("G4_6~molten") is made by IoSkins the first time it is asked for:
+        // a viewer who never had it made has no such sprite yet
+        let at: int = spriteID ? spriteID.indexOf("~") : -1;
+        if (at > 0 && !SPRITES._sprites[spriteID]) {
+            IoSkins.sprite(spriteID.substr(0, at), spriteID.substr(at + 1));
+        }
         SPRITES.SetupSprite(spriteID);
         let d: any = SPRITES.GetSpriteDescriptor(spriteID);
         this._canvas = new BitmapData(d ? d.width | 0 : 100, d ? d.height | 0 : 100, true, 0);
@@ -45,9 +51,17 @@ export class IoReplaySprite extends Sprite {
         }
     }
 
-    public show(x: number, y: number, altitude: number, walking: boolean): void {
+    /**
+     * Where it is now. (19 October) attacking: it was fighting there (as the replay works it out: IoReplayPlayer),
+     * facing faceX, faceY: its attack plays, as the champion's own does (ChampionBase.getNextSprite).
+     */
+    public show(x: number, y: number, altitude: number, walking: boolean, attacking: boolean = false, faceX: number = NaN, faceY: number = NaN): void {
         let dx: number = x - this.x;
         let dy: number = y - this.y;
+        if (attacking && !isNaN(faceX) && (faceX - x) * (faceX - x) + (faceY - y) * (faceY - y) > 0.25) {
+            dx = faceX - x;
+            dy = faceY - y;
+        }
         if (dx * dx + dy * dy > 0.25) {
             let r: number = Math.atan2(dy, dx) * 57.2957795;
             this._rotation = r < 0 ? r + 360 : r;
@@ -55,12 +69,12 @@ export class IoReplaySprite extends Sprite {
         this.x = x;
         this.y = y;
         this._bitmap.y = this._offY - altitude;
-        if (walking) {
+        if (walking || attacking) {
             ++this._frame;
         }
         if (GLOBAL._render) {
             this._canvas.fillRect(this._canvas.rect, 0);
-            SPRITES.GetSprite(this._canvas, this._spriteID, walking ? "walking" : "idle", (this._rotation - 45) | 0, this._frame);
+            SPRITES.GetSprite(this._canvas, this._spriteID, attacking ? GLOBAL.e_BASE_MODE.ATTACK : (walking ? "walking" : "idle"), (this._rotation - 45) | 0, this._frame);
             for (let f of as3.values(this._glows || [])) {
                 try {
                     this._canvas.applyFilter(this._canvas, this._canvas.rect, new Point(), f);

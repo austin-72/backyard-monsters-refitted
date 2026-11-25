@@ -21,6 +21,9 @@ type InvasionPop = Pick<InvasionEventDates, "start" | "end" | "extension"> & {
   current: number;
 };
 
+/** (18 October) Days of the extension after the invasion's week (phase 5: the bonus waves for those still playing). */
+const EXTENSION_DAYS = 3;
+
 /**
  * Sets up invasion event dates and phases based on invasion type.
  * Handles different invasions (WMI1, WMI2) with dev overrides and calculates
@@ -52,15 +55,15 @@ export const setupInvasionEvent = (type: Invasion): InvasionEventResult => {
       break;
 
     default:
-      startDate = new Date(now.getFullYear(), now.getMonth(), 10);
+      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 10));
       break;
   }
 
-  const endDate = new Date(startDate);
-  endDate.setDate(startDate.getDate() + 7);
+  // (18 October, SUSPECTED-BUGS.md: the dates followed the host's time zone, and the extension was set to the end's
+  // own date, so phase 5 never came) in UTC, a week, then EXTENSION_DAYS of extension
+  const endDate = new Date(startDate.getTime() + 7 * 86_400_000);
 
-  const extensionDate = new Date(endDate);
-  extensionDate.setDate(endDate.getDate());
+  const extensionDate = new Date(endDate.getTime() + EXTENSION_DAYS * 86_400_000);
 
   const current = Math.floor(now.getTime() / 1000);
   const start = Math.floor(startDate.getTime() / 1000);
@@ -100,19 +103,19 @@ const getInvasionPop = ({ current, start, end, extension }: InvasionPop) => {
 };
 
 /**
- * Gets the next invasion date based on month parity scheduling system.
- * WMI1 invasions occur in odd months, WMI2 in even months, always on the 10th.
+ * Gets the next invasion date based on month parity scheduling system (in UTC).
+ * WMI1 invasions occur in even months, WMI2 in odd months (getActiveInvasion), always on the 10th.
  * If current month matches the parity, returns 10th of current month, otherwise
  * returns 10th of next month to maintain the alternating schedule.
  *
  * @param {Date} now - Current date to calculate from
- * @param {0 | 1} monthParity - Month parity (0 for even months, 1 for odd months)
+ * @param {0 | 1} monthParity - Month parity (0 for even months, 1 for odd months), counting January as 1
  * @returns {Date} Next invasion start date set to the 10th of the appropriate month
  */
 const getNextInvasionDate = (now: Date, monthParity: 0 | 1): Date => {
-  const currentMonth = now.getMonth() + 1;
+  const currentMonth = now.getUTCMonth() + 1;
 
   if (currentMonth % 2 === monthParity)
-    return new Date(now.getFullYear(), currentMonth - 1, 10);
-  else return new Date(now.getFullYear(), currentMonth, 10);
+    return new Date(Date.UTC(now.getUTCFullYear(), currentMonth - 1, 10));
+  else return new Date(Date.UTC(now.getUTCFullYear(), currentMonth, 10));
 };

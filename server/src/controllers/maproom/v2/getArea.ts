@@ -19,6 +19,8 @@ import { BaseType } from "../../../enums/Base.js";
 import { mapRoomDisabledErr } from "../../../errors/errors.js";
 import { getAllianceRoster } from "../../../services/alliance/allianceData.js";
 import { visibleCredits } from "../../../services/user/shinyLock.js";
+import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
+import { getCurrentDateTime } from "../../../utils/getCurrentDateTime.js";
 
 /**
  * Schema for validating the request body when getting area data.
@@ -40,6 +42,8 @@ const OWN_SAVE_FIELDS = [
   "save.resources",
   "save.points",
   "save.basevalue",
+  // (QoL #344: the move cooldown, for the map's greyed Move button)
+  "save.cantmovetill",
 ] as const;
 
 /**
@@ -71,6 +75,7 @@ const CELL_SAVE_FIELDS = [
   "save.monsters",
   "save.damage",
   "save.destroyed",
+  "save.savetime",
   "save.points",
   "save.basevalue",
   "save.attackid",
@@ -262,6 +267,11 @@ export const getArea: KoaController = async (ctx) => {
         k: underworldConfig.takeoverCostMultiplier,
         p: portals.map((p) => [p.x, p.y, p.ux, p.uy]),
       },
+    }),
+    // Inferno-only (QoL #344, 15 October): seconds before the main yard can be moved again (0: now), so the map
+    // greys "Move main yard here" and says when it frees up instead of refusing after the click (migrateBase.ts)
+    ...(infernoOnlyConfig.enabled && {
+      io_move: Math.max(0, Number(save.cantmovetill ?? 0) - getCurrentDateTime()),
     }),
     ...(sendresources === 1 && {
       resources: save.resources,

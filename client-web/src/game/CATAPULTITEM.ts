@@ -79,13 +79,16 @@ export class CATAPULTITEM extends CATAPULTITEM_view {
         } else if (this._props.description) {
             _loc1_ += "<br>" + KEYS.Get(as3.str(this._props.description), { "v1": this._props.speed * 100 + "%", "v2": Math.round((1 - this._props.damageMult) * 100) + "%", "v3": this._props.speedlength });
         }
-        _loc1_ += "<br><b>Cost: </b>" + ResourceBombs.costText(this._props) + "<br>";
+        _loc1_ += "<br><b>" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_cat_cost") : "Cost:") + " </b>" + ResourceBombs.costText(this._props) + "<br>"; // (QoL #235)
         if (this._props.catapultLevel > GLOBAL._attackersCatapult) {
             _loc1_ += "<br>" + "<b><font color = \"#FF0000\">" + KEYS.Get("bomb_catapult_level", { "v1": this._props.catapultLevel }) + "</font></b>";
         } else if (!this._props.used && ResourceBombs.shortOf(this._props) > 0) {
             _loc1_ += "<br><b><font color = \"#FF0000\">" + KEYS.Get("bomb_need_resources", { "v1": KEYS.Get(as3.str(GLOBAL._resourceNames[ResourceBombs.shortOf(this._props) - 1])) }) + "</font></b>";
         } else if (!this._props.used && this._props.kind == "decoy" && SiegeWeapons.activeWeapon) {
-            _loc1_ += "<br><b><font color = \"#FF0000\">Another Chaos weapon is still active</font></b>";
+            _loc1_ += "<br><b><font color = \"#FF0000\">" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_cat_chaos_active") : "Another Chaos weapon is still active") + "</font></b>";
+        } else if (GLOBAL.INFERNO_ONLY && this._props.used) {
+            // (QoL #362: a row fires once an attack: said, instead of a greyed button with no reason)
+            _loc1_ += "<br><b><font color = \"#FF0000\">" + KEYS.Get("io_bat2_cat_fired") + "</font></b>";
         }
         this._popup.mouseEnabled = false;
         this._popup.Setup(this._popX, this._popY, as3.str(_loc1_));
@@ -96,18 +99,19 @@ export class CATAPULTITEM extends CATAPULTITEM_view {
     private ioStats(): string {
         let p: any = this._props;
         if (p.kind == "decoy") {
-            return "Lures defending monsters, then explodes.<br><b>Damage: </b>" + GLOBAL.FormatNumber(Number(p.damage)) + "<br><b>Lure range: </b>" + p.radius + "<br><b>Fuse: </b>" + p.fuse + " seconds";
+            // (QoL #235: each line in the player's language)
+            return KEYS.Get("io_t3k_cat_decoy", { "v1": GLOBAL.FormatNumber(Number(p.damage)), "v2": p.radius, "v3": p.fuse });
         }
         if (p.kind == "jars") {
             if (Number(p.seconds) > 0) {
-                return "Jars every tower in range. The glass cracks as the time runs out, then breaks.<br><b>Range: </b>" + p.radius + "<br><b>Lasts: </b>" + p.seconds + " seconds";
+                return KEYS.Get("io_t3k_cat_jars_timed", { "v1": p.radius, "v2": p.seconds });
             }
-            return "Jars every tower in range until it shoots its way out.<br><b>Range: </b>" + p.radius + "<br><b>Durability: </b>" + GLOBAL.FormatNumber(Number(p.durability));
+            return KEYS.Get("io_t3k_cat_jars", { "v1": p.radius, "v2": GLOBAL.FormatNumber(Number(p.durability)) });
         }
         let invuln: number = Number(Number(p.invuln) || 0);
         let armor: number = Number(p.hasOwnProperty("armor") ? Number(p.armor) : 99);
-        let shield: string = (invuln > 0 ? "<br><b>Invulnerable: </b>" + invuln + " seconds<br><b>Then damage removed: </b>" : "<br><b>Damage removed: </b>") + armor + "%, fading to 0 over " + (p.speedlength - invuln) + " seconds";
-        return "Speeds up and shields your monsters.<br><b>Radius: </b>" + p.radius + "<br><b>Speed: </b>" + Math.round(p.speed * 100) + "%" + shield + "<br><b>Lasts: </b>" + p.speedlength + " seconds";
+        let shield: string = KEYS.Get(invuln > 0 ? "io_t3k_cat_shield_invuln" : "io_t3k_cat_shield", { "v1": invuln, "v2": armor, "v3": p.speedlength - invuln });
+        return KEYS.Get("io_t3k_cat_speed", { "v1": p.radius, "v2": Math.round(p.speed * 100), "v3": shield, "v4": p.speedlength });
     }
 
     public Hide(): void {

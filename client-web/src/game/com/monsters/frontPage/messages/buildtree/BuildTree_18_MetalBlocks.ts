@@ -13,7 +13,7 @@ export class BuildTree_18_MetalBlocks extends KeywordMessage {
     protected override onButtonClick(): void {
         FrontPageHandler.closeAll();
         if (BASE.isInfernoMainYardOrOutpost) {
-            STORE.ShowB(1, 0, ["BLK2I", "BLK3I"]);
+            STORE.ShowB(1, 0, ["BLK2I", "BLK3I", "BLK4I", "BLK5I"]);
         } else {
             STORE.ShowB(1, 0, ["BLK2", "BLK3", "BLK4", "BLK5"]);
         }

@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>FAQ - Inferno Map Room 2</title>
+  <meta name="description" content="Answers to the questions players of Inferno Map Room 2 ask most.">
+  <meta name="theme-color" content="#1a0503">
+  <meta name="color-scheme" content="dark">
+  <!-- Written by hand (QoL #644). Its style is the one server/scripts/shinyPage.ts writes into shiny.html: keep the three pages the same. -->
+  <style>
+    @font-face { font-family: "Groboldov"; src: url("/web/fonts/groboldov.woff") format("woff"); font-display: swap; }
+    * { box-sizing: border-box; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { margin: 0; min-height: 100vh; color: #f2dcc8; font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: radial-gradient(ellipse at 50% -10%, rgba(255, 90, 20, .24), transparent 65%), #0d0403; }
+    .page { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+    .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
+    .top .home { font: 400 17px "Groboldov", Impact, sans-serif; color: #ffd8b0; text-decoration: none; text-shadow: 0 2px 0 #2d0602; }
+    h1 { margin: 22px 0 10px; font: 400 clamp(28px, 6vw, 42px)/1.1 "Groboldov", Impact, sans-serif; letter-spacing: .3px;
+      background: linear-gradient(#ffe9a0, #ff9a3a 55%, #e0401a); -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 2px 0 #2d0602); }
+    h2 { margin: 30px 0 10px; font: 400 21px/1.2 "Groboldov", Impact, sans-serif; color: #ffb36b; text-shadow: 0 2px 0 #2d0602; }
+    h3 { margin: 0 0 6px; font-size: 17px; line-height: 1.35; color: #ffd8b0; }
+    p { margin: 0 0 12px; }
+    a { color: #ffc27a; }
+    a:hover { color: #ffe9a0; }
+    .lead { color: #e8c9ad; }
+    .note { font-size: 14px; color: #c9a98f; }
+    .card { background: rgba(40, 8, 4, .72); border: 1px solid #6a2410; border-radius: 10px; padding: 14px 16px; margin: 0 0 12px; }
+    .card p:last-child { margin-bottom: 0; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; margin: 0 0 12px; background: rgba(40, 8, 4, .72);
+      border: 1px solid #6a2410; border-radius: 10px; overflow: hidden; }
+    th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-top: 1px solid rgba(106, 36, 16, .7); }
+    thead th { border-top: 0; background: rgba(106, 36, 16, .4); color: #ffd8b0; font-weight: 600; font-size: 14px; }
+    .num { text-align: right; white-space: nowrap; }
+    td.num { color: #ffe9a0; font-weight: 600; }
+    .sub { display: block; margin-top: 2px; font-size: 14px; color: #c9a98f; }
+    footer { margin-top: 36px; padding-top: 14px; border-top: 1px solid #6a2410; font-size: 14px; color: #c9a98f; }
+    footer nav { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 8px; }
+    footer a[aria-current] { color: #f2dcc8; font-weight: 600; text-decoration: none; }
+    @media (max-width: 480px) { th, td { padding: 8px 9px; } .card { padding: 12px 13px; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="top">
+      <a class="home" href="/">Inferno Map Room 2</a>
+      <a href="/">Back to the game</a>
+    </header>
+    <main>
+      <h1>Questions players ask</h1>
+      <p class="lead">Short answers about your account, attacks, Shiny and the map. For the times of the events, see <a href="/schedule">When things happen</a>; for how everything works, the <a href="/guide">player guide</a>.</p>
+
+      <h2>Your account</h2>
+
+      <section class="card" id="forgot-password">
+        <h3>I forgot my password. How do I get back in?</h3>
+        <p>Ask an admin on Discord for a password reset link (the <a href="/rules#appeals">Rules</a> page says how to reach one). It opens a page here where you choose a new password; the link works once, for 24 hours, and setting the password signs you out everywhere else.</p>
+        <p>If your name still shows on the login page in a browser you've played in, click it: a saved login signs you in without the password for 14 days after it was last used.</p>
+      </section>
+
+      <section class="card" id="change-password">
+        <h3>How do I change my password?</h3>
+        <p>Once you're signed in, open the page's settings with the gear at the top right (on a phone or tablet, the gear button at the top centre), then Account &gt; Change password. You need your current password, and the new one needs 8 or more characters, one of them a symbol. Everywhere else your account is signed in is signed out.</p>
+        <p>If you hid the settings button, reload the page to bring it back.</p>
+      </section>
+
+      <section class="card" id="signed-out">
+        <h3>I was signed out because my account "started playing" somewhere else.</h3>
+        <p>An account can play in only one place at a time: signing in on another computer, phone or browser window ends the older session. The message says where and when the new session began. If that wasn't you, sign in again and change your password.</p>
+      </section>
+
+      <h2>The game</h2>
+
+      <section class="card" id="reload">
+        <h3>The game says a new version has been published and asks me to reload.</h3>
+        <p>A new build of the game was put on the server while you were playing, and games older than the newest build are asked to reload. Press Reload (or reload the page) to get the new one.</p>
+      </section>
+
+      <h2>Attacks and protection</h2>
+
+      <section class="card" id="cant-attack">
+        <h3>Why can't I attack this yard?</h3>
+        <p>A player's yard can't be attacked while it is under damage protection, while another player is attacking it, or, for a main yard, while its player is online. It also has to be in your Flinger's range from your main yard or one of your outposts: upgrade the Flinger, or attack from an outpost nearer to it.</p>
+      </section>
+
+      <section class="card" id="protection">
+        <h3>How does damage protection work?</h3>
+        <p>A main yard is protected for 36 hours after an attack leaves it 50% or more damaged, and for 1 hour after 4 attacks within an hour. An outpost is protected for 8 hours after an attack leaves it 25% or more damaged. A new player's yard starts with 7 days, and more can be bought with Shiny (see the <a href="/shiny">Shiny page</a>).</p>
+        <p>Attacking anyone, wild monster yards included, ends your main yard's protection at once.</p>
+      </section>
+
+      <h2>Shiny and the map</h2>
+
+      <section class="card" id="shiny">
+        <h3>I lost my Shiny. Can I buy more?</h3>
+        <p>No: Shiny can't be bought on this server. It is earned from the Daily Reward, golden warts, the Quest Book's quests and chests, Moloch's Gauntlet, the Brimstone Pit, inviting friends, and sacrificing an idle worker to Moloch. The <a href="/shiny">Shiny page</a> lists what each pays and what everything costs.</p>
+        <p>To stop spending it by accident, set "Ask before spending Shiny" in the page's settings (the gear).</p>
+      </section>
+
+      <section class="card" id="relocate">
+        <h3>How do I move my yard to another part of the map, or another world?</h3>
+        <p>Open your Map Room and choose Relocate. Your main yard moves to a new place picked at random, on any world with room (you can't choose which), and it costs no Shiny: your bone, coal, sulfur and magma are emptied and your outposts go back to the wild. You can't relocate while your yard is being attacked.</p>
+        <p>You can also move your main yard onto one of your own outposts, or onto an alliance member's outpost when they invite you, for Shiny or resources.</p>
+      </section>
+    </main>
+    <footer>
+      <nav aria-label="Help pages">
+        <a href="/faq" aria-current="page">FAQ</a>
+        <a href="/shiny">Shiny</a>
+        <a href="/schedule">When things happen</a>
+        <a href="/guide">Player guide</a>
+        <a href="/rules">Rules</a>
+        <a href="/">Play</a>
+      </nav>
+      <p>Inferno Map Room 2, a Backyard Monsters Refitted server.</p>
+    </footer>
+  </div>
+</body>
+</html>

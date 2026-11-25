@@ -11,7 +11,7 @@ import type { TribeData } from "../../../types/TribeData.js";
  * Looks up the tribe template by baseid and tracks per-user building health
  * state in the player's Maproom record so damage persists across sessions.
  *
- * @param {string} baseid - The tribe base ID (matches TRIBES.as L/K/A/D_IDS)
+ * @param {string} baseid - The tribe base ID (matches TRIBES.ts L/K/A/D_IDS)
  * @param {User} user - The requesting user
  * @returns {Promise<Save>} A synthetic Save representing the tribe base
  */

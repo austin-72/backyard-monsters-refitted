@@ -10,6 +10,10 @@ export enum ClientMessageType {
   Delete = "delete",
   /** Inferno-only, admins and chat moderators: a player muted (minutes 0: unmuted). */
   Mute = "mute",
+  /** Inferno-only (QoL #153), admins and chat moderators: a player's last lines in a room removed for everyone. */
+  Purge = "purge",
+  /** Inferno-only (QoL #152), anyone: a line reported to the admins (the admin panel's Reports tab). */
+  Report = "report",
   GetIgnore = "getignore",
   Ignore = "ignore",
   Unignore = "unignore",
@@ -29,7 +33,8 @@ export enum ServerMessageType {
   AllianceLeft = "alliance_left",
   /** Inferno-only: a line removed by a moderator (`id`). */
   Deleted = "deleted",
-  /** Inferno-only: a line for this player only (a moderator's action done). */
+  /** Inferno-only: a line for this player only (a moderator's action done). With `key` (QoL #152, #153): the
+   * game's own words for it (KEYS), `v1` and `v2` filled in; `text` is the English for older games. */
   Notice = "notice",
   Error = "error",
 }
@@ -74,6 +79,15 @@ export interface HistoryEntry {
   id?: string;
   /** Inferno-only: the speaker's staff role, when they have one. */
   role?: ChatRole;
+  /** Inferno-only: the colour of the speaker's name (the D.A.V.E. Club), when they chose one. */
+  color?: string;
+  /** Inferno-only (13 October): the speaker's alliance and its tag ("[ABC] Name"), when they are in one. */
+  allianceId?: number;
+  allianceTag?: string;
+  /** Inferno-only (13 October): whether the speaker was online (active in the last 5 minutes) when the line was sent or loaded. */
+  online?: boolean;
+  /** Inferno-only (QoL #149): an alliance line from its leader or an officer with @all or @officers: who it calls. */
+  ping?: "all" | "officers";
 }
 
 export interface IgnoreEntry {
@@ -87,7 +101,9 @@ export type ClientMessage =
   | { type: ClientMessageType.Say; channel: string; message: string }
   | { type: ClientMessageType.Leave; channel: string }
   | { type: ClientMessageType.Delete; channel: string; id: string }
-  | { type: ClientMessageType.Mute; targetId?: string; targetName?: string; minutes: number }
+  | { type: ClientMessageType.Mute; targetId?: string; targetName?: string; minutes: number; reason?: string }
+  | { type: ClientMessageType.Purge; channel: string; targetId: string; count?: number }
+  | { type: ClientMessageType.Report; channel: string; id: string; targetId?: string; text?: string }
   | { type: ClientMessageType.GetIgnore; action?: string }
   | { type: ClientMessageType.Ignore; targetId?: string; targetName?: string }
   | { type: ClientMessageType.Unignore; targetId?: string; targetName?: string }
@@ -98,14 +114,14 @@ export type ServerMessage =
   | { type: ServerMessageType.AuthOk; userId: number; displayName: string; role?: ChatRole | null; refresh?: boolean }
   | { type: ServerMessageType.AuthFail; reason: AuthFailReason }
   | { type: ServerMessageType.Joined; channel: string; history: HistoryEntry[] }
-  | { type: ServerMessageType.Message; channel: string; messageType: AllianceMessageType | ChatBroadcastType; userId: number; displayName: string; picSquare: string | null; allianceImage: number | null; body: string; ts: number; id?: string; role?: ChatRole }
+  | { type: ServerMessageType.Message; channel: string; messageType: AllianceMessageType | ChatBroadcastType; userId: number; displayName: string; picSquare: string | null; allianceImage: number | null; body: string; ts: number; id?: string; role?: ChatRole; color?: string; allianceId?: number; allianceTag?: string; online?: boolean }
   | { type: ServerMessageType.Deleted; channel: string; id: string }
-  | { type: ServerMessageType.Notice; text: string }
+  | { type: ServerMessageType.Notice; text: string; key?: string; v1?: string; v2?: string }
   | { type: ServerMessageType.UserEnter; channel: string; userId: number; displayName: string }
   | { type: ServerMessageType.UserExit; channel: string; userId: number }
   | { type: ServerMessageType.IgnoreList; list: IgnoreEntry[]; action?: "show" | "sync" | "add" | "remove"; target?: string; targetName?: string }
   | { type: ServerMessageType.AllianceLeft; channel: string }
-  | { type: ServerMessageType.Error; code: ErrorCode; name?: string; minutes?: number };
+  | { type: ServerMessageType.Error; code: ErrorCode; name?: string; minutes?: number; reason?: string; fresh?: boolean };
 
 interface Sender { send(data: string): void; }
 

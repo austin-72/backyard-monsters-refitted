@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
 import { DisplayObject } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { BASE, BUILDINGS, Chat, GLOBAL, IoQuests, MapRoom3, MapRoomManager, MonsterMadness, MonsterMadnessInfoBar, POPUPS, QUESTS, SPECIALEVENT, STORE, TUTORIAL, UI2, UI_MENU, UI_MISSIONMENU, UI_NEXTWAVE, UI_NEXTWAVE_WM1, popup_prefab_help } from "@game";
+import { BASE, BUILDINGS, Chat, GLOBAL, IoQuests, MapRoom3, MapRoomManager, MonsterMadness, MonsterMadnessInfoBar, POPUPS, QUESTS, SPECIALEVENT, STORE, TUTORIAL, UI2, UI_MENU, UI_MISSIONMENU, UI_NEXTWAVE, UI_NEXTWAVE_WM1, popup_prefab, popup_prefab_help, KEYS } from "@game";
 
 export class UI_BOTTOM extends ASObject {
     public static _nextwave: UI_NEXTWAVE = null;
@@ -63,16 +63,22 @@ export class UI_BOTTOM extends ASObject {
         if (MapRoomManager.instance.isInMapRoom3 && !BASE.isMainYardOrInfernoMainYard) {
             return;
         }
+        // (Inferno-only, QoL #468: on the tab it was left on this session)
+        if (GLOBAL.INFERNO_ONLY) {
+            STORE.ioFromBar = true;
+            STORE.Show(STORE.ioLastTab > 0 ? STORE.ioLastTab : 1, 1)(param1);
+            return;
+        }
         STORE.Show(1, 1)(param1);
     }
 
     public static ShowStarterKits(param1: MouseEvent = null): void {
         if (GLOBAL.ioDesignMode()) {
             // Inferno-only: a Designer draft isn't a real outpost; kits are designed here, not bought
-            GLOBAL.Message("The kit popup isn't used in the Designer. Build the kit's buildings here, then Save.");
+            GLOBAL.Message(KEYS.Get("io_t3m_ui_designer_kits"));
             return;
         }
-        POPUPS.Push(new popup_prefab_help());
+        POPUPS.Push(GLOBAL.INFERNO_ONLY ? new popup_prefab() : new popup_prefab_help());
     }
 
     public static Update(): void {

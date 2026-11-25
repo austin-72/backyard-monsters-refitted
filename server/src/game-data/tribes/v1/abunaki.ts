@@ -1,7 +1,7 @@
 import type { SaveData } from "../../../types/EntityData.js";
 import { TribeScale } from "../../../enums/Tribes.js";
 
-// Baseids match TRIBES.as A_IDS entries (21=NEW, 22=TH3, 23=TH4, 24=TH5, 25=HIGH)
+// Baseids match TRIBES.ts A_IDS entries (21=NEW, 22=TH3, 23=TH4, 24=TH5, 25=HIGH)
 export const abunaki: Record<TribeScale, SaveData> = {
   [TribeScale.NEW]: {
     baseid: "21",

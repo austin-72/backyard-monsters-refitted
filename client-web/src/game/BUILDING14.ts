@@ -1,13 +1,17 @@
 import * as as3 from "as3";
 import { int, uint } from "as3";
-import { MouseEvent } from "flash/events";
+import { Event, MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { ACHIEVEMENTS, BASE, BSTORAGE, GLOBAL, ICoreBuilding, KEYS, LOGGER, MAP, MapRoomManager, POPUPS, UI2, WMBASE } from "@game";
 
 export class BUILDING14 extends BSTORAGE implements ICoreBuilding {
     static {
         as3.implement(this, [ICoreBuilding]);
+        as3.fields(this, { _ioAnimFrame: 0 });
     }
+
+    // (16 October, the user's: the Under Hall's fire and smoke animate) the game frames counted for the stepping
+    public _ioAnimFrame: int;
 
     public static readonly k_TYPE: uint = 14;
 
@@ -25,7 +29,28 @@ export class BUILDING14 extends BSTORAGE implements ICoreBuilding {
         }
         this._spoutPoint = new Point(1, -67);
         this._spoutHeight = 135;
+        this._ioAnimFrame = 0;
+        if (GLOBAL.INFERNO_ONLY) {
+            // (16 October, the user's: the Under Hall's fire and smoke animate) the fire (anim) and the smoke
+            // (anim2) are two layers of one loop: start them together, not each at a random frame
+            this._animRandomStart = false;
+        }
         this.SetProps();
+    }
+
+    // (16 October, the user's: the Under Hall's fire and smoke animate) BFOUNDATION loads the imageData's
+    // anim / anim2 / anim3 strips (fire, smoke, level 6's lava core) and draws their first frame, but only a
+    // building's own TickFast steps them. 24 frames, one every 3rd game frame (the stage runs at 40): a 1.8 s
+    // loop. Damaged, the same with the "animdamaged" strips; destroyed has none (BFOUNDATION.Render clears
+    // _animLoaded, so this stops).
+    public override TickFast(param1: Event = null): void {
+        super.TickFast(param1);
+        if (GLOBAL.INFERNO_ONLY && GLOBAL._render && this._animLoaded && !GLOBAL._catchup) {
+            if (this._ioAnimFrame % 3 == 0) {
+                this.AnimFrame();
+            }
+            ++this._ioAnimFrame;
+        }
     }
 
     public override Repair(): void {

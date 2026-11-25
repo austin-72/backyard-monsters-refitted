@@ -26,6 +26,8 @@ export const publishAllianceShout = (allianceId: number, entry: HistoryEntry) =>
     allianceImage: entry.allianceImage,
     body: entry.body,
     ts: entry.ts,
+    // (18 October, SUSPECTED-BUGS.md: left out, so a notice that had just arrived couldn't be deleted or reported)
+    ...(entry.id && { id: entry.id }),
   };
 
   publishToChannel(channel, JSON.stringify(message));

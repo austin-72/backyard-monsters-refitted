@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject } from "as3";
 import { MouseEvent } from "flash/events";
-import { ALLIANCEPOPUP, ALLIANCES, GLOBAL, SOUNDS } from "@game";
+import { ALLIANCEPOPUP, ALLIANCES, GLOBAL, SOUNDS, UI_TOP } from "@game";
 
 export class ALLIANCEWINDOW extends ASObject {
     public static _mc: ALLIANCEPOPUP = null;
@@ -21,6 +21,10 @@ export class ALLIANCEWINDOW extends ASObject {
             ALLIANCES.InvalidateMembers();
             ALLIANCES.InvalidateSuggested();
             GLOBAL.BlockerAdd();
+            // (QoL #464: a click on the backdrop closes it)
+            GLOBAL.ioBackdropCloses((): void => {
+                ALLIANCEWINDOW.Hide();
+            });
             ALLIANCEWINDOW._mc = as3.as(GLOBAL._layerWindows.addChild(new ALLIANCEPOPUP()), ALLIANCEPOPUP);
             ALLIANCEWINDOW._mc.Center();
             ALLIANCEWINDOW._mc.ScaleUp();
@@ -47,6 +51,10 @@ export class ALLIANCEWINDOW extends ASObject {
             ALLIANCEWINDOW._open = false;
             GLOBAL._layerWindows.removeChild(ALLIANCEWINDOW._mc);
             ALLIANCEWINDOW._mc = null;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #178: what was read or answered no longer counts on the top bar)
+                UI_TOP.ioAllianceBadge();
+            }
         }
     }
 }

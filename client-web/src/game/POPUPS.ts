@@ -1,11 +1,11 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
-import { Bitmap, BitmapData, DisplayObject, MovieClip, StageDisplayState } from "flash/display";
-import { Event, MouseEvent, TimerEvent } from "flash/events";
-import { Point } from "flash/geom";
-import { TextFieldAutoSize } from "flash/text";
-import { Timer, getQualifiedClassName } from "flash/utils";
-import { ACADEMY, BASE, BFOUNDATION, BUILDINGINFO, BUILDINGOPTIONS, BUILDINGS, BUY, BYMDevConfig, CREATURELOCKER, FrontPageGraphic, GAME, GLOBAL, ImageCache, IoBugReport, KEYS, LOGGER, MUSHROOMS, NewPopupSystem, POPUPSETTINGS, QUEUE, SOUNDS, STORE, TUTORIAL, TweenLite, UI_TOP, UPDATES, frame, popup_afk_gift, popup_bg, popup_bg2, popup_dialogue, popup_generic, popup_invite_friends, popup_noshiny, popup_noworker, popup_pleasebuy, popup_pleaserate, popup_timeout, popup_welcome, print } from "@game";
+import { Bitmap, BitmapData, DisplayObject, DisplayObjectContainer, MovieClip, Sprite, StageDisplayState } from "flash/display";
+import { Event, KeyboardEvent, MouseEvent, TimerEvent } from "flash/events";
+import { Point, Rectangle } from "flash/geom";
+import { TextField, TextFieldAutoSize, TextFormatAlign } from "flash/text";
+import { Timer, getQualifiedClassName, getTimer, setTimeout } from "flash/utils";
+import { ACADEMY, ArcadeWindow, BASE, BFOUNDATION, BUILDINGINFO, BUILDINGOPTIONS, BUILDINGS, BUY, BYMDevConfig, CasinoUI, CasinoWindow, CREATURELOCKER, frame, FrontPageGraphic, GAME, GLOBAL, ImageCache, IoBugReport, IoQuestBook, IoQuests, IoTd, IoWelcomeBack, IoWin, KEYS, LOGGER, MESSAGE, MUSHROOMS, NewPopupSystem, popup_afk_gift, popup_attackedme, popup_bg, popup_bg2, popup_damaged, popup_dialogue, popup_generic, popup_invite_friends, popup_noshiny, popup_noworker, popup_pleasebuy, popup_pleaserate, popup_timeout, popup_welcome, POPUPSETTINGS, print, QUEUE, SOUNDS, STORE, TUTORIAL, TweenLite, UI_TOP, UPDATES } from "@game";
 
 export class POPUPS extends ASObject {
     public static readonly k_TOP_LEFT: int = 1;
@@ -37,6 +37,202 @@ export class POPUPS extends ASObject {
     public static Setup(): void {
         POPUPS._popups = { "now": [], "alerts": [], "gifts": [], "wait": [], "tip": [] };
         POPUPS._open = false;
+        POPUPS._ioSetupAt = getTimer();
+        POPUPS._ioAlertOne = false;
+        // (Inferno-only, QoL #461: the session's first yard of the player's own: its popups wait for the Welcome back
+        // card, IoWelcomeBack)
+        POPUPS._ioHold = false;
+        POPUPS._ioHold = GLOBAL.INFERNO_ONLY && IoWelcomeBack.ioBegin();
+    }
+
+    // ---- Inferno-only (QoL #461, #91): the Welcome back card goes first, in place of the popups it covers
+    /** The popups pushed are queued and not shown yet: the Welcome back card is being made (IoWelcomeBack). */
+    private static _ioHold: boolean = false;
+
+    /** One POPUPS.Next is let pass (a card's button whose action ends with Next, as the heal does). */
+    private static _ioKeep: boolean = false;
+
+    /** Whether the popups are held for the Welcome back card. */
+    public static get ioHolding(): boolean {
+        return POPUPS._ioHold;
+    }
+
+    /**
+     * IoWelcomeBack, its card made (or not needed: `card` null): the popups it covers leave the queue (the attacks:
+     * popup_attackedme and the away summary; the repair and injured popups: popup_damaged), the card goes first, and
+     * the queue is shown.
+     */
+    public static ioRelease(card: MovieClip): void {
+        POPUPS._ioHold = false;
+        if (!POPUPS._popups) {
+            return;
+        }
+        if (card) {
+            for (let group of ["now", "alerts"]) {
+                let list: any[] = POPUPS._popups[group];
+                for (let i: int = (list.length - 1) | 0; i >= 0; i--) {
+                    let mc: any = list[i] ? list[i][0] : null;
+                    if (mc instanceof popup_attackedme || mc instanceof popup_damaged || (mc && mc.name == "ioAwayPopup")) {
+                        list.splice(i, 1);
+                    }
+                }
+            }
+            POPUPS._popups["now"].unshift([card, null, null, "", ""]);
+        }
+        if (!POPUPS._open && !POPUPS._mc && !NewPopupSystem.dialogShowing && POPUPS.QueueCount("now") > 0) {
+            POPUPS.Show("now");
+        }
+    }
+
+    /** Runs `fn` with the popup on screen kept: a POPUPS.Next it makes doesn't close it (the card's Heal). */
+    public static ioKeepOpen(fn: Function): void {
+        POPUPS._ioKeep = true;
+        try {
+            fn();
+        } finally {
+            POPUPS._ioKeep = false;
+        }
+    }
+
+    /** The away summary's title (BASE.ioAwaySummary) for the attackers the yard brought: so it can be left out. */
+    private static ioAwayTitle(): string {
+        let total: int = 0;
+        for (let a of as3.values(BASE._attackerArray || [])) {
+            total += a.count | 0;
+        }
+        return KEYS.Get("io_away_title", { "v1": total });
+    }
+
+    /** Inferno-only (QoL #463): when the queue was last set up (a yard began to load), getTimer. */
+    private static _ioSetupAt: number = 0;
+
+    /** Inferno-only (QoL #463): when the popup on screen was shown, and the player last pressed a button or a key. */
+    private static _ioShownAt: number = 0;
+
+    private static _ioPressAt: number = 0;
+
+    private static _ioPressWatch: boolean = false;
+
+    /**
+     * Inferno-only (QoL #463): GLOBAL.Message waits its turn in this queue rather than showing at once: while a yard
+     * loads and catches up, and while a popup that came with it is showing (its first 20 s), unless the player has
+     * pressed something since it showed (then the message answers that: a confirmation, a "not enough", shown at once).
+     */
+    public static ioQueueing(): boolean {
+        if (!GLOBAL.INFERNO_ONLY || !POPUPS._popups) {
+            return false;
+        }
+        let since: number = getTimer() - POPUPS._ioSetupAt;
+        // (QoL #461: and while the Welcome back card is being made)
+        if (GLOBAL._catchup || (BASE._loading && since < 60000) || POPUPS._ioHold) {
+            return true;
+        }
+        return POPUPS._open && Boolean(POPUPS._mc) && since < 20000 && POPUPS._ioPressAt < POPUPS._ioShownAt;
+    }
+
+    /** Inferno-only (QoL #463): notes the player's presses (before any button's own click). */
+    private static ioWatchPresses(): void {
+        let stage: any = GLOBAL._ROOT ? GLOBAL._ROOT.stage : null;
+        if (POPUPS._ioPressWatch || !stage) {
+            return;
+        }
+        POPUPS._ioPressWatch = true;
+        let pressed: Function = (e: any): void => {
+            POPUPS._ioPressAt = getTimer();
+        };
+        stage.addEventListener(MouseEvent.MOUSE_DOWN, pressed, true);
+        stage.addEventListener(KeyboardEvent.KEY_DOWN, pressed, true);
+    }
+
+    /** Inferno-only (QoL #463): a queued GLOBAL.Message (MESSAGE.ioQueued) joins the queue's "now" popups. */
+    public static ioPushMessage(m: MovieClip): void {
+        IoBugReport.Screen("message queued");
+        POPUPS._popups["now"].push([m, null, null, "", ""]);
+        if (!POPUPS._open && !NewPopupSystem.dialogShowing && !GLOBAL._catchup) {
+            POPUPS.Show("now");
+        } else {
+            POPUPS.ioKick();
+        }
+    }
+
+    /** Inferno-only (QoL #463): a queued message closed: the next popup if it was showing, else it leaves the queue. */
+    public static ioDone(m: MovieClip): void {
+        if (POPUPS._mc == m) {
+            POPUPS.Next();
+            return;
+        }
+        for (let group in POPUPS._popups) {
+            let list: any[] = POPUPS._popups[group];
+            for (let i: int = (list.length - 1) | 0; i >= 0; i--) {
+                if (list[i] && list[i][0] == m) {
+                    list.splice(i, 1);
+                }
+            }
+        }
+        if (m && m.parent) {
+            m.parent.removeChild(m);
+        }
+    }
+
+    private static _ioKick: Timer = null;
+
+    /** Inferno-only (QoL #463): shows the queue's "now" popups once nothing holds them (the catch-up done, none open). */
+    private static ioKick(): void {
+        if (POPUPS._ioKick) {
+            return;
+        }
+        POPUPS._ioKick = new Timer(300);
+        POPUPS._ioKick.addEventListener(TimerEvent.TIMER, (e: TimerEvent): void => {
+            if (!POPUPS._popups || POPUPS.QueueCount("now") == 0) {
+                POPUPS._ioKick.stop();
+                POPUPS._ioKick = null;
+                return;
+            }
+            if (!GLOBAL._catchup && !POPUPS._open && !(POPUPS._mc && POPUPS._mc.stage) && !NewPopupSystem.dialogShowing) {
+                POPUPS._ioKick.stop();
+                POPUPS._ioKick = null;
+                POPUPS.Show("now");
+            }
+        });
+        POPUPS._ioKick.start();
+    }
+
+    /**
+     * Inferno-only (QoL #462): runs `fn` once the popups are done: the yard loaded and caught up, no popup showing or
+     * waiting in the queue's "now" ones, no message on top. The Gauntlet's and the events' cards open with it, so they
+     * no longer cover the repair popup underneath. At once when nothing is in the way.
+     */
+    public static ioWhenClear(fn: Function): void {
+        if (fn == null) {
+            return;
+        }
+        let clear: Function = (): boolean => {
+            // (QoL #461: the Welcome back card comes first)
+            if (GLOBAL._catchup || BASE._loading || !POPUPS._popups || POPUPS._ioHold) {
+                return false;
+            }
+            // (a popup closed by its own button may leave POPUPS._mc pointing at it, off the stage: only one still shown counts)
+            if (POPUPS._open || (POPUPS._mc && POPUPS._mc.stage) || POPUPS.QueueCount("now") > 0 || NewPopupSystem.dialogShowing) {
+                return false;
+            }
+            let top: DisplayObjectContainer = GLOBAL._layerTop;
+            return !(top && top.numChildren > 0 && top.getChildAt(top.numChildren - 1) instanceof MESSAGE);
+        };
+        if (!GLOBAL.INFERNO_ONLY || clear()) {
+            fn();
+            return;
+        }
+        let tries: int = 0;
+        let t: Timer = new Timer(300);
+        t.addEventListener(TimerEvent.TIMER, (e: TimerEvent): void => {
+            tries++;
+            // (after 5 minutes, it goes ahead anyway)
+            if (clear() || tries > 1000) {
+                t.stop();
+                fn();
+            }
+        });
+        t.start();
     }
 
     public static Push(param1: any, param2: Function = null, param3: any[] = null, param4: string = "", param5: string = "", param6: boolean = false, param7: string = "now"): void {
@@ -50,6 +246,10 @@ export class POPUPS extends ASObject {
             POPUPS._lastGroup = "now";
         }
         POPUPS._popups[param7].push([param1, param2, param3, param4, param5]);
+        if (GLOBAL.INFERNO_ONLY && POPUPS._ioHold) {
+            // (QoL #461: queued, shown after the Welcome back card; IoWelcomeBack lets them go)
+            return;
+        }
         if (param6) {
             POPUPS.Next();
         } else if (!POPUPS._open && !NewPopupSystem.dialogShowing) {
@@ -58,6 +258,11 @@ export class POPUPS extends ASObject {
     }
 
     public static Next(param1: MouseEvent = null): void {
+        // (Inferno-only, QoL #461: a Welcome back card's Heal, whose end calls Next, leaves the card open)
+        if (GLOBAL.INFERNO_ONLY && POPUPS._ioKeep) {
+            POPUPS._ioKeep = false;
+            return;
+        }
         if (GLOBAL.isHalted) {
             GLOBAL.CallJS("reloadPage");
         }
@@ -81,6 +286,21 @@ export class POPUPS extends ASObject {
             POPUPS._mc.parent.removeChild(POPUPS._mc);
         }
         POPUPS._mc = null;
+        if (GLOBAL.INFERNO_ONLY && POPUPS._ioAlertOne && POPUPS._lastGroup == "alerts") {
+            // (QoL #471: one alert picked from the bell's list: back to the list while there are others, not on
+            // through all of them)
+            POPUPS._ioAlertOne = false;
+            POPUPS._lastGroup = "now";
+            if (POPUPS.QueueCount("alerts") > 1) {
+                setTimeout((): void => {
+                    if (!POPUPS._open && !POPUPS._mc) {
+                        POPUPS.ioAlertsList();
+                    }
+                }, 250);
+            }
+            POPUPS.Show("now");
+            return;
+        }
         if (POPUPS._lastGroup == "alerts" || POPUPS._lastGroup == "wait" || POPUPS._lastGroup == "tip") {
             if (POPUPS._lastGroup == "tip") {
                 POPUPS._lastGroup = "now";
@@ -111,7 +331,10 @@ export class POPUPS extends ASObject {
 
     public static hasPopupsOpen(): boolean {
         let _loc1_: boolean = Boolean(GLOBAL._newBuilding) && (as3.as(GLOBAL._newBuilding, BFOUNDATION))._placing == true;
-        return BUILDINGS._open || STORE._open || BUILDINGOPTIONS._open || ACADEMY._open || CREATURELOCKER._open || _loc1_ || Boolean(POPUPS._mc) || POPUPS._open;
+        // (Inferno-only, 14 October, QoL #443: a queued popup waits for the Pit, the Arcade, the Quest Book and a
+        // Hellgate run too; a level-up or an HFO notice landed on top of a round or a match)
+        let ioBusy: boolean = GLOBAL.INFERNO_ONLY && (CasinoWindow.isOpen || ArcadeWindow.isOpen || IoQuestBook.isOpen || IoTd.on);
+        return BUILDINGS._open || STORE._open || BUILDINGOPTIONS._open || ACADEMY._open || CREATURELOCKER._open || _loc1_ || Boolean(POPUPS._mc) || POPUPS._open || ioBusy;
     }
 
     private static NextDelayed(param1: int = 200): void {
@@ -178,6 +401,10 @@ export class POPUPS extends ASObject {
         let ImageLoaded: Function = null;
         let message: any[] = null;
         let group: string = param1;
+        // (Inferno-only, QoL #461: the yard's popups wait for the Welcome back card, which goes first)
+        if (GLOBAL.INFERNO_ONLY && POPUPS._ioHold && group == "now") {
+            return;
+        }
         if (!GLOBAL._catchup || group == "tip") {
             POPUPS._lastGroup = group;
             message = as3.cast(POPUPS._popups[group].shift(), Array);
@@ -186,8 +413,14 @@ export class POPUPS extends ASObject {
                 POPUPS.AddBG();
                 POPUPS._mc = as3.as(GLOBAL._layerTop.addChild(as3.cast(message[0], DisplayObject)), MovieClip);
                 IoBugReport.Screen("popup: " + POPUPS.ioShowing());
+                if (GLOBAL.INFERNO_ONLY) {
+                    POPUPS._ioShownAt = getTimer();
+                    POPUPS.ioWatchPresses();
+                }
                 POPUPSETTINGS.AlignToCenter(POPUPS._mc);
-                POPUPSETTINGS.ScaleUp(POPUPS._mc);
+                if (!(GLOBAL.INFERNO_ONLY && POPUPS.ioFitWide(POPUPS._mc))) {
+                    POPUPSETTINGS.ScaleUp(POPUPS._mc);
+                }
                 try {
                     if (POPUPS._mc.bMessage) {
                         POPUPS._mc.bMessage.selectable = true;
@@ -269,6 +502,168 @@ export class POPUPS extends ASObject {
         }
     }
 
+    /**
+     * Inferno-only (QoL #466): a queued popup wider or taller than the stage is shown smaller, to fit (IoWin.fit, round
+     * its centre). Bounds of twice the stage or more are an invisible backdrop in it, not its size: left alone.
+     */
+    private static ioFitWide(mc: MovieClip): boolean {
+        if (!mc || !GLOBAL._SCREEN) {
+            return false;
+        }
+        let b: Rectangle = null;
+        try {
+            b = mc.getBounds(mc);
+        } catch (e) {
+            return false;
+        }
+        let w: number = 2 * Math.max(Math.abs(b.x), Math.abs(b.x + b.width));
+        let h: number = 2 * Math.max(Math.abs(b.y), Math.abs(b.y + b.height));
+        let sw: number = Number(GLOBAL._SCREEN.width);
+        let sh: number = Number(GLOBAL._SCREEN.height);
+        if ((w <= sw - 16 && h <= sh - 16) || w > sw * 2 || h > sh * 2) {
+            return false;
+        }
+        IoWin.fit(mc, w, h);
+        return true;
+    }
+
+    // ---- Inferno-only (QoL #471): the Alerts bell says what it holds, and opens one list
+    /** One alert picked from the list is showing (HideB goes back to the list). */
+    private static _ioAlertOne: boolean = false;
+
+    /** What the bell holds, by kind, "2 attacks · 1 battle report" ("" when empty). */
+    public static ioAlertsSummary(): string {
+        let counts: any = {};
+        let order: string[] = [];
+        for (let m of as3.values(POPUPS._popups ? POPUPS._popups["alerts"] : [])) {
+            let k: string = POPUPS.ioAlertKind(m[0]);
+            if (!counts[k]) {
+                counts[k] = 0;
+                order.push(k);
+            }
+            counts[k]++;
+        }
+        let parts: string[] = [];
+        for (let k of order) {
+            parts.push(KEYS.Get("io_win_al_" + k + (counts[k] == 1 ? "1" : "n"), { "v1": counts[k] }));
+        }
+        return parts.join(" · ");
+    }
+
+    /** An alert's kind: attack, report (a battle report), repair (damage), loot, or notice. */
+    private static ioAlertKind(mc: any): string {
+        let cls: string = String(getQualifiedClassName(mc)).toLowerCase();
+        let title: string = POPUPS.ioAlertTitle(mc);
+        if (cls.indexOf("report") >= 0) {
+            return "report";
+        }
+        if (cls.indexOf("attacked") >= 0 || /attack|attaqu|atac|ataq/i.test(title)) {
+            return "attack";
+        }
+        if (cls.indexOf("damaged") >= 0) {
+            return "repair";
+        }
+        if (cls.indexOf("loot") >= 0) {
+            return "loot";
+        }
+        return "notice";
+    }
+
+    /** An alert's line of text (its title, or its first text), plain. */
+    private static ioAlertTitle(mc: any): string {
+        for (let f of ["tA", "title_txt", "tTitle", "tB", "tMessage"]) {
+            try {
+                if (mc && mc[f] && mc[f].text) {
+                    let t: string = String(mc[f].text).replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+                    if (t != "") {
+                        return t;
+                    }
+                }
+            } catch (e) {
+            }
+        }
+        return "";
+    }
+
+    /**
+     * The bell's list: a row for each alert it holds (its line and View), and Show all (one after another, as the bell
+     * did). One alert: shown at once.
+     */
+    public static ioAlertsList(): void {
+        let list: any[] = POPUPS._popups ? POPUPS._popups["alerts"] : null;
+        if (!list || list.length == 0) {
+            return;
+        }
+        // (a popup showing: Show would take the first alert off the queue and drop it)
+        if (POPUPS._open) {
+            return;
+        }
+        if (!GLOBAL.INFERNO_ONLY || list.length == 1) {
+            POPUPS.Show("alerts");
+            return;
+        }
+        let shown: int = Math.min(list.length, 7) | 0;
+        let more: int = (list.length - shown) | 0;
+        let W: int = 440;
+        let H: int = (128 + shown * 34 + (more > 0 ? 18 : 0)) | 0;
+        let win: any = IoWin.openPanel("ioAlertsList", W, H, KEYS.Get("io_win_al_title"));
+        let mc: MovieClip = win.mc;
+        let left: int = win.left;
+        let top: int = win.top;
+        let sub: TextField = as3.as(mc.addChild(CasinoUI.label(POPUPS.ioAlertsSummary(), 11, CasinoUI.ASH, true, W - 44, TextFormatAlign.LEFT)), TextField);
+        sub.name = "ioAlertsSummary";
+        GLOBAL.ioFitText(sub, 8);
+        sub.x = left + 22;
+        sub.y = top + 50;
+        for (let i: int = 0; i < shown; i++) {
+            let item: any[] = list[i];
+            let row: Sprite = as3.as(mc.addChild(CasinoUI.panel(W - 40, 30, 0.9)), Sprite);
+            row.name = "ioAlertRow:" + i;
+            row.x = left + 20;
+            row.y = top + 72 + i * 34;
+            let line: string = POPUPS.ioAlertTitle(item[0]);
+            if (line.length > 60) {
+                line = line.substr(0, 58) + "…";
+            }
+            let t: TextField = as3.as(row.addChild(CasinoUI.label(line, 11, CasinoUI.GOLD, false, W - 40 - 100, TextFormatAlign.LEFT)), TextField);
+            GLOBAL.ioFitText(t, 8);
+            t.x = 10;
+            t.y = 7;
+            let view: Sprite = as3.as(row.addChild(CasinoUI.button(KEYS.Get("io_win_al_view"), 74, 24, (e: MouseEvent): void => {
+                win.close();
+                POPUPS.ioShowAlert(item);
+            }, true, 12)), Sprite);
+            view.name = "ioAlertView:" + i;
+            view.x = W - 40 - 80;
+            view.y = 3;
+        }
+        if (more > 0) {
+            let m: TextField = as3.as(mc.addChild(CasinoUI.label(KEYS.Get("io_win_al_more", { "v1": more }), 10, CasinoUI.ASH, false, W - 44, TextFormatAlign.LEFT)), TextField);
+            m.x = left + 24;
+            m.y = top + 72 + shown * 34;
+        }
+        let all: Sprite = as3.as(mc.addChild(CasinoUI.button(KEYS.Get("io_win_al_all"), 150, 30, (e: MouseEvent): void => {
+            win.close();
+            POPUPS.Show("alerts");
+        }, true, 13)), Sprite);
+        all.name = "ioAlertsAll";
+        all.x = -75;
+        all.y = -top - 44;
+    }
+
+    /** One alert from the list, shown now (it goes first in the bell's queue). */
+    private static ioShowAlert(item: any[]): void {
+        let list: any[] = POPUPS._popups["alerts"];
+        let i: int = list.indexOf(item) | 0;
+        if (i < 0 || POPUPS._open) {
+            return;
+        }
+        list.splice(i, 1);
+        list.unshift(item);
+        POPUPS._ioAlertOne = true;
+        POPUPS.Show("alerts");
+    }
+
     public static QueueCount(param1: string = "now"): int {
         return POPUPS._popups[param1].length | 0;
     }
@@ -328,12 +723,53 @@ export class POPUPS extends ASObject {
     private static ioReloadOnly(movie: MovieClip): void {
         (as3.as(movie.mcFrame, frame)).Setup(false);
         movie.bGift.visible = true;
-        movie.bGift.Setup("Reload");
+        movie.bGift.Setup(KEYS.Get("io_maint_reload")); // (QoL #235)
         movie.bGift.Highlight = true;
         movie.bGift.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
             e.stopPropagation();
             GAME.ioReload(true);
         });
+    }
+
+    /** (Inferno-only, QoL #211) a reload on the player's return has begun */
+    private static _ioReturning: boolean = false;
+
+    /**
+     * Inferno-only (QoL #211): the game stopped because nobody was there; the first sign of the player back (the mouse,
+     * a key, a tap, or the tab shown again), from 3 s after it stopped, says "Welcome back! Reloading…" and reloads,
+     * so there's no Reload to find. The button still works.
+     */
+    private static ioReloadOnReturn(movie: MovieClip): void {
+        let stage: any = GLOBAL._ROOT ? GLOBAL._ROOT.stage : null;
+        let armedAt: number = getTimer() + 3000;
+        let back: Function = null;
+        back = (e: any = null): void => {
+            if (getTimer() < armedAt || POPUPS._ioReturning || !movie.parent) {
+                return;
+            }
+            POPUPS._ioReturning = true;
+            if (stage) {
+                stage.removeEventListener(MouseEvent.MOUSE_MOVE, back);
+                stage.removeEventListener(MouseEvent.MOUSE_DOWN, back);
+                stage.removeEventListener(KeyboardEvent.KEY_DOWN, back);
+            }
+            movie.tB.htmlText = KEYS.Get("io_welcome_back_reload");
+            setTimeout((): void => {
+                GAME.ioReload(true);
+            }, 800);
+        };
+        if (stage) {
+            stage.addEventListener(MouseEvent.MOUSE_MOVE, back);
+            stage.addEventListener(MouseEvent.MOUSE_DOWN, back);
+            stage.addEventListener(KeyboardEvent.KEY_DOWN, back);
+        }
+        if (typeof document != "undefined") {
+            document.addEventListener("visibilitychange", (): void => {
+                if (document.visibilityState == "visible") {
+                    back();
+                }
+            });
+        }
     }
 
     public static NoConnection(): void {
@@ -352,7 +788,7 @@ export class POPUPS extends ASObject {
         movie.tA.htmlText = "<b>" + KEYS.Get("pop_noconnect_title") + "</b>";
         movie.tB.htmlText = KEYS.Get("pop_noconnect_body");
         if (GLOBAL.INFERNO_ONLY) {
-            movie.tB.htmlText = KEYS.Get("pop_noconnect_body") + " Then press Reload.";
+            movie.tB.htmlText = KEYS.Get("pop_noconnect_body") + " " + KEYS.Get("io_t3k_then_reload");
             POPUPS.ioReloadOnly(movie);
             POPUPS._ioNoConnection = movie;
         } else {
@@ -384,11 +820,14 @@ export class POPUPS extends ASObject {
         _loc1_.tA.htmlText = "<b>" + KEYS.Get("pop_timeout_title") + "</b>";
         _loc1_.tB.htmlText = KEYS.Get("pop_timeout_body");
         if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #636: a soft chime as it stops, after the rest went quiet)
+            SOUNDS.Play("clock1", 0.4);
             // Its button was Send FREE Gifts or Invite Friends To Play (Facebook dialogs, not here), on a
             // stopped game with nothing to go on with: Reload instead.
-            _loc1_.tB.htmlText = "You've been inactive for a while, so the game stopped. Press Reload to carry on playing.";
+            _loc1_.tB.htmlText = KEYS.Get("io_t3k_inactive_stopped");
             POPUPS.ioReloadOnly(_loc1_);
             POPUPS._ioTimeout = _loc1_;
+            POPUPS.ioReloadOnReturn(_loc1_);
         } else if (!GLOBAL._flags.kongregate) {
             if (GLOBAL._canGift) {
                 _loc1_.bGift.SetupKey("btn_sendfreegifts");
@@ -417,9 +856,9 @@ export class POPUPS extends ASObject {
             if (!home) {
                 return;
             }
-            if (!GLOBAL._promptedAFK && TUTORIAL._stage > 200 && POPUPS.ioCanInvite()) {
-                POPUPS.Invite(true);
-            }
+            // (QoL #484, 15 October: no "Having fun? Invite a friend" popup after a few idle minutes: an idle
+            // player isn't there to read it, and it covered the yard for the one who comes back. The invite
+            // link is in the top bar's Invite button.)
             GLOBAL._promptedAFK = true;
             return;
         }
@@ -492,8 +931,8 @@ export class POPUPS extends ASObject {
             // Its button opens the top bar's Invite Friends popup in its place (pushed to show now, so this
             // one closes first).
             popupMC = new popup_invite_friends();
-            popupMC.tA.htmlText = "<b>Having fun?</b>";
-            popupMC.tB.htmlText = "Invite a friend to the inferno. When they register from your link, you both get <b>" + GLOBAL.FormatNumber(Number(GLOBAL._flags.io_invite_shiny)) + " shiny</b>.";
+            popupMC.tA.htmlText = "<b>" + KEYS.Get("io_t3k_having_fun") + "</b>";
+            popupMC.tB.htmlText = KEYS.Get("io_t3k_invite_body", { "v1": GLOBAL.FormatNumber(Number(GLOBAL._flags.io_invite_shiny)) });
             popupMC.bAction.SetupKey("btn_invitefriends");
             popupMC.bAction.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
                 POPUPS.ioShowInvite();
@@ -586,6 +1025,15 @@ export class POPUPS extends ASObject {
         }
     }
 
+    /** (Inferno-only, QoL #136) the Shiny the refused thing costs, for the popup's "You need N more" */
+    private static _ioNeed: number = 0;
+
+    /** The not-enough-Shiny popup for something that costs `cost` Shiny. */
+    public static ioShinyNeed(cost: number): void {
+        POPUPS._ioNeed = Math.max(0, Number(cost) || 0);
+        POPUPS.DisplayGetShiny();
+    }
+
     public static DisplayGetShiny(param1: MouseEvent = null): void {
         POPUPS.Push(POPUPS.GetShinyPopup(), null, null, "error1", "aintgotnoshiny.png");
     }
@@ -603,8 +1051,57 @@ export class POPUPS extends ASObject {
         if (GLOBAL.INFERNO_ONLY) {
             _loc1_.tB.htmlText = KEYS.Get("io_noshiny_body");
             _loc1_.bGet.visible = false;
+            POPUPS.ioShinySources(_loc1_);
         }
+        POPUPS._ioNeed = 0;
         return _loc1_;
+    }
+
+    /**
+     * Inferno-only (QoL #136): how many more it takes ("You need 120 more Shiny; you have 30"), what is ready now
+     * (the Daily Reward, quests to collect), and a button to the best of them.
+     */
+    private static ioShinySources(mc: MovieClip): void {
+        let have: number = BASE._credits ? BASE._credits.Get() : 0;
+        let lines: string[] = [];
+        if (POPUPS._ioNeed > have) {
+            lines.push("<b>" + KEYS.Get("io_noshiny_need", { "v1": GLOBAL.FormatNumber(POPUPS._ioNeed - have), "v2": GLOBAL.FormatNumber(have) }) + "</b>");
+        }
+        lines.push(KEYS.Get("io_noshiny_body"));
+        let daily: any = null;
+        try {
+            daily = GLOBAL._flags && GLOBAL._flags.io_streak ? JSON.parse(String(GLOBAL._flags.io_streak)) : null;
+        } catch (e) {
+            daily = null;
+        }
+        let dailyReady: boolean = Boolean(daily) && (daily.collected | 0) != 1;
+        let quests: int = IoQuests.on ? IoQuests.ready | 0 : 0;
+        let ready: string[] = [];
+        if (dailyReady) {
+            ready.push(KEYS.Get("io_noshiny_daily", { "v1": daily.offerShiny | 0 }));
+        }
+        if (quests > 0) {
+            ready.push(KEYS.Get("io_noshiny_quests", { "v1": quests }));
+        }
+        if (ready.length > 0) {
+            lines.push(KEYS.Get("io_noshiny_ready", { "v1": ready.join(", ") }));
+        }
+        mc.tB.htmlText = lines.join("<br><br>");
+        GLOBAL.ioFitHeight(mc.tB);
+        if (dailyReady || quests > 0) {
+            mc.bGet.removeEventListener(MouseEvent.CLICK, BUY.Show);
+            mc.bGet.Setup(dailyReady ? KEYS.Get("io_noshiny_go_daily") : KEYS.Get("io_noshiny_go_quests"));
+            mc.bGet.name = "ioNoShinyGo";
+            mc.bGet.visible = true;
+            mc.bGet.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                POPUPS.Next();
+                if (dailyReady) {
+                    BASE.ioOpenDaily();
+                } else {
+                    IoQuestBook.Show();
+                }
+            });
+        }
     }
 
     public static DisplayWorker(param1: int, param2: any): void {
@@ -624,10 +1121,10 @@ export class POPUPS extends ASObject {
             GLOBAL._selectedBuilding = QUEUE.GetBuilding();
             if (_loc3_ > BASE._credits.Get()) {
                 POPUPS.Next();
-                POPUPS.DisplayGetShiny();
+                POPUPS.ioShinyNeed(_loc3_);
                 return;
             }
-            if (GLOBAL._selectedBuilding && !GLOBAL.ioConfirmShiny(_loc3_, "to finish your worker's current job now", (): void => {
+            if (GLOBAL._selectedBuilding && !GLOBAL.ioConfirmShiny(_loc3_, KEYS.Get("io_t3k_for_worker_now"), (): void => {
                 DisplayWorkerNext(param1, param2);
             })) {
                 return;
@@ -643,7 +1140,7 @@ export class POPUPS extends ASObject {
             } else {
                 _loc4_ = as3.as(param2, BFOUNDATION);
                 if (param1 == 1 && Boolean(_loc4_)) {
-                    if (((_loc4_._buildingProps.costs[_loc4_._lvl.Get()].time.Get() * GLOBAL._buildTime) | 0) > 3600) {
+                    if (((_loc4_._buildingProps.costs[_loc4_._lvl.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0) > 3600) {
                         UPDATES.Create(["BU", _loc4_._id]);
                     }
                     BUILDINGOPTIONS.Hide();
@@ -653,7 +1150,7 @@ export class POPUPS extends ASObject {
                     BUILDINGINFO.Hide();
                     MUSHROOMS.PickWorker(_loc4_);
                 } else if (param1 == 3 && Boolean(_loc4_)) {
-                    if (((_loc4_._buildingProps.fortify_costs[_loc4_._fortification.Get()].time.Get() * GLOBAL._buildTime) | 0) > 3600) {
+                    if (((_loc4_._buildingProps.fortify_costs[_loc4_._fortification.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0) > 3600) {
                         UPDATES.Create(["BF", _loc4_._id]);
                     }
                     BUILDINGOPTIONS.Hide();
@@ -680,6 +1177,15 @@ export class POPUPS extends ASObject {
                 mc.bGet.SetupKey("btn_speedup");
                 mc.bGet.addEventListener(MouseEvent.CLICK, (param1: MouseEvent): void => {
                     DisplayWorkerNext(n, b);
+                });
+            } else if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only (QoL #1 / #307): every worker is picking a wart or breaking ice. Workers
+                // can't be bought here (the store's "1 Extra Worker" took the Shiny and the server took the
+                // worker back), so no "Hire another": they'll be back in a moment.
+                mc.tB.htmlText = KEYS.Get("io_worker_busy_away");
+                mc.bGet.SetupKey("btn_ok");
+                mc.bGet.addEventListener(MouseEvent.CLICK, (param1: MouseEvent): void => {
+                    POPUPS.Next();
                 });
             } else {
                 mc.bGet.SetupKey("btn_hireanother");
@@ -730,6 +1236,11 @@ export class POPUPS extends ASObject {
         }
         _loc6_.bAction.y = _loc6_.mcBG.y + _loc6_.mcBG.height - 45;
         _loc6_.mcBG.Setup();
+        // (Inferno-only, QoL #91: the away summary BASE makes is covered by the Welcome back card: named, so it can
+        // be left out of the queue, POPUPS.ioRelease)
+        if (GLOBAL.INFERNO_ONLY && POPUPS._ioHold && param1 == POPUPS.ioAwayTitle()) {
+            _loc6_.name = "ioAwayPopup";
+        }
         POPUPS.Push(_loc6_, null, null, "", param4);
     }
 

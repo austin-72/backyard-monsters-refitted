@@ -34,7 +34,11 @@ if errorlevel 1 (
   echo just made the same way, then start the server with: docker compose start web
   exit /b 1
 )
+rem (an older dump: the migrations it hasn't had)
+docker compose run --rm db-init
+if errorlevel 1 echo The migrations did not all run: see the output above before players come back.
 docker compose start web
 echo.
 echo Done: the database is %~nx1 again, and the game server is running.
+echo Chat history, mutes and sign-ins (Redis), .env, the changelog and the kits' files are not in a dump.
 endlocal

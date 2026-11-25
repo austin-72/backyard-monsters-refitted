@@ -8,7 +8,8 @@ import { logger } from "../../utils/logger.js";
 import { casinoErr } from "./access.js";
 import { configuredAdmins } from "../admin/admin.js";
 import { hashSeed, newServerSeed, roundPayout } from "./rng.js";
-import { sqlAll, type Em } from "./wallet.js";
+import { refundOpenBets, sqlAll, type Em } from "./wallet.js";
+import { changed, sharedView } from "./sharedView.js";
 import { derbyRace, type DerbyRace } from "./games/derby.js";
 
 /**
@@ -47,20 +48,33 @@ const createRound = async (em: Em, opensAt: number) => {
 
 /** One step of the loop. */
 export const tickDerby = async (): Promise<void> => {
-  await postgres.em.fork().transactional(async (em) => {
+  // (anything written: the view every player polls is read afresh; sharedView.ts)
+  let wrote = false;
+  try {
+    await postgres.em.fork().transactional(async (em) => {
     const lock = await sqlAll<{ ok: boolean }>(em, `SELECT pg_try_advisory_xact_lock(?) AS ok`, [LOCK]);
     if (!lock[0]?.ok) return;
     const now = Date.now();
     const r = (await sqlAll<RoundRow>(em, `SELECT * FROM bym.casino_round WHERE game = 'derby' ORDER BY id DESC LIMIT 1 FOR UPDATE`))[0];
     if (!r) {
+      wrote = true;
+      await createRound(em, now);
+      return;
+    }
+    // (18 October, SUSPECTED-BUGS.md: a last round already settled with no round after it, as a restored database or
+    // a round deleted by hand can leave, stopped the races for good) a new one, as Ascent does
+    if (r.status === "settled") {
+      wrote = true;
       await createRound(em, now);
       return;
     }
     if (r.status === "betting" && now >= ms(r.starts_at)) {
+      wrote = true;
       await sqlAll(em, `UPDATE bym.casino_round SET status = 'running' WHERE id = ? RETURNING id`, [r.id]);
       r.status = "running";
     }
     if (r.status !== "running" || now < ms(r.ends_at)) return;
+    wrote = true;
     // the race is over: the winner's bets paid, the rest lost
     const race = r.params;
     const winner = race.order[0];
@@ -71,7 +85,7 @@ export const tickDerby = async (): Promise<void> => {
       const on = b.outcome.bets.filter((x) => x.on === winner).reduce((a, x) => a + x.amount, 0);
       let payout = on > 0 ? roundPayout(r.seed, b.id, on * odds) : 0;
       if (casinoConfig.maxPayout > 0) payout = Math.min(payout, casinoConfig.maxPayout);
-      if (payout > 0) await sqlAll(em, `UPDATE bym.save SET credits = credits + ? WHERE userid = ? AND type = ? RETURNING credits`, [payout, b.user_id, BaseType.MAIN]);
+      if (payout > 0) await sqlAll(em, `UPDATE bym.save SET credits = LEAST(credits::bigint + ?, 2147483647) WHERE userid = ? AND type = ? RETURNING credits`, [payout, b.user_id, BaseType.MAIN]);
       await sqlAll(em,
         `UPDATE bym.casino_bet SET payout = ?, multiplier = ?, status = 'settled', settled_at = now(), outcome = outcome || CAST(? AS jsonb) WHERE id = ? RETURNING id`,
         [payout, Math.min(payout / b.stake, 99_999_999).toFixed(2), JSON.stringify({ winner, odds }), b.id]);
@@ -80,7 +94,10 @@ export const tickDerby = async (): Promise<void> => {
     await sqlAll(em, `UPDATE bym.casino_round SET status = 'settled', result = CAST(? AS jsonb) WHERE id = ? RETURNING id`,
       [JSON.stringify({ order: race.order, seed: r.seed }), r.id]);
     await createRound(em, Math.max(now, ms(r.ends_at)) + rules().resultSeconds * 1000);
-  });
+    });
+  } finally {
+    if (wrote) changed("derby");
+  }
 };
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -127,6 +144,26 @@ export const betDerby = async (user: User, requestId: string, roundId: number, s
       [user.userid, requestId, r.id, stake, JSON.stringify({ bets: slip, odds: Object.fromEntries(r.params.runners.map((x) => [x.id, x.odds])) }), r.seed_hash]);
     return { round_id: Number(r.id), bets: slip, stake, credits: paid[0].credits, replayed: false };
   });
+  if (!result.replayed) changed("derby");
+  if (user.save && typeof user.save === "object" && "credits" in user.save) (user.save as { credits: number }).credits = result.credits;
+  return result;
+};
+
+/**
+ * Inferno-only (15 October, QoL #504): every slip the player has on the race taken back while bets are still open:
+ * the stakes paid back once (wallet.refundOpenBets), in one transaction with the round locked, as the loop locks it
+ * to start the race, so it can't start in between. New slips can be placed after.
+ */
+export const takeBackDerby = async (user: User, roundId: number) => {
+  const result = await postgres.em.fork().transactional(async (em) => {
+    const r = (await sqlAll<RoundRow>(em, `SELECT * FROM bym.casino_round WHERE id = ? AND game = 'derby' FOR UPDATE`, [roundId]))[0];
+    if (!r) throw casinoErr("That race could not be found.", Status.NOT_FOUND);
+    if (r.status !== "betting" || Date.now() >= ms(r.starts_at)) throw casinoErr("Too late: the race has started.", Status.CONFLICT);
+    const back = await refundOpenBets(em, r.id, user.userid);
+    if (!back.count) throw casinoErr("You have no bet on this race.", Status.CONFLICT);
+    return { round_id: Number(r.id), refunded: back.stake, credits: back.credits };
+  });
+  changed("derby");
   if (user.save && typeof user.save === "object" && "credits" in user.save) (user.save as { credits: number }).credits = result.credits;
   return result;
 };
@@ -139,30 +176,43 @@ export const derbyState = async (userid: number) => {
   const conn = postgres.em.getConnection();
   const q = async <T>(sql: string, p: unknown[] = []) => (await conn.execute(sql, p, "all")) as T[];
   const now = Date.now();
-  const rounds = await q<RoundRow>(`SELECT * FROM bym.casino_round WHERE game = 'derby' ORDER BY id DESC LIMIT 2`);
+  // (the race, the last winners and everyone's bets on it are the same for every player: read once for all every
+  // quarter second, sharedView.ts; the player's own bets are read for them)
+  const { rounds, history } = await sharedView("derby:rounds", 250, async () => ({
+    rounds: await q<RoundRow>(`SELECT * FROM bym.casino_round WHERE game = 'derby' ORDER BY id DESC LIMIT 2`),
+    // (QoL #391: and each past race's winner's odds, the runner-up and when it was run, for the game's Past races)
+    history: (await q<{ id: string; result: { order: string[] }; odds: string | number | null; ends_at: Date }>(
+      `SELECT id, result, ends_at,
+              (SELECT x->>'odds' FROM jsonb_array_elements(params->'runners') x WHERE x->>'id' = result->'order'->>0 LIMIT 1) AS odds
+         FROM bym.casino_round WHERE game = 'derby' AND status = 'settled' ORDER BY id DESC LIMIT ?`, [rules().history]))
+      .map((h) => ({ round_id: Number(h.id), winner: h.result?.order?.[0], second: h.result?.order?.[1], odds: h.odds != null ? Number(h.odds) : null, at: ms(h.ends_at) })),
+  }));
   let r = rounds[0] ?? null;
   if (r && r.status === "betting" && now < ms(r.betting_opens_at) && rounds[1]) r = rounds[1];
-  const history = (await q<{ id: string; result: { order: string[] } }>(
-    `SELECT id, result FROM bym.casino_round WHERE game = 'derby' AND status = 'settled' ORDER BY id DESC LIMIT ?`, [rules().history]))
-    .map((h) => ({ round_id: Number(h.id), winner: h.result?.order?.[0] }));
   const pub = { betting_seconds: rules().bettingSeconds, race_seconds: rules().raceSeconds, result_seconds: rules().resultSeconds, rtp: rules().rtp };
   if (!r) return { server_ts: now, phase: "waiting", history, my_bets: [], rules: pub };
   const phase = r.status === "settled" ? "results" : r.status === "running" ? "racing" : now < ms(r.betting_opens_at) ? "waiting" : "betting";
   const race = r.params;
   const mine = await q<{ stake: number; payout: number; status: string; outcome: { bets: { on: string; amount: number }[] } }>(
-    `SELECT stake, payout, status, outcome FROM bym.casino_bet WHERE round_id = ? AND user_id = ? ORDER BY id`, [r.id, userid]);
-  const count = (await q<{ n: string; s: string }>(`SELECT count(DISTINCT user_id) AS n, COALESCE(sum(stake), 0) AS s FROM bym.casino_bet WHERE round_id = ?`, [r.id]))[0];
-  // everyone's bets on it: what is on each runner, and the biggest bettors (a line per player and runner;
-  // the admins' bets count in the totals but are not listed)
-  const admins = configuredAdmins();
-  const notAdmin = admins.length ? `AND u.username NOT IN (${admins.map(() => "?").join(", ")})` : "";
-  const totals = await q<{ on: string; amount: string }>(
-    `SELECT x->>'on' AS on, sum((x->>'amount')::bigint) AS amount FROM bym.casino_bet b, jsonb_array_elements(b.outcome->'bets') x
-      WHERE b.round_id = ? GROUP BY 1`, [r.id]);
-  const bettors = await q<{ username: string; user_id: number; on: string; amount: string }>(
-    `SELECT u.username, b.user_id, x->>'on' AS on, sum((x->>'amount')::bigint) AS amount
-       FROM bym.casino_bet b JOIN bym."user" u ON u.userid = b.user_id, jsonb_array_elements(b.outcome->'bets') x
-      WHERE b.round_id = ? ${notAdmin} GROUP BY u.username, b.user_id, x->>'on' ORDER BY amount DESC, u.username LIMIT ?`, [r.id, ...admins, rules().listed]);
+    `SELECT stake, payout, status, outcome FROM bym.casino_bet WHERE round_id = ? AND user_id = ? AND status <> 'refunded' ORDER BY id`, [r.id, userid]);
+  const roundId = r.id;
+  const { count, totals, bettors } = await sharedView(`derby:round${roundId}`, 250, async () => {
+    // everyone's bets on it: what is on each runner, and the biggest bettors (a line per player and runner;
+    // the admins' bets count in the totals but are not listed)
+    const admins = configuredAdmins();
+    const notAdmin = admins.length ? `AND u.username NOT IN (${admins.map(() => "?").join(", ")})` : "";
+    return {
+      // (QoL #504: slips taken back are left out)
+      count: (await q<{ n: string; s: string }>(`SELECT count(DISTINCT user_id) AS n, COALESCE(sum(stake), 0) AS s FROM bym.casino_bet WHERE round_id = ? AND status <> 'refunded'`, [roundId]))[0],
+      totals: await q<{ on: string; amount: string }>(
+        `SELECT x->>'on' AS on, sum((x->>'amount')::bigint) AS amount FROM bym.casino_bet b, jsonb_array_elements(b.outcome->'bets') x
+          WHERE b.round_id = ? AND b.status <> 'refunded' GROUP BY 1`, [roundId]),
+      bettors: await q<{ username: string; user_id: number; on: string; amount: string }>(
+        `SELECT u.username, b.user_id, x->>'on' AS on, sum((x->>'amount')::bigint) AS amount
+           FROM bym.casino_bet b JOIN bym."user" u ON u.userid = b.user_id, jsonb_array_elements(b.outcome->'bets') x
+          WHERE b.round_id = ? AND b.status <> 'refunded' ${notAdmin} GROUP BY u.username, b.user_id, x->>'on' ORDER BY amount DESC, u.username LIMIT ?`, [roundId, ...admins, rules().listed]),
+    };
+  });
   return {
     server_ts: now,
     phase,

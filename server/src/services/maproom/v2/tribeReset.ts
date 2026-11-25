@@ -1,5 +1,4 @@
 import { Save } from "../../../database/models/save.model.js";
-import { WorldMapCell } from "../../../database/models/worldmapcell.model.js";
 import { BaseType } from "../../../enums/Base.js";
 import { MapRoomCell } from "../../../enums/MapRoom.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
@@ -36,12 +35,22 @@ export const resetExpiredTribeYards = async (now = Math.floor(Date.now() / 1000)
   for (let i = 0; i < baseids.length; i += 500) {
     const batch = baseids.slice(i, i + 500);
     // (the save first, as the admin's reset does: it holds the link to its cell)
-    done += await em.nativeDelete(Save, {
-      type: BaseType.TRIBE,
-      baseid: { $in: batch },
-      savetime: { $lt: now - WILD_MONSTER_EXPIRATION },
-    });
-    await em.nativeDelete(WorldMapCell, { base_type: MapRoomCell.WM, baseid: { $in: batch } });
+    // (18 October, SUSPECTED-BUGS.md: every cell of the batch went, also the cell of a yard attacked between the
+    // find and this delete, whose save was kept. Only the cells of the saves deleted now, and with no save left.)
+    const marks = batch.map(() => "?").join(",");
+    const gone = (await em
+      .getConnection()
+      .execute(`DELETE FROM bym.save WHERE type = ? AND baseid IN (${marks}) AND savetime < ? RETURNING baseid`, [BaseType.TRIBE, ...batch, now - WILD_MONSTER_EXPIRATION], "all")) as { baseid: string }[];
+    done += gone.length;
+    const ids = [...new Set(gone.map((g) => String(g.baseid)))];
+    if (ids.length)
+      await em
+        .getConnection()
+        .execute(
+          `DELETE FROM bym.world_map_cell c WHERE c.base_type = ? AND c.baseid IN (${ids.map(() => "?").join(",")}) AND NOT EXISTS (SELECT 1 FROM bym.save s WHERE s.baseid = c.baseid)`,
+          [MapRoomCell.WM, ...ids],
+          "all",
+        );
   }
   return done;
 };

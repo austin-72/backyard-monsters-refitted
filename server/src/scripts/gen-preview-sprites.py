@@ -1,11 +1,11 @@
-"""Writes server/src/game-data/kits/previewSprites.ts from the client's INFERNOYARDPROPS.as imageData.
+"""Writes server/src/game-data/kits/previewSprites.ts from the client's INFERNOYARDPROPS.ts imageData.
 
    python3 server/src/scripts/gen-preview-sprites.py <repo root>   (after changing building art in INFERNOYARDPROPS;
    then bump KIT_PICTURES in services/kits/refreshKitPictures.ts so every kit picture is drawn again)
 """
 import re, sys, json
 W = sys.argv[1]
-src = open(W + '/client/scripts/INFERNOYARDPROPS.as').read()
+src = open(W + '/client-web/src/game/INFERNOYARDPROPS.ts').read()
 src = re.sub(r'//[^\n]*', '', src)
 
 def block(s, i):
@@ -30,8 +30,9 @@ for m in re.finditer(r'"id": (\d+),', src):
     if not bm: continue
     base = bm.group(1)
     levels = {}
-    for t in re.finditer(r'\n\s*(\d+): \{', img):
-        tb = img.index('{', t.start()); tier = img[tb:block(img, tb)]
+    # (a level's entry, "<level>: {": the TypeScript keeps the table on one line)
+    for t in re.finditer(r'(?:^|[{,\s])(\d+): \{', img):
+        tb = img.index('{', t.start(1)); tier = img[tb:block(img, tb)]
         spr = {}
         for e in re.finditer(r'"(top|anim|anim2|anim3)": \["([^"]+)", new (Point|Rectangle)\(([^)]*)\)', tier):
             nums = [float(v) for v in e.group(4).split(',')]

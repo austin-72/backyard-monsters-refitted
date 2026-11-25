@@ -8,7 +8,7 @@ import { ASObject } from "as3";
 import { flashClass, cssColor, unimplemented, context2d } from "../_internal";
 import { runtimeHooks } from "../_runtime";
 import { Event, FocusEvent, TextEvent, KeyboardEvent } from "../events";
-import { DisplayObject, InteractiveObject, player, type M6 } from "../display/core";
+import { DisplayObject, InteractiveObject, player, touch, redrawHooks, type M6 } from "../display/core";
 import { Rectangle } from "../geom";
 
 // ------------------------------------------------------------ embedded fonts
@@ -24,7 +24,7 @@ const EM = 20480;
 const embedded: EmbeddedFont[] = [];
 const resolvedCache = new Map<string, EmbeddedFont | null>();
 
-/** Loads fonts.json produced by tools/swf-assets. Fonts keep SWF definition order. */
+/** Loads fonts.json (public/swf: the game's fonts, read out of its original Flash library). Fonts keep SWF definition order. */
 export function registerEmbeddedFonts(json: { fonts: any[] }): void {
   for (const f of json.fonts) {
     const glyphs = new Map<number, GlyphDef>();
@@ -61,6 +61,25 @@ function resolveEmbedded(name: string, bold: boolean, italic: boolean): Embedded
   resolvedCache.set(key, out);
   return out;
 }
+
+/**
+ * Characters an embedded font may lack, and what is drawn instead when it has that (the font's own glyph is kept when it
+ * has one): the middle dot as a bullet, typographic quotes and dashes as plain ones, a no-break space as a space.
+ */
+const GLYPH_FALLBACK: Record<number, number> = {
+  0xb7: 0x2022, // · -> •
+  0x2219: 0x2022, // ∙ -> •
+  0x2018: 0x27, 0x2019: 0x27, // ‘ ’ -> '
+  0x201c: 0x22, 0x201d: 0x22, // “ ” -> "
+  0x2013: 0x2d, 0x2014: 0x2d, // – — -> -
+  0xa0: 0x20, // no-break space -> space
+  0xd7: 0x78, // × -> x
+  0xab: 0x22, 0xbb: 0x22, // « » -> " (French and Spanish quotes)
+  0xaa: 0x61, 0xba: 0x6f, 0xb0: 0x6f, // ª º ° -> a o o (Spanish and Portuguese ordinals, "N°")
+  0x25cf: 0x2022, // ● -> •
+  0x25b6: 0x3e, 0x25c0: 0x3c, // ▶ ◀ -> > <
+  0x25be: 0x76, 0x2193: 0x76, // ▾ ↓ -> v
+};
 
 // ------------------------------------------------------------ TextFormat
 export class TextFormat extends ASObject {
@@ -211,10 +230,37 @@ function deviceFamily(name: string): string {
   return `'${n}', Arial, sans-serif`;
 }
 function cssFont(f: Fmt): string { return `${f.italic ? "italic " : ""}${f.bold ? "bold " : ""}${f.size}px ${deviceFamily(f.font)}`; }
+/**
+ * (21 October) A device font's character widths, kept by font: text was laid out by setting the font and measuring
+ * each character anew (a chat line, a button's label, every number on the HUD). Let go when the page's fonts finish
+ * loading, as one that came later measures differently.
+ */
+const deviceWidths = new Map<string, Map<string, number>>();
+let deviceWidthsHooked = false;
+let lastFmt: Fmt | null = null;
+let lastFont = "";
+let lastWidths: Map<string, number> | null = null;
 function measureDevice(f: Fmt, ch: string): number {
   if (!measureCtx) measureCtx = context2d(document.createElement("canvas"));
-  measureCtx.font = cssFont(f);
-  return measureCtx.measureText(ch).width;
+  if (!deviceWidthsHooked) {
+    deviceWidthsHooked = true;
+    try { (document as any).fonts?.addEventListener?.("loadingdone", () => { deviceWidths.clear(); lastFmt = null; lastWidths = null; }); } catch (e) { /* no font events */ }
+  }
+  let widths: Map<string, number> | null = f === lastFmt ? lastWidths : null;
+  let font = lastFont;
+  if (!widths) {
+    font = cssFont(f);
+    widths = deviceWidths.get(font) ?? null;
+    if (!widths) { widths = new Map(); deviceWidths.set(font, widths); }
+    lastFmt = f; lastFont = font; lastWidths = widths;
+  }
+  let w = widths.get(ch);
+  if (w === undefined) {
+    if (measureCtx.font !== font) measureCtx.font = font;
+    w = measureCtx.measureText(ch).width;
+    widths.set(ch, w);
+  }
+  return w;
 }
 
 export class TextField extends InteractiveObject {
@@ -225,6 +271,8 @@ export class TextField extends InteractiveObject {
   declare $autoSize: string; declare $wordWrap: boolean; declare $multiline: boolean; declare $embedFonts: boolean;
   declare $type: string; declare $selectable: boolean; declare $border: boolean; declare $borderColor: number;
   declare $background: boolean; declare $backgroundColor: number; declare $maxChars: number; declare $restrict: string | null;
+  /** (Inferno: the phone keyboard a field asks for, and its Enter key's label: QoL #204) */
+  declare $ioInputMode: string | null; declare $ioEnterKey: string | null;
   declare $password: boolean; declare $condenseWhite: boolean; declare $scrollV: number; declare $scrollH: number;
   declare $selBegin: number; declare $selEnd: number; declare $antiAliasType: string; declare $gridFitType: string;
   declare $sharpness: number; declare $thickness: number; declare $mouseWheelEnabled: boolean; declare $alwaysShowSelection: boolean;
@@ -233,7 +281,8 @@ export class TextField extends InteractiveObject {
   // so caches and redraw regions see a restyle even when the text is laid out again before rendering.
   declare $lay: Line[] | null; declare $gen: number;
   get $layout(): Line[] | null { return this.$lay; }
-  set $layout(v: Line[] | null) { if (v === null) this.$gen = (this.$gen | 0) + 1; this.$lay = v; }
+  // (laid out: compared again at the next drawing, as its size can follow its text (autoSize) and its look its layout)
+  set $layout(v: Line[] | null) { if (v === null) this.$gen = (this.$gen | 0) + 1; touch(this); this.$lay = v; }
   /** top-left of the text box in local coordinates (library text fields start at their bounds) */
   declare $bx: number; declare $by: number;
 
@@ -247,6 +296,7 @@ export class TextField extends InteractiveObject {
     this.$autoSize = "none"; this.$wordWrap = false; this.$multiline = false; this.$embedFonts = false;
     this.$type = "dynamic"; this.$selectable = true; this.$border = false; this.$borderColor = 0;
     this.$background = false; this.$backgroundColor = 0xffffff; this.$maxChars = 0; this.$restrict = null;
+    this.$ioInputMode = null; this.$ioEnterKey = null;
     this.$password = false; this.$condenseWhite = false; this.$scrollV = 1; this.$scrollH = 0;
     this.$selBegin = 0; this.$selEnd = 0; this.$antiAliasType = "normal"; this.$gridFitType = "pixel";
     this.$sharpness = 0; this.$thickness = 0; this.$mouseWheelEnabled = true; this.$alwaysShowSelection = false;
@@ -265,6 +315,9 @@ export class TextField extends InteractiveObject {
   set text(v: string) {
     if (v == null) throw new TypeError("Error #2007: Parameter text must be non-null.");
     const t = String(v).replace(/\r\n|\n/g, "\r");
+    // The same text again, as it stands (plain, in the default format: just what this would make): nothing to do.
+    // Games set their scores and clocks every few steps; each set laid the field out and drew it again (9 October).
+    if (t === this.$text && this.$htmlSource == null && (t ? this.$runs.length === 1 && this.$runs[0].text === t && this.$runs[0].fmt === this.$default : this.$runs.length === 0)) return;
     this.$runs = t ? [{ text: t, fmt: this.$runs[0]?.fmt && this.$runs.length && false ? this.$runs[0].fmt : this.$default }] : [];
     this.$text = t;
     this.$htmlSource = null;
@@ -393,8 +446,13 @@ export class TextField extends InteractiveObject {
   get textColor(): number { return (this.$runs[0]?.fmt ?? this.$default).color; }
   set textColor(v: number) {
     const c = v >>> 0 & 0xffffff;
-    this.$runs = this.$runs.map((r) => ({ text: r.text, fmt: { ...r.fmt, color: c } }));
-    this.$default = { ...this.$default, color: c };
+    // (the colour it has already: nothing to do; and runs in the default format keep sharing it, so setting the same
+    // text after stays a no-op too: a clock coloured every frame was laid out and drawn again every frame; 9 October)
+    if (this.$default.color === c && this.$runs.every((r) => r.fmt.color === c)) return;
+    const old = this.$default;
+    const def = { ...old, color: c };
+    this.$runs = this.$runs.map((r) => ({ text: r.text, fmt: r.fmt === old ? def : { ...r.fmt, color: c } }));
+    this.$default = def;
     this.$layout = null;
   }
   get styleSheet(): any { return this.$styleSheet; } set styleSheet(v: any) { this.$styleSheet = v; if (v) unimplemented("TextField.styleSheet"); }
@@ -414,12 +472,16 @@ export class TextField extends InteractiveObject {
     this.$type = v;
   }
   get selectable(): boolean { return this.$selectable; } set selectable(v: boolean) { this.$selectable = !!v; }
-  get border(): boolean { return this.$border; } set border(v: boolean) { this.$border = !!v; }
-  get borderColor(): number { return this.$borderColor; } set borderColor(v: number) { this.$borderColor = v >>> 0 & 0xffffff; }
-  get background(): boolean { return this.$background; } set background(v: boolean) { this.$background = !!v; }
-  get backgroundColor(): number { return this.$backgroundColor; } set backgroundColor(v: number) { this.$backgroundColor = v >>> 0 & 0xffffff; }
+  get border(): boolean { return this.$border; } set border(v: boolean) { this.$border = !!v; touch(this); }
+  get borderColor(): number { return this.$borderColor; } set borderColor(v: number) { this.$borderColor = v >>> 0 & 0xffffff; touch(this); }
+  get background(): boolean { return this.$background; } set background(v: boolean) { this.$background = !!v; touch(this); }
+  get backgroundColor(): number { return this.$backgroundColor; } set backgroundColor(v: number) { this.$backgroundColor = v >>> 0 & 0xffffff; touch(this); }
   get maxChars(): number { return this.$maxChars; } set maxChars(v: number) { this.$maxChars = v | 0; }
   get restrict(): string | null { return this.$restrict; } set restrict(v: string | null) { this.$restrict = v; }
+  /** Inferno (QoL #204): the phone keyboard for this field: "email", "numeric", "decimal", "search"... (HTML inputmode). */
+  get ioInputMode(): string | null { return this.$ioInputMode; } set ioInputMode(v: string | null) { this.$ioInputMode = v; }
+  /** Inferno (QoL #204): the phone keyboard's Enter key: "send", "go", "next", "done", "search" (HTML enterkeyhint). */
+  get ioEnterKey(): string | null { return this.$ioEnterKey; } set ioEnterKey(v: string | null) { this.$ioEnterKey = v; }
   get displayAsPassword(): boolean { return this.$password; } set displayAsPassword(v: boolean) { this.$password = !!v; this.$changed(); }
   get condenseWhite(): boolean { return this.$condenseWhite; } set condenseWhite(v: boolean) { this.$condenseWhite = !!v; }
   get antiAliasType(): string { return this.$antiAliasType; } set antiAliasType(v: string) { this.$antiAliasType = v; }
@@ -443,6 +505,7 @@ export class TextField extends InteractiveObject {
   setSelection(begin: number, end: number): void {
     this.$selBegin = Math.max(0, Math.min(begin, this.$text.length));
     this.$selEnd = Math.max(0, Math.min(end, this.$text.length));
+    touch(this);
     inputBridge.syncSelection(this);
   }
   private $clampSelection(): void {
@@ -452,8 +515,8 @@ export class TextField extends InteractiveObject {
     // sent): the hidden <textarea> must follow, or the next key brings the old text back in front of it.
     inputBridge.syncText(this);
   }
-  get scrollV(): number { return this.$scrollV; } set scrollV(v: number) { this.$scrollV = Math.max(1, Math.min(v | 0, this.maxScrollV)); }
-  get scrollH(): number { return this.$scrollH; } set scrollH(v: number) { this.$scrollH = Math.max(0, v | 0); }
+  get scrollV(): number { return this.$scrollV; } set scrollV(v: number) { this.$scrollV = Math.max(1, Math.min(v | 0, this.maxScrollV)); touch(this); }
+  get scrollH(): number { return this.$scrollH; } set scrollH(v: number) { this.$scrollH = Math.max(0, v | 0); touch(this); }
   get maxScrollH(): number { return Math.max(0, Math.ceil(this.textWidth + 4 - this.$w)); }
   get maxScrollV(): number {
     const lines = this.$lines();
@@ -544,6 +607,8 @@ export class TextField extends InteractiveObject {
     for (const r of this.$runs) for (let i = 0; i < r.text.length; i++) fmts.push(r.fmt);
     let y = 2;
     let pStart = 0;
+    // (a format's widths found again by the format itself only within one laying out: formats can change between)
+    lastFmt = null;
     const paras = text.split("\r");
     for (let pi = 0; pi < paras.length; pi++) {
       const ptext = paras[pi];
@@ -555,10 +620,17 @@ export class TextField extends InteractiveObject {
       // measure glyphs
       const gl: LGlyph[] = [];
       let x = 0;
+      // (21 October: the embedded font looked up once per format, not once per character)
+      let fontFmt: Fmt | null = null;
+      let fontOf: EmbeddedFont | null = null;
       for (let i = 0; i < ptext.length; i++) {
         const f = fmts[pStart + i] ?? pfmt;
-        const code = ptext.charCodeAt(i);
-        const font = this.$embedFonts ? resolveEmbedded(f.font, f.bold, f.italic) : null;
+        let code = ptext.charCodeAt(i);
+        if (this.$embedFonts && f !== fontFmt) { fontFmt = f; fontOf = resolveEmbedded(f.font, f.bold, f.italic); }
+        const font = this.$embedFonts ? fontOf : null;
+        // (24 October: a character the embedded font hasn't (Groboldov has no "·", which the game's texts use between
+        // parts: "Inferno Map Room 2 · a custom server" showed two spaces) drawn with a near one it has)
+        if (font && !font.glyphs.has(code)) { const alt = GLYPH_FALLBACK[code]; if (alt !== undefined && font.glyphs.has(alt)) code = alt; }
         let adv: number;
         if (this.$embedFonts) {
           const g = font?.glyphs.get(code);
@@ -650,6 +722,33 @@ export class TextField extends InteractiveObject {
 
   // ---------------------------------------------------------- display object hooks
   $selfBounds(): Rectangle { return new Rectangle(this.$bx, this.$by, this.$w, this.$h); }
+  /**
+   * (19 October) Where its text can draw (its own space): round the lines laid out, a margin round them, inside its
+   * box; null when that is not known (a background or border, being typed in, scrolled, device text laid out wider
+   * (see $drawSelf)). A glowing text field's filter was put over all of its box: a title 480 wide with a few
+   * characters in the middle, blurred whole whenever its text changed (Balthazar's Ascent's multiplier, 40 times a
+   * second).
+   */
+  $inkBounds(m: M6): Rectangle | null {
+    if (this.$background || this.$border || this.$type === "input" || inputBridge.focused === this || this.$scrollV !== 1 || this.$scrollH !== 0) return null;
+    if (!this.$embedFonts) {
+      const sx = Math.hypot(m[0], m[1]), sy = Math.hypot(m[2], m[3]);
+      if (sy > 1e-6 && Math.abs(sx / sy - 1) > 0.01) return null;
+    }
+    const lines = this.$lines();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const l of lines) {
+      if (!l.glyphs.length) continue;
+      // (a margin for what reaches past the advance: italics, wide glyphs, a big font's overhang)
+      const big = Math.max(l.ascent + l.descent, 4);
+      x0 = Math.min(x0, l.x - big * 0.5 - 2); x1 = Math.max(x1, l.x + l.width + big * 0.5 + 2);
+      y0 = Math.min(y0, l.y - big * 0.25 - 2); y1 = Math.max(y1, l.y + l.ascent + l.descent + big * 0.25 + 2);
+    }
+    if (!(x1 > x0)) return null;
+    x0 = Math.max(0, x0); y0 = Math.max(0, y0); x1 = Math.min(this.$w, x1); y1 = Math.min(this.$h, y1);
+    if (!(x1 > x0) || !(y1 > y0)) return new Rectangle(this.$bx, this.$by, 0, 0);
+    return new Rectangle(this.$bx + x0, this.$by + y0, x1 - x0, y1 - y0);
+  }
   $hitSelf(lx: number, ly: number): boolean { lx -= this.$bx; ly -= this.$by; return lx >= 0 && ly >= 0 && lx <= this.$w && ly <= this.$h; }
   $drawSelf(ctx: CanvasRenderingContext2D, mm: M6, alpha: number): void {
     if (player.debug.noText) return;
@@ -811,12 +910,19 @@ export const inputBridge = {
     });
   },
   focus(tf: TextField | null): void {
+    touch(this.focused); touch(tf);
     this.focused = tf;
     this.blinkStart = performance.now();
     if (!this.el) return;
     if (tf && tf.$type === "input") {
       this.el.value = tf.$text.replace(/\r/g, "\n");
       this.el.maxLength = tf.$maxChars > 0 ? tf.$maxChars : 524288;
+      // (QoL #204: the keyboard a phone shows: an email one, a number pad for fields that only take digits; "Send",
+      // "Next" or "Done" on its Enter key; no autocorrect in a password)
+      const digits = tf.$restrict !== null && /^(?:\\-)?0-9(?:\\-)?$|^[0-9]+$/.test(tf.$restrict.replace(/[\s,.]/g, ""));
+      this.el.inputMode = tf.$ioInputMode ?? (digits ? "numeric" : "text");
+      this.el.enterKeyHint = tf.$ioEnterKey ?? (tf.$multiline ? "enter" : "done");
+      this.el.setAttribute("autocorrect", tf.$password || tf.$ioInputMode === "email" ? "off" : "on");
       this.el.focus({ preventScroll: true });
       this.syncSelection(tf);
     } else {
@@ -860,6 +966,8 @@ export const inputBridge = {
   },
 };
 void FocusEvent; void KeyboardEvent;
+// (the focused field's caret blinks and its selection follows the keyboard, unmarked: compared at every drawing)
+redrawHooks.push(() => { if (inputBridge.focused) touch(inputBridge.focused); });
 
 function applyRestrict(v: string, restrict: string, _old: string): string {
   if (restrict === "") return "";

@@ -68,6 +68,18 @@ export class Timekeeper extends ASObject {
         this.tickFrequency = param1;
     }
 
+    /**
+     * Inferno-only (21 October: a "Game clock ahead of the server" report, a false one). The game's clock was just set
+     * from the server's (a yard loaded): any time still owed from before (a page the browser froze, its timer events
+     * held back, owed seconds then paid back up to 20 a second) is forgotten, or it was paid on top of the server's
+     * time and the clock ran ahead of it, by as much as the page was frozen (a yard loaded again after a long time
+     * away: GLOBAL.ioBackAfterAway), its timers finishing early.
+     */
+    public resync(): void {
+        this.regulatorAcc = 0;
+        this.regulatorCache = getTimer();
+    }
+
     public stopTicking(): void {
         this.isTicking = false;
     }

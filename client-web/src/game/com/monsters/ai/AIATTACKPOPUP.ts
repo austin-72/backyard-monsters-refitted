@@ -2,6 +2,7 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { Bitmap, BitmapData, DisplayObject } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
+import { TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { AIATTACKPOPUP_CLIP, BASE, CREATURELOCKER, GLOBAL, ImageCache, KEYS, POPUPSETTINGS, SOUNDS, TRIBES, WMATTACK, bubblepopup3 } from "@game";
 
 export class AIATTACKPOPUP extends AIATTACKPOPUP_CLIP {
@@ -109,9 +110,37 @@ export class AIATTACKPOPUP extends AIATTACKPOPUP_CLIP {
         }
         if (BASE.isInfernoMainYardOrOutpost) {
             this.name_txt.htmlText = "<b>" + KEYS.Get("inf_ai_tribe_mapview", { "v1": TRIBES.TribeForBaseID(WMATTACK._attackersBaseID).name }) + "</b>";
+            // (Inferno-only, QoL #601: its level, and when it arrives in the player's own time)
+            if (GLOBAL.INFERNO_ONLY && WMATTACK._queued) {
+                this.ioWhen();
+            }
         } else {
             this.name_txt.htmlText = "<b>" + KEYS.Get("ai_tribe", { "v1": TRIBES.TribeForBaseID(WMATTACK._attackersBaseID).name }) + "</b>";
         }
+    }
+
+    /** QoL #601: "Level 12 · arriving at 14:05 (in 4m 30s)", under the tribe's name. */
+    public ioWhen(): string {
+        let q: any = WMATTACK._queued;
+        let left: int = Math.max(0, (Number(q.attackTime) || 0) - GLOBAL.Timestamp()) | 0;
+        let at: Date = new Date(Date.now() + left * 1000);
+        let clock: string = ("0" + at.getHours()).slice(-2) + ":" + ("0" + at.getMinutes()).slice(-2);
+        let text: string = KEYS.Get("io_raid_when", { "v1": Math.max(1, q.level | 0), "v2": clock, "v3": GLOBAL.ioDuration(left) });
+        let t: TextField = new TextField();
+        t.name = "ioRaidWhen";
+        let f: TextFormat = new TextFormat("Verdana", 11, 0x5A1A0A, true);
+        f.align = TextFormatAlign.CENTER;
+        t.defaultTextFormat = f;
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.width = Math.max(200, this.name_txt.width);
+        t.height = 18;
+        t.x = this.name_txt.x + (this.name_txt.width - t.width) / 2;
+        t.y = this.name_txt.y + this.name_txt.height + 10;
+        t.text = text;
+        GLOBAL.ioFitText(t);
+        this.addChild(t);
+        return text;
     }
 
     /** Sorts monster kinds strongest first: health of one at the attack's level. */

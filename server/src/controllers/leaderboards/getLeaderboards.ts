@@ -79,7 +79,9 @@ export const getLeaderboards: KoaController = async (ctx) => {
 
   // Admins in test mode are left out (their outposts are undone when they switch it off).
   const hidden = (await testModeUserIds()).filter((id) => Number.isInteger(id));
-  const notHidden = (column: string) => (hidden.length ? ` AND ${column} NOT IN (${hidden.join(", ")})` : "");
+  // (13 October: and banned accounts)
+  const notHidden = (column: string) =>
+    (hidden.length ? ` AND ${column} NOT IN (${hidden.join(", ")})` : "") + ` AND ${column} NOT IN (SELECT userid FROM bym."user" WHERE banned)`;
 
   if (version === MapRoomVersion.V3) {
     leaderboard = await postgres.em.getConnection().execute<MR3Leaderboard[]>(

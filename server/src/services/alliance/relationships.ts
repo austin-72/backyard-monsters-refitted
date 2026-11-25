@@ -2,9 +2,11 @@ import { AllianceMessageType, AllianceStance } from "../../enums/Alliance.js";
 import { EnumBaseRelationship } from "../../enums/EnumBaseRelationship.js";
 import { Alliance } from "../../database/models/alliance.model.js";
 import { AllianceRelationship } from "../../database/models/alliancerelationship.model.js";
+import { AllianceMessage } from "../../database/models/alliancemessage.model.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { announceShout } from "./allianceMessages.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 
 export type Relationship = Record<number, AllianceStance>;
 export type RelationshipLookup = Map<number, AllianceStance>;
@@ -121,7 +123,48 @@ export const setAllianceRelationship = async (
 
   await announceShout(shout);
 
+  // (Inferno-only, QoL #176: the other alliance is told too, in its own feed: it was never told before)
+  if (infernoOnlyConfig.enabled) {
+    // (one line in their feed for the last hour's changes, not one a click: an earlier one from this hour goes)
+    await postgres.em
+      .nativeDelete(AllianceMessage, {
+        alliance_id: target.id,
+        messageType: AllianceMessageType.RELATIONSHIP,
+        targetAlliance: alliance.id,
+        body: { $like: "in:%" },
+        created_at: { $gt: new Date(Date.now() - 60 * 60 * 1000) },
+      })
+      .catch(() => 0);
+    await announceShout({
+      allianceId: target.id,
+      author: leader,
+      type: AllianceMessageType.RELATIONSHIP,
+      body: `in:${relationship}`,
+      target: alliance,
+    });
+  }
+
   return true;
+};
+
+/**
+ * Inferno-only (QoL #176): how each of some alliances has flagged the viewer's own (the other direction of
+ * findRelationships), for Browse.
+ *
+ * @param {User["alliance_id"]} allianceId - The viewer's alliance, absent when unaffiliated.
+ * @param {number[]} fromIds - The alliances being listed.
+ * @returns {Promise<RelationshipLookup>} Their flags on the viewer's alliance, by their id; missing means neutral.
+ */
+export const findStancesToward = async (allianceId: User["alliance_id"], fromIds: number[]): Promise<RelationshipLookup> => {
+  if (!allianceId || !fromIds.length) return new Map();
+
+  const rows = await postgres.em.find(
+    AllianceRelationship,
+    { alliance: { $in: fromIds }, targetAlliance: allianceId },
+    { fields: ["alliance", "relationship"] }
+  );
+
+  return new Map(rows.map(({ alliance, relationship }) => [alliance.id, relationship]));
 };
 
 /**

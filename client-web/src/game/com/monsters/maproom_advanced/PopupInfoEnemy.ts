@@ -1,14 +1,15 @@
 import * as as3 from "as3";
 import { Vector, int } from "as3";
-import { Bitmap, BitmapData, DisplayObject, Loader, MovieClip } from "flash/display";
+import { Bitmap, BitmapData, DisplayObject, Loader, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
-import { Point } from "flash/geom";
+import { Point, Rectangle } from "flash/geom";
 import { URLRequest } from "flash/net";
-import { ALLIANCES, AllyInfo, BASE, CellData, Contact, EnumYardType, GLOBAL, ImageCache, IoMapUi, IoUnderworld, KEYS, LOGGER, LOGIN, MapRoomCell, MapRoomManager, PLEASEWAIT, POPUPSETTINGS, POWERUPS, PopupInfoEnemy_CLIP, PopupTakeover, SecNum, TRIBES, URLLoaderApi, bubblepopupRight, com_monsters_mailbox_Message as Message, com_monsters_maproom_advanced_MapRoom as MapRoom, frame } from "@game";
+import { TextField, TextFieldAutoSize } from "flash/text";
+import { ALLIANCES, ATTACK, AllyInfo, BASE, IoAllianceUi, CellData, Contact, EnumYardType, GLOBAL, ImageCache, IoMapUi, IoQuests, IoUnderworld, KEYS, LOGGER, LOGIN, MapRoomCell, MapRoomManager, PLEASEWAIT, POPUPSETTINGS, POWERUPS, PopupInfoEnemy_CLIP, PopupTakeover, SecNum, TRIBES, URLLoaderApi, bubblepopupRight, com_monsters_mailbox_Message as Message, com_monsters_maproom_advanced_MapRoom as MapRoom, frame, IoOutpostsPopup } from "@game";
 
 export class PopupInfoEnemy extends PopupInfoEnemy_CLIP {
     static {
-        as3.fields(this, { _cell: null, _mcMonsters: null, _mcResources: null, _message: null, _profilePic: null, _profileBmp: null });
+        as3.fields(this, { _cell: null, _mcMonsters: null, _mcResources: null, _message: null, _profilePic: null, _profileBmp: null, _ioRows: null, _ioCard: null, _ioCardH0: 0 });
     }
 
     private static _takeoverCost: SecNum = null;
@@ -116,6 +117,11 @@ export class PopupInfoEnemy extends PopupInfoEnemy_CLIP {
     }
 
     /** Inferno-only: worked out again for the same cell (what the portals reach has come: IoUnderworld). */
+    /** (Inferno-only, QoL #86) its button is Take over, not Attack */
+    public get ioTakeoverReady(): boolean {
+        return Boolean(this._cell) && this._cell._base != 2 && Boolean(this._cell._destroyed) && !this._cell._protected && (this._cell._locked == 0 || this._cell._locked == LOGIN._playerID) && MapRoom._flingerInRange;
+    }
+
     public ioRefresh(): void {
         if (this._cell && this.parent) {
             this.Setup(this._cell, MapRoom._flingerInRange);
@@ -256,6 +262,21 @@ export class PopupInfoEnemy extends PopupInfoEnemy_CLIP {
             }
         }
         this.tLocation.htmlText = IoMapUi.location(this._cell.X, this._cell.Y);
+        if (GLOBAL.INFERNO_ONLY && this._cell.ioStatusLine()) {
+            this.tName.htmlText += "<br><font size=\"10\" color=\"#9FD3FF\">" + this._cell.ioStatusLine() + "</font>";
+        }
+        if (GLOBAL.INFERNO_ONLY && !this._cell._mine && (this._cell._base == 1 || this._cell._base == 3) && GLOBAL._mapHome) {
+            // (QoL #66: what taking it over would cost, before attacking; and when no more outposts can be had)
+            let price: number = Number(PopupTakeover.ioPriceOf(this._cell).cost);
+            let short: boolean = false;
+            for (let r: int = 1; r <= 4; r++) {
+                if (GLOBAL._resources["r" + r].Get() < price) {
+                    short = true;
+                }
+            }
+            let line: string = this.doesHaveMaxOutposts() ? "<font color=\"#FF8A6A\">" + KEYS.Get("io_takeover_cap") + "</font>" : KEYS.Get(short ? "io_takeover_cost_short" : "io_takeover_cost", { "v1": IoOutpostsPopup.short(price) });
+            this.tName.htmlText += "<br><font size=\"10\" color=\"" + (short ? "#FFB08A" : "#BFE6A0") + "\">" + line + "</font>";
+        }
         this.tHeight.htmlText = this._cell._height - 100 + "m";
         if (this._cell._base == 2) {
             _loc6_ = 0;
@@ -300,7 +321,97 @@ export class PopupInfoEnemy extends PopupInfoEnemy_CLIP {
                 this.bBookmark.Enabled = true;
             }
         }
+        // (Inferno-only, QoL #65: what the yard would give up, as last scouted)
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioFitName();
+            this.ioBat2Loot();
+        }
         this.Update();
+    }
+
+    /** The place, height and bonus fields' first places (ioFitName moves them). */
+    private _ioRows: any[];
+
+    /**
+     * Inferno-only (23 October): a name with its alliance and a status line under it (three lines) ran over "Location:"
+     * (the user's: "anything ... disorganized"): the rows under it moved down as far as it reaches.
+     */
+    private ioFitName(): void {
+        let rows: any[] = [this.tLocationLabel, this.tLocation, this.tHeightLabel, this.tHeight, this.tYardHasLabel, this.tBonus];
+        if (!this._ioRows) {
+            this._ioRows = rows.map((t: any): number => t ? Number(t.y) : 0);
+        }
+        let reach: number = this.tName.y + this.tName.textHeight + 4;
+        let down: number = Math.max(0, Math.min(40, reach - Number(this._ioRows[0])));
+        for (let i: int = 0; i < rows.length; i++) {
+            if (rows[i]) {
+                rows[i].y = Number(this._ioRows[i]) + down;
+            }
+        }
+        // (and the white card they are on made as much taller)
+        if (!this._ioCard) {
+            for (let k: int = 0; k < this.numChildren; k++) {
+                let c: DisplayObject = this.getChildAt(k);
+                if (c instanceof Shape) {
+                    let r: Rectangle = c.getBounds(this);
+                    if (r.contains(this.tName.x + 2, this.tName.y + 2) && r.contains(this.tBonus.x + 2, this.tBonus.y + 2)) {
+                        this._ioCard = c;
+                        this._ioCardH0 = c.height;
+                    }
+                }
+            }
+        }
+        if (this._ioCard) {
+            this._ioCard.height = this._ioCardH0 + down;
+        }
+    }
+
+    /** The white card the name and rows are on, and its own height (ioFitName). */
+    private _ioCard: DisplayObject;
+
+    private _ioCardH0: number;
+
+    /**
+     * Inferno-only (QoL #65): under the popup, about how much of each resource the yard would give up if every
+     * storage and harvester fell, as worked out the last time it was looked at (View: ATTACK.ioScouted, by the loot
+     * code's rules), and how long ago; or that looking at it tells. Not for the player's own yards.
+     */
+    private ioBat2Loot(): void {
+        let old: DisplayObject = this.getChildByName("ioBat2EnemyLoot");
+        if (old) {
+            this.removeChild(old);
+        }
+        if (!this._cell || this._cell._mine || this._cell._base < 1 || !this._cell._baseID) {
+            return;
+        }
+        let seen: any = ATTACK.ioScoutedFor(this._cell._baseID);
+        const W: int = 300;
+        let p: Sprite = new Sprite();
+        p.name = "ioBat2EnemyLoot";
+        p.mouseEnabled = false;
+        p.mouseChildren = false;
+        let t: TextField = IoMapUi.label("", 11, IoMapUi.LIGHT, false, W - 16);
+        t.name = "ioBat2EnemyLootText";
+        t.multiline = true;
+        t.wordWrap = true;
+        t.autoSize = TextFieldAutoSize.LEFT;
+        if (seen) {
+            t.htmlText = "<font color=\"#FFD24A\"><b>" + KEYS.Get("io_bat2_scout_title", { "v1": IoAllianceUi.ago(Number(seen.at)) }) + "</b></font><br>" + ATTACK.ioLootLine(seen.loot);
+        } else {
+            t.htmlText = "<font color=\"#C8BEB0\">" + KEYS.Get("io_bat2_scout_none") + "</font>";
+        }
+        t.x = 8;
+        t.y = 5;
+        p.addChild(t);
+        let h: int = Math.ceil(t.height + 10) | 0;
+        IoMapUi.glass(p.graphics, W, h, 8);
+        // (at the foot of the frame, centred, inside it (23 October: it sat on the frame's edge): the frame is made
+        // taller to hold it and the map's buttons under it, MapRoomPopup.ioFitFrame)
+        let fr: DisplayObject = this.mcFrame ? as3.as(this.mcFrame, DisplayObject) : null;
+        let r: Rectangle = (fr ? fr : this).getBounds(this);
+        p.x = Math.round(r.x + (r.width - W) / 2);
+        p.y = Math.round(Math.max(r.bottom - 14, this.tBonus ? this.tBonus.y + this.tBonus.textHeight + 10 : r.bottom - 14));
+        this.addChild(p);
     }
 
     public Cleanup(): void {
@@ -506,7 +617,7 @@ export class PopupInfoEnemy extends PopupInfoEnemy_CLIP {
                 GLOBAL.Message(KEYS.Get("newmap_take3"));
             }
         } else if (this._cell._protected) {
-            GLOBAL.Message(KEYS.Get("newmap_dp"));
+            GLOBAL.Message(this._cell.ioProtectedText());
         } else if (Boolean(this._cell._truce) && this._cell._truce > GLOBAL.Timestamp()) {
             GLOBAL.Message(KEYS.Get("newmap_truce"));
         } else if (Boolean(this._cell._alliance) && this._cell._allianceID == ALLIANCES._allianceID) {
@@ -585,6 +696,10 @@ export class PopupInfoEnemy extends PopupInfoEnemy_CLIP {
             GLOBAL._attackerCellsInRange = MapRoom._mc.GetCellsInRange(this._cell.X, this._cell.Y, 10);
         }
         GLOBAL._currentCell = this._cell;
+        // Inferno-only quest book: a yard looked at from the map
+        if (GLOBAL.INFERNO_ONLY) {
+            IoQuests.viewed(this._cell.X, this._cell.Y);
+        }
         if (this._cell._base == 1) {
             BASE.LoadBase(null, 0, this._cell._baseID, GLOBAL.e_BASE_MODE.WMVIEW, false, EnumYardType.MAIN_YARD);
         } else {

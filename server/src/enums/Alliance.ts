@@ -40,6 +40,10 @@ export enum AllianceMessageType {
   PINNED = "pinned",
   /** Inferno-only: a member made an officer (body "1") or no longer one (body "0"). */
   OFFICER = "officer",
+  /** Inferno-only (13 October): the leader renamed the alliance (body: {"from", "to"}). */
+  RENAMED = "renamed",
+  /** Inferno-only (QoL #180): a power-up ran out (body {"powerup", "state": "ended"}) or is charged ("ready"). */
+  POWERUP_STATE = "powerup_state",
 }
 
 /**
@@ -68,8 +72,9 @@ export enum AllianceInviteStatus {
 }
 
 /**
- * The three alliance power-ups. Values are the ids the client's POWERUPS class
- * keys its buckets by, so they must match `ap_*` in POWERUPS.as exactly.
+ * The alliance power-ups. Values are the ids the client's POWERUPS class
+ * keys its buckets by, so they must match `ap_*` in POWERUPS.ts exactly.
+ * Inferno-only (22 October, the user's): Harvest Moon and Builders' Guild.
  *
  * @enum {string}
  */
@@ -77,4 +82,8 @@ export enum AlliancePowerupType {
   ARMAMENT = "ap_armament",
   CONQUEST = "ap_conquest",
   DECLARE_WAR = "ap_declarewar",
+  /** Inferno-only: every member's harvesters make 25% more (the stronger of it and Production Overdrive). */
+  HARVEST_MOON = "ap_harvestmoon",
+  /** Inferno-only: every member's builds and upgrades take 15% less time (the stronger of it and Sharper Tools). */
+  BUILDERS_GUILD = "ap_buildersguild",
 }

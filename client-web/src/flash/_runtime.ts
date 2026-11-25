@@ -17,4 +17,9 @@ export const runtimeHooks = {
   inputBlurred: (): void => {},
   /** The game asked for full screen but this browser has no element full-screen API (iPhone Safari). */
   fullScreenUnavailable: (): void => {},
+  /**
+   * Inferno-only (QoL #224): what goes full screen when the game asks for it (the page shell gives the whole page,
+   * so its menu and settings stay reachable); null: the player's own container.
+   */
+  fullScreenTarget: (): HTMLElement | null => null,
 };

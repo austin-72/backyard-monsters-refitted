@@ -1,8 +1,10 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
-import { MovieClip } from "flash/display";
+import { MovieClip, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { ACHIEVEMENTS, Ashkarr, BASE, Balthazar, Bandito, Bolt, Brain, CREATURELOCKERPOPUP, Clinkerjaw, CreepTypeManager, DAVE, Emberghoul, Eyera, Fang, Fink, Flickerfiend, Fusebug, GLOBAL, HATCHERYCC, IoChampionCreep, IoHailspitter, IoHfo, IoIceCreep, IoRimegrave, KEYS, KingWormzer, LOGGER, MAPROOM_DESCENT, MapRoomManager, POPUPS, ProjectX, QUESTS, RebalancedCreatures, Rezghul, SOUNDS, STORE, Sabnox, Slimeattikus, Spurtz, SubscriptionHandler, Teratorn, Vorg, Wormzer, Zafreeti, md5, popup_monster } from "@game";
+import { GlowFilter } from "flash/filters";
+import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
+import { ACHIEVEMENTS, Ashkarr, BASE, BFOUNDATION, BYMConfig, CREATURES, MAP, Balthazar, Basilisk, Bandito, Bolt, Brain, CREATURELOCKERPOPUP, Clinkerjaw, CreepTypeManager, DAVE, Emberghoul, Eyera, Fang, Fink, Flickerfiend, Fusebug, GLOBAL, IoTargets, IoTeleport, HATCHERYCC, IoChampionCreep, IoHailspitter, IoHfo, IoIceCreep, IoRimegrave, KEYS, KingWormzer, LOGGER, MAPROOM_DESCENT, MapRoomManager, POPUPS, ProjectX, QUESTS, RebalancedCreatures, Rezghul, SOUNDS, STORE, Sabnox, Slimeattikus, Spurtz, SubscriptionHandler, Teratorn, Vorg, Wormzer, Zafreeti, md5, popup_monster, IoSocial, IoShop } from "@game";
 
 export class CREATURELOCKER extends ASObject {
     public static readonly k_USE_REBALANCED_MONSTERS: boolean = false;
@@ -30,7 +32,7 @@ export class CREATURELOCKER extends ASObject {
     /**
      * Inferno-only: Korath (IC9) and Drull (IC10), the champions, as ordinary monsters. Unlocked in the
      * Strongbox on page 5 (Strongbox level 5), for 2.5 times King Wormzer's unlock cost and time;
-     * hatched with magma (2.2M-5.2M, as Ashkarr), 600 housing each, damage, speed and reach per level from their champion tables; health set by the user (28 September: Korath 32,000 to 64,000, Drull 22,000 to 52,000, even steps). Drawn and fought by IoChampionCreep. These numbers must stay identical to the server's
+     * hatched with magma (2.2M-5.2M, as Ashkarr), 400 housing each (600 until 10 October), damage, speed and reach per level from their champion tables; health set by the user (28 September: Korath 32,000 to 64,000, Drull 22,000 to 52,000, even steps). Drawn and fought by IoChampionCreep. These numbers must stay identical to the server's
      * (server/src/game-data/stats/monsterStats.ts), which checks them on every attack.
      */
     public static readonly KORATH_ID: string = "IC9";
@@ -40,8 +42,8 @@ export class CREATURELOCKER extends ASObject {
     /**
      * Inferno-only: Ashkarr, the Ember Herald (IC24; the user's ASHKARR.md): Strongbox page 5 after Korath and
      * Drull (Strongbox level 5); unlocked and trained in the Academy (to level 6) for what Korath and Drull
-     * cost. Hatched with magma (her own costs); 600 housing, as Korath and Drull. Her war-cry
-     * is in her class (creeps/inferno/Ashkarr.as, WarCry). The server's table must match
+     * cost. Hatched with magma (her own costs); 350 housing (600, as Korath and Drull, until 10 October). Her war-cry
+     * is in her class (creeps/inferno/Ashkarr.ts, WarCry). The server's table must match
      * (server/src/game-data/stats/monsterStats.ts).
      */
     public static readonly ASHKARR_ID: string = "IC24";
@@ -64,19 +66,19 @@ export class CREATURELOCKER extends ASObject {
      * numbered the Fusebug IC19, but the Hatchery passes monsters around as bare numbers and 19 is Rezghul's
      * (C19, an Inferno monster here): IC19 would have taken his place there. So it is IC15.
      * Fusebug: Strongbox page 1 after Zagnoid, a bomber that runs at defences, creeps in to the building's
-     * middle and explodes (the game's own "explode", as Eye-ra's; Fusebug.as). Emberghoul: page 4 after King Wormzer and Rezghul,
-     * a bruiser that heals itself for 15-20% of every hit (Emberghoul.as). Numbers as the spec's.
+     * middle and explodes (the game's own "explode", as Eye-ra's; Fusebug.ts). Emberghoul: page 4 after King Wormzer and Rezghul,
+     * a bruiser that heals itself for 15-20% of every hit (Emberghoul.ts). Numbers as the spec's.
      */
     public static readonly FUSEBUG_ID: string = "IC15";
 
     public static readonly EMBERGHOUL_ID: string = "IC20";
 
     /**
-     * Hell Freezes Over (the user's hell_freezes_over.md, 1 October; com/monsters/events/IoHfo.as):
+     * Hell Freezes Over (the user's hell_freezes_over.md, 1 October; com/monsters/events/IoHfo.ts):
      *  - Rimegrave (IC25), the ice champion: Strongbox page 5 after Ashkarr, unlocked there only once the player
      *    has won all 13 waves of the event (until then he is in none of the Strongbox, the Compound, the Incubators
      *    or the Academy: ioHfoRefresh, IoHfo.championFree), then trained
-     *    in the Academy to level 6, for what Korath, Drull and Ashkarr cost. 600 housing. His look follows his
+     *    in the Academy to level 6, for what Korath, Drull and Ashkarr cost. 350 housing (600 until 10 October). His look follows his
      *    Academy level (one sprite sheet a level: IoRimegrave). His hits ice towers over and freeze monsters.
      *  - The ice cretins (IC26-IC31): the event's waves. Never a player's: they are on no Strongbox page and
      *    always "blocked" (in none of the Strongbox, the Compound, the Incubators or the Academy). Admins have
@@ -84,6 +86,15 @@ export class CREATURELOCKER extends ASObject {
      * Every number must match the server's (server/src/game-data/stats/monsterStats.ts hellFreezesOverMonsters).
      */
     public static readonly RIMEGRAVE_ID: string = "IC25";
+
+    /**
+     * Inferno-only (13 October, the user's): the Basilisk (IC32), the serpent who constricts. Hidden in the
+     * Strongbox, the Compound, the Hatchery, the Incubation Control Station and the Academy until the player has won
+     * 200 battles (the quest "Something in the Ashes"; the server's flag io_basilisk, which the server checks again
+     * on unlocking: services/base/lockedMonsters.ts). Strongbox page 5, unlocked and trained as the other champions.
+     * 500 housing; Drull's health x1.15 and damage per second x1.3 (Basilisk).
+     */
+    public static readonly BASILISK_ID: string = "IC32";
 
     public static readonly SHIVLING_ID: string = "IC26";
 
@@ -177,6 +188,7 @@ export class CREATURELOCKER extends ASObject {
         ids.push(CREATURELOCKER.FUSEBUG_ID, CREATURELOCKER.CLINKERJAW_ID, CREATURELOCKER.FLICKERFIEND_ID, CREATURELOCKER.EMBERGHOUL_ID, CREATURELOCKER.KORATH_ID, CREATURELOCKER.DRULL_ID, CREATURELOCKER.ASHKARR_ID, CREATURELOCKER.REZGHUL_ID);
         // Hell Freezes Over: Rimegrave and the ice cretins (admins only: test mode and the Designer)
         ids.push(CREATURELOCKER.RIMEGRAVE_ID);
+        ids.push(CREATURELOCKER.BASILISK_ID);
         for (const $value of as3.values(CREATURELOCKER.HFO_CRETINS)) {
             let cretin: string = as3.str($value);
             ids.push(cretin);
@@ -193,7 +205,7 @@ export class CREATURELOCKER extends ASObject {
         let ids: any[] = [];
         for (const $value of as3.values(CREATURELOCKER.ioTestMonsterIds())) {
             let id: string = as3.str($value);
-            if (id != CREATURELOCKER.RIMEGRAVE_ID && CREATURELOCKER.HFO_CRETINS.indexOf(id) == -1 && (id != CREATURELOCKER.REZGHUL_ID || GLOBAL.ioRezghul)) {
+            if (id != CREATURELOCKER.RIMEGRAVE_ID && id != CREATURELOCKER.BASILISK_ID && CREATURELOCKER.HFO_CRETINS.indexOf(id) == -1 && (id != CREATURELOCKER.REZGHUL_ID || GLOBAL.ioRezghul)) {
                 ids.push(id);
             }
         }
@@ -223,7 +235,7 @@ export class CREATURELOCKER extends ASObject {
      */
     public static ioReachesLevel6(param1: string): boolean {
         let c: any = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[param1] : null;
-        return Boolean(param1 == CREATURELOCKER.KORATH_ID || param1 == CREATURELOCKER.DRULL_ID || param1 == CREATURELOCKER.REZGHUL_ID || param1 == CREATURELOCKER.ASHKARR_ID || param1 == CREATURELOCKER.RIMEGRAVE_ID || (c && as3.is(c.trainingCosts, Array) && c.trainingCosts.length >= 5));
+        return Boolean(param1 == CREATURELOCKER.KORATH_ID || param1 == CREATURELOCKER.DRULL_ID || param1 == CREATURELOCKER.REZGHUL_ID || param1 == CREATURELOCKER.ASHKARR_ID || param1 == CREATURELOCKER.RIMEGRAVE_ID || param1 == CREATURELOCKER.BASILISK_ID || (c && as3.is(c.trainingCosts, Array) && c.trainingCosts.length >= 5));
     }
 
     private static ioAddChampionMonsters(): void {
@@ -235,9 +247,9 @@ export class CREATURELOCKER extends ASObject {
         let training: Function = (): any[] => {
             return [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]];
         };
-        CREATURELOCKER._mainCreatures[CREATURELOCKER.KORATH_ID] = { "index": 9, "page": 5, "order": 1, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#m_korath#", "classType": IoChampionCreep, "description": "mon_korathdesc", "stream": ["", "", ""], "trainingCosts": training(), "props": { "speed": [1.4, 1.6, 1.8, 2, 2.3, 2.5], "health": [32000, 38400, 44800, 51200, 57600, 64000], "damage": [2000, 2400, 3000, 3800, 5000, 6500], "range": [35, 45, 55, 60, 65, 65], "cTime": [3600], "cResource": cost, "cStorage": [600], "bucket": [600], "targetGroup": [1], "hTime": [1125], "hResource": heal } };
-        CREATURELOCKER._mainCreatures[CREATURELOCKER.DRULL_ID] = { "index": 10, "page": 5, "order": 2, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#m_drull#", "classType": IoChampionCreep, "description": "mon_drulldesc", "stream": ["", "", ""], "trainingCosts": training(), "props": { "speed": [2, 2.2, 2.5, 2.8, 3.2, 3.6], "health": [22000, 28000, 34000, 40000, 46000, 52000], "damage": [3000, 3600, 4200, 5500, 6500, 8000], "range": [35, 45, 55, 65, 85, 90], "cTime": [3600], "cResource": cost, "cStorage": [600], "bucket": [600], "targetGroup": [1], "hTime": [1125], "hResource": heal } };
-        CREATURELOCKER._mainCreatures[CREATURELOCKER.ASHKARR_ID] = { "index": 10.5, "page": 5, "order": 3, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#m_ashkarr#", "classType": Ashkarr, "description": "mi_Ashkarr_desc", "stream": ["mi_Ashkarr_stream", "mi_Ashkarr_streambody", ""], "trainingCosts": training(), "props": { "speed": [2, 2.1, 2.2, 2.3, 2.4, 2.5], "health": [25000, 30000, 35000, 40000, 45000, 50000], "damage": [3000, 3350, 3750, 4150, 4600, 5100], "cTime": [4200], "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000], "cStorage": [600], "bucket": [600], "targetGroup": [1], "hTime": [1260], "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000] } };
+        CREATURELOCKER._mainCreatures[CREATURELOCKER.KORATH_ID] = { "index": 9, "page": 5, "order": 1, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#m_korath#", "classType": IoChampionCreep, "description": "mon_korathdesc", "stream": ["", "", ""], "trainingCosts": training(), "props": { "speed": [1.4, 1.6, 1.8, 2, 2.3, 2.5], "health": [32000, 38400, 44800, 51200, 57600, 64000], "damage": [2000, 2400, 3000, 3800, 5000, 6500], "range": [35, 45, 55, 60, 65, 65], "cTime": [3600], "cResource": cost, "cStorage": [400], "bucket": [400], "targetGroup": [1], "hTime": [1125], "hResource": heal } };
+        CREATURELOCKER._mainCreatures[CREATURELOCKER.DRULL_ID] = { "index": 10, "page": 5, "order": 2, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#m_drull#", "classType": IoChampionCreep, "description": "mon_drulldesc", "stream": ["", "", ""], "trainingCosts": training(), "props": { "speed": [2, 2.2, 2.5, 2.8, 3.2, 3.6], "health": [22000, 28000, 34000, 40000, 46000, 52000], "damage": [3000, 3600, 4200, 5500, 6500, 8000], "range": [35, 45, 55, 65, 85, 90], "cTime": [3600], "cResource": cost, "cStorage": [400], "bucket": [400], "targetGroup": [1], "hTime": [1125], "hResource": heal } };
+        CREATURELOCKER._mainCreatures[CREATURELOCKER.ASHKARR_ID] = { "index": 10.5, "page": 5, "order": 3, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#m_ashkarr#", "classType": Ashkarr, "description": "mi_Ashkarr_desc", "stream": ["mi_Ashkarr_stream", "mi_Ashkarr_streambody", ""], "trainingCosts": training(), "props": { "speed": [2, 2.1, 2.2, 2.3, 2.4, 2.5], "health": [25000, 30000, 35000, 40000, 45000, 50000], "damage": [3000, 3350, 3750, 4150, 4600, 5100], "cTime": [4200], "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000], "cStorage": [350], "bucket": [350], "targetGroup": [1], "hTime": [1260], "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000] } };
     }
 
     private static ioTraining(param1: int, param2: int): any[] {
@@ -287,10 +299,30 @@ export class CREATURELOCKER extends ASObject {
                 CREATURELOCKER._mainCreatures[cretin].blocked = true;
             }
         }
+        if (CREATURELOCKER._mainCreatures[CREATURELOCKER.BASILISK_ID]) {
+            CREATURELOCKER._mainCreatures[CREATURELOCKER.BASILISK_ID].blocked = !CREATURELOCKER.ioBasiliskFree();
+        }
+    }
+
+    /**
+     * The Basilisk has joined the player's side: 200 battles won (the server's flag; kept for the session once
+     * seen, GLOBAL.IO_STICKY_FLAGS), or an admin testing. Already unlocked (or unlocking) counts too: never hidden
+     * once the player has him.
+     */
+    public static ioBasiliskFree(): boolean {
+        if (GLOBAL.ioTestMode() || (GLOBAL._flags && (GLOBAL._flags.io_basilisk | 0) == 1)) {
+            return true;
+        }
+        let have: any = CREATURELOCKER._lockerData ? CREATURELOCKER._lockerData[CREATURELOCKER.BASILISK_ID] : null;
+        return Boolean(have);
     }
 
     private static ioAddHfoMonsters(): void {
-        CREATURELOCKER._mainCreatures[CREATURELOCKER.RIMEGRAVE_ID] = { "blocked": true, "index": 10.75, "page": 5, "order": 4, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#mi_rimegrave#", "classType": IoRimegrave, "description": "mi_Rimegrave_desc", "stream": ["mi_Rimegrave_stream", "mi_Rimegrave_streambody", ""], "trainingCosts": [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]], "props": { "speed": [1.9, 2, 2.1, 2.2, 2.3, 2.4], "health": [26000, 31000, 36000, 41000, 46000, 52000], "damage": [2600, 2950, 3300, 3700, 4100, 4600], "range": [40, 45, 50, 55, 60, 65], "attackDelay": [70], "cTime": [4200], "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000], "cStorage": [600], "bucket": [600], "targetGroup": [1], "hTime": [1260], "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000] } };
+        CREATURELOCKER._mainCreatures[CREATURELOCKER.RIMEGRAVE_ID] = { "blocked": true, "index": 10.75, "page": 5, "order": 4, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#mi_rimegrave#", "classType": IoRimegrave, "description": "mi_Rimegrave_desc", "stream": ["mi_Rimegrave_stream", "mi_Rimegrave_streambody", ""], "trainingCosts": [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]], "props": { "speed": [1.9, 2, 2.1, 2.2, 2.3, 2.4], "health": [26000, 31000, 36000, 41000, 46000, 52000], "damage": [2600, 2950, 3300, 3700, 4100, 4600], "range": [40, 45, 50, 55, 60, 65], "attackDelay": [70], "cTime": [4200], "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000], "cStorage": [350], "bucket": [350], "targetGroup": [1], "hTime": [1260], "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000] } };
+        // the Basilisk (13 October, the user's): 500 housing; Drull's health x1.15 and damage per second x1.3, dealt every
+        // 1/8 second (a monster strikes every attackDelay + 1 steps: Drull's blow every 61, his squeeze every 10, 1.3 x
+        // 10/61 of Drull's damage); identical to the server's (monsterStats.ts IC32)
+        CREATURELOCKER._mainCreatures[CREATURELOCKER.BASILISK_ID] = { "blocked": true, "index": 10.9, "page": 5, "order": 5, "resource": CREATURELOCKER.IO_CHAMPION_UNLOCK_COST, "time": CREATURELOCKER.IO_CHAMPION_UNLOCK_TIME, "level": 5, "name": "#mi_Basilisk#", "classType": Basilisk, "description": "mi_Basilisk_desc", "stream": ["mi_Basilisk_stream", "mi_Basilisk_streambody", ""], "trainingCosts": [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]], "props": { "speed": [3, 3.3, 3.6, 3.9, 4.2, 4.6], "health": [25300, 32200, 39100, 46000, 52900, 59800], "damage": [639, 767, 895, 1172, 1385, 1705], "range": [30], "attackDelay": [9], "cTime": [3600], "cResource": [2200000, 2600000, 3050000, 3600000, 4300000, 5200000], "cStorage": [500], "bucket": [500], "targetGroup": [1], "hTime": [1125], "hResource": [660000, 780000, 915000, 1080000, 1290000, 1560000] } };
         // Shivling: the swarm. Slushgut: the tank. Rimeclaw: goes for the defences (targetGroup 4).
         // Sleetwing: flies over walls. Hailspitter: lobs hailstones from range. Permafrost Hulk: slow and
         // heavy, shatters into 4 Shivlings when it falls.
@@ -371,7 +403,7 @@ export class CREATURELOCKER extends ASObject {
         CREATURELOCKER._popupCreatureID = CREATURELOCKER.getFirstCreatureID();
         CREATURELOCKER._lockerData = {};
         CREATURELOCKER._open = false;
-        CREATURELOCKER._mainCreatures = { "C1": { "index": 1, "page": 1, "order": 1, "resource": 4000, "time": 10 * 60, "level": 1, "name": "#m_pokey#", "description": "mon_pokeydesc", "stream": ["mon_pokeystream", "mon_pokeystreambody", "quests/monster1.v2.png"], "unlock": [""], "trainingCosts": [[4000, 60 * 60 * 2], [8000, 60 * 60 * 3], [12000, 60 * 60 * 5], [16000, 60 * 60 * 8], [22000, 60 * 60 * 12]], "props": { "speed": [1.2], "health": [200, 220, 240, 260, 280, 300], "damage": [60, 65, 70, 75, 80, 85], "cTime": [15, 10, 8, 7, 6, 5], "cResource": [250, 450, 675, 800, 1000, 1250], "cStorage": [10, 10, 10, 9, 8, 7], "bucket": [7], "targetGroup": [1], "hTime": [5, 3, 2, 2, 2, 2], "hResource": [75, 135, 203, 240, 300, 375] } }, "C2": { "index": 2, "page": 1, "order": 2, "resource": 8000, "time": 1 * 60 * 60, "level": 1, "name": "#m_octoooze#", "description": "mon_octooozedesc", "stream": ["mon_octooozestream", "mon_octooozestreambody", "quests/monster2.v2.png"], "trainingCosts": [[8000, 60 * 60 * 4], [16000, 60 * 60 * 6], [24000, 60 * 60 * 10], [48000, 60 * 60 * 16], [64000, 60 * 60 * 24]], "props": { "speed": [1.4], "health": [1000, 1100, 1300, 1450, 1600, 1800], "damage": [15, 15, 20, 25, 30, 35], "cTime": [15, 16], "cResource": [500, 900, 1350, 1800, 2100, 2500], "cStorage": [10], "bucket": [10], "targetGroup": [4], "hTime": [5], "hResource": [150, 270, 405, 540, 630, 750] } }, "C3": { "index": 3, "page": 1, "order": 3, "resource": 16000, "time": 2 * 60 * 60, "level": 1, "name": "#m_bolt#", "classType": Bolt, "description": "mon_boltdesc", "stream": ["mon_boltstream", "mon_boltstreambody", "quests/monster3.v2.png"], "trainingCosts": [[16000, 60 * 60 * 4], [32000, 60 * 60 * 6], [48000, 60 * 60 * 8], [96000, 60 * 60 * 12], [144000, 60 * 60 * 16]], "props": { "speed": [2.5, 2.55, 2.6, 2.8, 3, 3.2], "health": [150], "damage": [15, 20, 25, 35, 45, 55], "cTime": [23], "cResource": [350, 675, 1015, 1400, 1800, 2400], "cStorage": [15], "bucket": [15], "targetGroup": [3], "hTime": [7], "hResource": [105, 203, 305, 420, 540, 720] } }, "C4": { "index": 4, "page": 1, "order": 4, "resource": 32000, "time": 4 * 60 * 60, "level": 1, "name": "#m_fink#", "classType": Fink, "description": "mon_finkdesc", "stream": ["mon_finkstream", "mon_finkstreambody", "quests/monster4.v2.png"], "trainingCosts": [[32000, 60 * 60 * 8], [64000, 60 * 60 * 12], [96000, 60 * 60 * 18], [128000, 60 * 60 * 24], [160000, 60 * 60 * 30]], "props": { "speed": [1.3], "health": [200, 200, 200, 200, 220, 240], "damage": [300, 330, 380, 430, 470, 520], "cTime": [100, 100, 100, 100, 90, 90], "cResource": [1500, 2250, 3375, 4800, 7200, 10000], "cStorage": [20], "bucket": [20], "targetGroup": [1], "hTime": [30, 30, 30, 30, 27, 27], "hResource": [450, 675, 1013, 1440, 2160, 3000] } }, "C5": { "index": 5, "page": 2, "order": 1, "resource": 64000, "time": 8 * 60 * 60, "level": 2, "name": "#m_eyera#", "classType": Eyera, "description": "mon_eyeradesc", "stream": ["mon_eyerastream", "mon_eyerastreambody", "quests/monster5.v2.png"], "trainingCosts": [[64000, 60 * 60 * 5], [128000, 60 * 60 * 7], [192000, 60 * 60 * 12], [384000, 60 * 60 * 24], [512000, 60 * 60 * 36]], "props": { "speed": [2, 2.2, 2.4, 2.6, 2.8, 3], "health": [600, 900, 1200, 1600, 2000, 2400], "damage": [4000, 8000, 12000, 16000, 20000, 24000], "cTime": [1500], "cResource": [5000, 15000, 30000, 45000, 60000, 80000], "cStorage": [60], "bucket": [60], "targetGroup": [2], "explode": [1], "hTime": [450, 450, 450, 450, 450, 450], "hResource": [1500, 4500, 9000, 13500, 18000, 24000] } }, "C6": { "index": 6, "page": 2, "order": 2, "resource": 128000, "time": 16 * 60 * 60, "level": 2, "name": "#m_ichi#", "description": "mon_ichidesc", "stream": ["mon_ichistream", "mon_ichistreambody", "quests/monster6.v2.png"], "trainingCosts": [[128000, 60 * 60 * 12], [256000, 60 * 60 * 18], [409600, 60 * 60 * 24], [640000, 60 * 60 * 48], [820000, 60 * 60 * 72]], "props": { "speed": [1.2], "health": [2000, 2100, 2200, 2300, 2500, 2800], "damage": [50, 60, 70, 80, 95, 110], "cTime": [100, 100, 90], "cResource": [5000, 5625, 8440, 11200, 16000, 24000], "cStorage": [20], "bucket": [20], "targetGroup": [4], "hTime": [30, 30, 27], "hResource": [1500, 1688, 2532, 3360, 4800, 7200] } }, "C7": { "index": 7, "page": 2, "order": 3, "resource": 256000, "time": 28 * 60 * 60, "level": 2, "name": "#m_bandito#", "classType": Bandito, "description": "mon_banditodesc", "stream": ["mon_banditostream", "mon_banditostreambody", "quests/monster7.v2.png"], "trainingCosts": [[256000, 60 * 60 * 12], [512000, 60 * 60 * 16], [756000, 60 * 60 * 24], [1024000, 60 * 60 * 36], [1440000, 60 * 60 * 48]], "props": { "speed": [1], "health": [500, 550, 600, 650, 750, 900], "damage": [200, 250, 300, 350, 400, 450], "cTime": [225, 225, 225, 225, 180, 180], "cResource": [2500, 4500, 6750, 8750, 11200, 14400], "cStorage": [20], "bucket": [20], "targetGroup": [1], "hTime": [68, 68, 68, 68, 54, 54], "hResource": [750, 1350, 2025, 2625, 3360, 4320] } }, "C8": { "index": 8, "page": 2, "order": 4, "resource": 512000, "time": 40 * 60 * 60, "level": 2, "name": "#m_fang#", "classType": Fang, "description": "mon_fangdesc", "stream": ["mon_fangstream", "mon_fangstreambody", "quests/monster8.v2.png"], "trainingCosts": [[512000, 60 * 60 * 12], [512000, 60 * 60 * 16], [756000, 60 * 60 * 24], [1024000, 60 * 60 * 36], [1440000, 60 * 60 * 48]], "props": { "speed": [1.1, 1.2, 1.3, 1.4, 1.5, 1.6], "health": [400], "damage": [600, 600, 620, 660, 720, 800], "cTime": [450, 350, 250, 225, 195, 195], "cResource": [18000, 27000, 40500, 60500, 80000, 100000], "cStorage": [30], "bucket": [30], "targetGroup": [1], "hTime": [135, 105, 75, 68, 59, 59], "hResource": [5400, 8100, 12150, 18150, 24000, 30000] } }, "C9": { "index": 10, "page": 3, "order": 1, "resource": 1024000, "time": 52 * 60 * 60, "level": 3, "name": "#m_brain#", "classType": Brain, "description": "mon_braindesc", "stream": ["mon_brainstream", "mon_brainstreambody", "quests/monster9.v2.png"], "trainingCosts": [[1024000, 60 * 60 * 12], [2056000, 60 * 60 * 16], [2870000, 60 * 60 * 20], [4500000, 60 * 60 * 40], [6000000, 60 * 60 * 60]], "props": { "speed": [2, 2, 2, 2, 2.1, 2.2], "health": [600, 700, 750, 800, 1100, 1400], "damage": [100, 100, 200, 250, 300, 350], "cTime": [342], "cResource": [12000, 20250, 30375, 35000, 50000, 75000], "cStorage": [30], "bucket": [30], "targetGroup": [3], "hTime": [103], "hResource": [3600, 6075, 9113, 10500, 1500, 22500] } }, "C10": { "index": 11, "page": 3, "order": 3, "resource": 2048000, "time": 58 * 60 * 60, "level": 3, "name": "#m_crabatron#", "description": "mon_crabatrondesc", "stream": ["mon_crabatronstream", "mon_crabatronstreambody", "quests/monster10.v2.png"], "trainingCosts": [[2048000, 60 * 60 * 12], [3000000, 60 * 60 * 18], [4400000, 60 * 60 * 24], [6000000, 60 * 60 * 48], [7500000, 60 * 60 * 72]], "props": { "speed": [1, 1, 1, 1.2, 1.4, 1.5], "health": [4000, 4000, 4300, 4400, 4600, 4800], "damage": [100, 120, 130, 140, 150, 170], "cTime": [750], "cResource": [30000, 45000, 67500, 75000, 90000, 120000], "cStorage": [40], "bucket": [40], "targetGroup": [4], "hTime": [225], "hResource": [9000, 13500, 20250, 22500, 27000, 36000] } }, "C11": { "index": 12, "page": 3, "order": 4, "resource": 4096000, "time": 62 * 60 * 60, "level": 3, "name": "#m_projectx#", "classType": ProjectX, "description": "mon_projectxdesc", "stream": ["mon_projectxstream", "mon_projectxstreambody", "quests/monster11.v2.png"], "trainingCosts": [[4096000, 60 * 60 * 24], [7000000, 60 * 60 * 36], [12000000, 60 * 60 * 48], [18000000, 60 * 60 * 96], [24000000, 60 * 60 * 128]], "props": { "speed": [0.9, 0.9, 1, 1.2, 1.2, 1.3], "health": [800, 900, 950, 1000, 1100, 1200], "damage": [1200, 1400, 1600, 1800, 2000, 2200], "cTime": [1384], "cResource": [60000, 90000, 135000, 180000, 234000, 280000], "cStorage": [70], "bucket": [70], "targetGroup": [4], "hTime": [415], "hResource": [18000, 27000, 40500, 54000, 70200, 84000] } }, "C12": { "index": 16, "page": 4, "order": 3, "resource": 8192000, "time": 72 * 60 * 60, "level": 4, "name": "#m_dave#", "classType": DAVE, "description": "mon_davedesc", "stream": ["mon_davestream", "mon_davestreambody", "quests/monster12.v2.png"], "trainingCosts": [[8192000, 60 * 60 * 48], [10000000, 60 * 60 * 72], [12200000, 60 * 60 * 96], [19200000, 60 * 60 * 144], [28000000, 60 * 60 * 192]], "props": { "speed": [0.8, 0.85, 0.9, 1, 1.1, 1.2], "health": [8000, 9100, 10000, 12000, 16500, 21000], "damage": [1500, 1500, 1600, 1700, 1800, 1900], "cTime": [3600], "cResource": [150000, 225000, 337500, 440000, 600000, 800000], "cStorage": [160], "bucket": [160], "targetGroup": [1], "hTime": [1080], "hResource": [45000, 67500, 101250, 132000, 180000, 240000] } }, "C13": { "index": 15, "page": 4, "order": 2, "resource": 4096000, "time": 62 * 60 * 60, "level": 4, "name": "#m_wormzer#", "classType": Wormzer, "description": "mon_wormzerdesc", "stream": ["mon_wormzerstream", "mon_wormzerstreambody", "quests/monster13.v2.png"], "trainingCosts": [[4096000, 60 * 60 * 24], [8192000, 60 * 60 * 48], [8192000, 60 * 60 * 72], [8192000, 60 * 60 * 96], [12800000, 60 * 60 * 128]], "movement": "burrow", "pathing": "direct", "props": { "speed": [3, 4], "health": [600, 800, 1100, 1300, 1500, 1700], "damage": [300, 400, 550, 600, 650, 700], "cTime": [1384], "cResource": [20000, 25000, 30000, 35000, 40000, 47500], "cStorage": [70], "bucket": [70], "targetGroup": [1], "hTime": [415], "hResource": [6000, 7500, 9000, 10500, 12000, 14250] } }, "C14": { "index": 14, "page": 4, "order": 1, "resource": 4096000, "time": 60 * 60 * 60, "level": 4, "name": "#m_teratorn#", "classType": Teratorn, "description": "mon_teratorndesc", "stream": ["mon_teratornstream", "mon_teratornstreambody", "quests/monster14.v3.png"], "trainingCosts": [[4096000, 60 * 60 * 36], [7000000, 60 * 60 * 54], [10000000, 60 * 60 * 80], [16000000, 60 * 60 * 136], [24000000, 60 * 60 * 180]], "movement": "fly", "pathing": "direct", "props": { "range": [150], "attackDelay": [90], "speed": [2.5, 2.75, 3, 3.25, 3.5], "health": [1600, 1900, 2400, 3000, 3600, 4200], "damage": [300, 350, 400, 500, 600, 700], "cTime": [1800, 1920, 2040, 2160, 2280, 2400], "cResource": [70000, 95000, 145000, 200000, 300000, 400000], "cStorage": [70], "bucket": [70], "targetGroup": [1], "hTime": [540, 576, 612, 648, 684, 720], "hResource": [21000, 28500, 43500, 60000, 90000, 120000] } }, "C15": { "index": 13, "page": 3, "order": 5, "resource": 6192000, "time": 60 * 60 * 60, "level": 3, "name": "#m_zafreeti#", "classType": Zafreeti, "description": "mon_zafreetidesc", "stream": ["mon_zafreetistream", "mon_zafreetistreambody", "quests/monster15.v2.png"], "trainingCosts": [[6192000, 60 * 60 * 36], [7800000, 60 * 60 * 54], [12000000, 60 * 60 * 80], [18000000, 60 * 60 * 136]], "movement": "fly", "pathing": "direct", "antiHeal": true, "props": { "range": [150], "attackDelay": [20], "speed": [0.75, 0.8, 0.85, 0.9, 0.95], "health": [8000], "damage": [-400, -550, -700, -850, -1000], "cTime": [2400], "cResource": [120000, 180000, 256000, 324000, 468000], "cStorage": [200], "bucket": [200], "targetGroup": [5], "hTime": [720], "hResource": [36000, 54000, 76800, 97200, 140400] } }, "C16": { "index": 9, "page": 2, "order": 5, "resource": 384000, "time": 36 * 60 * 60, "level": 2, "name": "#m_vorg#", "blocked": true, "classType": Vorg, "description": "mon_vorgdesc", "trainingCosts": [[384000, 60 * 60 * 24], [384000, 60 * 60 * 36], [512000, 60 * 60 * 48], [768000, 60 * 60 * 60], [1024000, 60 * 60 * 72]], "movement": "fly", "stream": ["", "", "quests/monster16.png"], "pathing": "direct", "antiHeal": true, "blocked": true, "props": { "range": [150], "attackDelay": [10], "speed": [1.5, 1.75, 2, 2.25, 2.5], "health": [750], "damage": [-60, -70, -80, -90, -100, -110], "cTime": [1200], "cResource": [16000, 25000, 38500, 62500, 75000, 90000], "cStorage": [60], "bucket": [60], "targetGroup": [5], "hTime": [360], "hResource": [4800, 7500, 11550, 18750, 22500, 27000] } }, "C17": { "index": 10, "page": 3, "order": 2, "resource": 2048000, "time": 36 * 60 * 60, "level": 3, "name": "#m_slimeattikus#", "classType": Slimeattikus, "description": "mon_slimeattikusdesc", "trainingCosts": [[2560000, 60 * 60 * 24], [3840000, 60 * 60 * 36], [4096000, 60 * 60 * 48], [6250000, 60 * 60 * 60], [8500000, 60 * 60 * 80]], "stream": ["", "", "quests/monster17.png"], "blocked": true, "props": { "speed": [1, 1.1, 1.2, 1.3, 1.4, 1.5], "health": [700, 725, 750, 800, 900, 1000], "damage": [850, 850, 900, 1000, 1200, 1400], "cTime": [500, 450, 400, 350, 300, 250], "cResource": [27000, 40500, 60750, 90000, 125000, 150000], "cStorage": [40], "bucket": [40], "targetGroup": [1], "splits": [2, 2, 3, 3, 4, 5], "hTime": [150, 135, 120, 105, 90, 75], "hResource": [8100, 12150, 18225, 27000, 37500, 45000] } }, "C18": { "index": 0, "page": 0, "order": 0, "resource": 2048000, "time": 36 * 60 * 60, "level": 3, "name": "#m_slimeattikusmini#", "blocked": true, "description": "mon_slimeattikusminidesc", "trainingCosts": [[2560000, 60 * 60 * 24], [3840000, 60 * 60 * 36], [4096000, 60 * 60 * 48], [6250000, 60 * 60 * 60], [8500000, 60 * 60 * 80]], "stream": ["", "", ""], "blocked": true, "fake": true, "dependent": "C17", "props": { "speed": [1.5, 1.6, 1.7, 1.8, 1.9, 2], "health": [250], "damage": [310, 320, 330, 340, 350], "cTime": [500, 450, 400, 350, 300, 250], "cResource": [27000, 40500, 60750, 90000, 125000, 150000], "cStorage": [40], "bucket": [40], "targetGroup": [1] } }, "C19": { "index": 17, "page": 0, "order": 0, "resource": 2048000, "time": 36 * 60 * 60, "level": 3, "name": "#m_rezghul#", "classType": Rezghul, "description": "mon_rezghuldesc", "trainingCosts": [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]], "stream": ["", "", "quests/monster19.png"], "blocked": true, "props": { "range": [200], "speed": [0.8, 0.9, 1, 1.1, 1.2, 1.3], "health": [7000, 7500, 8000, 8500, 9000, 10000], "damage": [700, 800, 900, 1000, 1100, 1200], "cTime": [4500], "cResource": [3000000 / 3], "cStorage": [250], "bucket": [250], "targetGroup": [4], "zombieSpeedMultiplier": [0.75], "zombieHealthMultiplier": [1, 1.1, 1.2, 1.3, 1.4, 1.5], "zombieDamageMultiplier": [1, 1.1, 1.2, 1.3, 1.4, 1.5], "resurrectCooldown": [7, 7, 6, 6, 5, 4], "hTime": [1125], "hResource": [250000] } }, "IC1": { "index": 1, "page": 1, "order": 1, "resource": 2400, "time": 3600, "level": 1, "name": "#m_spurtz#", "classType": Spurtz, "description": "mi_Spurtz_desc", "stream": ["mi_Spurtz_stream", "mi_Spurtz_streambody", "quests/inferno_monster1.png"], "trainingCosts": [[2400, 3600], [4800, 7200], [7200, 10800], [9600, 14400], [14400, 21600]], "props": { "speed": [1.2], "health": [400, 425, 450, 570, 714, 880], "damage": [160, 200, 200, 288, 390, 490], "cTime": [15, 10, 8, 7, 6, 5], "cResource": [500, 1000, 2000, 4000, 6000, 10000], "cStorage": [15], "bucket": [15], "targetGroup": [1], "hTime": [5, 3, 2], "hResource": [150, 300, 600, 1200, 1800, 3000] } }, "IC2": { "index": 2, "page": 1, "order": 2, "resource": 4800, "time": 14400, "level": 1, "name": "#m_zagnoid#", "description": "mi_Zagnoid_desc", "stream": ["mi_Zagnoid_stream", "mi_Zagnoid_streambody", "quests/zagnoid.v3.png"], "trainingCosts": [[4800, 14400], [9600, 28800], [14400, 43200], [19200, 57600], [28800, 86400]], "props": { "speed": [1.8], "health": [1500, 1820, 2300, 3360, 4690, 5760], "damage": [80, 85, 90, 109, 130, 154], "cTime": [15, 16, 16, 16, 16, 16], "cResource": [2500, 4000, 8000, 12000, 16000, 20000], "cStorage": [15], "bucket": [15], "targetGroup": [4], "hTime": [5], "hResource": [750, 1200, 2400, 3600, 4800, 6000] } }, "IC4": { "index": 3, "page": 2, "order": 1, "resource": 38400, "time": 64800, "level": 2, "name": "#m_valgos#", "description": "mi_Valgos_desc", "stream": ["mi_Valgos_stream", "mi_Valgos_streambody", "quests/valgos.png"], "trainingCosts": [[38400, 64800], [76800, 129600], [115200, 194400], [153600, 259200], [230400, 388800]], "movement": "burrow", "pathing": "direct", "props": { "speed": [2, 2, 2, 2, 2, 2], "health": [1600, 1920, 2380, 3200, 3600, 4000], "damage": [343, 371, 435, 645, 700, 775], "cTime": [450, 350, 250, 225, 195, 195], "cResource": [31000, 35000, 39000, 44000, 50000, 55000], "cStorage": [30], "bucket": [30], "targetGroup": [2], "hTime": [135, 105, 75, 68, 59, 59], "hResource": [9300, 10500, 11700, 13200, 15000, 16500] } }, "IC3": { "index": 4, "page": 2, "order": 2, "resource": 76800, "time": 64800, "level": 2, "name": "#m_malphus#", "description": "mi_Malphus_desc", "stream": ["mi_Malphus_stream", "mi_Malphus_streambody", "quests/malphus.png"], "trainingCosts": [[76800, 64800], [153600, 129600], [230400, 194400], [307200, 259200], [460800, 388800]], "movement": "jump", "props": { "speed": [3.2], "health": [585, 611, 650, 842, 1056, 1290], "damage": [100, 105, 110, 138, 169, 196], "cTime": [100, 100, 90, 90, 90, 90], "cResource": [3000, 3500, 4100, 4800, 5500, 7000], "cStorage": [15], "bucket": [15], "targetGroup": [3], "hTime": [30, 30, 27], "hResource": [900, 1050, 1230, 1440, 1650, 2100] } }, "IC5": { "index": 5, "page": 3, "order": 1, "resource": 614400, "time": 86400, "level": 3, "name": "#m_balthazar#", "classType": Balthazar, "description": "mi_Balthazar_desc", "stream": ["mi_Balthazar_stream", "mi_Balthazar_streambody", "quests/balthazar.png"], "trainingCosts": [[614400, 86400], [1228800, 172800], [1843200, 259200], [2457600, 345600], [3686400, 518400]], "movement": "fly", "pathing": "direct", "props": { "speed": [4.5], "health": [2240, 2520, 3200, 4500, 5000, 5600], "damage": [480, 532, 657, 795, 860, 930], "cTime": [1800, 1920, 2040, 2160, 2280, 2400], "cResource": [88000, 104000, 161000, 249000, 327000, 487000], "cStorage": [40], "bucket": [40], "targetGroup": [6], "hTime": [540, 576, 612, 648, 684, 720], "hResource": [26400, 31200, 48300, 74700, 98100, 146100] } }, "IC6": { "index": 6, "page": 3, "order": 2, "resource": 1228800, "time": 86400, "level": 3, "name": "#m_grokus#", "description": "mi_Grokus_desc", "stream": ["mi_Grokus_stream", "mi_Grokus_streambody", "quests/grokus.png"], "trainingCosts": [[1228800, 86400], [2457600, 172800], [3686400, 259200], [4915200, 345600], [7372800, 518400]], "props": { "speed": [1.3, 1.3, 1.4, 1.4, 1.5, 1.6], "health": [7600, 8750, 9900, 10100, 11300, 12500], "damage": [400, 425, 450, 475, 500, 550], "cTime": [1800, 1800, 1800, 1800, 1800, 1800], "cResource": [80000, 105000, 135000, 175000, 210000, 325000], "cStorage": [50], "bucket": [50], "targetGroup": [3], "hTime": [540], "hResource": [24000, 31500, 40500, 52500, 63000, 97500] } }, "IC7": { "index": 7, "page": 3, "order": 3, "resource": 2457600, "time": 172800, "level": 3, "name": "#m_sabnox#", "classType": Sabnox, "description": "mi_Sabnox_desc", "stream": ["mi_Sabnox_stream", "mi_Sabnox_streambody", "quests/sabnox.png"], "trainingCosts": [[2457600, 172800], [4915200, 345600], [7372800, 518400], [9830400, 691200], [14745600, 1036800]], "props": { "range": [240], "speed": [1.7, 1.8, 1.9, 2, 2.1, 2.2], "health": [1456, 1638, 1820, 2145, 2470, 2860], "damage": [700, 825, 950, 1075, 1200, 1350], "cTime": [1384, 1384, 1384, 1384, 1384, 1384], "cResource": [60000, 90000, 145000, 200000, 330000, 450000], "cStorage": [65], "bucket": [65], "targetGroup": [4], "hTime": [415], "hResource": [18000, 27000, 43500, 60000, 99000, 135000] } }, "IC8": { "index": 8, "page": 4, "order": 1, "resource": 4915200, "time": 259200, "level": 4, "name": "#m_king_wormzer#", "shortName": "#m_k_wormzer#", "classType": KingWormzer, "description": "mi_King_Wormzer_desc", "stream": ["mi_King_Wormzer_stream", "mi_King_Wormzer_streambody", "quests/king_wormzer.png"], "trainingCosts": [[4915200, 259200], [7268000, 518400], [9296000, 777600], [13624000, 1036800], [19248000, 1555200]], "movement": "burrow", "pathing": "direct", "props": { "speed": [2.5, 2.6, 2.7, 2.8, 2.9, 3], "health": [5600, 6300, 7000, 10000, 11800, 14000], "damage": [1100, 1200, 1300, 1500, 1800, 2000], "cTime": [2700], "cResource": [425000, 476000, 580000, 700000, 910000, 1204000], "cStorage": [100], "bucket": [100], "targetGroup": [1], "hTime": [810], "hResource": [127500, 142800, 174000, 210000, 273000, 361200] } }, "C200": { "name": "AILooter1", "blocked": true, "props": { "speed": [3], "health": [200], "damage": [20], "cTime": [10], "cResource": [10], "cStorage": [10], "bucket": [50], "size": [32], "targetGroup": [3] } } };
+        CREATURELOCKER._mainCreatures = { "C1": { "index": 1, "page": 1, "order": 1, "resource": 4000, "time": 10 * 60, "level": 1, "name": "#m_pokey#", "description": "mon_pokeydesc", "stream": ["mon_pokeystream", "mon_pokeystreambody", "quests/monster1.v2.png"], "unlock": [""], "trainingCosts": [[4000, 60 * 60 * 2], [8000, 60 * 60 * 3], [12000, 60 * 60 * 5], [16000, 60 * 60 * 8], [22000, 60 * 60 * 12]], "props": { "speed": [1.2], "health": [200, 220, 240, 260, 280, 300], "damage": [60, 65, 70, 75, 80, 85], "cTime": [15, 10, 8, 7, 6, 5], "cResource": [250, 450, 675, 800, 1000, 1250], "cStorage": [10, 10, 10, 9, 8, 7], "bucket": [7], "targetGroup": [1], "hTime": [5, 3, 2, 2, 2, 2], "hResource": [75, 135, 203, 240, 300, 375] } }, "C2": { "index": 2, "page": 1, "order": 2, "resource": 8000, "time": 1 * 60 * 60, "level": 1, "name": "#m_octoooze#", "description": "mon_octooozedesc", "stream": ["mon_octooozestream", "mon_octooozestreambody", "quests/monster2.v2.png"], "trainingCosts": [[8000, 60 * 60 * 4], [16000, 60 * 60 * 6], [24000, 60 * 60 * 10], [48000, 60 * 60 * 16], [64000, 60 * 60 * 24]], "props": { "speed": [1.4], "health": [1000, 1100, 1300, 1450, 1600, 1800], "damage": [15, 15, 20, 25, 30, 35], "cTime": [15, 16], "cResource": [500, 900, 1350, 1800, 2100, 2500], "cStorage": [10], "bucket": [10], "targetGroup": [4], "hTime": [5], "hResource": [150, 270, 405, 540, 630, 750] } }, "C3": { "index": 3, "page": 1, "order": 3, "resource": 16000, "time": 2 * 60 * 60, "level": 1, "name": "#m_bolt#", "classType": Bolt, "description": "mon_boltdesc", "stream": ["mon_boltstream", "mon_boltstreambody", "quests/monster3.v2.png"], "trainingCosts": [[16000, 60 * 60 * 4], [32000, 60 * 60 * 6], [48000, 60 * 60 * 8], [96000, 60 * 60 * 12], [144000, 60 * 60 * 16]], "props": { "speed": [2.5, 2.55, 2.6, 2.8, 3, 3.2], "health": [150], "damage": [15, 20, 25, 35, 45, 55], "cTime": [23], "cResource": [350, 675, 1015, 1400, 1800, 2400], "cStorage": [15], "bucket": [15], "targetGroup": [3], "hTime": [7], "hResource": [105, 203, 305, 420, 540, 720] } }, "C4": { "index": 4, "page": 1, "order": 4, "resource": 32000, "time": 4 * 60 * 60, "level": 1, "name": "#m_fink#", "classType": Fink, "description": "mon_finkdesc", "stream": ["mon_finkstream", "mon_finkstreambody", "quests/monster4.v2.png"], "trainingCosts": [[32000, 60 * 60 * 8], [64000, 60 * 60 * 12], [96000, 60 * 60 * 18], [128000, 60 * 60 * 24], [160000, 60 * 60 * 30]], "props": { "speed": [1.3], "health": [200, 200, 200, 200, 220, 240], "damage": [300, 330, 380, 430, 470, 520], "cTime": [100, 100, 100, 100, 90, 90], "cResource": [1500, 2250, 3375, 4800, 7200, 10000], "cStorage": [20], "bucket": [20], "targetGroup": [1], "hTime": [30, 30, 30, 30, 27, 27], "hResource": [450, 675, 1013, 1440, 2160, 3000] } }, "C5": { "index": 5, "page": 2, "order": 1, "resource": 64000, "time": 8 * 60 * 60, "level": 2, "name": "#m_eyera#", "classType": Eyera, "description": "mon_eyeradesc", "stream": ["mon_eyerastream", "mon_eyerastreambody", "quests/monster5.v2.png"], "trainingCosts": [[64000, 60 * 60 * 5], [128000, 60 * 60 * 7], [192000, 60 * 60 * 12], [384000, 60 * 60 * 24], [512000, 60 * 60 * 36]], "props": { "speed": [2, 2.2, 2.4, 2.6, 2.8, 3], "health": [600, 900, 1200, 1600, 2000, 2400], "damage": [4000, 8000, 12000, 16000, 20000, 24000], "cTime": [1500], "cResource": [5000, 15000, 30000, 45000, 60000, 80000], "cStorage": [60], "bucket": [60], "targetGroup": [2], "explode": [1], "hTime": [450, 450, 450, 450, 450, 450], "hResource": [1500, 4500, 9000, 13500, 18000, 24000] } }, "C6": { "index": 6, "page": 2, "order": 2, "resource": 128000, "time": 16 * 60 * 60, "level": 2, "name": "#m_ichi#", "description": "mon_ichidesc", "stream": ["mon_ichistream", "mon_ichistreambody", "quests/monster6.v2.png"], "trainingCosts": [[128000, 60 * 60 * 12], [256000, 60 * 60 * 18], [409600, 60 * 60 * 24], [640000, 60 * 60 * 48], [820000, 60 * 60 * 72]], "props": { "speed": [1.2], "health": [2000, 2100, 2200, 2300, 2500, 2800], "damage": [50, 60, 70, 80, 95, 110], "cTime": [100, 100, 90], "cResource": [5000, 5625, 8440, 11200, 16000, 24000], "cStorage": [20], "bucket": [20], "targetGroup": [4], "hTime": [30, 30, 27], "hResource": [1500, 1688, 2532, 3360, 4800, 7200] } }, "C7": { "index": 7, "page": 2, "order": 3, "resource": 256000, "time": 28 * 60 * 60, "level": 2, "name": "#m_bandito#", "classType": Bandito, "description": "mon_banditodesc", "stream": ["mon_banditostream", "mon_banditostreambody", "quests/monster7.v2.png"], "trainingCosts": [[256000, 60 * 60 * 12], [512000, 60 * 60 * 16], [756000, 60 * 60 * 24], [1024000, 60 * 60 * 36], [1440000, 60 * 60 * 48]], "props": { "speed": [1], "health": [500, 550, 600, 650, 750, 900], "damage": [200, 250, 300, 350, 400, 450], "cTime": [225, 225, 225, 225, 180, 180], "cResource": [2500, 4500, 6750, 8750, 11200, 14400], "cStorage": [20], "bucket": [20], "targetGroup": [1], "hTime": [68, 68, 68, 68, 54, 54], "hResource": [750, 1350, 2025, 2625, 3360, 4320] } }, "C8": { "index": 8, "page": 2, "order": 4, "resource": 512000, "time": 40 * 60 * 60, "level": 2, "name": "#m_fang#", "classType": Fang, "description": "mon_fangdesc", "stream": ["mon_fangstream", "mon_fangstreambody", "quests/monster8.v2.png"], "trainingCosts": [[512000, 60 * 60 * 12], [512000, 60 * 60 * 16], [756000, 60 * 60 * 24], [1024000, 60 * 60 * 36], [1440000, 60 * 60 * 48]], "props": { "speed": [1.1, 1.2, 1.3, 1.4, 1.5, 1.6], "health": [400], "damage": [600, 600, 620, 660, 720, 800], "cTime": [450, 350, 250, 225, 195, 195], "cResource": [18000, 27000, 40500, 60500, 80000, 100000], "cStorage": [30], "bucket": [30], "targetGroup": [1], "hTime": [135, 105, 75, 68, 59, 59], "hResource": [5400, 8100, 12150, 18150, 24000, 30000] } }, "C9": { "index": 10, "page": 3, "order": 1, "resource": 1024000, "time": 52 * 60 * 60, "level": 3, "name": "#m_brain#", "classType": Brain, "description": "mon_braindesc", "stream": ["mon_brainstream", "mon_brainstreambody", "quests/monster9.v2.png"], "trainingCosts": [[1024000, 60 * 60 * 12], [2056000, 60 * 60 * 16], [2870000, 60 * 60 * 20], [4500000, 60 * 60 * 40], [6000000, 60 * 60 * 60]], "props": { "speed": [2, 2, 2, 2, 2.1, 2.2], "health": [600, 700, 750, 800, 1100, 1400], "damage": [100, 100, 200, 250, 300, 350], "cTime": [342], "cResource": [12000, 20250, 30375, 35000, 50000, 75000], "cStorage": [30], "bucket": [30], "targetGroup": [3], "hTime": [103], "hResource": [3600, 6075, 9113, 10500, 1500, 22500] } }, "C10": { "index": 11, "page": 3, "order": 3, "resource": 2048000, "time": 58 * 60 * 60, "level": 3, "name": "#m_crabatron#", "description": "mon_crabatrondesc", "stream": ["mon_crabatronstream", "mon_crabatronstreambody", "quests/monster10.v2.png"], "trainingCosts": [[2048000, 60 * 60 * 12], [3000000, 60 * 60 * 18], [4400000, 60 * 60 * 24], [6000000, 60 * 60 * 48], [7500000, 60 * 60 * 72]], "props": { "speed": [1, 1, 1, 1.2, 1.4, 1.5], "health": [4000, 4000, 4300, 4400, 4600, 4800], "damage": [100, 120, 130, 140, 150, 170], "cTime": [750], "cResource": [30000, 45000, 67500, 75000, 90000, 120000], "cStorage": [40], "bucket": [40], "targetGroup": [4], "hTime": [225], "hResource": [9000, 13500, 20250, 22500, 27000, 36000] } }, "C11": { "index": 12, "page": 3, "order": 4, "resource": 4096000, "time": 62 * 60 * 60, "level": 3, "name": "#m_projectx#", "classType": ProjectX, "description": "mon_projectxdesc", "stream": ["mon_projectxstream", "mon_projectxstreambody", "quests/monster11.v2.png"], "trainingCosts": [[4096000, 60 * 60 * 24], [7000000, 60 * 60 * 36], [12000000, 60 * 60 * 48], [18000000, 60 * 60 * 96], [24000000, 60 * 60 * 128]], "props": { "speed": [0.9, 0.9, 1, 1.2, 1.2, 1.3], "health": [800, 900, 950, 1000, 1100, 1200], "damage": [1200, 1400, 1600, 1800, 2000, 2200], "cTime": [1384], "cResource": [60000, 90000, 135000, 180000, 234000, 280000], "cStorage": [70], "bucket": [70], "targetGroup": [4], "hTime": [415], "hResource": [18000, 27000, 40500, 54000, 70200, 84000] } }, "C12": { "index": 16, "page": 4, "order": 3, "resource": 8192000, "time": 72 * 60 * 60, "level": 4, "name": "#m_dave#", "classType": DAVE, "description": "mon_davedesc", "stream": ["mon_davestream", "mon_davestreambody", "quests/monster12.v2.png"], "trainingCosts": [[8192000, 60 * 60 * 48], [10000000, 60 * 60 * 72], [12200000, 60 * 60 * 96], [19200000, 60 * 60 * 144], [28000000, 60 * 60 * 192]], "props": { "speed": [0.8, 0.85, 0.9, 1, 1.1, 1.2], "health": [8000, 9100, 10000, 12000, 16500, 21000], "damage": [1500, 1500, 1600, 1700, 1800, 1900], "cTime": [3600], "cResource": [150000, 225000, 337500, 440000, 600000, 800000], "cStorage": [160], "bucket": [160], "targetGroup": [1], "hTime": [1080], "hResource": [45000, 67500, 101250, 132000, 180000, 240000] } }, "C13": { "index": 15, "page": 4, "order": 2, "resource": 4096000, "time": 62 * 60 * 60, "level": 4, "name": "#m_wormzer#", "classType": Wormzer, "description": "mon_wormzerdesc", "stream": ["mon_wormzerstream", "mon_wormzerstreambody", "quests/monster13.v2.png"], "trainingCosts": [[4096000, 60 * 60 * 24], [8192000, 60 * 60 * 48], [8192000, 60 * 60 * 72], [8192000, 60 * 60 * 96], [12800000, 60 * 60 * 128]], "movement": "burrow", "pathing": "direct", "props": { "speed": [3, 4], "health": [600, 800, 1100, 1300, 1500, 1700], "damage": [300, 400, 550, 600, 650, 700], "cTime": [1384], "cResource": [20000, 25000, 30000, 35000, 40000, 47500], "cStorage": [70], "bucket": [70], "targetGroup": [1], "hTime": [415], "hResource": [6000, 7500, 9000, 10500, 12000, 14250] } }, "C14": { "index": 14, "page": 4, "order": 1, "resource": 4096000, "time": 60 * 60 * 60, "level": 4, "name": "#m_teratorn#", "classType": Teratorn, "description": "mon_teratorndesc", "stream": ["mon_teratornstream", "mon_teratornstreambody", "quests/monster14.v3.png"], "trainingCosts": [[4096000, 60 * 60 * 36], [7000000, 60 * 60 * 54], [10000000, 60 * 60 * 80], [16000000, 60 * 60 * 136], [24000000, 60 * 60 * 180]], "movement": "fly", "pathing": "direct", "props": { "range": [150], "attackDelay": [90], "speed": [2.5, 2.75, 3, 3.25, 3.5], "health": [1600, 1900, 2400, 3000, 3600, 4200], "damage": [300, 350, 400, 500, 600, 700], "cTime": [1800, 1920, 2040, 2160, 2280, 2400], "cResource": [70000, 95000, 145000, 200000, 300000, 400000], "cStorage": [70], "bucket": [70], "targetGroup": [1], "hTime": [540, 576, 612, 648, 684, 720], "hResource": [21000, 28500, 43500, 60000, 90000, 120000] } }, "C15": { "index": 13, "page": 3, "order": 5, "resource": 6192000, "time": 60 * 60 * 60, "level": 3, "name": "#m_zafreeti#", "classType": Zafreeti, "description": "mon_zafreetidesc", "stream": ["mon_zafreetistream", "mon_zafreetistreambody", "quests/monster15.v2.png"], "trainingCosts": [[6192000, 60 * 60 * 36], [7800000, 60 * 60 * 54], [12000000, 60 * 60 * 80], [18000000, 60 * 60 * 136]], "movement": "fly", "pathing": "direct", "antiHeal": true, "props": { "range": [150], "attackDelay": [20], "speed": [0.75, 0.8, 0.85, 0.9, 0.95], "health": [8000], "damage": [-400, -550, -700, -850, -1000], "cTime": [2400], "cResource": [120000, 180000, 256000, 324000, 468000], "cStorage": [200], "bucket": [200], "targetGroup": [5], "hTime": [720], "hResource": [36000, 54000, 76800, 97200, 140400] } }, "C16": { "index": 9, "page": 2, "order": 5, "resource": 384000, "time": 36 * 60 * 60, "level": 2, "name": "#m_vorg#", "blocked": true, "classType": Vorg, "description": "mon_vorgdesc", "trainingCosts": [[384000, 60 * 60 * 24], [384000, 60 * 60 * 36], [512000, 60 * 60 * 48], [768000, 60 * 60 * 60], [1024000, 60 * 60 * 72]], "movement": "fly", "stream": ["", "", "quests/monster16.png"], "pathing": "direct", "antiHeal": true, "blocked": true, "props": { "range": [150], "attackDelay": [10], "speed": [1.5, 1.75, 2, 2.25, 2.5], "health": [750], "damage": [-60, -70, -80, -90, -100, -110], "cTime": [1200], "cResource": [16000, 25000, 38500, 62500, 75000, 90000], "cStorage": [60], "bucket": [60], "targetGroup": [5], "hTime": [360], "hResource": [4800, 7500, 11550, 18750, 22500, 27000] } }, "C17": { "index": 10, "page": 3, "order": 2, "resource": 2048000, "time": 36 * 60 * 60, "level": 3, "name": "#m_slimeattikus#", "classType": Slimeattikus, "description": "mon_slimeattikusdesc", "trainingCosts": [[2560000, 60 * 60 * 24], [3840000, 60 * 60 * 36], [4096000, 60 * 60 * 48], [6250000, 60 * 60 * 60], [8500000, 60 * 60 * 80]], "stream": ["", "", "quests/monster17.png"], "blocked": true, "props": { "speed": [1, 1.1, 1.2, 1.3, 1.4, 1.5], "health": [700, 725, 750, 800, 900, 1000], "damage": [850, 850, 900, 1000, 1200, 1400], "cTime": [500, 450, 400, 350, 300, 250], "cResource": [27000, 40500, 60750, 90000, 125000, 150000], "cStorage": [40], "bucket": [40], "targetGroup": [1], "splits": [2, 2, 3, 3, 4, 5], "hTime": [150, 135, 120, 105, 90, 75], "hResource": [8100, 12150, 18225, 27000, 37500, 45000] } }, "C18": { "index": 0, "page": 0, "order": 0, "resource": 2048000, "time": 36 * 60 * 60, "level": 3, "name": "#m_slimeattikusmini#", "blocked": true, "description": "mon_slimeattikusminidesc", "trainingCosts": [[2560000, 60 * 60 * 24], [3840000, 60 * 60 * 36], [4096000, 60 * 60 * 48], [6250000, 60 * 60 * 60], [8500000, 60 * 60 * 80]], "stream": ["", "", ""], "blocked": true, "fake": true, "dependent": "C17", "props": { "speed": [1.5, 1.6, 1.7, 1.8, 1.9, 2], "health": [250], "damage": [310, 320, 330, 340, 350], "cTime": [500, 450, 400, 350, 300, 250], "cResource": [27000, 40500, 60750, 90000, 125000, 150000], "cStorage": [40], "bucket": [40], "targetGroup": [1] } }, "C19": { "index": 17, "page": 0, "order": 0, "resource": 2048000, "time": 36 * 60 * 60, "level": 3, "name": "#m_rezghul#", "classType": Rezghul, "description": "mon_rezghuldesc", "trainingCosts": [[16000000, 60 * 60 * 24], [19000000, 60 * 60 * 36], [22000000, 60 * 60 * 48], [25000000, 60 * 60 * 60], [28000000, 60 * 60 * 72]], "stream": ["", "", "quests/monster19.png"], "blocked": true, "props": { "range": [200], "speed": [0.8, 0.9, 1, 1.1, 1.2, 1.3], "health": [7000, 7500, 8000, 8500, 9000, 10000], "damage": [700, 800, 900, 1000, 1100, 1200], "cTime": [4500], "cResource": [3000000 / 3], "cStorage": [250], "bucket": [250], "targetGroup": [4], "zombieSpeedMultiplier": [0.75], "zombieHealthMultiplier": [1, 1.1, 1.2, 1.3, 1.4, 1.5], "zombieDamageMultiplier": [1, 1.1, 1.2, 1.3, 1.4, 1.5], "resurrectCooldown": [7, 7, 6, 6, 5, 4], "hTime": [1125], "hResource": [250000] } }, "IC1": { "index": 1, "page": 1, "order": 1, "resource": 2400, "time": 3600, "level": 1, "name": "#m_spurtz#", "classType": Spurtz, "description": "mi_Spurtz_desc", "stream": ["mi_Spurtz_stream", "mi_Spurtz_streambody", "quests/inferno_monster1.png"], "trainingCosts": [[2400, 3600], [4800, 7200], [7200, 10800], [9600, 14400], [14400, 21600]], "props": { "speed": [1.2], "health": [400, 425, 450, 570, 714, 880], "damage": [160, 200, 200, 288, 390, 490], "cTime": [15, 10, 8, 7, 6, 5], "cResource": [500, 1000, 2000, 4000, 6000, 10000], "cStorage": [15], "bucket": [15], "targetGroup": [1], "hTime": [5, 3, 2], "hResource": [150, 300, 600, 1200, 1800, 3000] } }, "IC2": { "index": 2, "page": 1, "order": 2, "resource": 4800, "time": 14400, "level": 1, "name": "#m_zagnoid#", "description": "mi_Zagnoid_desc", "stream": ["mi_Zagnoid_stream", "mi_Zagnoid_streambody", "quests/zagnoid.v3.png"], "trainingCosts": [[4800, 14400], [9600, 28800], [14400, 43200], [19200, 57600], [28800, 86400]], "props": { "speed": [1.8], "health": [1500, 1820, 2300, 3360, 4690, 5760], "damage": [80, 85, 90, 109, 130, 154], "cTime": [15, 16, 16, 16, 16, 16], "cResource": [2500, 4000, 8000, 12000, 16000, 20000], "cStorage": [15], "bucket": [15], "targetGroup": [4], "hTime": [5], "hResource": [750, 1200, 2400, 3600, 4800, 6000] } }, "IC4": { "index": 3, "page": 2, "order": 1, "resource": 38400, "time": 64800, "level": 2, "name": "#m_valgos#", "description": "mi_Valgos_desc", "stream": ["mi_Valgos_stream", "mi_Valgos_streambody", "quests/valgos.png"], "trainingCosts": [[38400, 64800], [76800, 129600], [115200, 194400], [153600, 259200], [230400, 388800]], "movement": "burrow", "pathing": "direct", "props": { "speed": [3, 3, 3, 3, 3, 3], "health": [1600, 1920, 2380, 3200, 3600, 4000], "damage": [343, 371, 435, 645, 700, 775], "cTime": [450, 350, 250, 225, 195, 195], "cResource": [31000, 35000, 39000, 44000, 50000, 55000], "cStorage": [30], "bucket": [30], "targetGroup": [2], "hTime": [135, 105, 75, 68, 59, 59], "hResource": [9300, 10500, 11700, 13200, 15000, 16500] } }, "IC3": { "index": 4, "page": 2, "order": 2, "resource": 76800, "time": 64800, "level": 2, "name": "#m_malphus#", "description": "mi_Malphus_desc", "stream": ["mi_Malphus_stream", "mi_Malphus_streambody", "quests/malphus.png"], "trainingCosts": [[76800, 64800], [153600, 129600], [230400, 194400], [307200, 259200], [460800, 388800]], "movement": "jump", "props": { "speed": [3.2], "health": [585, 611, 650, 842, 1056, 1290], "damage": [100, 105, 110, 138, 169, 196], "cTime": [100, 100, 90, 90, 90, 90], "cResource": [3000, 3500, 4100, 4800, 5500, 7000], "cStorage": [15], "bucket": [15], "targetGroup": [3], "hTime": [30, 30, 27], "hResource": [900, 1050, 1230, 1440, 1650, 2100] } }, "IC5": { "index": 5, "page": 3, "order": 1, "resource": 614400, "time": 86400, "level": 3, "name": "#m_balthazar#", "classType": Balthazar, "description": "mi_Balthazar_desc", "stream": ["mi_Balthazar_stream", "mi_Balthazar_streambody", "quests/balthazar.png"], "trainingCosts": [[614400, 86400], [1228800, 172800], [1843200, 259200], [2457600, 345600], [3686400, 518400]], "movement": "fly", "pathing": "direct", "props": { "speed": [4.5], "health": [2240, 2520, 3200, 4500, 5000, 5600], "damage": [480, 532, 657, 795, 860, 930], "cTime": [1800, 1920, 2040, 2160, 2280, 2400], "cResource": [88000, 104000, 161000, 249000, 327000, 487000], "cStorage": [40], "bucket": [40], "targetGroup": [6], "hTime": [540, 576, 612, 648, 684, 720], "hResource": [26400, 31200, 48300, 74700, 98100, 146100] } }, "IC6": { "index": 6, "page": 3, "order": 2, "resource": 1228800, "time": 86400, "level": 3, "name": "#m_grokus#", "description": "mi_Grokus_desc", "stream": ["mi_Grokus_stream", "mi_Grokus_streambody", "quests/grokus.png"], "trainingCosts": [[1228800, 86400], [2457600, 172800], [3686400, 259200], [4915200, 345600], [7372800, 518400]], "props": { "speed": [1.3, 1.3, 1.4, 1.4, 1.5, 1.6], "health": [7600, 8750, 9900, 10100, 11300, 12500], "damage": [400, 425, 450, 475, 500, 550], "cTime": [1800, 1800, 1800, 1800, 1800, 1800], "cResource": [80000, 105000, 135000, 175000, 210000, 325000], "cStorage": [50], "bucket": [50], "targetGroup": [3], "hTime": [540], "hResource": [24000, 31500, 40500, 52500, 63000, 97500] } }, "IC7": { "index": 7, "page": 3, "order": 3, "resource": 2457600, "time": 172800, "level": 3, "name": "#m_sabnox#", "classType": Sabnox, "description": "mi_Sabnox_desc", "stream": ["mi_Sabnox_stream", "mi_Sabnox_streambody", "quests/sabnox.png"], "trainingCosts": [[2457600, 172800], [4915200, 345600], [7372800, 518400], [9830400, 691200], [14745600, 1036800]], "props": { "range": [240], "speed": [1.7, 1.8, 1.9, 2, 2.1, 2.2], "health": [1456, 1638, 1820, 2145, 2470, 2860], "damage": [700, 825, 950, 1075, 1200, 1350], "cTime": [1384, 1384, 1384, 1384, 1384, 1384], "cResource": [60000, 90000, 145000, 200000, 330000, 450000], "cStorage": [65], "bucket": [65], "targetGroup": [4], "hTime": [415], "hResource": [18000, 27000, 43500, 60000, 99000, 135000] } }, "IC8": { "index": 8, "page": 4, "order": 1, "resource": 4915200, "time": 259200, "level": 4, "name": "#m_king_wormzer#", "shortName": "#m_k_wormzer#", "classType": KingWormzer, "description": "mi_King_Wormzer_desc", "stream": ["mi_King_Wormzer_stream", "mi_King_Wormzer_streambody", "quests/king_wormzer.png"], "trainingCosts": [[4915200, 259200], [7268000, 518400], [9296000, 777600], [13624000, 1036800], [19248000, 1555200]], "movement": "burrow", "pathing": "direct", "props": { "speed": [2.5, 2.6, 2.7, 2.8, 2.9, 3], "health": [5600, 6300, 7000, 10000, 11800, 14000], "damage": [1100, 1200, 1300, 1500, 1800, 2000], "cTime": [2700], "cResource": [425000, 476000, 580000, 700000, 910000, 1204000], "cStorage": [100], "bucket": [100], "targetGroup": [1], "hTime": [810], "hResource": [127500, 142800, 174000, 210000, 273000, 361200] } }, "C200": { "name": "AILooter1", "blocked": true, "props": { "speed": [3], "health": [200], "damage": [20], "cTime": [10], "cResource": [10], "cStorage": [10], "bucket": [50], "size": [32], "targetGroup": [3] } } };
         if (CREATURELOCKER.k_USE_REBALANCED_MONSTERS) {
             CREATURELOCKER._mainCreatures = RebalancedCreatures.REBALANCED_CREATURES;
             for (_loc1_ in CREATURELOCKER._mainCreatures) {
@@ -502,17 +534,22 @@ export class CREATURELOCKER extends ASObject {
                         };
                     };
                     mc = new popup_monster();
-                    mc.bSpeedup.SetupKey("btn_warnyourfriends");
-                    if (!creature.stream[0]) {
-                        mc.bSpeedup.visible = false;
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // (QoL #140: Hatch now and Share in chat, not "Warn your friends")
+                        IoSocial.ioWarnUnlocked(mc, KEYS.Get(as3.str(creature.name)));
+                    } else {
+                        mc.bSpeedup.SetupKey("btn_warnyourfriends");
+                        if (!creature.stream[0]) {
+                            mc.bSpeedup.visible = false;
+                        }
+                        _body = "";
+                        if (creature.stream[1]) {
+                            _body = KEYS.Get(as3.str(creature.stream[1]));
+                        }
+                        mc.bSpeedup.addEventListener(MouseEvent.CLICK, StreamPost(KEYS.Get(as3.str(creature.stream[0])), _body, img));
+                        mc.bSpeedup.Highlight = true;
+                        mc.bAction.visible = false;
                     }
-                    _body = "";
-                    if (creature.stream[1]) {
-                        _body = KEYS.Get(as3.str(creature.stream[1]));
-                    }
-                    mc.bSpeedup.addEventListener(MouseEvent.CLICK, StreamPost(KEYS.Get(as3.str(creature.stream[0])), _body, img));
-                    mc.bSpeedup.Highlight = true;
-                    mc.bAction.visible = false;
                     hatcheryName = hatcheryName = !(!GLOBAL._bHatchery) ? String(GLOBAL._bHatchery._buildingProps.name) : String(GLOBAL._buildingProps[12].name);
                     mc.tText.htmlText = KEYS.Get("pop_unlock_complete", { "v1": KEYS.Get(as3.str(CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name)), "v2": KEYS.Get(hatcheryName) });
                     POPUPS.Push(mc, null, null, null, CREATURELOCKER._unlocking + "-150.png");
@@ -526,6 +563,10 @@ export class CREATURELOCKER extends ASObject {
         }
         if (CREATURELOCKER._mc) {
             CREATURELOCKER._mc.Tick();
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #358: the unlock's countdown over the Strongbox)
+            CREATURELOCKER.ioLockerTimer();
         }
     }
 
@@ -543,6 +584,10 @@ export class CREATURELOCKER extends ASObject {
         // Hell Freezes Over: Rimegrave is unlocked only once the curse is broken (the server checks too)
         if (creatureID == CREATURELOCKER.RIMEGRAVE_ID && !IoHfo.championFree()) {
             GLOBAL.Message(KEYS.Get("mon_strongbox_hfo_locked"));
+            return false;
+        }
+        // the Basilisk: only once he has joined the player's side (200 battles won; the server checks too)
+        if (creatureID == CREATURELOCKER.BASILISK_ID && !CREATURELOCKER.ioBasiliskFree()) {
             return false;
         }
         // Inferno-only: asks the locker data, not the copy Tick keeps (an instant unlock cleared that copy until
@@ -571,15 +616,21 @@ export class CREATURELOCKER extends ASObject {
                 POPUPS.Next();
                 STORE.SpeedUp("SP4");
             };
-            CREATURELOCKER._lockerData[creatureID] = { "t": 1, "s": GLOBAL.Timestamp(), "e": GLOBAL.Timestamp() + creature.time };
+            // (Inferno-only, 22 October: a fifth less with a Training Manual running: IoShop)
+            CREATURELOCKER._lockerData[creatureID] = { "t": 1, "s": GLOBAL.Timestamp(), "e": GLOBAL.Timestamp() + (GLOBAL.INFERNO_ONLY ? IoShop.unlockTime(Number(creature.time)) : creature.time) };
             CREATURELOCKER._unlocking = creatureID;
             BASE.Save();
             LOGGER.Stat([9, Number(creatureID.substr(1)) | 0]);
             popupMC = new popup_monster();
-            popupMC.bAction.SetupKey("btn_warnyourfriends");
-            popupMC.bAction.addEventListener(MouseEvent.CLICK, StreamPost);
-            if (!CREATURELOCKER._creatures[creatureID].stream[0]) {
-                popupMC.bAction.visible = false;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #140: Share in chat, not "Warn your friends"; Speed up as it is)
+                IoSocial.ioWarnUnlocking(popupMC, KEYS.Get(as3.str(creature.name)));
+            } else {
+                popupMC.bAction.SetupKey("btn_warnyourfriends");
+                popupMC.bAction.addEventListener(MouseEvent.CLICK, StreamPost);
+                if (!CREATURELOCKER._creatures[creatureID].stream[0]) {
+                    popupMC.bAction.visible = false;
+                }
             }
             popupMC.bSpeedup.SetupKey("btn_speedup");
             popupMC.bSpeedup.addEventListener(MouseEvent.CLICK, SpeedUp);
@@ -646,7 +697,7 @@ export class CREATURELOCKER extends ASObject {
     public static Cancel(): void {
         if (CREATURELOCKER._unlocking) {
             delete CREATURELOCKER._lockerData[CREATURELOCKER._unlocking];
-            BASE.Fund(3, Number(CREATURELOCKER._creatures[CREATURELOCKER._unlocking].resource));
+            BASE.Fund(3, Number(CREATURELOCKER._creatures[CREATURELOCKER._unlocking].resource), GLOBAL.INFERNO_ONLY);
             CREATURELOCKER._unlocking = null;
         }
         CREATURELOCKER.Update();
@@ -889,5 +940,320 @@ export class CREATURELOCKER extends ASObject {
             return as3.str(CREATURELOCKER._creatures[param1].shortName);
         }
         return as3.str(CREATURELOCKER._creatures[param1].name);
+    }
+
+    /** The game's steps a second (GLOBAL.TickFast: the simulation runs at a fixed 80 a second). */
+    private static readonly IO_STEPS_PER_SECOND: int = 80;
+
+    /** A monster's attackDelay when it has none (CreepBase). */
+    private static readonly IO_DEFAULT_ATTACK_DELAY: int = 60;
+
+    /** Inferno-only: the level a monster's stats are read at (0: the one the player has trained it to, as GetProperty). */
+    public static ioLevel(param1: string, param2: int = 0): int {
+        if (param2 > 0) {
+            return param2;
+        }
+        let up: any = GLOBAL.player && GLOBAL.player.m_upgrades ? GLOBAL.player.m_upgrades[param1] : null;
+        return Math.max(1, up ? up.level | 0 : 1) | 0;
+    }
+
+    /** Inferno-only: one that explodes on its first hit (Eye-ra, the Fusebug: "explode" in its stats). */
+    public static ioExplodes(param1: string): boolean {
+        let c: any = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[param1] : null;
+        return Boolean(c && c.props && as3.is(c.props.explode, Array) && Number(c.props.explode[0]) > 0);
+    }
+
+    /**
+     * Inferno-only (QoL #351): the game steps from one hit to the next. A monster hits when its cooldown has run
+     * out, then adds its attackDelay to it and takes one off each step (CreepBase), so it hits every attackDelay + 1
+     * steps. attackDelay is the monster's "attackDelay" stat (60 when it has none, CreepBase); Korath's is set by
+     * IoChampionCreep (72, and 80 from level 3).
+     */
+    public static ioHitSteps(param1: string, param2: int = 0, param3: boolean = true): int {
+        let delay: number = CREATURES.GetProperty(param1, "attackDelay", param2, param3);
+        if (!(delay > 0)) {
+            delay = CREATURELOCKER.IO_DEFAULT_ATTACK_DELAY;
+        }
+        if (param1 == CREATURELOCKER.KORATH_ID) {
+            delay = CREATURELOCKER.ioLevel(param1, param2) >= 3 ? 80 : 72;
+        }
+        return Math.max(1, Math.round(delay) + 1) | 0;
+    }
+
+    /**
+     * Inferno-only (QoL #351): damage per second at a level (0: the player's), the damage of a hit times the hits
+     * a second (80 steps a second / ioHitSteps). Negative for a healer, as its damage. Before the buffs, and
+     * before the double damage a wall-breaker does to walls and a defence-breaker to defences (CreepBase). 0 for
+     * one that explodes (its one blast is its damage).
+     */
+    public static ioDps(param1: string, param2: int = 0, param3: boolean = true): number {
+        if (CREATURELOCKER.ioExplodes(param1)) {
+            return 0;
+        }
+        let damage: number = CREATURES.GetProperty(param1, "damage", param2, param3);
+        if (!damage) {
+            return 0;
+        }
+        return damage * CREATURELOCKER.IO_STEPS_PER_SECOND / CREATURELOCKER.ioHitSteps(param1, param2, param3);
+    }
+
+    /** Inferno-only (QoL #351): the damage per second as shown: "3,934", "1,639 (Heal)", or one that explodes, "4,000 (one blast)". */
+    public static ioDpsText(param1: string, param2: int = 0, param3: boolean = true): string {
+        if (CREATURELOCKER.ioExplodes(param1)) {
+            return KEYS.Get("io_mon2_blast", { "v1": GLOBAL.FormatNumber(Math.abs(CREATURES.GetProperty(param1, "damage", param2, param3))) });
+        }
+        let dps: number = CREATURELOCKER.ioDps(param1, param2, param3);
+        if (dps < 0) {
+            return GLOBAL.FormatNumber(Math.round(-dps)) + " (" + KEYS.Get("str_heal") + ")";
+        }
+        return GLOBAL.FormatNumber(Math.round(dps));
+    }
+
+    /**
+     * Inferno-only (QoL #353): what 100 housing of this monster brings, at a level (0: the player's), so a small
+     * monster and a big one compare as the Compound holds them: "Per 100 housing: 4,800 health, 1,250 DPS" (healing,
+     * or one blast, as ioDpsText); "" for one that takes no housing.
+     */
+    public static ioPer100Line(param1: string, param2: int = 0): string {
+        let size: number = CREATURES.GetProperty(param1, "cStorage", param2);
+        if (!(size > 0)) {
+            return "";
+        }
+        let k: number = 100 / size;
+        let health: string = GLOBAL.FormatNumber(Math.round(CREATURES.GetProperty(param1, "health", param2) * k));
+        let hit: string = "";
+        if (CREATURELOCKER.ioExplodes(param1)) {
+            hit = KEYS.Get("io_yin_per100_blast", { "v1": GLOBAL.FormatNumber(Math.round(Math.abs(CREATURES.GetProperty(param1, "damage", param2)) * k)) });
+        } else {
+            let dps: number = CREATURELOCKER.ioDps(param1, param2);
+            if (dps < 0) {
+                hit = KEYS.Get("io_yin_per100_heal", { "v1": GLOBAL.FormatNumber(Math.round(-dps * k)) });
+            } else if (dps > 0) {
+                hit = KEYS.Get("io_yin_per100_dps", { "v1": GLOBAL.FormatNumber(Math.round(dps * k)) });
+            }
+        }
+        return hit ? KEYS.Get("io_yin_per100", { "v1": health, "v2": hit }) : KEYS.Get("io_yin_per100_nohit", { "v1": health });
+    }
+
+    /** Inferno-only (QoL #351): the most damage per second of these monsters at a level (0: the player's), for the bars. */
+    public static ioMaxDps(param1: any, param2: int = 0): number {
+        let most: number = 0;
+        for (let id in param1) {
+            most = Math.max(most, Math.abs(CREATURELOCKER.ioDps(id, param2)));
+        }
+        return most;
+    }
+
+    /**
+     * Inferno-only (QoL #352): what a monster goes for and how it moves, from its stats: "Targets: Defences ·
+     * Flies · Reach 65". Its target group (MonsterBase.findTarget: 1 anything, 2 walls, 3 resources, 4
+     * defences; CreepBase: 5 heals monsters, 6 hunts monsters), its movement (fly, burrow, jump), whether it
+     * explodes, and its range: the reach of the champion-sized ones that hit up close (IoChampionCreep,
+     * Basilisk, IoRimegrave: never "ranged"), the shooting range of the others.
+     */
+    public static ioTags(param1: string, param2: int = 0, param3: boolean = true): string {
+        let c: any = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[param1] : null;
+        if (!c) {
+            return "";
+        }
+        let group: int = CREATURES.GetProperty(param1, "targetGroup", param2, param3) | 0;
+        if (group < 1 || group > 6) {
+            group = 1;
+        }
+        // (22 November: what the 21 November targets made of Valgos, Malphus, Grokus, Clinkerjaw and the Emberghoul)
+        let ioTargets: string = IoTargets.describe(param1);
+        let parts: any[] = [KEYS.Get("io_mon2_targets", { "v1": ioTargets || KEYS.Get("io_mon2_tg_" + group) })];
+        if (c.movement == "fly") {
+            parts.push(KEYS.Get("io_mon2_flies"));
+            // (21 October, the user's: Balthazar no longer flies over walls: MonsterBase.ioWalledFlyer)
+            if (param1 == "IC5" && GLOBAL.INFERNO_ONLY) {
+                parts.push(KEYS.Get("io_mon2_walled"));
+            }
+        } else if (c.movement == "burrow") {
+            parts.push(KEYS.Get("io_mon2_burrows"));
+        } else if (c.movement == "jump") {
+            parts.push(KEYS.Get("io_mon2_jumps"));
+        }
+        // (22 November: Rezghul's teleport, 21 November's)
+        if (param1 == "C19" && GLOBAL.INFERNO_ONLY) {
+            parts.push(KEYS.Get("io_mon2_teleports"));
+        }
+        if (CREATURELOCKER.ioExplodes(param1)) {
+            parts.push(KEYS.Get("io_mon2_explodes"));
+        }
+        // (22 November: its damage to some buildings: Valgos's walls and storage, Grokus's defences)
+        for (let note of IoTargets.damageNotes(param1)) {
+            parts.push(note);
+        }
+        let range: int = CREATURES.GetProperty(param1, "range", param2, param3) | 0;
+        if (range > 1) {
+            let close: boolean = c.classType === IoChampionCreep || c.classType === Basilisk || c.classType === IoRimegrave;
+            parts.push(KEYS.Get(close ? "io_mon2_reach" : "io_mon2_range", { "v1": range }));
+        }
+        return parts.join(" · ");
+    }
+
+    /**
+     * Inferno-only (QoL #356): the levels a monster's abilities come at, [[level, text], ...], from the code that
+     * gives them: Korath burns the monsters he hits, throws a fireball at a flyer from level 4 and stomps every
+     * third hit from level 5 (IoChampionCreep.attacked); Ashkarr's war cry from level 1, stronger each level
+     * (Ashkarr.BOOST); the Emberghoul's healing from its hits (Emberghoul.STEAL); the Spurtz Clinkerjaw cracks
+     * into ("splits" in its stats: 2, then 3 from level 4). `level` is the level the per-level numbers are shown at.
+     */
+    public static ioAbilities(param1: string, param2: int = 0): any[] {
+        let level: int = Math.max(1, Math.min(6, CREATURELOCKER.ioLevel(param1, param2))) | 0;
+        let list: any[] = [];
+        if (param1 == CREATURELOCKER.KORATH_ID) {
+            list.push([1, KEYS.Get("io_mon2_ab_burn")]);
+            list.push([4, KEYS.Get("io_mon2_ab_fireball")]);
+            list.push([5, KEYS.Get("io_mon2_ab_stomp")]);
+        } else if (param1 == CREATURELOCKER.ASHKARR_ID) {
+            list.push([1, KEYS.Get("io_mon2_ab_warcry", { "v1": Math.round((Number(Ashkarr.BOOST[level - 1]) - 1) * 100), "v2": Math.round((Number(Ashkarr.BOOST[Ashkarr.BOOST.length - 1]) - 1) * 100) })]);
+        } else if (param1 == CREATURELOCKER.EMBERGHOUL_ID) {
+            list.push([1, KEYS.Get("io_mon2_ab_lifesteal", { "v1": Math.round(Number(Emberghoul.STEAL[level - 1]) * 100), "v2": Math.round(Number(Emberghoul.STEAL[Emberghoul.STEAL.length - 1]) * 100) })]);
+        } else if (param1 == "C19" && GLOBAL.INFERNO_ONLY) {
+            // (22 November: Rezghul's teleport, IoTeleport's numbers)
+            list.push([1, KEYS.Get("io_mon2_ab_teleport", { "v1": Math.round(IoTeleport.DISTANCE / IoTargets.BLOCK), "v2": Math.round(IoTeleport.COOLDOWN_TICKS / 80) })]);
+        } else if (param1 == IoTargets.MALPHUS && GLOBAL.INFERNO_ONLY) {
+            list.push([1, KEYS.Get("io_mon2_ab_sneak")]);
+        } else if (param1 == CREATURELOCKER.CLINKERJAW_ID) {
+            let splits: any[] = CREATURELOCKER._creatures[param1] ? as3.as(CREATURELOCKER._creatures[param1].props.splits, Array) : null;
+            let last: int = 0;
+            for (let i: int = 0; splits && i < splits.length; i++) {
+                if ((splits[i] | 0) != last) {
+                    last = splits[i] | 0;
+                    list.push([i + 1, KEYS.Get("io_mon2_ab_splits", { "v1": last })]);
+                }
+            }
+        }
+        return list;
+    }
+
+    /**
+     * Inferno-only (QoL #356): the abilities on one line for the Academy: "Abilities: Burns the monsters he hits
+     * (Lv 1) · Fireball at flyers (Lv 4) · ...", the ones it has in black, the next in green, the later ones grey.
+     * "" for a monster with none.
+     */
+    public static ioAbilitiesLine(param1: string, param2: int = 0): string {
+        let list: any[] = CREATURELOCKER.ioAbilities(param1, param2);
+        if (!list.length) {
+            return "";
+        }
+        let level: int = CREATURELOCKER.ioLevel(param1, param2);
+        let parts: any[] = [];
+        let nextShown: boolean = false;
+        for (const $value of as3.values(list)) {
+            let at: int = $value[0] | 0;
+            let text: string = KEYS.Get("io_mon2_ab_at", { "v1": $value[1], "v2": at });
+            if (at <= level) {
+                parts.push(text);
+            } else if (!nextShown) {
+                nextShown = true;
+                parts.push("<font color=\"#1E7A12\">" + text + "</font>");
+            } else {
+                parts.push("<font color=\"#777777\">" + text + "</font>");
+            }
+        }
+        return "<b>" + KEYS.Get("io_mon2_abilities") + "</b> " + parts.join(" · ");
+    }
+
+    /** Inferno-only (QoL #358): the countdown labels over buildings: {"k": what for, "b": the building, "s": the label, "t": its text}. */
+    private static _ioLabels: any[] = [];
+
+    /**
+     * Inferno-only (QoL #358): a small countdown over a building (the Strongbox's unlock, an Academy's training),
+     * white with a dark edge as the yard's "Upgrading" labels (BuildingOverlay), just above where they go and
+     * placed the same way. `param3` null takes it away. `param1` tells the kinds apart ("locker", "academy").
+     */
+    public static ioBuildingLabel(param1: string, param2: BFOUNDATION, param3: string): void {
+        let entry: any = null;
+        for (const $value of as3.values(CREATURELOCKER._ioLabels)) {
+            if ($value.k == param1 && $value.b === param2) {
+                entry = $value;
+                break;
+            }
+        }
+        if (param3 == null || !param2 || !param2._mc || !MAP._BUILDINGTOPS) {
+            if (entry) {
+                CREATURELOCKER.ioDropLabel(entry);
+            }
+            return;
+        }
+        if (!entry) {
+            let s: Sprite = new Sprite();
+            s.name = param1 == "locker" ? "ioMonLockerTimer" : "ioMonAcademyTimer";
+            s.mouseEnabled = false;
+            s.mouseChildren = false;
+            let t: TextField = new TextField();
+            let f: TextFormat = new TextFormat("Groboldov", 10, 16777215);
+            f.align = TextFormatAlign.CENTER;
+            t.embedFonts = true;
+            t.selectable = false;
+            t.mouseEnabled = false;
+            t.defaultTextFormat = f;
+            t.autoSize = TextFieldAutoSize.CENTER;
+            t.filters = [new GlowFilter(0, 1, 2, 2, 5, 2)];
+            t.name = s.name + "Text";
+            s.addChild(t);
+            entry = { "k": param1, "b": param2, "s": s, "t": t };
+            CREATURELOCKER._ioLabels.push(entry);
+        }
+        let label: TextField = as3.as(entry.t, TextField);
+        if (label.text != param3) {
+            label.text = param3;
+        }
+        let sprite: Sprite = as3.as(entry.s, Sprite);
+        let offset: any = param2._overlayOffset;
+        label.x = (offset ? Number(offset.x) : 0) - label.width * 0.5;
+        label.y = (offset ? Number(offset.y) : 0) - 48;
+        if (BYMConfig.instance.RENDERER_ON) {
+            sprite.x = param2._mc.x;
+            sprite.y = param2._mc.y;
+            if (sprite.parent != MAP._BUILDINGTOPS) {
+                MAP._BUILDINGTOPS.addChild(sprite);
+            }
+        } else if (sprite.parent != param2._mc) {
+            param2._mc.addChild(sprite);
+        }
+    }
+
+    /** Inferno-only (QoL #358): takes away the labels of one kind over buildings not in `param2`. */
+    public static ioKeepLabels(param1: string, param2: any[]): void {
+        for (let i: int = CREATURELOCKER._ioLabels.length - 1; i >= 0; i--) {
+            let entry: any = CREATURELOCKER._ioLabels[i];
+            if (entry.k == param1 && param2.indexOf(entry.b) == -1) {
+                CREATURELOCKER.ioDropLabel(entry);
+            }
+        }
+    }
+
+    private static ioDropLabel(param1: any): void {
+        let s: Sprite = as3.as(param1.s, Sprite);
+        if (s && s.parent) {
+            s.parent.removeChild(s);
+        }
+        let i: int = CREATURELOCKER._ioLabels.indexOf(param1);
+        if (i != -1) {
+            CREATURELOCKER._ioLabels.splice(i, 1);
+        }
+    }
+
+    /** Inferno-only (QoL #358): the labels go up only in the player's own yard, while building there. */
+    public static ioLabelsShown(): boolean {
+        return GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD) && Boolean(MAP._BUILDINGTOPS);
+    }
+
+    /** Inferno-only (QoL #358): "Korath  6h 12m" over the Strongbox while it unlocks a monster. */
+    private static ioLockerTimer(): void {
+        let building: BFOUNDATION = GLOBAL._bLocker;
+        let id: string = CREATURELOCKER.ioUnlockingID();
+        let data: any = id ? CREATURELOCKER._lockerData[id] : null;
+        if (!CREATURELOCKER.ioLabelsShown() || !building || !data || !CREATURELOCKER._creatures[id] || !isFinite(Number(data.e))) {
+            CREATURELOCKER.ioKeepLabels("locker", []);
+            return;
+        }
+        CREATURELOCKER.ioKeepLabels("locker", [building]);
+        let left: number = Math.max(0, Number(data.e) - GLOBAL.Timestamp());
+        CREATURELOCKER.ioBuildingLabel("locker", building, KEYS.Get("io_mon2_timer_unlock", { "v1": KEYS.Get(CREATURELOCKER.getShortCreatureName(id)), "v2": GLOBAL.ioDuration(left) }));
     }
 }

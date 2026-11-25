@@ -2,7 +2,8 @@ import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { Event } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, BMUSHROOM, BTOWER, CREATURELOCKER, CREEPS, GLOBAL, GRID, HOUSINGBUNKER, InstanceManager, IoHfo, IoHfoArt, IoHfoStepClock, IoHfoUi, KEYS, MAP, MonsterBase, PATHING, PLEASEWAIT, SOUNDS, UI2, WMATTACK } from "@game";
+import { setTimeout } from "flash/utils";
+import { BASE, BFOUNDATION, BMUSHROOM, BTOWER, CREATURELOCKER, CREEPS, GLOBAL, GRID, HOUSINGBUNKER, InstanceManager, IoHfo, IoHfoArt, IoHfoStepClock, IoHfoUi, KEYS, MAP, MESSAGE, MonsterBase, PATHING, PLEASEWAIT, SOUNDS, UI2, WMATTACK } from "@game";
 
 /**
  * Hell Freezes Over: the 13 waves of ice cretins, fought in the player's main yard like a wild monster attack
@@ -155,7 +156,10 @@ export class IoHfoWaves extends ASObject {
 
     /** Fights `wave` (the current one, or a skipped one again). */
     public static Start(wave: int): void {
-        if (IoHfoWaves._fight || IoHfoWaves._ending) {
+        // (Inferno-only, 14 October, QoL #426: one start at a time. A second click while the first was on its way
+        // started the wave twice: the server settled the first fight as lost (a try gone) and the wave on
+        // screen reported with the stale fight, so even a win wasn't recorded.)
+        if (IoHfoWaves._fight || IoHfoWaves._ending || IoHfoWaves._starting) {
             return;
         }
         if (!IoHfo.inYard()) {
@@ -165,15 +169,174 @@ export class IoHfoWaves extends ASObject {
             GLOBAL.Message(KEYS.Get("hfo_err_attack"));
             return;
         }
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #600: not while a raid is counting down: it landed right after the wave, on a yard the wave
+            // had just broken)
+            let raid: string = IoHfoWaves.raidNote();
+            if (raid) {
+                GLOBAL.Message(raid);
+                return;
+            }
+            // (QoL #111 and #595: a yard still repairing, and a wave's last try, are said before the try is used)
+            let warn: any[] = [];
+            let last: string = IoHfoWaves.lastTryNote(wave);
+            if (last) {
+                warn.push(last);
+            }
+            let repairs: string = IoHfoWaves.repairNote();
+            if (repairs) {
+                warn.push(repairs);
+            }
+            if (warn.length) {
+                GLOBAL.Message(warn.join("<br><br>"), KEYS.Get(last ? "hfo_wave_start_btn" : "io_hfo2_start_anyway"), (): void => {
+                    IoHfoWaves.go(wave);
+                });
+                return;
+            }
+        }
+        IoHfoWaves.go(wave);
+    }
+
+    /** The wave starts (the server counts the try). */
+    private static go(wave: int): void {
+        if (IoHfoWaves._fight || IoHfoWaves._ending || IoHfoWaves._starting || !IoHfo.inYard()) {
+            return;
+        }
+        if (WMATTACK._inProgress || BASE.ioAttackRunning()) {
+            GLOBAL.Message(KEYS.Get("hfo_err_attack"));
+            return;
+        }
+        // (QoL #600: a raid's countdown may have begun while the warning was open)
+        let raid: string = GLOBAL.INFERNO_ONLY ? IoHfoWaves.raidNote() : null;
+        if (raid) {
+            GLOBAL.Message(raid);
+            return;
+        }
         PLEASEWAIT.Show(KEYS.Get("msg_loading"));
+        IoHfoWaves._starting = true;
         IoHfo.call("wavestart", [["wave", wave]], (r: any): void => {
+            IoHfoWaves._starting = false;
             PLEASEWAIT.Hide();
             if (!IoHfo.inYard() || WMATTACK._inProgress) {
                 return;
             }
             IoHfoWaves.begin(r.fight);
         }, (): void => {
+            IoHfoWaves._starting = false;
             PLEASEWAIT.Hide();
+        });
+    }
+
+    /** Inferno-only (QoL #426): a wave start is on its way to the server. */
+    private static _starting: boolean = false;
+
+    /**
+     * Inferno-only (QoL #600): a raid counting down (its warning or its bar showing), as a message, or null. Its
+     * launch waits for nothing once the time is up, so it came right after a wave. (The invasions ask it too.)
+     */
+    public static raidNote(): string {
+        if (!WMATTACK._queued || (!WMATTACK.warningPopup && !UI2._wildMonsterBar)) {
+            return null;
+        }
+        let left: int = (Number(WMATTACK._queued.attackTime) - GLOBAL.Timestamp()) | 0;
+        return left > 0 ? KEYS.Get("io_hfo2_raid_wait", { "v1": GLOBAL.ioDuration(left) }) : KEYS.Get("io_hfo2_raid_now");
+    }
+
+    /**
+     * Inferno-only (QoL #111): buildings still repairing (and when the last is ready) or damaged and not repairing,
+     * as a message, or null. Nothing is repaired for a wave: they face it as they are. (The invasions ask it too.)
+     */
+    public static repairNote(): string {
+        let repairing: int = 0;
+        let damaged: int = 0;
+        let longest: int = 0;
+        for (let o of (InstanceManager.getInstancesByClass(BFOUNDATION) ?? [])) {
+            let b: BFOUNDATION = as3.as(o, BFOUNDATION);
+            if (!b || b instanceof BMUSHROOM || b._class == "trap" || b._class == "decoration" || b._class == "enemy" || b._class == "immovable" || b.health >= b.maxHealth) {
+                continue;
+            }
+            if (b._repairing) {
+                repairing++;
+                let left: int = b._repairTime | 0;
+                if (left <= 0) {
+                    try {
+                        left = b.getEstimatedRepairTimeRemaining() | 0;
+                    } catch (e) {
+                        left = 0;
+                    }
+                }
+                longest = Math.max(longest, left) | 0;
+            } else {
+                damaged++;
+            }
+        }
+        let out: any[] = [];
+        if (repairing > 0) {
+            out.push(KEYS.Get("io_hfo2_repairing", { "v1": repairing, "v2": GLOBAL.ioDuration(Math.max(1, longest)) }));
+        }
+        if (damaged > 0) {
+            out.push(KEYS.Get("io_hfo2_damaged", { "v1": damaged }));
+        }
+        return out.length ? out.join(" ") + " " + KEYS.Get("io_hfo2_as_they_are") : null;
+    }
+
+    /** Inferno-only (QoL #595): the current wave's last try, as a message (what failing it costs), or null. */
+    private static lastTryNote(wave: int): string {
+        let f: any = IoHfo.flag();
+        if (!f || wave != (f.current | 0)) {
+            return null;
+        }
+        let w: any[] = as3.as(as3.as(f.waves, Array) ? f.waves[wave - 1] : null, Array);
+        if ((f.tries | 0) - (w ? w[0] | 0 : 0) != 1) {
+            return null;
+        }
+        let prize: int = IoHfoUi.prize(f, wave);
+        return prize > 0 ? KEYS.Get("io_hfo2_last_try", { "v1": wave, "v2": prize }) : KEYS.Get("io_hfo2_last_try_noprize", { "v1": wave });
+    }
+
+    /** Inferno-only (QoL #113): attackers still in the yard. (The invasions count theirs with it.) */
+    public static attackersLeft(): int {
+        let n: int = 0;
+        for (let c of as3.values(CREEPS._creeps)) {
+            let m: MonsterBase = as3.as(c, MonsterBase);
+            if (m && m.health > 0 && !m._friendly) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** How many surges the wave being fought has. */
+    private static _surgeTotal: int = 0;
+
+    /** Inferno-only (QoL #113): the bar under the top bar: the surge, the ice cretins left, the yard destroyed against the losing line. */
+    private static updateBar(destroyed: int): void {
+        if (!GLOBAL.INFERNO_ONLY || !IoHfoWaves._fight || IoHfoWaves._ending) {
+            return;
+        }
+        let parts: any[] = [];
+        if (IoHfoWaves._surgeTotal > 1) {
+            parts.push(KEYS.Get("io_hfo2_bar_surge", { "v1": Math.max(1, IoHfoWaves._surgeTotal - IoHfoWaves._surges.length), "v2": IoHfoWaves._surgeTotal }));
+        }
+        parts.push(KEYS.Get("io_hfo2_bar_left", { "v1": IoHfoWaves.attackersLeft() }));
+        parts.push(KEYS.Get("io_hfo2_bar_destroyed", { "v1": destroyed, "v2": IoHfoWaves.LOSE_PERCENT }));
+        IoHfoUi.WaveBar("ioHfoWaveBar", parts.join("  ·  "), destroyed, IoHfoWaves.LOSE_PERCENT);
+    }
+
+    // ---- leaving the page mid-wave (QoL #598)
+    private static _unloadWatched: boolean = false;
+
+    /** The browser asks before a reload or a closed tab throws a wave away (the server settles it as lost). */
+    private static watchUnload(): void {
+        if (IoHfoWaves._unloadWatched || typeof window == "undefined") {
+            return;
+        }
+        IoHfoWaves._unloadWatched = true;
+        window.addEventListener("beforeunload", (e: BeforeUnloadEvent): void => {
+            if (GLOBAL.INFERNO_ONLY && IoHfoWaves._fight) {
+                e.preventDefault();
+                e.returnValue = "";
+            }
         });
     }
 
@@ -184,6 +347,12 @@ export class IoHfoWaves extends ASObject {
         IoHfoWaves._lastSurgeAt = NaN;
         IoHfoWaves._melted = 0;
         IoHfoWaves._surges = (as3.as(IoHfoWaves.WAVES[Math.max(0, Math.min(IoHfoWaves.WAVES.length, fight.wave | 0) - 1)], Array)).concat();
+        IoHfoWaves._surgeTotal = IoHfoWaves._surges.length;
+        if (GLOBAL.INFERNO_ONLY) {
+            IoHfoWaves.watchUnload();
+            // (QoL #113: the wave's bar takes the line under the top bar; it comes back after the wave)
+            IoHfoUi.HudOff();
+        }
         if (IoHfoWaves._clock) {
             GLOBAL.removeFastTickable(IoHfoWaves._clock);
         }
@@ -209,7 +378,10 @@ export class IoHfoWaves extends ASObject {
         WMATTACK._inProgress = true;
         IoHfoWaves.freezeCompounds();
         BASE._blockSave = false;
+        // (QoL #114: at the speed the player picked, 1x or 2x: the button at the right of the wave's bar)
+        IoHfoUi.ioSpeedStart();
         IoHfoWaves.surgeDue(true);
+        IoHfoWaves.updateBar(IoHfoWaves.destroyedPercent());
     }
 
     /** Each frame from IoHfo: surges as they come, and the yard's state. */
@@ -223,8 +395,11 @@ export class IoHfoWaves extends ASObject {
             // (watching a wave is playing: the "Anyone home?" stop after 10 minutes without a touch would
             // throw the wave away, and the invite popup at 6 would land on the battle)
             GLOBAL.UpdateAFKTimer();
-            if (IoHfoWaves.destroyedPercent() >= IoHfoWaves.LOSE_PERCENT) {
+            let destroyed: int = IoHfoWaves.destroyedPercent();
+            if (destroyed >= IoHfoWaves.LOSE_PERCENT) {
                 IoHfoWaves.finish(false);
+            } else {
+                IoHfoWaves.updateBar(destroyed);
             }
         }
     }
@@ -298,11 +473,53 @@ export class IoHfoWaves extends ASObject {
         IoHfoWaves.finish(true);
     }
 
+    /** Inferno-only (QoL #596): Surrender's question, while it is open. */
+    private static _surrenderAsk: MESSAGE = null;
+
     private static surrender(e: Event = null): void {
+        // (Inferno-only, QoL #596: it asks first: a loss, and what it leaves on the wave. One click gave the try away.)
+        if (GLOBAL.INFERNO_ONLY && IoHfoWaves._fight && !IoHfoWaves._ending) {
+            if (IoHfoWaves._surrenderAsk && IoHfoWaves._surrenderAsk._mc) {
+                return;
+            }
+            let fight: any = IoHfoWaves._fight;
+            IoHfoWaves._surrenderAsk = GLOBAL.ioDanger(IoHfoWaves.surrenderText(fight), KEYS.Get("wmi_surrenderbtn"), (): void => {
+                IoHfoWaves._surrenderAsk = null;
+                if (IoHfoWaves._fight == fight && !IoHfoWaves._ending) {
+                    IoHfoWaves.giveUp();
+                }
+            }, null, KEYS.Get("io_hfo2_keep_fighting"));
+            return;
+        }
+        IoHfoWaves.giveUp();
+    }
+
+    private static giveUp(): void {
         if (UI2._scareAway) {
             UI2._scareAway.removeEventListener("scareAway", IoHfoWaves.surrender);
         }
         IoHfoWaves.finish(false);
+    }
+
+    /** QoL #596: what surrendering this fight means: a loss, and the tries it leaves on the wave. */
+    private static surrenderText(fight: any): string {
+        let wave: int = fight.wave | 0;
+        if (fight.replay) {
+            return KEYS.Get("io_hfo2_surrender_replay", { "v1": wave });
+        }
+        let f: any = IoHfo.flag();
+        let w: any[] = f && as3.as(f.waves, Array) ? as3.as(f.waves[wave - 1], Array) : null;
+        // (the try being fought is already counted: the server counts it when the wave starts)
+        let left: int = Math.max(0, (f ? f.tries | 0 : 3) - (w ? w[0] | 0 : 0)) | 0;
+        return left > 0 ? KEYS.Get("io_hfo2_surrender_tries", { "v1": wave, "v2": left }) : KEYS.Get("io_hfo2_surrender_last", { "v1": wave });
+    }
+
+    /** The question is gone with the fight (won, lost, or the yard left). */
+    private static closeSurrenderAsk(): void {
+        if (IoHfoWaves._surrenderAsk && IoHfoWaves._surrenderAsk._mc) {
+            IoHfoWaves._surrenderAsk.Hide();
+        }
+        IoHfoWaves._surrenderAsk = null;
     }
 
     /** How much of the yard is destroyed (walls and traps aside), as a percent. */
@@ -325,8 +542,13 @@ export class IoHfoWaves extends ASObject {
             return;
         }
         IoHfoWaves._ending = true;
+        // (QoL #114: the result at the usual speed)
+        IoHfoUi.ioSpeedStop();
         IoHfoWaves.stopClock();
         IoHfoWaves.thawCompounds(true);
+        // (QoL #113, #596: the wave's bar and Surrender's question go with it)
+        IoHfoUi.WaveBarOff();
+        IoHfoWaves.closeSurrenderAsk();
         let fight: any = IoHfoWaves._fight;
         if (!won) {
             // the ice cretins go back to the frozen wastes
@@ -340,21 +562,46 @@ export class IoHfoWaves extends ASObject {
         WMATTACK.setEnd();
         WMATTACK.CleanUpLite();
         UI2.Hide("surrender");
-        IoHfo.call("waveend", [["wave", fight.wave | 0], ["id", fight.id | 0], ["won", won ? "1" : "0"]], (r: any): void => {
-            IoHfoWaves._fight = null;
-            IoHfoWaves._ending = false;
-            if (r.credits != null && Number(r.paid) > 0) {
-                BASE._credits.Set(r.credits | 0);
-                BASE._hpCredits = r.credits | 0;
-                GLOBAL._credits.Set(r.credits | 0);
-            }
-            IoHfo.TombUpdate();
-            IoHfoUi.Hud();
-            IoHfoUi.WaveResult(r);
-        }, (): void => {
-            IoHfoWaves._fight = null;
-            IoHfoWaves._ending = false;
-        });
+        // (QoL #597, 14 October: a won wave whose report didn't get through was settled as lost later. Sent again with
+        // the same fight id, quietly, behind "Saving result..." (a repeat the server already has answers with its
+        // result), then a Try again; the server takes the report until the fight's time is up.)
+        let send = (tries: int): void => {
+            PLEASEWAIT.Show(KEYS.Get("io_saving_result"));
+            IoHfo.call("waveend", [["wave", fight.wave | 0], ["id", fight.id | 0], ["won", won ? "1" : "0"]], (r: any): void => {
+                PLEASEWAIT.Hide();
+                IoHfoWaves._fight = null;
+                IoHfoWaves._ending = false;
+                if (r.credits != null && Number(r.paid) > 0) {
+                    BASE._credits.Set(r.credits | 0);
+                    BASE._hpCredits = r.credits | 0;
+                    GLOBAL._credits.Set(r.credits | 0);
+                }
+                IoHfo.TombUpdate();
+                IoHfoUi.Hud();
+                IoHfoUi.WaveResult(r);
+            }, (network: boolean = false): void => {
+                PLEASEWAIT.Hide();
+                if (network && tries < 2) {
+                    setTimeout((): void => {
+                        send((tries + 1) | 0);
+                    }, 2000 * (tries + 1));
+                    return;
+                }
+                if (network && won) {
+                    GLOBAL.Message(KEYS.Get("io_result_not_saved"), KEYS.Get("io_kit_retry"), (): void => {
+                        send(0);
+                    });
+                    return;
+                }
+                IoHfoWaves._fight = null;
+                IoHfoWaves._ending = false;
+                if (GLOBAL.INFERNO_ONLY) {
+                    // (QoL #113: the line under the top bar back, as after a result)
+                    IoHfoUi.Hud();
+                }
+            }, true);
+        };
+        send(0);
     }
 
     private static stopClock(): void {
@@ -371,8 +618,14 @@ export class IoHfoWaves extends ASObject {
 
     /** The yard is leaving in the middle of a wave (it counts as lost: the server settles it). */
     public static Abandon(): void {
+        // (QoL #114)
+        IoHfoUi.ioSpeedStop();
         IoHfoWaves.stopClock();
         IoHfoWaves.thawCompounds(false);
+        if (IoHfoWaves._fight) {
+            IoHfoUi.WaveBarOff();
+            IoHfoWaves.closeSurrenderAsk();
+        }
         IoHfoWaves._fight = null;
         IoHfoWaves._ending = false;
         IoHfoWaves._surges = [];

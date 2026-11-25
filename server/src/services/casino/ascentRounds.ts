@@ -7,7 +7,8 @@ import { postgres } from "../../server.js";
 import { logger } from "../../utils/logger.js";
 import { casinoErr } from "./access.js";
 import { hashSeed, newServerSeed, roundPayout } from "./rng.js";
-import { sqlAll, type Em } from "./wallet.js";
+import { refundOpenBets, sqlAll, type Em } from "./wallet.js";
+import { changed, sharedView } from "./sharedView.js";
 import { ascentCrash, ascentFlightMs, ascentMultiplier } from "./games/ascent.js";
 
 /**
@@ -62,7 +63,7 @@ const createRound = async (em: Em, opensAt: number): Promise<RoundRow> => {
 const payBet = async (em: Em, r: RoundRow, bet: BetRow, mult: number, how: string) => {
   let payout = roundPayout(r.seed, bet.id, bet.stake * mult);
   if (casinoConfig.maxPayout > 0) payout = Math.min(payout, casinoConfig.maxPayout);
-  await sqlAll(em, `UPDATE bym.save SET credits = credits + ? WHERE userid = ? AND type = ? RETURNING credits`, [payout, bet.user_id, BaseType.MAIN]);
+  await sqlAll(em, `UPDATE bym.save SET credits = LEAST(credits::bigint + ?, 2147483647) WHERE userid = ? AND type = ? RETURNING credits`, [payout, bet.user_id, BaseType.MAIN]);
   await sqlAll(em,
     `UPDATE bym.casino_bet SET payout = ?, multiplier = ?, status = 'settled', settled_at = now(), outcome = outcome || CAST(? AS jsonb) WHERE id = ? RETURNING id`,
     [payout, mult.toFixed(2), JSON.stringify({ cashed: mult, how }), bet.id]);
@@ -72,6 +73,16 @@ const payBet = async (em: Em, r: RoundRow, bet: BetRow, mult: number, how: strin
 
 /** One step of the loop: the latest round moved on as far as the clock says. */
 export const tickAscent = async (): Promise<void> => {
+  // (anything written: the view every player polls is read afresh; sharedView.ts)
+  let wrote = false;
+  try {
+    await tickAscentIn((w) => (wrote = wrote || w));
+  } finally {
+    if (wrote) changed("ascent");
+  }
+};
+
+const tickAscentIn = async (note: (wrote: boolean) => void): Promise<void> => {
   await postgres.em.fork().transactional(async (em) => {
     const lock = await sqlAll<{ ok: boolean }>(em, `SELECT pg_try_advisory_xact_lock(?) AS ok`, [LOCK]);
     if (!lock[0]?.ok) return;
@@ -79,10 +90,19 @@ export const tickAscent = async (): Promise<void> => {
     const rows = await sqlAll<RoundRow>(em, `SELECT * FROM bym.casino_round WHERE game = 'ascent' ORDER BY id DESC LIMIT 1 FOR UPDATE`);
     let r = rows[0];
     if (!r) {
+      note(true);
       await createRound(em, now);
       return;
     }
+    // (a last round already settled with no round after it, as a database restored from a dump or a round
+    // deleted by hand can leave: a new one, or the loop would wait on it for ever)
+    if (r.status === "settled") {
+      note(true);
+      await createRound(em, Math.max(now, ms(r.ends_at) + rules().resultSeconds * 1000));
+      return;
+    }
     if (r.status === "betting" && now >= ms(r.starts_at)) {
+      note(true);
       await sqlAll(em, `UPDATE bym.casino_round SET status = 'running' WHERE id = ? RETURNING id`, [r.id]);
       r = { ...r, status: "running" };
     }
@@ -94,8 +114,10 @@ export const tickAscent = async (): Promise<void> => {
     const autos = await sqlAll<BetRow>(em,
       `SELECT * FROM bym.casino_bet WHERE round_id = ? AND status = 'open' AND (outcome->>'auto') IS NOT NULL AND (outcome->>'auto')::numeric <= ? FOR UPDATE`,
       [r.id, reached]);
+    if (autos.length) note(true);
     for (const b of autos) await payBet(em, r, b, Number(b.outcome.auto), "auto");
     if (!ended) return;
+    note(true);
     // shot down: the rest lose
     await sqlAll(em,
       `UPDATE bym.casino_bet SET payout = 0, multiplier = 0, status = 'settled', settled_at = now(), outcome = outcome || '{"lost": true}'::jsonb WHERE round_id = ? AND status = 'open' RETURNING id`,
@@ -142,7 +164,8 @@ export const betAscent = async (user: User, requestId: string, roundId: number, 
     if (!r || Number(r.id) !== roundId || r.status !== "betting" || now < ms(r.betting_opens_at) || now >= ms(r.starts_at)) {
       throw casinoErr("Bets are closed for this flight. Wait for the next one.", Status.CONFLICT);
     }
-    const mine = await sqlAll(em, `SELECT id FROM bym.casino_bet WHERE round_id = ? AND user_id = ?`, [r.id, user.userid]);
+    // (Inferno-only, QoL #504: a bet taken back doesn't count: another can be placed)
+    const mine = await sqlAll(em, `SELECT id FROM bym.casino_bet WHERE round_id = ? AND user_id = ? AND status <> 'refunded'`, [r.id, user.userid]);
     if (mine.length) throw casinoErr("You already have a bet on this flight.", Status.CONFLICT);
     const paid = await sqlAll<{ credits: number }>(em,
       `UPDATE bym.save SET credits = credits - ? WHERE userid = ? AND type = ? AND credits >= ? RETURNING credits`, [stake, user.userid, BaseType.MAIN, stake]);
@@ -153,6 +176,26 @@ export const betAscent = async (user: User, requestId: string, roundId: number, 
       [user.userid, requestId, r.id, stake, JSON.stringify({ auto }), r.seed_hash]);
     return { round_id: Number(r.id), stake, auto, credits: paid[0].credits, replayed: false };
   });
+  if (!result.replayed) changed("ascent");
+  if (user.save && typeof user.save === "object" && "credits" in user.save) (user.save as { credits: number }).credits = result.credits;
+  return result;
+};
+
+/**
+ * Inferno-only (15 October, QoL #504): the player's bet on a flight taken back while it still takes bets (not yet
+ * off): the stake paid back once (wallet.refundOpenBets), in one transaction with the round locked, as the loop locks
+ * it to start the flight, so it can't take off in between. A new bet can be placed on it after.
+ */
+export const takeBackAscent = async (user: User, roundId: number) => {
+  const result = await postgres.em.fork().transactional(async (em) => {
+    const r = (await sqlAll<RoundRow>(em, `SELECT * FROM bym.casino_round WHERE id = ? AND game = 'ascent' FOR UPDATE`, [roundId]))[0];
+    if (!r) throw casinoErr("That flight could not be found.", Status.NOT_FOUND);
+    if (r.status !== "betting" || Date.now() >= ms(r.starts_at)) throw casinoErr("Too late: Balthazar has taken off.", Status.CONFLICT);
+    const back = await refundOpenBets(em, r.id, user.userid);
+    if (!back.count) throw casinoErr("You have no bet on this flight.", Status.CONFLICT);
+    return { round_id: Number(r.id), refunded: back.stake, credits: back.credits };
+  });
+  changed("ascent");
   if (user.save && typeof user.save === "object" && "credits" in user.save) (user.save as { credits: number }).credits = result.credits;
   return result;
 };
@@ -166,7 +209,8 @@ export const cashoutAscent = async (user: User, roundId: number) => {
     const rows = await sqlAll<RoundRow>(em, `SELECT * FROM bym.casino_round WHERE id = ? AND game = 'ascent' FOR UPDATE`, [roundId]);
     const r = rows[0];
     if (!r) throw casinoErr("That flight could not be found.", Status.NOT_FOUND);
-    const bets = await sqlAll<BetRow>(em, `SELECT * FROM bym.casino_bet WHERE round_id = ? AND user_id = ? FOR UPDATE`, [r.id, user.userid]);
+    // (QoL #504: not a bet taken back)
+    const bets = await sqlAll<BetRow>(em, `SELECT * FROM bym.casino_bet WHERE round_id = ? AND user_id = ? AND status <> 'refunded' FOR UPDATE`, [r.id, user.userid]);
     const bet = bets[0];
     if (!bet) throw casinoErr("You have no bet on this flight.", Status.CONFLICT);
     const bal = async () => (await sqlAll<{ credits: number }>(em, `SELECT credits FROM bym.save WHERE userid = ? AND type = ?`, [user.userid, BaseType.MAIN]))[0]?.credits ?? 0;
@@ -185,6 +229,7 @@ export const cashoutAscent = async (user: User, roundId: number) => {
     const payout = await payBet(em, r, bet, at, at === m ? "hand" : "auto");
     return { cashed: at, payout, lost: false, credits: await bal(), replayed: false };
   });
+  if (!result.replayed) changed("ascent");
   if (user.save && typeof user.save === "object" && "credits" in user.save) (user.save as { credits: number }).credits = result.credits;
   return result;
 };
@@ -197,20 +242,28 @@ export const ascentState = async (userid: number) => {
   const conn = postgres.em.getConnection();
   const q = async <T>(sql: string, p: unknown[] = []) => (await conn.execute(sql, p, "all")) as T[];
   const now = Date.now();
-  const rounds = await q<RoundRow>(`SELECT * FROM bym.casino_round WHERE game = 'ascent' ORDER BY id DESC LIMIT 2`);
+  // (the round, its history and its players are the same for everyone: read once for all every quarter second,
+  // sharedView.ts; the player's own bet is read for them)
+  const { rounds, history } = await sharedView("ascent:rounds", 250, async () => ({
+    rounds: await q<RoundRow>(`SELECT * FROM bym.casino_round WHERE game = 'ascent' ORDER BY id DESC LIMIT 2`),
+    history: (await q<{ id: string; result: { crash: number } }>(
+      `SELECT id, result FROM bym.casino_round WHERE game = 'ascent' AND status = 'settled' ORDER BY id DESC LIMIT ?`, [rules().history]))
+      .map((h) => ({ round_id: Number(h.id), crash: Number(h.result?.crash) })),
+  }));
   let r = rounds[0] ?? null;
   // between rounds: the last one's result is shown until the next opens
   if (r && r.status === "betting" && now < ms(r.betting_opens_at) && rounds[1]) r = rounds[1];
-  const history = (await q<{ id: string; result: { crash: number } }>(
-    `SELECT id, result FROM bym.casino_round WHERE game = 'ascent' AND status = 'settled' ORDER BY id DESC LIMIT ?`, [rules().history]))
-    .map((h) => ({ round_id: Number(h.id), crash: Number(h.result?.crash) }));
   if (!r) return { server_ts: now, phase: "waiting", history, players: [], my_bet: null, rules: publicRules() };
   const phase = r.status === "settled" ? "crashed" : r.status === "running" ? "flying" : now < ms(r.betting_opens_at) ? "waiting" : "betting";
-  const bets = await q<BetRow & { username: string }>(
-    `SELECT b.id, b.user_id, b.stake, b.payout, b.multiplier, b.outcome, b.status, u.username FROM bym.casino_bet b JOIN bym."user" u ON u.userid = b.user_id
-     WHERE b.round_id = ? ORDER BY b.stake DESC, b.id LIMIT ?`, [r.id, rules().listed]);
-  const mine = (await q<BetRow>(`SELECT * FROM bym.casino_bet WHERE round_id = ? AND user_id = ?`, [r.id, userid]))[0];
-  const count = (await q<{ n: string }>(`SELECT count(*) AS n FROM bym.casino_bet WHERE round_id = ?`, [r.id]))[0];
+  const roundId = r.id;
+  const { bets, count } = await sharedView(`ascent:round${roundId}`, 250, async () => ({
+    bets: await q<BetRow & { username: string }>(
+      `SELECT b.id, b.user_id, b.stake, b.payout, b.multiplier, b.outcome, b.status, u.username FROM bym.casino_bet b JOIN bym."user" u ON u.userid = b.user_id
+       WHERE b.round_id = ? AND b.status <> 'refunded' ORDER BY b.stake DESC, b.id LIMIT ?`, [roundId, rules().listed]),
+    // (QoL #504: bets taken back are not on the flight)
+    count: (await q<{ n: string }>(`SELECT count(*) AS n FROM bym.casino_bet WHERE round_id = ? AND status <> 'refunded'`, [roundId]))[0],
+  }));
+  const mine = (await q<BetRow>(`SELECT * FROM bym.casino_bet WHERE round_id = ? AND user_id = ? AND status <> 'refunded'`, [r.id, userid]))[0];
   return {
     server_ts: now,
     phase,

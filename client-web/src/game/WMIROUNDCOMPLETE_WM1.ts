@@ -5,7 +5,7 @@ import { MouseEvent } from "flash/events";
 import { BASE, BTOTEM, GLOBAL, ImageCache, KEYS, POPUPS, ROUNDCOMPLETEPOPUP_CLIP, SOUNDS, SPECIALEVENT_WM1, STORE } from "@game";
 
 /*
- * This is the original WMIROUNDCOMPLETE.as class for Wild Monster Invasion 1.
+ * This is the original WMIROUNDCOMPLETE.ts class for Wild Monster Invasion 1.
  * The original developers rewrote this class when Wild Monster Invasion 2 was released
  * instead of creating a new class.
  *
@@ -251,7 +251,7 @@ export class WMIROUNDCOMPLETE_WM1 extends ROUNDCOMPLETEPOPUP_CLIP {
                 _loc2_.Repair();
             }
         }
-        SOUNDS.Play("repair1", 0.25);
+        SOUNDS.ioPlayFor("repair1", 0.25, 1800);
         this.Hide();
     }
 

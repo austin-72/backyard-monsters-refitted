@@ -1,9 +1,12 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
-import { TimerEvent } from "flash/events";
+import { MovieClip, Sprite } from "flash/display";
+import { MouseEvent, TimerEvent } from "flash/events";
+import { GlowFilter } from "flash/filters";
 import { Rectangle } from "flash/geom";
+import { TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { Timer, getTimer } from "flash/utils";
-import { BASE, BFOUNDATION, BMUSHROOM, GLOBAL, GRID, InstanceManager, IoHfo, IoHfoIce, IoQuests, KEYS, LOGGER, POPUPS, QUESTS, QUEUE, Rndm, WORKERS, popup_mushroomshiny } from "@game";
+import { BASE, BFOUNDATION, BMUSHROOM, GLOBAL, GRID, InstanceManager, IoHfo, IoHfoIce, IoQuests, KEYS, LOGGER, POPUPS, QUESTS, QUEUE, Rndm, SOUNDS, TUTORIAL, UI_WORKERS, WORKERS, popup_mushroomshiny, IoFormat } from "@game";
 
 export class MUSHROOMS extends ASObject {
     public static _mushroom: BFOUNDATION = null;
@@ -81,10 +84,74 @@ export class MUSHROOMS extends ASObject {
             MUSHROOMS._ioTimer.addEventListener(TimerEvent.TIMER, MUSHROOMS.ioTick);
             MUSHROOMS._ioTimer.start();
         }
+        MUSHROOMS.ioChip();
+    }
+
+    /** QoL #565: the chip under the top bar while a bloom is on. */
+    private static _ioChip: Sprite = null;
+
+    /**
+     * Inferno-only (QoL #565): while a Wart Bloom is on, in the main yard, "Wart Bloom ×3 · 1d 4h" under the top
+     * bar (under Hell Freezes Over's line when that shows); a click says when it ends, in the player's own time.
+     * (Before, a line in Global chat said "until Sunday midnight (Central time)", which runs into Monday in Europe.)
+     */
+    public static ioChip(): void {
+        if (MUSHROOMS._ioChip && MUSHROOMS._ioChip.parent) {
+            MUSHROOMS._ioChip.parent.removeChild(MUSHROOMS._ioChip);
+        }
+        MUSHROOMS._ioChip = null;
+        let now: number = GLOBAL.Timestamp();
+        let on: any[] = GLOBAL.INFERNO_ONLY ? MUSHROOMS.ioBloomAt(now) : null;
+        if (!on || !BASE.isMainYard || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || GLOBAL.ioDesignMode() || BASE.ioAttackRunning()) {
+            return;
+        }
+        let bloom: any = MUSHROOMS.ioBloom();
+        let rate: int = Math.max(1, Number(bloom && bloom.rate) || 3) | 0;
+        let end: number = Number(on[1]);
+        let chip: Sprite = new Sprite();
+        chip.name = "ioBloomChip";
+        let t: TextField = new TextField();
+        t.selectable = false;
+        t.mouseEnabled = false;
+        let f: TextFormat = new TextFormat("Verdana", 12, 0xFFF2C4, true);
+        f.align = TextFormatAlign.CENTER;
+        t.defaultTextFormat = f;
+        t.text = KEYS.Get("io_bloom_chip", { "v1": rate, "v2": GLOBAL.ioDuration(end - now) });
+        // (QoL #606: how many warts, and when the yard is full, that it is: a full yard wastes the bloom's growth)
+        let warts: int = MUSHROOMS.ioWartCount();
+        t.text += "  \u00B7  " + KEYS.Get(warts >= MUSHROOMS.WART_MAX ? "io_bloom_full" : "io_bloom_warts", { "v1": warts, "v2": Math.max(warts, MUSHROOMS.WART_MAX) });
+        if (warts >= MUSHROOMS.WART_MAX) {
+            t.textColor = 0xFFB070;
+        }
+        let w: number = Math.max(150, t.textWidth + 30);
+        t.width = w - 10;
+        t.height = 20;
+        t.x = -t.width / 2;
+        t.y = 3;
+        t.filters = [new GlowFilter(0x3A1A00, 1, 3, 3, 6, 1)];
+        chip.graphics.lineStyle(2, 0xE0A040, 1);
+        chip.graphics.beginFill(0x4A2A08, 0.9);
+        chip.graphics.drawRoundRect(-w / 2, 0, w, 24, 12, 12);
+        chip.graphics.endFill();
+        chip.addChild(t);
+        chip.buttonMode = true;
+        chip.mouseChildren = false;
+        chip.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            // (16 October: "Monday 00:00", the game's clock as the events calendar has it; the browser's said "12:00 AM")
+            let d: Date = new Date(end * 1000);
+            let at: string = IoFormat.weekdayName(d.getDay()) + " " + IoFormat.time(end);
+            GLOBAL.Message(KEYS.Get("io_bloom_about", { "v1": rate, "v2": at, "v3": GLOBAL.ioDuration(end - GLOBAL.Timestamp()) }));
+        });
+        GLOBAL.RefreshScreen();
+        let hfo: any = GLOBAL._layerUI.getChildByName("ioHfoHud");
+        chip.x = GLOBAL._SCREEN.x + GLOBAL._SCREEN.width / 2;
+        chip.y = GLOBAL._SCREEN.y + (hfo ? 120 : 84);
+        GLOBAL._layerUI.addChild(chip);
+        MUSHROOMS._ioChip = chip;
     }
 
     /** The warts in the yard now. */
-    private static ioWartCount(): int {
+    public static ioWartCount(): int {
         let n: int = 0;
         for (let b of (InstanceManager.getInstancesByClass(BMUSHROOM) ?? [])) {
             if (!(b instanceof IoHfoIce)) {
@@ -97,6 +164,7 @@ export class MUSHROOMS extends ASObject {
     /** In a bloom, warts grow while the main yard is open too (every half minute: one when one is due). */
     private static ioTick(e: TimerEvent = null): void {
         let now: number = GLOBAL.Timestamp();
+        MUSHROOMS.ioChip();
         if (!GLOBAL.INFERNO_ONLY || !MUSHROOMS.ioBloomAt(now) || !GLOBAL._flags || !GLOBAL._flags.mushrooms) {
             return;
         }
@@ -136,6 +204,9 @@ export class MUSHROOMS extends ASObject {
         let shroom: any = null;
         let replace: boolean = false;
         let spawnCount: int = 0;
+        // (QoL #25, #589: a run of "Pick all warts" or "Break all ice" belongs to the yard it was started in)
+        MUSHROOMS._ioAll = null;
+        MUSHROOMS._ioIce = null;
         if (!GLOBAL._flags.mushrooms && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
             return;
         }
@@ -353,6 +424,13 @@ export class MUSHROOMS extends ASObject {
 
         mushroom.RecycleC();
 
+        // (QoL #25: one of a "Pick all warts" run: its golden finds are added up for one summary at the end)
+        let ioRun: any = GLOBAL.INFERNO_ONLY && MUSHROOMS._ioAll && MUSHROOMS._ioAll.sent[mushroomId] ? MUSHROOMS._ioAll : null;
+        if (ioRun) {
+            delete ioRun.sent[mushroomId];
+            ioRun.picked = (ioRun.picked | 0) + 1;
+        }
+
         if (isGolden) {
             let mushroomVariant: int = (Math.random() * 3 + 1) | 0;
 
@@ -365,21 +443,340 @@ export class MUSHROOMS extends ASObject {
 
             BASE.Purchase("MUSHROOM" + mushroomVariant, 1, "MUSHROOMS");
 
-            let shinyPopup: popup_mushroomshiny = new popup_mushroomshiny();
-            shinyPopup.tTitle.htmlText = "<b>" + KEYS.Get("pop_goldenmushroom_title") + "</b>";
-            shinyPopup.tMessage.htmlText = KEYS.Get(GLOBAL.INFERNO_ONLY ? "pop_goldenwart_desc" : "pop_goldenmushroom_desc", { "v1": shinyAwarded });
+            if (ioRun) {
+                ioRun.golden = (ioRun.golden | 0) + 1;
+                ioRun.shiny = (ioRun.shiny | 0) + shinyAwarded;
+                SOUNDS.Play("splat1", 0.35);
+            } else {
+                let shinyPopup: popup_mushroomshiny = new popup_mushroomshiny();
+                shinyPopup.tTitle.htmlText = "<b>" + KEYS.Get("pop_goldenmushroom_title") + "</b>";
+                shinyPopup.tMessage.htmlText = KEYS.Get(GLOBAL.INFERNO_ONLY ? "pop_goldenwart_desc" : "pop_goldenmushroom_desc", { "v1": shinyAwarded });
 
-            POPUPS.Push(shinyPopup, null, null, "chaching", GLOBAL.INFERNO_ONLY ? "goldwart.png" : "goldmushroom.png");
+                POPUPS.Push(shinyPopup, null, null, "chaching", GLOBAL.INFERNO_ONLY ? "goldwart.png" : "goldmushroom.png");
+            }
         } else {
             // Inferno-only: the warts have their own lines (pop_wart_msg2-4).
             let flavourKeys: any[] = GLOBAL.INFERNO_ONLY ? ["pop_wart_msg2", "pop_wart_msg3", "pop_wart_msg4"] : ["pop_mushroom_msg2", "pop_mushroom_msg3", "pop_mushroom_msg4"];
             workerMessage = KEYS.Get(as3.str(flavourKeys[(Math.random() * flavourKeys.length) | 0]));
+            // (QoL #629: an ordinary pick makes a sound too; a golden one already plays cha-ching)
+            if (GLOBAL.INFERNO_ONLY) {
+                SOUNDS.Play("splat1", 0.35);
+            }
             BASE.Save();
         }
 
         LOGGER.Stat([34, shinyAwarded]);
         QUESTS.Check();
-        WORKERS.Say(workerMessage, QUEUE.Remove("mushroom" + mushroomId, true), 3000);
+        let worker: MovieClip = QUEUE.Remove("mushroom" + mushroomId, true);
+        WORKERS.Say(workerMessage, worker, 3000);
+        if (ioRun && ioRun === MUSHROOMS._ioAll) {
+            // (the worker, free again, goes on to the next wart of the run)
+            if (worker) {
+                ioRun.last = worker;
+            }
+            MUSHROOMS.ioPickNext();
+        }
         return true;
+    }
+
+    // ---- Inferno-only (QoL #25): "Pick all warts" (its button: the workers' column, UI_WORKERS.ioYardButtons)
+    /**
+     * The run it started: {sent: {wart id: wart} with a worker on it, todo: [warts still waiting for one],
+     * picked, golden, shiny (golden finds added up), last: the worker who picked the last one}, or null.
+     */
+    private static _ioAll: any = null;
+
+    /** QoL #589: the run "Break all ice" started: {todo: [ice still waiting for a worker], sent: [ice with one]}, or null. */
+    private static _ioIce: any = null;
+
+    /** (no run is sent on while one is being sent: QUEUE.Add ticks the queue, and the queue's tick sends runs on) */
+    private static _ioSending: boolean = false;
+
+    /** Can workers be sent to the yard's warts from here: the player's own main yard, built, nothing else going on. */
+    public static ioCanPickHere(): boolean {
+        return GLOBAL.INFERNO_ONLY && BASE.isMainYard && !BASE.isOutpost && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !GLOBAL.ioDesignMode() && !BASE.ioAttackRunning() && !BASE._loading && String(BASE._loadedBaseID) == String(GLOBAL._homeBaseID) && TUTORIAL._stage >= 200;
+    }
+
+    /** The yard's warts and the event's ice now (a copy). */
+    private static ioYardShrooms(): any[] {
+        let out: any[] = [];
+        for (let b of (InstanceManager.getInstancesByClass(BMUSHROOM) ?? [])) {
+            out.push(b);
+        }
+        return out;
+    }
+
+    /** The warts no worker is on yet (never the event's ice). */
+    public static ioPickable(): any[] {
+        let out: any[] = [];
+        for (let b of as3.values(MUSHROOMS.ioYardShrooms())) {
+            if (!(b instanceof IoHfoIce) && !b._picking && b._mc) {
+                out.push(b);
+            }
+        }
+        return out;
+    }
+
+    /** The warts the button would send workers to: those no worker is on and the run isn't waiting to do already. */
+    public static ioWartsLeft(): int {
+        let n: int = 0;
+        let todo: any[] = MUSHROOMS._ioAll ? as3.cast(MUSHROOMS._ioAll.todo, Array) : [];
+        for (let b of as3.values(MUSHROOMS.ioPickable())) {
+            if (todo.indexOf(b) < 0) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** A worker with no job, or null. */
+    public static ioIdleWorker(): any {
+        for (let w of as3.values(WORKERS._workers || [])) {
+            if (w && w.mc && !w.task) {
+                return w;
+            }
+        }
+        return null;
+    }
+
+    /** Is a worker on this job (QUEUE.Add said yes, but found no worker near enough, as can happen in test mode)? */
+    private static ioHasWorker(b: BFOUNDATION): boolean {
+        for (let w of as3.values(WORKERS._workers || [])) {
+            if (w && w.task === b) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** "Pick all warts": idle workers to every wart in the yard, one after another; golden finds told once at the end. */
+    public static ioPickAll(): void {
+        if (!MUSHROOMS.ioCanPickHere()) {
+            return;
+        }
+        let warts: any[] = MUSHROOMS.ioPickable();
+        if (!warts.length) {
+            return;
+        }
+        if (!MUSHROOMS.ioIdleWorker()) {
+            GLOBAL.Message(QUEUE.ioBusyText());
+            return;
+        }
+        let run: any = MUSHROOMS._ioAll;
+        if (!run) {
+            run = MUSHROOMS._ioAll = { "sent": {}, "todo": [], "picked": 0, "golden": 0, "shiny": 0, "last": null };
+        }
+        for (let w of as3.values(warts)) {
+            if (run.todo.indexOf(w) < 0) {
+                run.todo.push(w);
+            }
+        }
+        SOUNDS.Play("click1");
+        MUSHROOMS.ioPickNext();
+        UI_WORKERS.ioYardButtons();
+    }
+
+    /**
+     * The run's next warts, one to each idle worker. It goes on only while a worker of its own is still at it
+     * (the workers it took carry on from wart to wart): once none is, it ends, and the summary is told.
+     */
+    public static ioPickNext(): void {
+        let run: any = MUSHROOMS._ioAll;
+        if (!run || MUSHROOMS._ioSending) {
+            return;
+        }
+        MUSHROOMS._ioSending = true;
+        try {
+            let here: any[] = MUSHROOMS.ioYardShrooms();
+            for (let id in run.sent) {
+                if (here.indexOf(run.sent[id]) < 0) {
+                    delete run.sent[id];
+                }
+            }
+            while (run.todo.length > 0 && MUSHROOMS.ioCanPickHere()) {
+                let w: BFOUNDATION = as3.as(run.todo[0], BFOUNDATION);
+                if (!w || here.indexOf(w) < 0 || w._picking) {
+                    run.todo.shift();
+                    continue;
+                }
+                if (!MUSHROOMS.ioIdleWorker()) {
+                    break;
+                }
+                if (!QUEUE.Add("mushroom" + w._id, w)) {
+                    break;
+                }
+                if (!MUSHROOMS.ioHasWorker(w)) {
+                    QUEUE.Remove("mushroom" + w._id, false);
+                    break;
+                }
+                w._mc.alpha = 0.5;
+                w._picking = true;
+                run.sent[w._id] = w;
+                run.todo.shift();
+            }
+            let busy: boolean = false;
+            for (let id in run.sent) {
+                busy = true;
+                break;
+            }
+            if (!busy) {
+                MUSHROOMS.ioPickDone();
+            }
+        } finally {
+            MUSHROOMS._ioSending = false;
+        }
+    }
+
+    /** The run is over: one summary (a popup when golden ones were found, else the last worker says so). */
+    private static ioPickDone(): void {
+        let run: any = MUSHROOMS._ioAll;
+        MUSHROOMS._ioAll = null;
+        if (!run || (run.picked | 0) <= 0) {
+            return;
+        }
+        if ((run.golden | 0) > 0) {
+            let p: popup_mushroomshiny = new popup_mushroomshiny();
+            p.name = "ioYard2WartSummary";
+            p.tTitle.htmlText = "<b>" + KEYS.Get("pop_goldenmushroom_title") + "</b>";
+            p.tMessage.htmlText = KEYS.Get((run.golden | 0) == 1 ? "io_yard2_warts_golden1" : "io_yard2_warts_golden", { "v1": run.picked | 0, "v2": run.golden | 0, "v3": run.shiny | 0 });
+            POPUPS.Push(p, null, null, "chaching", "goldwart.png");
+        } else if (run.last && (run.picked | 0) > 1) {
+            WORKERS.Say(KEYS.Get("io_yard2_warts_none", { "v1": run.picked | 0 }), as3.cast(run.last, MovieClip), 3500);
+        }
+    }
+
+    // ---- Inferno-only (QoL #589): "Break all ice" while the event's Days 1-3 ice is in the yard (IoHfo sends each worker)
+    /** The event's Days 1 to 3, in the player's own yard (before the curse breaks). */
+    public static ioIceDays(): boolean {
+        if (!MUSHROOMS.ioCanPickHere() || !IoHfo.inYard()) {
+            return false;
+        }
+        let f: any = IoHfo.flag();
+        let day: int = f ? f.day | 0 : 0;
+        return day >= 1 && day <= 3 && !(Number(f.done) > 0);
+    }
+
+    /**
+     * The ice a worker can do something with now: every small patch, each big patch not tried yet (only the
+     * first try counts), and each sealed tower that isn't being built or upgraded; none with a worker on it.
+     */
+    public static ioWorkableIce(): any[] {
+        let out: any[] = [];
+        if (!MUSHROOMS.ioIceDays()) {
+            return out;
+        }
+        for (let o of as3.values(IoHfo.ices())) {
+            let ice: IoHfoIce = as3.as(o, IoHfoIce);
+            if (!ice || ice._picking || !ice._mc) {
+                continue;
+            }
+            if (ice.kind == IoHfoIce.BIG && IoHfoIce.ioTried(ice.ioServerId)) {
+                continue;
+            }
+            if (ice.kind == IoHfoIce.TOWER && (!ice.tower || ice.tower._countdownBuild.Get() + ice.tower._countdownUpgrade.Get() + ice.tower._countdownFortify.Get() > 0)) {
+                continue;
+            }
+            out.push(ice);
+        }
+        return out;
+    }
+
+    /** The ice the button would send workers to (not what its run is waiting to do already). */
+    public static ioIceLeft(): int {
+        let n: int = 0;
+        let todo: any[] = MUSHROOMS._ioIce ? as3.cast(MUSHROOMS._ioIce.todo, Array) : [];
+        for (let ice of as3.values(MUSHROOMS.ioWorkableIce())) {
+            if (todo.indexOf(ice) < 0) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** "Break all ice": idle workers to all of it, one after another (IoHfo.sendWorker, as a click on each). */
+    public static ioBreakAll(): void {
+        let ice: any[] = MUSHROOMS.ioWorkableIce();
+        if (!ice.length) {
+            return;
+        }
+        if (!MUSHROOMS.ioIdleWorker()) {
+            GLOBAL.Message(QUEUE.ioBusyText());
+            return;
+        }
+        let run: any = MUSHROOMS._ioIce;
+        if (!run) {
+            run = MUSHROOMS._ioIce = { "todo": [], "sent": [] };
+        }
+        for (let i of as3.values(ice)) {
+            if (run.todo.indexOf(i) < 0) {
+                run.todo.push(i);
+            }
+        }
+        SOUNDS.Play("click1");
+        MUSHROOMS.ioIceNext();
+        UI_WORKERS.ioYardButtons();
+    }
+
+    /** The ice run's next pieces, one to each idle worker; it ends when none of its workers is still at it. */
+    private static ioIceNext(): void {
+        let run: any = MUSHROOMS._ioIce;
+        if (!run || MUSHROOMS._ioSending) {
+            return;
+        }
+        if (!MUSHROOMS.ioIceDays()) {
+            MUSHROOMS._ioIce = null;
+            return;
+        }
+        MUSHROOMS._ioSending = true;
+        try {
+            let ices: any[] = IoHfo.ices();
+            let sent: any[] = [];
+            for (let s of as3.values(run.sent)) {
+                if (s._picking && ices.indexOf(s) >= 0) {
+                    sent.push(s);
+                }
+            }
+            run.sent = sent;
+            let workable: any[] = MUSHROOMS.ioWorkableIce();
+            while (run.todo.length > 0) {
+                let ice: IoHfoIce = as3.as(run.todo[0], IoHfoIce);
+                if (!ice || workable.indexOf(ice) < 0) {
+                    run.todo.shift();
+                    continue;
+                }
+                if (!MUSHROOMS.ioIdleWorker()) {
+                    break;
+                }
+                IoHfo.sendWorker(ice);
+                run.todo.shift();
+                if (!ice._picking) {
+                    break;
+                }
+                if (!MUSHROOMS.ioHasWorker(ice)) {
+                    QUEUE.Remove("hfoice" + ice._id, false);
+                    ice.ioReset();
+                    break;
+                }
+                run.sent.push(ice);
+            }
+            if (!run.sent.length) {
+                MUSHROOMS._ioIce = null;
+            }
+        } finally {
+            MUSHROOMS._ioSending = false;
+        }
+    }
+
+    /** The queue's tick (UI_WORKERS.Update): the runs go on as workers come free. */
+    public static ioYardTick(): void {
+        if (!MUSHROOMS.ioCanPickHere()) {
+            return;
+        }
+        if (MUSHROOMS._ioAll) {
+            MUSHROOMS.ioPickNext();
+        }
+        if (MUSHROOMS._ioIce) {
+            MUSHROOMS.ioIceNext();
+        }
     }
 }

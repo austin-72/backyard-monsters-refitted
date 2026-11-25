@@ -20,6 +20,8 @@ export interface KitBuilding {
   Y: number;
   id: number;
   prefab?: number;
+  /** (12 November) how far it is calcified, 1-4 */
+  fort?: number;
 }
 
 // --------------------------------------------------------------------------------------
@@ -222,7 +224,10 @@ const layersOf = (building: KitBuilding): Layer[] => {
  */
 const renderYard = (buildings: KitBuilding[]): Bitmap => {
   const iso = (x: number, y: number): [number, number] => [x - y, (x + y) / 2];
+  // (13 October) a building stored far outside a yard (the yard's own save takes positions as sent) made a canvas of
+  // gigabytes, filled pixel by pixel on the server's thread: those are left out of the picture
   const items = buildings
+    .filter((building) => Number.isFinite(building.X) && Number.isFinite(building.Y) && Math.abs(building.X) <= 1500 && Math.abs(building.Y) <= 1500)
     .map((building) => {
       const size = FOOTPRINT[building.t] ?? 70;
       const quad = [iso(building.X, building.Y), iso(building.X + size, building.Y), iso(building.X + size, building.Y + size), iso(building.X, building.Y + size)];

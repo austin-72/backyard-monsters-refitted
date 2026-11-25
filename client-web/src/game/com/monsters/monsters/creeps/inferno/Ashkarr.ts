@@ -2,11 +2,11 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { Bitmap, BitmapData, IBitmapDrawable } from "flash/display";
 import { Point } from "flash/geom";
-import { BFOUNDATION, BYMConfig, CREATURELOCKER, CREATURES, CreepBase, MonsterBase, RasterData, SOUNDS, SPRITES, WarCry } from "@game";
+import { BFOUNDATION, BYMConfig, CREATURELOCKER, CREATURES, CreepBase, IoDave, IoSkins, MonsterBase, RasterData, SOUNDS, SPRITES, WarCry } from "@game";
 
 /**
  * Inferno-only: Ashkarr, the Ember Herald (IC24), Moloch's warlord (the user's ASHKARR.md). A champion-class
- * monster: Strongbox page 5 with Korath and Drull, 600 housing, trained to level 6 in the Academy.
+ * monster: Strongbox page 5 with Korath and Drull, 350 housing (600 until 10 October), trained to level 6 in the Academy.
  *
  * Every 10 seconds in battle she roars (WarCry): her side's monsters within 300 move faster for 11 seconds, so
  * one that stays near her keeps it from roar to roar (x1.20 at level 1 to x1.35 at level 6; several Ashkarrs
@@ -19,7 +19,7 @@ import { BFOUNDATION, BYMConfig, CREATURELOCKER, CREATURES, CreepBase, MonsterBa
  */
 export class Ashkarr extends CreepBase {
     static {
-        as3.fields(this, { m_level: 1, m_ready: false, m_lastCell: -1, m_still: false, roarTicks: 0 });
+        as3.fields(this, { m_level: 1, m_ready: false, m_lastCell: -1, m_still: false, roarTicks: 0, m_sheet: null });
     }
 
     public static readonly ID: string = "IC24";
@@ -56,10 +56,13 @@ export class Ashkarr extends CreepBase {
     private m_still: boolean;
     /** Steps of the roar left to show; 0 when she isn't roaring. */
     public roarTicks: int;
+    /** Her sheet's sprite: her own, or (14 October) a skin of it her owner bought (IoSkins). */
+    private m_sheet: string;
 
     public $ctor(param1?: string, param2?: string, param3?: Point, param4?: number, param5: int = 0, param6: int = 2147483647, param7: Point = null, param8: boolean = false, param9: BFOUNDATION = null, param10: number = 1, param11: boolean = false, param12: MonsterBase = null): void {
         super.$ctor(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12);
         this.m_level = Ashkarr.levelOf(param5, this._friendly);
+        this.m_sheet = IoSkins.sprite(Ashkarr.ID, IoDave.skin(Ashkarr.ID, this._friendly));
         this.useOwnGraphic();
         this.m_ready = true;
         this.addComponent(new WarCry(this, Ashkarr.RADIUS, Ashkarr.COOLDOWN_TICKS, Number(Ashkarr.BOOST[this.m_level - 1]), Ashkarr.BOOST_TICKS, Ashkarr.ROOT_TICKS));
@@ -79,7 +82,7 @@ export class Ashkarr extends CreepBase {
 
     /** CreepBase made a 52 x 50 monster bitmap; her frames are 188 x 128, drawn with her feet on the spot. */
     private useOwnGraphic(): void {
-        SPRITES.SetupSprite(Ashkarr.ID);
+        SPRITES.SetupSprite(this.m_sheet);
         if (BYMConfig.instance.RENDERER_ON) {
             if (this._rasterData) {
                 this._rasterData.clear();
@@ -145,13 +148,15 @@ export class Ashkarr extends CreepBase {
                 row = (((this._frameNumber / 8) | 0) % 10) | 0;
         }
         let cell: int = (row * 16 + column) | 0;
-        if (cell != this.m_lastCell) {
-            let sheet: any = SPRITES.GetSpriteDescriptor(Ashkarr.ID);
+        // (26 October: also the same frame again, when the same-frame cache tells: a picture wiped since (healed to full)
+        // was left empty until the frame changed)
+        if (cell != this.m_lastCell || SPRITES.ioSameFrame) {
+            let sheet: any = SPRITES.GetSpriteDescriptor(this.m_sheet);
             if (!sheet || !sheet.image) {
                 return;
             }
             this.m_lastCell = cell;
-            SPRITES.GetFrameById(this._graphic, Ashkarr.ID, column, row);
+            SPRITES.GetFrameById(this._graphic, this.m_sheet, column, row);
         }
     }
 }

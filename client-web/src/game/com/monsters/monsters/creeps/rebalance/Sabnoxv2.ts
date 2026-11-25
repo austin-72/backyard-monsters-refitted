@@ -21,7 +21,7 @@ export class Sabnoxv2 extends CreepBase {
 
     protected override rangedAttack(param1: ITargetable): ITargetable {
         let _loc2_: Projectilev2 = as3.as(this.m_projectilePool.borrowObject(), Projectilev2);
-        _loc2_.setup(as3.cast(ProjectileUtils.getFireballBitmapData()(), IBitmapDrawable), this.x, this.getDisplayY(), param1, Sabnoxv2.k_projectileSpeed, this.damage, this);
+        _loc2_.setup(as3.cast(ProjectileUtils.getFireballBitmapData(), IBitmapDrawable), this.x, this.getDisplayY(), param1, Sabnoxv2.k_projectileSpeed, this.damage, this);
         return _loc2_;
     }
 

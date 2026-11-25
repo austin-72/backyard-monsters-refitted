@@ -25,6 +25,10 @@ import { Migration } from "@mikro-orm/migrations";
  */
 export class CreateAllianceStatsView extends Migration {
   async up(): Promise<void> {
+    // (24 October: on a fresh database schema:create has made the view already, as it is now (with the columns
+    // 20261007_AllianceEmpireValue adds), and CREATE OR REPLACE can't drop columns from a view: "cannot drop columns
+    // from view", and db:init stopped there. Dropped first; 20261007 makes it as it is now again.)
+    await this.execute(`DROP VIEW IF EXISTS bym.alliance_stats`);
     await this.execute(`
       CREATE OR REPLACE VIEW bym.alliance_stats AS
       SELECT

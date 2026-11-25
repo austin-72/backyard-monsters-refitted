@@ -4,8 +4,9 @@ import { MovieClip, Shape, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { ColorMatrixFilter, GlowFilter } from "flash/filters";
 import { TextField, TextFormatAlign } from "flash/text";
-import { BetSelector, CASINO, CasinoUI, CasinoWindow, SOUNDS } from "@game";
+import { BetSelector, CASINO, CasinoUI, CasinoWindow, GLOBAL, KEYS, SOUNDS } from "@game";
 
+// (QoL #235: the Pit's texts in the player's language: keys io_t3c_*, the games' names left as they are)
 /**
  * Bone Pile (Mines): 25 bone piles, some hiding a Sabnox (the player picks how many). Each safe pile
  * raises the multiplier; cash out whenever, lose it all to a Sabnox. The server placed the Sabnox when
@@ -55,17 +56,21 @@ export class BonePileGame extends Sprite {
         this._win = win;
         this.name = "casinoBonePile";
         let p: Sprite = as3.as(this.addChild(CasinoUI.panel(210, 400)), Sprite);
-        let back: Sprite = CasinoUI.button("LOBBY", 90, 26, as3.bind(win, win.toLobby), true, 12);
+        let back: Sprite = CasinoUI.button(KEYS.Get("io_t3c_lobby"), 90, 26, as3.bind(win, win.toLobby), true, 12);
         back.x = 10;
         back.y = 10;
         p.addChild(back);
+        // (QoL #390: "?", the rules and pays)
+        if (GLOBAL.INFERNO_ONLY) {
+            CasinoUI.ioRulesButton(p, as3.bind(this, this.ioRules));
+        }
         p.addChild(CasinoUI.at(CasinoUI.label("BONE PILE", 14, CasinoUI.GOLD, true, 190, TextFormatAlign.CENTER), 10, 44));
-        p.addChild(CasinoUI.at(CasinoUI.label("BET", 11, CasinoUI.EMBER, true, 190), 12, 68));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_bet_label"), 11, CasinoUI.EMBER, true, 190), 12, 68));
         this._bet = new BetSelector(190);
         this._bet.x = 10;
         this._bet.y = 82;
         p.addChild(this._bet);
-        p.addChild(CasinoUI.at(CasinoUI.label("SABNOX HIDING", 11, CasinoUI.EMBER, true, 190), 12, 206));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_sabnox_hiding"), 11, CasinoUI.EMBER, true, 190), 12, 206));
         let minus: Sprite = CasinoUI.toggle("-", 30, 26, (e: MouseEvent): void => {
             this.setSabnox((this._sabnox - 1) | 0);
         });
@@ -93,11 +98,11 @@ export class BonePileGame extends Sprite {
             this._quick.push(q);
             i++;
         }
-        this._start = CasinoUI.button("START", 190, 42, as3.bind(this, this.onStart), true, 20);
+        this._start = CasinoUI.button(KEYS.Get("io_t3c_start"), 190, 42, as3.bind(this, this.onStart), true, 20);
         this._start.x = 10;
         this._start.y = 286;
         p.addChild(this._start);
-        this._cashout = CasinoUI.button("CASH OUT", 190, 42, as3.bind(this, this.onCashout), false, 20);
+        this._cashout = CasinoUI.button(KEYS.Get("io_t3c_cashout"), 190, 42, as3.bind(this, this.onCashout), false, 20);
         this._cashout.x = 10;
         this._cashout.y = 286;
         this._cashout.visible = false;
@@ -136,6 +141,12 @@ export class BonePileGame extends Sprite {
     private rules(): any {
         let st: any = CASINO.state;
         return st && st.rules && st.rules.bonepile ? st.rules.bonepile : { "piles": 25, "min_sabnox": 1, "max_sabnox": 20, "rtp": 0.9999, "max_multiplier": 1000 };
+    }
+
+    /** QoL #390: the rules and pays ("?"), from casino/state's Bone Pile rules and the Sabnox chosen. */
+    private ioRules(): any[] {
+        let r: any = this.rules();
+        return ["BONE PILE", KEYS.Get("io_t3c_rules_bone1", { "v1": r.piles | 0, "v2": r.min_sabnox | 0, "v3": r.max_sabnox | 0 }), KEYS.Get("io_pit_rules_bone2"), KEYS.Get("io_t3c_rules_bone3"), KEYS.Get("io_pit_rules_bone4"), KEYS.Get("io_pit_rules_bone5", { "v1": this._sabnox, "v2": CasinoUI.mult(this.mult(1, this._sabnox)), "v3": CasinoUI.mult(Number(r.max_multiplier)) })];
     }
 
     /** The multiplier after k safe piles with m Sabnox (as the server works it out; for showing only). */
@@ -180,11 +191,11 @@ export class BonePileGame extends Sprite {
             let g: any = this._game;
             let k: int = (as3.as(g.revealed, Array)).length;
             let safeLeft: int = (piles - (g.sabnox | 0) - k) | 0;
-            this._info.text = k > 0 ? "NOW " + CasinoUI.mult(Number(g.multiplier)) + " = " + CasinoUI.shiny((g.stake | 0) * Number(g.multiplier)) + " SHINY" : "OPEN A PILE";
-            this._info2.text = g.next_multiplier != null ? "Next pile: " + CasinoUI.mult(Number(g.next_multiplier)) + "\n" + safeLeft + " of " + (piles - k) + " piles safe (" + Math.round(Number(g.safe_chance) * 100) + "%)" : "";
+            this._info.text = k > 0 ? KEYS.Get("io_t3c_now_shiny", { "v1": CasinoUI.mult(Number(g.multiplier)), "v2": CasinoUI.shiny((g.stake | 0) * Number(g.multiplier)) }) : KEYS.Get("io_t3c_open_pile");
+            this._info2.text = g.next_multiplier != null ? KEYS.Get("io_t3c_next_pile", { "v1": CasinoUI.mult(Number(g.next_multiplier)) }) + "\n" + KEYS.Get("io_t3c_piles_safe_pct", { "v1": safeLeft, "v2": (piles - k), "v3": Math.round(Number(g.safe_chance) * 100) }) : "";
         } else if (!this._over || force) {
-            this._info.text = "FIRST PILE " + CasinoUI.mult(this.mult(1, this._sabnox));
-            this._info2.text = (piles - this._sabnox) + " of " + piles + " piles safe. Every safe pile raises the multiplier.";
+            this._info.text = KEYS.Get("io_t3c_first_pile", { "v1": CasinoUI.mult(this.mult(1, this._sabnox)) });
+            this._info2.text = KEYS.Get("io_t3c_piles_safe", { "v1": (piles - this._sabnox), "v2": piles });
         }
     }
 
@@ -271,7 +282,7 @@ export class BonePileGame extends Sprite {
             o.crystal.visible = true;
             o.crystal.filters = [new GlowFilter(0xFF7A20, 0.8, 14, 14, 2, 2)];
         }
-        this._win.message("Your Bone Pile game is where you left it.", CasinoUI.GOLD);
+        this._win.message(KEYS.Get("io_t3c_bone_resume"), CasinoUI.GOLD);
         this.buttons();
         this.showInfo();
     }
@@ -279,16 +290,30 @@ export class BonePileGame extends Sprite {
     private onStart(e: MouseEvent = null): void {
         let st: any = CASINO.state;
         if (!st || st.closed || st.shiny_locked) {
-            this._win.message(st && st.closed ? String(st.closed) : "The Pit is not open.", CasinoUI.LOSS);
+            this._win.message(st && st.closed ? String(st.closed) : KEYS.Get("io_t3c_not_open"), CasinoUI.LOSS);
             return;
         }
         if (this._pending || this.playing()) {
             return;
         }
+        // (a cash-out's Shiny still flying in lands now: after the new bet's balance it set an older one, and
+        // before it the bet looked unaffordable; 9 October)
+        for (let fl of as3.values(this._flying)) {
+            CASINO.setCredits(fl.credits | 0);
+        }
+        this._flying = [];
         let bet: int = this._bet.value;
         if (CASINO.credits() < bet) {
-            this._win.message("You do not have enough Shiny for that bet.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny_bet"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
+            return;
+        }
+        // (QoL #385: more than half the Shiny asked about first, once)
+        if (CASINO.ioAskBig("bonepile", bet, (): void => {
+            if (this.parent) {
+                this.onStart();
+            }
+        })) {
             return;
         }
         this._pending = true;
@@ -297,6 +322,7 @@ export class BonePileGame extends Sprite {
         CASINO.bonePileStart(bet, this._sabnox, (r: any): void => {
             this._pending = false;
             if (!this.parent) {
+                CASINO.late(r);
                 return;
             }
             if (r.error) {
@@ -312,7 +338,7 @@ export class BonePileGame extends Sprite {
                 return;
             }
             this._game = r;
-            this._win.message(r.sabnox + " Sabnox are hiding. Pick a pile.", CasinoUI.GOLD);
+            this._win.message(KEYS.Get("io_t3c_sabnox_go", { "v1": r.sabnox }), CasinoUI.GOLD);
             SOUNDS.Play("click1");
             this.buttons();
             this.showInfo();
@@ -330,6 +356,7 @@ export class BonePileGame extends Sprite {
         CASINO.bonePileReveal(g.session_id | 0, o.i | 0, (r: any): void => {
             this._pending = false;
             if (!this.parent) {
+                CASINO.late(r);
                 return;
             }
             o.pop = 0;
@@ -343,10 +370,10 @@ export class BonePileGame extends Sprite {
                 this._game = r;
                 this.openSafe(o);
                 if (r.status == "won") {
-                    // every safe pile: paid at once
+                    // every safe pile, or the most it pays (the cap): paid at once
                     this.finish(r, true);
                 } else {
-                    this._win.message("Safe! " + CasinoUI.mult(Number(r.multiplier)), CasinoUI.WIN);
+                    this._win.message(KEYS.Get("io_t3c_safe", { "v1": CasinoUI.mult(Number(r.multiplier)) }), CasinoUI.WIN);
                 }
             } else {
                 this.openSabnox(o);
@@ -366,6 +393,7 @@ export class BonePileGame extends Sprite {
         CASINO.bonePileCashout(this._game.session_id | 0, (r: any): void => {
             this._pending = false;
             if (!this.parent) {
+                CASINO.late(r);
                 return;
             }
             if (r.error) {
@@ -401,7 +429,7 @@ export class BonePileGame extends Sprite {
         o.s.filters = [new GlowFilter(0x7AFF3A, 1, 20, 20, 3, 2)];
         this.burst(Number(o.s.x), Number(o.s.y), [0x7AFF3A, 0x3AD01A, 0xC8FF6A], 26, 7);
         this._shake = 20;
-        SOUNDS.Play("error1");
+        CasinoUI.ioLoseSound();
     }
 
     private burst(x: number, y: number, colors: any[], n: int, speed: number): void {
@@ -452,16 +480,16 @@ export class BonePileGame extends Sprite {
                     this.fly(o);
                 }
             }
-            this._info.text = "CASHED OUT " + CasinoUI.mult(Number(r.multiplier));
+            this._info.text = KEYS.Get("io_t3c_cashed_title", { "v1": CasinoUI.mult(Number(r.multiplier)) });
             this._info2.text = "+" + CasinoUI.number(payout) + " Shiny";
-            this._win.message("Cashed out at " + CasinoUI.mult(Number(r.multiplier)) + ": +" + CasinoUI.number(payout) + " Shiny", CasinoUI.WIN);
-            this._win.bigWin(payout, (r.bet != null ? r.bet | 0 : Math.round(payout / Math.max(1, Number(r.multiplier)))) | 0);
+            this._win.message(KEYS.Get("io_t3c_cashed_at", { "v1": CasinoUI.mult(Number(r.multiplier)), "v2": CasinoUI.number(payout) }), CasinoUI.WIN);
+            this._win.bigWin(payout, (r.stake != null ? r.stake | 0 : r.bet != null ? r.bet | 0 : Math.round(payout / Math.max(1, Number(r.multiplier)))) | 0);
             let credits: int = r.credits | 0;
             this._flying.push({ "credits": credits, "t": 26 });
         } else {
-            this._info.text = "A SABNOX!";
-            this._info2.text = "The bet is lost. Start again?";
-            this._win.message("A Sabnox was under that one. The bet is lost.", CasinoUI.LOSS);
+            this._info.text = KEYS.Get("io_t3c_a_sabnox");
+            this._info2.text = KEYS.Get("io_t3c_lost_again");
+            this._win.message(KEYS.Get("io_t3c_sabnox_lost"), CasinoUI.LOSS);
             if (r.credits != null) {
                 CASINO.setCredits(r.credits | 0);
             }
@@ -523,7 +551,7 @@ export class BonePileGame extends Sprite {
             f.t--;
             if (f.t <= 0) {
                 CASINO.setCredits(f.credits | 0);
-                SOUNDS.Play("chaching");
+                CasinoUI.ioWinSound();
                 this._flying.splice(i, 1);
             }
             i--;

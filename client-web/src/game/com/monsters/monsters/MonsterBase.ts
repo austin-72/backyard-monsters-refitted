@@ -4,12 +4,12 @@ import { Bitmap, BitmapData, DisplayObject, IBitmapDrawable } from "flash/displa
 import { Event } from "flash/events";
 import { BitmapFilter, GlowFilter } from "flash/filters";
 import { Point, Rectangle } from "flash/geom";
-import { ATTACK, BASE, BFOUNDATION, BTOWER, BYMConfig, BeastMode, Bounce, CModifiableProperty, CREATURES, CREEPS, CStatusEffect, Component, EFFECTS, GLOBAL, GRID, GameObject, HOUSING, HyperSpeed, IAttackable, IAttackingComponent, IComponentOwner, IDefendingComponent, ILootable, ITargetable, IoHfoWaves, MAP, MONSTERBUNKER, MonsterDust, PATHING, QUESTS, RasterData, SOUNDS, SPECIALEVENT, SecNum, Sine, Targeting, TweenLite, print } from "@game";
+import { ATTACK, BASE, BFOUNDATION, BTOWER, BYMConfig, BeastMode, Bounce, CModifiableProperty, CREATURES, CREEPS, CStatusEffect, Component, EFFECTS, GLOBAL, GRID, GameObject, HOUSING, HyperSpeed, IAttackable, IAttackingComponent, IComponentOwner, IDefendingComponent, ILootable, ITargetable, IoFmiWaves, IoHfoWaves, MAP, MONSTERBUNKER, MonsterDust, PATHING, QUESTS, RasterData, Renderer, SOUNDS, SPECIALEVENT, SecNum, Sine, Targeting, TweenLite, print, IoTd2, IoTilt, IoGlowCache, SPRITES, IoTargets } from "@game";
 
 export class MonsterBase extends GameObject implements IAttackable, IComponentOwner {
     static {
         as3.implement(this, [IAttackable, IComponentOwner]);
-        as3.fields(this, { spriteAction: "walking", aggroRange: 50, _components: null, _attackComponents: null, _frameNumber: 0, _spawned: false, _creatureID: null, _graphic: null, _visible: true, _clicked: false, _looking: false, _glow: null, _speed: NaN, _goo: 0, _damageMult: 1, m_range: 1, _damagePerSecond: null, _targetRotation: NaN, _targetPosition: null, _targetCenter: null, _waypoints: null, _pathID: 0, _jumping: false, _jumpingUp: false, _noDefensePath: false, _doDefenseBurrow: true, m_rotation: 0, m_state: 0, _behaviour: null, _hasTarget: false, _hasPath: false, _attacking: false, _intercepting: false, _targetBuilding: null, _homeBunker: undefined, _targetCreeps: null, _targetCreep: null, _id: null, _friendly: false, _house: null, _hits: 0, _spawnPoint: null, _lastRotation: 400, _targetGroup: 0, targetMode: 0, _explode: 0, _goeasy: false, _hitLimit: 50, _tmpPoint: null, _spawnTime: 0, _atTarget: false, _xd: 0, _yd: 0, _shadow: null, _shadowMC: null, attackCooldown: 0, frameCount: 0, shocking: false, node: null, newNode: null, _phase: 0, _movement: "", _componentTickCounter: 0, _pathing: "", _lockRotation: false, isDisposable: false, _enraged: 0, m_isInvisible: false, _graphicMC: null, _altitude: 0, _currentSkinOverride: null, ioHatchling: false, _rasterData: null, _rasterPt: null, _shadowData: null, _shadowPt: null, _dying: false, _dead: false, m_juiceReady: false, attackDelayProperty: null, damageProperty: null, m_filters: null, _lastXd: NaN, _lastYd: NaN, _cachedTargetRotation: NaN, _ioHurtCarry: 0, _ioPuppetY: NaN, _ioDrawn: false });
+        as3.fields(this, { spriteAction: "walking", aggroRange: 50, _components: null, _attackComponents: null, _frameNumber: 0, _spawned: false, _creatureID: null, _graphic: null, _visible: true, _clicked: false, _looking: false, _glow: null, _speed: NaN, _goo: 0, _damageMult: 1, m_range: 1, _damagePerSecond: null, _targetRotation: NaN, _targetPosition: null, _targetCenter: null, _waypoints: null, _pathID: 0, _jumping: false, _jumpingUp: false, _noDefensePath: false, _doDefenseBurrow: true, m_rotation: 0, m_state: 0, _behaviour: null, _hasTarget: false, _hasPath: false, _attacking: false, _intercepting: false, _targetBuilding: null, _homeBunker: undefined, _targetCreeps: null, _targetCreep: null, _id: null, _friendly: false, _house: null, _hits: 0, _spawnPoint: null, _lastRotation: 400, _targetGroup: 0, targetMode: 0, _explode: 0, _goeasy: false, _hitLimit: 50, _tmpPoint: null, _spawnTime: 0, _atTarget: false, _xd: 0, _yd: 0, _shadow: null, _shadowMC: null, attackCooldown: 0, frameCount: 0, shocking: false, node: null, newNode: null, _phase: 0, _movement: "", _componentTickCounter: 0, _pathing: "", _lockRotation: false, isDisposable: false, _enraged: 0, m_isInvisible: false, _graphicMC: null, _altitude: 0, _currentSkinOverride: null, ioHatchling: false, _rasterData: null, _rasterPt: null, _shadowData: null, _shadowPt: null, _dying: false, _dead: false, m_juiceReady: false, attackDelayProperty: null, damageProperty: null, m_filters: null, _lastXd: NaN, _lastYd: NaN, _cachedTargetRotation: NaN, _ioHurtCarry: 0, _ioPuppetY: NaN, _ioDrawn: false, _ioPuppetOnly: false, _ioLodPhase: -1, _ioOffView: false, _ioShadowHid: false, _ioPlX: NaN, _ioPlY: NaN, _ioPlMx: NaN, _ioPlMy: NaN, _ioPlAlt: NaN, _ioPlOx: NaN, _ioPlOy: NaN, _ioHalfH: NaN, _ioHalfN: 0 });
     }
 
     public static readonly k_sBHVR_ATTACK: string = "attack";
@@ -153,8 +153,189 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
      */
     private _ioHurtCarry: number;
     private _ioPuppetY: number;
+    /** Inferno-only (19 October): a replay's puppet: shots at it (the yard's towers, as the replay plays them) do nothing. */
+    public _ioPuppetOnly: boolean;
     /** Drawn at least once (see render: steps that are not drawn skip the picture after that). */
     private _ioDrawn: boolean;
+
+    /** Inferno-only (21 October, crowds): which of the drawn frames this monster's picture changes on (_ioCrowd). */
+    public _ioLodPhase: int;
+    /** Inferno-only: off the screen, not drawn (render). */
+    public _ioOffView: boolean;
+    /** Inferno-only: its shadow hidden with it. */
+    public _ioShadowHid: boolean;
+    /** Inferno-only: where ioPlace last put it (its x, y, its picture's x, y, its height off the ground, the map's offset). */
+    private _ioPlX: number;
+    private _ioPlY: number;
+    private _ioPlMx: number;
+    private _ioPlMy: number;
+    private _ioPlAlt: number;
+    private _ioPlOx: number;
+    private _ioPlOy: number;
+    private _ioHalfH: number;
+    private _ioHalfN: int;
+
+    /**
+     * Inferno-only (21 October, crowds: 2000 monsters at once). For the game step that is drawn (CREEPS.Tick):
+     *  - a monster well off the screen isn't drawn: its picture, its health bar and its place in the yard's drawing are
+     *    left until it is near the screen again (it still walks and fights as ever)
+     *  - with many monsters, each one's picture (its facing, its walk, its health bar) changes every second or third
+     *    drawn frame, in turn (a walk's frames last 8 game steps anyway); where it is still follows it every frame.
+     * ioLodOff: never (tests). The server's io_lod flag at 0: never.
+     */
+    public static ioLodOff: boolean = false;
+    /** From this many monsters, pictures change every 2nd drawn frame; from IO_CROWD3, every 3rd. */
+    public static readonly IO_CROWD2: int = 400;
+    public static readonly IO_CROWD3: int = 1200;
+    /** (21 October, later) from this many, every 4th. */
+    public static readonly IO_CROWD4: int = 1600;
+    /** How far past the screen's edge (the yard canvas's pixels) a monster is still drawn. */
+    public static readonly IO_VIEW_MARGIN: number = 450;
+    public static _ioLod: boolean = false;
+    public static _ioView: number[] = null;
+    public static _ioOffX: number = 0;
+    public static _ioOffY: number = 0;
+    public static _ioCrowd: int = 1;
+    public static _ioDrawSeq: int = 0;
+    private static _ioLodNext: int = 0;
+    /** For tests: how many monsters were left undrawn (off the screen) and how many kept their picture, this step. */
+    public static ioLodStats: any = { off: 0, kept: 0, drawn: 0 };
+
+    /** Before the monsters' step (CREEPS.Tick): on a drawn step, where the screen is and how big the crowd. */
+    public static ioLodBegin(): void {
+        MonsterBase._ioLod = false;
+        if (!GLOBAL.INFERNO_ONLY || !GLOBAL._render || GLOBAL._catchup || MonsterBase.ioLodOff || !BYMConfig.instance.RENDERER_ON || !Renderer.ioSwitch("io_lod")) {
+            return;
+        }
+        MonsterBase._ioDrawSeq = (MonsterBase._ioDrawSeq + 1) | 0;
+        let r: number[] = null;
+        try {
+            r = Renderer.ioOnScreen();
+        } catch (e) {
+            r = null;
+        }
+        let m: number = MonsterBase.IO_VIEW_MARGIN;
+        MonsterBase._ioView = r ? [r[0] - m, r[1] - m, r[2] + m, r[3] + m] : null;
+        let off: Point = MAP.instance ? MAP.instance.offset : null;
+        MonsterBase._ioOffX = off ? off.x : 0;
+        MonsterBase._ioOffY = off ? off.y : 0;
+        let n: int = CREEPS._creepCount | 0;
+        MonsterBase._ioCrowd = n >= MonsterBase.IO_CROWD4 ? 4 : (n >= MonsterBase.IO_CROWD3 ? 3 : (n >= MonsterBase.IO_CROWD2 ? 2 : 1));
+        MonsterBase.ioLodStats = { off: 0, kept: 0, drawn: 0, crowd: MonsterBase._ioCrowd, view: MonsterBase._ioView };
+        MonsterBase._ioLod = true;
+    }
+
+    /** After the monsters' step. */
+    public static ioLodEnd(): void {
+        MonsterBase._ioLod = false;
+    }
+
+    /**
+     * Inferno-only (21 October, crowds): true when this drawn step needn't draw it (render): off the screen (hidden
+     * once, shown again when near it), or its turn to keep its picture (only its place moved).
+     */
+    private ioLodSkip(): boolean {
+        if (!this._ioDrawn || !this._rasterData || !this._graphicMC || this._movement == "burrow" || this._ioPuppetOnly) {
+            return false;
+        }
+        let v: number[] = MonsterBase._ioView;
+        if (v) {
+            let x: number = this._tmpPoint.x + this._graphicMC.x - MonsterBase._ioOffX;
+            let y: number = this._tmpPoint.y + this._graphicMC.y - MonsterBase._ioOffY;
+            let w: number = this._graphic ? this._graphic.width : 100;
+            let h: number = this._graphic ? this._graphic.height : 100;
+            if (x > v[2] || y > v[3] || x + w < v[0] || y + h < v[1]) {
+                if (!this._ioOffView) {
+                    this._ioOffView = true;
+                    this._rasterData.visible = false;
+                    if (this._shadowData && this._shadowData.visible) {
+                        this._shadowData.visible = false;
+                        this._ioShadowHid = true;
+                    }
+                }
+                ++MonsterBase.ioLodStats.off;
+                return true;
+            }
+        }
+        if (this._ioOffView) {
+            // (back near the screen: drawn whole)
+            this.ioLodShown();
+            return false;
+        }
+        if (MonsterBase._ioCrowd > 1) {
+            if (this._ioLodPhase < 0) {
+                this._ioLodPhase = MonsterBase._ioLodNext = (MonsterBase._ioLodNext + 1) % 12;
+            }
+            if ((this._ioLodPhase + MonsterBase._ioDrawSeq) % MonsterBase._ioCrowd != 0) {
+                this.ioPlace();
+                ++MonsterBase.ioLodStats.kept;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Inferno-only (21 October, crowds): its picture kept, only where it is drawn moved with it (updateRasterData's
+     * sums for its place, its depth and its foot); nothing when it hasn't moved. Its own picture only (not a glow's,
+     * nothing added to it): else updateRasterData itself.
+     */
+    private ioPlace(): void {
+        let mc: Bitmap = this._graphicMC;
+        let rd: RasterData = this._rasterData;
+        if (!mc || !rd || rd._data !== this._graphic || (this.m_children && this.m_children.length) || mc.$filters.length) {
+            this.updateRasterData();
+            return;
+        }
+        let x: number = this.x;
+        let y: number = this.y;
+        let mx: number = mc.x;
+        let my: number = mc.y;
+        if (x === this._ioPlX && y === this._ioPlY && mx === this._ioPlMx && my === this._ioPlMy && this._altitude === this._ioPlAlt && MonsterBase._ioOffX === this._ioPlOx && MonsterBase._ioOffY === this._ioPlOy) {
+            return;
+        }
+        this._ioPlX = x;
+        this._ioPlY = y;
+        this._ioPlMx = mx;
+        this._ioPlMy = my;
+        this._ioPlAlt = this._altitude;
+        this._ioPlOx = MonsterBase._ioOffX;
+        this._ioPlOy = MonsterBase._ioOffY;
+        let ox: number = MonsterBase._ioOffX;
+        let oy: number = MonsterBase._ioOffY;
+        let mid: number = this._middle ? this._middle : this.ioHalfHeight();
+        this._rasterPt.x = x + mx - ox;
+        this._rasterPt.y = y + my - oy;
+        rd.depth = Math.max(MAP.DEPTH_SHADOW + 1, (y + this._altitude - oy + mid) * 1000 + x - ox);
+        rd._ioFoot = y - oy;
+        if (this._shadowMC) {
+            this._shadowPt.x = x + this._shadowMC.x - ox;
+            this._shadowPt.y = y + this._shadowMC.y - oy;
+        }
+    }
+
+    /**
+     * Inferno-only (21 October): half its display object's height (where it stands in the yard's order without a
+     * middle of its own), measured again every 32nd time: measuring its bounds each frame was a large part of a crowd's
+     * drawing, and it doesn't change as it walks.
+     */
+    private ioHalfHeight(): number {
+        if (this._ioHalfH !== this._ioHalfH || ((++this._ioHalfN) & 31) == 0) {
+            this._ioHalfH = this.graphic.height * 0.5;
+        }
+        return this._ioHalfH;
+    }
+
+    /** Inferno-only: drawn again (render shows its picture), its shadow again. */
+    private ioLodShown(): void {
+        this._ioOffView = false;
+        if (this._ioShadowHid) {
+            this._ioShadowHid = false;
+            if (this._shadowData) {
+                this._shadowData.visible = true;
+            }
+        }
+    }
 
     public $ctor(): void {
         this._lastXd = NaN;
@@ -278,8 +459,16 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
     public override modifyHealth(param1: number, param2: ITargetable = null): number {
         let _loc6_: Component = null;
         let ioWhole: number = NaN;
-        if (!this.health) {
+        if (!this.health || this._ioPuppetOnly) {
             return 0;
+        }
+        // Inferno-only (Hellgate Defense 2): a hit on one of the arena's monsters: armour, crits, slows, burns,
+        // who gets the kill (IoTd2.hurt)
+        if (param1 < 0 && GLOBAL.INFERNO_ONLY && IoTd2.on) {
+            param1 = IoTd2.hurt(this, param1);
+            if (param1 == 0) {
+                return 0;
+            }
         }
         let _loc3_: number = param1;
         let _loc4_: int = 0;
@@ -307,7 +496,16 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         } else {
             if (_loc5_ >= this.maxHealth) {
                 if (this._graphic) {
-                    this._graphic.fillRect(this._graphic.rect, 0);
+                    if (GLOBAL.INFERNO_ONLY && this._graphicMC && CREEPS._bmdHPbar) {
+                        // (Inferno-only, 26 October: healed to full, only its health bar wiped (where render puts it), and
+                        // the frame copied again when it is next drawn (SPRITES.ioOverlay). The whole picture was
+                        // wiped, every heal of a monster already whole too: it vanished until its frame changed, a
+                        // standing Rimegrave, Ashkarr or ice monster for good, a crowd's monsters flashing in and out)
+                        this._graphic.fillRect(new Rectangle(Math.floor(-this._graphicMC.x - CREEPS._bmdHPbar.width / 2), 6, 17, 5), 0);
+                        SPRITES.ioOverlay(this._graphic, null, null);
+                    } else {
+                        this._graphic.fillRect(this._graphic.rect, 0);
+                    }
                 }
                 param1 = this.maxHealth - this.health;
             }
@@ -437,7 +635,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         }
         // Inferno-only (Hell Freezes Over): a monster pacing in its Compound is frozen still while a wave has the
         // Compound sealed in ice (IoHfoWaves)
-        if (GLOBAL.INFERNO_ONLY && (this._behaviour == MonsterBase.k_sBHVR_PEN || this._behaviour == MonsterBase.k_sBHVR_HOUSING) && IoHfoWaves.compoundFrozen) {
+        if (GLOBAL.INFERNO_ONLY && (this._behaviour == MonsterBase.k_sBHVR_PEN || this._behaviour == MonsterBase.k_sBHVR_HOUSING) && (IoHfoWaves.compoundFrozen || IoFmiWaves.compoundFrozen)) {
             this.updateRasterData();
             // (still where it stands when the map scrolls)
             return false;
@@ -485,7 +683,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
 
     protected tickState(param1: int = 1): boolean {
         this._frameNumber += 1;
-        if (Boolean(this.graphic) && this.graphic.filters.length > 0) {
+        if (Boolean(this.graphic) && this.graphic.$filters.length > 0) {
             if (this._friendly) {
                 if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                     if (GLOBAL._playerMonsterOverdrive && GLOBAL._playerMonsterOverdrive.Get() < GLOBAL.Timestamp() || GLOBAL._playerMonsterDefenseOverdrive && GLOBAL._playerMonsterDefenseOverdrive.Get() < GLOBAL.Timestamp() || GLOBAL._playerMonsterSpeedOverdrive && GLOBAL._playerMonsterSpeedOverdrive.Get() < GLOBAL.Timestamp()) {
@@ -522,16 +720,44 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         this.updateRasterData();
     }
 
-    public ioPuppet(x: number, y: number, hpRatio: number, altitude: number, walking: boolean): void {
+    /** Inferno-only (19 October, a replay's puppet): its place in Targeting's cells follows _tmpPoint. */
+    public ioCellMove(): void {
+        let cell: string = Targeting.CreepCellMove(this._tmpPoint, this._id, this, this.node);
+        if (cell) {
+            this.node = cell;
+        }
+    }
+
+    /** Inferno-only (19 October, a replay's puppet going): out of Targeting's cells. */
+    public ioCellDrop(): void {
+        Targeting.CreepCellDelete(this._id, this.node, false);
+    }
+
+    public ioPuppet(x: number, y: number, hpRatio: number, altitude: number, walking: boolean, attacking: boolean = false, faceX: number = NaN, faceY: number = NaN): void {
+        this._ioPuppetOnly = true;
         let dx: number = x - this._tmpPoint.x;
         let dy: number = y - this._tmpPoint.y;
         if (dx * dx + dy * dy > 0.25) {
             this._xd = dx;
             this._yd = dy;
         }
+        // (19 October: fighting, as the replay works it out (IoReplayPlayer.fightOf): it faces what it hits, and
+        // its attack plays)
+        if (attacking && !isNaN(faceX)) {
+            let fx: number = faceX - x;
+            let fy: number = faceY - y;
+            if (fx * fx + fy * fy > 0.25) {
+                this._xd = fx;
+                this._yd = fy;
+            }
+        }
+        this._attacking = attacking;
+        this._atTarget = attacking;
         this._tmpPoint.x = x;
         this._tmpPoint.y = y;
-        if (walking) {
+        // (19 October: where the yard's towers look for it, as a monster's own step keeps it)
+        this.ioCellMove();
+        if (walking || attacking) {
             ++this._frameNumber;
         }
         this.setHealth(Math.max(1, this.maxHealth * Math.min(1, hpRatio)));
@@ -544,36 +770,44 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         this.render();
     }
 
+    /** The facing from the heading (render). */
+    private ioTurn(): void {
+        let _loc1_: number = NaN;
+        if (!this._lockRotation) {
+            // Only calculate rotation when movement direction changes
+            if (this._lastXd !== this._xd || this._lastYd !== this._yd) {
+                this._targetRotation = Math.atan2(this._yd, this._xd) * 57.2957795 - 90;
+                this._lastXd = this._xd;
+                this._lastYd = this._yd;
+                this._cachedTargetRotation = this._targetRotation;
+            } else {
+                // Use cached rotation
+                this._targetRotation = this._cachedTargetRotation;
+            }
+        }
+        _loc1_ = this.m_rotation - this._targetRotation;
+        if (_loc1_ > 180) {
+            this._targetRotation += 360;
+        } else if (_loc1_ < -180) {
+            this._targetRotation -= 360;
+        }
+        this._targetRotation += 90;
+        this.m_rotation = this._targetRotation;
+        while (this.m_rotation < 0) {
+            this.m_rotation += 360;
+        }
+        this.m_rotation %= 360;
+    }
+
     protected render(): void {
         let _loc1_: number = NaN;
         let _loc2_: string = null;
         let _loc3_: int = 0;
         let _loc4_: int = 0;
         if (!GLOBAL._catchup) {
-            if (!this._lockRotation) {
-                // Only calculate rotation when movement direction changes
-                if (this._lastXd !== this._xd || this._lastYd !== this._yd) {
-                    this._targetRotation = Math.atan2(this._yd, this._xd) * 57.2957795 - 90;
-                    this._lastXd = this._xd;
-                    this._lastYd = this._yd;
-                    this._cachedTargetRotation = this._targetRotation;
-                } else {
-                    // Use cached rotation
-                    this._targetRotation = this._cachedTargetRotation;
-                }
+            if (this._lockRotation) {
+                this.ioTurn();
             }
-            _loc1_ = this.m_rotation - this._targetRotation;
-            if (_loc1_ > 180) {
-                this._targetRotation += 360;
-            } else if (_loc1_ < -180) {
-                this._targetRotation -= 360;
-            }
-            this._targetRotation += 90;
-            this.m_rotation = this._targetRotation;
-            while (this.m_rotation < 0) {
-                this.m_rotation += 360;
-            }
-            this.m_rotation %= 360;
             if (this.x != (this._tmpPoint.x | 0) || this.y != (this._tmpPoint.y | 0)) {
                 this.graphic.x = this._tmpPoint.x | 0;
                 this.graphic.y = this._tmpPoint.y | 0;
@@ -584,6 +818,19 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
             // the same picture twice a frame, and the ice monsters' frames drawn twice.
             if (GLOBAL.INFERNO_ONLY && !GLOBAL._render && this._ioDrawn) {
                 return;
+            }
+            // (Inferno-only, 21 October: crowds, ioLodSkip; turned off meanwhile: shown again)
+            if (MonsterBase._ioLod) {
+                if (this.ioLodSkip()) {
+                    return;
+                }
+            } else if (this._ioOffView) {
+                this.ioLodShown();
+            }
+            // (Inferno-only, 21 October: the facing is only for drawing, so it is worked out on the step that is drawn: the
+            // same facing, from the same heading; a spin (a locked facing turned every step) every step, as before)
+            if (!this._lockRotation) {
+                this.ioTurn();
             }
             if (this._graphic) {
                 this._graphic.lock();
@@ -603,11 +850,25 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
                     this.graphic.alpha = 1;
                 }
             }
+            // (Inferno-only, 19 October: the frame is copied again only when it changed (SPRITES.GetFrame), the health bar
+            // over it only when it or the frame changed (SPRITES.ioOverlay); healed: no bar, the frame copied again)
+            if (GLOBAL.INFERNO_ONLY && !(this.health < this.maxHealth)) {
+                SPRITES.ioOverlay(this._graphic, null, null);
+            }
             this.getNextSprite();
             this._lastRotation = (this.m_rotation / 12) | 0;
             if (this.health < this.maxHealth) {
                 _loc4_ = (11 - ((11 / this.maxHealth * this.health) | 0)) | 0;
-                this._graphic.copyPixels(CREEPS._bmdHPbar, new Rectangle(0, 5 * _loc4_, 17, 5), new Point(-this._graphicMC.x - CREEPS._bmdHPbar.width / 2, 6));
+                let hpRow: int = _loc4_;
+                SPRITES.ioOverlay(this._graphic, "hp" + hpRow + "@" + this._graphicMC.x, () => {
+                    this._graphic.copyPixels(CREEPS._bmdHPbar, new Rectangle(0, 5 * hpRow, 17, 5), new Point(-this._graphicMC.x - CREEPS._bmdHPbar.width / 2, 6));
+                    // (21 October: the bar's part of its picture and where it went, for the graphics card: Renderer.ioGlEntry)
+                    if (GLOBAL.INFERNO_ONLY) {
+                        Object(this._graphic)["$ioOv"] = [CREEPS._bmdHPbar, 0, 5 * hpRow, 17, 5, -this._graphicMC.x - CREEPS._bmdHPbar.width / 2, 6];
+                    }
+                    // (Inferno-only, 16 October: the frame and its health bar, for the glow's cache: IoGlowCache)
+                    IoGlowCache.retag(this._graphic, "hp" + hpRow + "@" + this._graphicMC.x);
+                });
             }
             if (this._graphic) {
                 this._graphic.unlock();
@@ -617,6 +878,9 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
             }
             this.updateRasterData();
             this._ioDrawn = true;
+            if (MonsterBase._ioLod) {
+                ++MonsterBase.ioLodStats.drawn;
+            }
         }
     }
 
@@ -636,7 +900,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
                     this._rasterData.visible = false;
                 }
                 EFFECTS.Dig(this.x | 0, this.y | 0);
-                SOUNDS.Play("dig", 0.5);
+                SOUNDS.ioPlayAt("dig", 0.5, this.x, this.y);
             } else if (this._frameNumber % 5 == 0) {
                 EFFECTS.Burrow(this.x | 0, this.y | 0);
             }
@@ -654,7 +918,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
             if (this._behaviour == MonsterBase.k_sBHVR_ATTACK || this._doDefenseBurrow) {
                 EFFECTS.Dig(this.x | 0, this.y | 0);
             }
-            SOUNDS.Play("arise", 0.5);
+            SOUNDS.ioPlayAt("arise", 0.5, this.x, this.y);
         }
     }
 
@@ -677,17 +941,31 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
             return;
         }
         let _loc1_: Point = MAP.instance.offset;
+        // (ioPlace's record of where it put it no longer holds)
+        this._ioPlX = NaN;
         if (Boolean(this._graphicMC) && Boolean(this._rasterData)) {
-            _loc2_ = this.graphic.height * 0.5;
-            if (this._middle) {
-                _loc2_ = this._middle;
-            }
+            // (Inferno-only, 21 October: the picture's height (its bounds, measured) only when it has no middle)
+            _loc2_ = this._middle ? this._middle : (GLOBAL.INFERNO_ONLY ? this.ioHalfHeight() : this.graphic.height * 0.5);
             this._rasterPt.x = this.x + this._graphicMC.x - _loc1_.x;
             this._rasterPt.y = this.y + this._graphicMC.y - _loc1_.y;
             this._rasterData.depth = Math.max(MAP.DEPTH_SHADOW + 1, (this.y + this._altitude - _loc1_.y + _loc2_) * 1000 + this.x - _loc1_.x);
-            if (Boolean(this._graphicMC.filters.length) && this._rasterData.data !== this._graphicMC) {
-                this._rasterData.data = as3.cast(this._graphicMC, IBitmapDrawable);
-            } else if (!this._graphicMC.filters.length && this._rasterData.data !== this._graphic) {
+            // (Inferno-only, 14 October: where it stands, for a tilted yard: IoTilt)
+            this._rasterData._ioFoot = this.y - _loc1_.y;
+            if (Boolean(this._graphicMC.$filters.length)) {
+                // Inferno-only (16 October): a glowing monster (a rage, Ashkarr's boost, a Sulfur Bomb's shield) is
+                // drawn from the glowing frame made once for every monster showing it (IoGlowCache), not blurred
+                // afresh each frame: when its picture says which frame it holds
+                let glowed: any = GLOBAL.INFERNO_ONLY && this._graphicMC instanceof Bitmap ? IoGlowCache.glowed(this._graphic, this._graphicMC.filters) : null;
+                if (glowed) {
+                    this._rasterPt.x -= Number(glowed.pad);
+                    this._rasterPt.y -= Number(glowed.pad);
+                    if (this._rasterData.data !== glowed.bmd) {
+                        this._rasterData.data = as3.cast(glowed.bmd, IBitmapDrawable);
+                    }
+                } else if (this._rasterData.data !== this._graphicMC) {
+                    this._rasterData.data = as3.cast(this._graphicMC, IBitmapDrawable);
+                }
+            } else if (this._rasterData.data !== this._graphic) {
                 this._rasterData.data = as3.cast(this._graphic, IBitmapDrawable);
             }
         }
@@ -722,7 +1000,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         this._attacking = false;
         if (this._movement == "burrow") {
             EFFECTS.Dig(this.x | 0, this.y | 0);
-            SOUNDS.Play("dig");
+            SOUNDS.ioPlayAt("dig", 0.8, this.x, this.y);
         }
         this.WaypointTo(this._spawnPoint);
     }
@@ -953,6 +1231,13 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
                 secondClosestBuilding = { "building": building, "distance": distance };
             }
         };
+        // Inferno-only (21 November, the user's): some monsters' own favourite targets (IoTargets); the rest as before
+        let ioPicked: any[] = GLOBAL.INFERNO_ONLY && this._behaviour == MonsterBase.k_sBHVR_ATTACK ? IoTargets.pick(this) : null;
+        if (ioPicked) {
+            for (building of as3.values(ioPicked)) {
+                checkTarget(building);
+            }
+        } else
         // Preferred target is walls
         if (targetGroup == 2) {
             for (building of as3.values(BASE._buildingsWalls)) {
@@ -1008,7 +1293,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
             }
         }
         // No preferred targets left or targets all
-        if (!closestBuilding || targetGroup == 1) {
+        if (!closestBuilding || targetGroup == 1 && !ioPicked) {
             for (building of as3.values(BASE._buildingsMain)) {
                 if (building._class != "decoration" && building._class != "immovable" && building.health > 0 && building._class != "enemy") {
                     if (this._targetGroup != 4) {
@@ -1051,7 +1336,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
                 this._waypoints = [GRID.ToISO(burrowWaypoint.x, burrowWaypoint.y, 0)];
                 this._targetPosition = as3.cast(this._waypoints[0], Point);
                 this._targetBuilding = as3.cast(closestBuilding.building, BFOUNDATION);
-            } else if (this._movement == "fly" || this._movement == "fly_low") {
+            } else if ((this._movement == "fly" || this._movement == "fly_low") && !this.ioWalledFlyer()) {
                 this._hasTarget = true;
                 this._hasPath = true;
                 this._targetBuilding = as3.cast(closestBuilding.building, BFOUNDATION);
@@ -1098,15 +1383,26 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         }
     }
 
+    /**
+     * Inferno-only (21 October, the user's): Balthazar no longer flies over walls. He still flies (his height, his shadow,
+     * traps and towers as before), but his way to what he attacks is found as a walking monster's (findTarget's
+     * WaypointTo): walls in the way are gone round or broken through.
+     */
+    public ioWalledFlyer(): boolean {
+        return GLOBAL.INFERNO_ONLY && this._creatureID == "IC5";
+    }
+
     public WaypointTo(targetPoint: Point, targetBuilding: BFOUNDATION = null): void {
         let ignoreWalls: boolean = false;
         if (this._behaviour === MonsterBase.k_sBHVR_JUICE || this._behaviour === MonsterBase.k_sBHVR_HOUSING || this._behaviour === MonsterBase.k_sBHVR_PEN || this._behaviour === MonsterBase.k_sBHVR_DEFEND || this._behaviour === MonsterBase.k_sBHVR_FEED || this._movement === MonsterBase.k_sBHVR_JUMP || this._behaviour === MonsterBase.k_sBHVR_DECOY) {
             ignoreWalls = true;
         }
+        // (Inferno-only, 21 November: Malphus keeps out of the defenses' reach where he can: IoTargets)
+        let ioAvoid: boolean = this._behaviour === MonsterBase.k_sBHVR_ATTACK && IoTargets.avoidsDefenses(this);
         if (targetBuilding) {
-            PATHING.GetPath(this._tmpPoint, new Rectangle(targetPoint.x | 0, targetPoint.y | 0, targetBuilding._footprint[0].width, targetBuilding._footprint[0].height), as3.bind(this, this.setWaypoints), ignoreWalls, targetBuilding);
+            PATHING.GetPath(this._tmpPoint, new Rectangle(targetPoint.x | 0, targetPoint.y | 0, targetBuilding._footprint[0].width, targetBuilding._footprint[0].height), as3.bind(this, this.setWaypoints), ignoreWalls, targetBuilding, ioAvoid);
         } else {
-            PATHING.GetPath(this._tmpPoint, new Rectangle(targetPoint.x | 0, targetPoint.y | 0, 10, 10), as3.bind(this, this.setWaypoints), ignoreWalls);
+            PATHING.GetPath(this._tmpPoint, new Rectangle(targetPoint.x | 0, targetPoint.y | 0, 10, 10), as3.bind(this, this.setWaypoints), ignoreWalls, null, ioAvoid);
         }
     }
 
@@ -1124,8 +1420,12 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
     }
 
     private dieFinish(): void {
-        SOUNDS.Play("monsterland" + (1 + ((Math.random() * 3) | 0)));
+        SOUNDS.ioPlayAt("monsterland" + (1 + ((Math.random() * 3) | 0)), 0.8, this.x, this.y);
         if (this.health <= 0) {
+            // (Inferno-only, 14 October: a champion falling, a nod)
+            if (IoTilt.isChampion(this._creatureID) && GLOBAL._render) {
+                IoTilt.nod(IoTilt.LIGHT, this.x, this.y);
+            }
             this.dispatchEvent(new Event(MonsterBase.k_DEATH_EVENT));
             ++QUESTS._global.kills;
             this.deathSplat();
@@ -1152,7 +1452,7 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
     }
 
     public deathSplat(): void {
-        SOUNDS.Play("splat" + (((Math.random() * 3) | 0) + 1));
+        SOUNDS.ioPlayAt("splat" + (((Math.random() * 3) | 0) + 1), 0.8, this.x, this.y);
         EFFECTS.CreepSplat(this._creatureID, this._tmpPoint.x | 0, this._tmpPoint.y | 0);
     }
 
@@ -1160,12 +1460,26 @@ export class MonsterBase extends GameObject implements IAttackable, IComponentOw
         this.m_juiceReady = true;
     }
 
+    /** Inferno-only (22 October): the game step a hunting monster last looked again after the ways were cleared. */
+    private _ioRefoundAt: number = -1;
+
     public setWaypoints(waypoints: any[], targetBuilding: BFOUNDATION = null, pathingWasCleared: boolean = false): void {
         let moveToTarget: boolean = false;
         if (pathingWasCleared) {
             switch (this._behaviour) {
                 case MonsterBase.k_sBHVR_ATTACK:
                     this.findTarget(this._targetGroup);
+                    break;
+                // (Inferno-only, 21 October: a hunting monster waiting for its way to a building (Balthazar, now that he
+                // finds his way round walls) looks again when the ways are worked out afresh, as an attacking one does;
+                // it was left waiting for good)
+                case MonsterBase.k_sBHVR_HUNT:
+                    // (22 October: once a game step: each of his ways waiting is called back as they're cleared, and each
+                    // look asks for ways again: two waiting became four)
+                    if (GLOBAL.INFERNO_ONLY && this._ioRefoundAt !== this._frameNumber) {
+                        this._ioRefoundAt = this._frameNumber;
+                        this.findTarget(this._targetGroup);
+                    }
                     break;
                 case MonsterBase.k_sBHVR_HOUSING:
                     this.changeModeHousing();

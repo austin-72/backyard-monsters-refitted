@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject } from "as3";
 import { StageDisplayState } from "flash/display";
-import { GLOBAL, KEYS, LOGGER, LOGIN, MAP, QUESTS, RADIOSETTINGSPOPUP, UI2, URLLoaderApi } from "@game";
+import { GLOBAL, KEYS, LOGGER, LOGIN, MAP, QUESTS, RADIOSETTINGSPOPUP, UI2, URLLoaderApi, IoTilt } from "@game";
 
 export class RADIO extends ASObject {
     public static _init: boolean = false;
@@ -158,7 +158,8 @@ export class RADIO extends ASObject {
                 }
                 GLOBAL._ROOT.stage.displayState = StageDisplayState.NORMAL;
                 GLOBAL._zoomed = false;
-                MAP._GROUND.scaleX = MAP._GROUND.scaleY = 1;
+                MAP._GROUND.scaleX = 1;
+                MAP._GROUND.scaleY = IoTilt.groundScaleY(1);
                 MAP.Focus(0, 0);
             }
             GLOBAL.BlockerAdd();

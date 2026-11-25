@@ -3,7 +3,7 @@ import { ASObject, int, uint } from "as3";
 import { Bitmap, BitmapData, IBitmapDrawable, Shape, Sprite } from "flash/display";
 import { GlowFilter } from "flash/filters";
 import { Point } from "flash/geom";
-import { BFOUNDATION, BYMConfig, CHAMPIONCAGE, CREATURELOCKER, CREATURES, CreepBase, FIREBALL, FIREBALLS, FlameEffect, GLOBAL, IAttackable, ITargetable, MAP, MonsterBase, PATHING, ProjectileEvent, RasterData, SOUNDS, SPRITES, Targeting, TweenLite } from "@game";
+import { BFOUNDATION, BYMConfig, CHAMPIONCAGE, CREATURELOCKER, CREATURES, CreepBase, FIREBALL, FIREBALLS, FlameEffect, GLOBAL, IAttackable, ITargetable, MAP, MonsterBase, PATHING, ProjectileEvent, RasterData, SOUNDS, SPRITES, Targeting, TweenLite, IoDave, IoSkins } from "@game";
 
 /**
  * Inferno-only: Korath (IC9) and Drull (IC10) as ordinary monsters, hatched, housed, flung and
@@ -19,7 +19,7 @@ import { BFOUNDATION, BYMConfig, CHAMPIONCAGE, CREATURELOCKER, CREATURES, CreepB
  */
 export class IoChampionCreep extends CreepBase {
     static {
-        as3.fields(this, { m_spriteID: null, m_level: 1, m_artLevel: 4, m_attackNum: 0 });
+        as3.fields(this, { m_spriteID: null, m_level: 1, m_artLevel: 4, m_attackNum: 0, m_stompAt: -1, m_stompHit: false });
     }
 
     public static readonly KORATH_ID: string = "IC9";
@@ -33,6 +33,16 @@ export class IoChampionCreep extends CreepBase {
     private m_level: int;
     private m_artLevel: int;
     private m_attackNum: int;
+    /**
+     * (26 October, the user's: "Koraths ground pound animation seems not to fire"): his stomp hit at once, his strike
+     * still showing; now he rears up and pounds the ground (his sheet's stomp rows, 20 to 28, as the champion does),
+     * the ground shaking as his fists land (row 26, 48 steps in), the rings and the damage with it. The game step his
+     * stomp began on (-1: none), and whether it has landed.
+     */
+    private m_stompAt: int;
+    private m_stompHit: boolean;
+    public static readonly STOMP_LANDS: int = 48;
+    public static readonly STOMP_ENDS: int = 72;
 
     public $ctor(param1?: string, param2?: string, param3?: Point, param4?: number, param5: int = 0, param6: int = 2147483647, param7: Point = null, param8: boolean = false, param9: BFOUNDATION = null, param10: number = 1, param11: boolean = false, param12: MonsterBase = null): void {
         super.$ctor(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12);
@@ -40,6 +50,13 @@ export class IoChampionCreep extends CreepBase {
         let champion: string = this._creatureID == IoChampionCreep.KORATH_ID ? "G4" : "G2";
         this.m_artLevel = IoChampionCreep.ART_LEVEL[Math.max(1, Math.min(6, this.m_level)) - 1] | 0;
         this.m_spriteID = champion + "_" + this.m_artLevel;
+        // Inferno-only (10 October): the frozen look its owner chose in the D.A.V.E. Club (IoDave)
+        if (IoDave.frozen(this._creatureID, this._friendly)) {
+            this.m_spriteID += "F";
+        } else {
+            // (14 October) or a Shiny skin (IoSkins)
+            this.m_spriteID = IoSkins.sprite(this.m_spriteID, IoDave.skin(this._creatureID, this._friendly));
+        }
         if (this._creatureID == IoChampionCreep.KORATH_ID) {
             this.attackDelayProperty.value = this.m_level >= 3 ? 80 : 72;
         }
@@ -91,7 +108,9 @@ export class IoChampionCreep extends CreepBase {
         if (!this.m_spriteID) {
             return;
         }
-        if (this._attacking) {
+        if (this.m_stompAt >= 0 && this.health > 0) {
+            SPRITES.GetSprite(this._graphic, this.m_spriteID, "stomp", (this.m_rotation - 45) | 0, Math.max(0, this._frameNumber - this.m_stompAt));
+        } else if (this._attacking) {
             SPRITES.GetSprite(this._graphic, this.m_spriteID, GLOBAL.e_BASE_MODE.ATTACK, (this.m_rotation - 45) | 0, this._frameNumber);
         } else if (this._atTarget || this.ioStandingStill()) {
             // (standing, also when held still, e.g. rooted: not walking on the spot)
@@ -112,10 +131,46 @@ export class IoChampionCreep extends CreepBase {
         if (this.m_level >= 4) {
             this.fireballAtFlyer();
         }
-        if (this.m_level >= 5 && ++this.m_attackNum >= 3) {
+        if (this.m_level >= 5 && ++this.m_attackNum >= 3 && this.m_stompAt < 0) {
             this.m_attackNum = 0;
-            this.stomp();
+            // (his art for levels 5-6 has the stomp's rows; without them, at once as before)
+            if (this.ioHasStompRows()) {
+                this.m_stompAt = this._frameNumber;
+                this.m_stompHit = false;
+            } else {
+                this.stomp();
+            }
         }
+    }
+
+    /** His sheet has the stomp's rows (20-29). */
+    private ioHasStompRows(): boolean {
+        let sd: any = SPRITES.GetSpriteDescriptor(this.m_spriteID);
+        return Boolean(sd && sd.image && sd.image.height >= sd.rect.height * 30 - 1);
+    }
+
+    protected override tickState(param1: int = 1): boolean {
+        let done: boolean = super.tickState(param1);
+        if (this.m_stompAt >= 0) {
+            let t: int = (this._frameNumber - this.m_stompAt) | 0;
+            if (this.health <= 0 || t < 0) {
+                this.m_stompAt = -1;
+            } else if (!this.m_stompHit && !this._attacking && !this._atTarget) {
+                // (his fight over before his fists came down (his target gone, he moves on): it lands now, as it did)
+                this.m_stompHit = true;
+                this.m_stompAt = -1;
+                this.stomp();
+            } else {
+                if (!this.m_stompHit && t >= IoChampionCreep.STOMP_LANDS) {
+                    this.m_stompHit = true;
+                    this.stomp();
+                }
+                if (t >= IoChampionCreep.STOMP_ENDS) {
+                    this.m_stompAt = -1;
+                }
+            }
+        }
+        return done;
     }
 
     private burn(param1: MonsterBase): void {

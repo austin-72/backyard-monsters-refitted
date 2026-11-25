@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, Vector, int } from "as3";
 import { BitmapData, MovieClip } from "flash/display";
 import { Point } from "flash/geom";
-import { ACHIEVEMENTS, ALLIANCES, ATTACK, BASE, BFOUNDATION, CATAPULTPOPUP, DROPZONE, Decoy, GLOBAL, ImageCache, InstanceManager, IoQuests, IoReplayRecorder, KEYS, LOGGER, MAP, MARKETING, ResourceBomb, SOUNDS, SecNum, SiegeWeapons, md5 } from "@game";
+import { ACHIEVEMENTS, ALLIANCES, ATTACK, BASE, BFOUNDATION, CATAPULTPOPUP, DROPZONE, Decoy, GLOBAL, ImageCache, InstanceManager, IoGauntlet, IoQuests, IoReplayRecorder, KEYS, LOGGER, MAP, MARKETING, ResourceBomb, SOUNDS, SecNum, SiegeWeapons, md5 } from "@game";
 
 export class ResourceBombs extends ASObject {
     public static _activeBombs: any = {};
@@ -69,7 +69,9 @@ export class ResourceBombs extends ASObject {
         let jars: any[] = [[200, 15, 100000], [250, 25, 500000], [300, 40, 2000000], [350, 55, 5000000]];
         // radius, speed, invulnerable seconds, total seconds, armour % when the invulnerable part ends
         // (it fades to 0 by the end), sulfur cost
-        let sulfur: any[] = [[150, 1.2, 0, 15, 40, 100000], [200, 1.4, 4, 25, 55, 500000], [300, 1.8, 8, 40, 70, 5000000], [500, 2, 12, 55, 85, 10000000]];
+        // (21 November, the user's: invulnerable 0 / 2 / 4 / 6 s, then the armour starts at 40 / 55 / 65 / 80% and
+        // fades over 15 / 23 / 37 / 44 s, so 15 / 25 / 41 / 50 s in all)
+        let sulfur: any[] = [[150, 1.2, 0, 15, 40, 100000], [200, 1.4, 2, 25, 55, 500000], [300, 1.8, 4, 41, 65, 5000000], [500, 2, 6, 50, 80, 10000000]];
         let i: int = 0;
         ResourceBombs._bombs = {};
         while (i < 4) {
@@ -273,6 +275,10 @@ export class ResourceBombs extends ASObject {
             if (GLOBAL.INFERNO_ONLY && _loc2_.kind) {
                 IoQuests.event("ammo_" + _loc2_.kind);
             }
+            // Moloch's Gauntlet: a catapult fired in it (no "no catapults" trophy this month)
+            if (GLOBAL.INFERNO_ONLY) {
+                IoGauntlet.ReportCatapult();
+            }
             for (_loc4_ of as3.values(ResourceBombs._bombs)) {
                 if (_loc4_.group == _loc2_.group) {
                     _loc4_.used = true;
@@ -292,7 +298,7 @@ export class ResourceBombs extends ASObject {
         }
         if (_loc2_.kind) {
             if (_loc3_) {
-                ATTACK.Log("bomb" + ResourceBombs._bombid, "<font color=\"#A800FF\">" + _loc2_.name + " " + ResourceBombs.ioRowName(_loc2_) + " was catapulted in (" + ResourceBombs.costText(_loc2_) + ")</font>");
+                ATTACK.Log("bomb" + ResourceBombs._bombid, "<font color=\"#A800FF\">" + KEYS.Get("io_t3m_fx_catapulted", { "v1": _loc2_.name, "v2": ResourceBombs.ioRowName(_loc2_), "v3": ResourceBombs.costText(_loc2_) }) + "</font>");
             }
         } else {
             ATTACK.Log("bomb" + ResourceBombs._bombid, "<font color=\"#A800FF\">" + KEYS.Get("attack_log_catapulted", { "v1": GLOBAL.FormatNumber(Number(_loc2_.cost)), "v2": GLOBAL._resourceNames[_loc2_.resource - 1] }) + "</font>");
@@ -310,7 +316,7 @@ export class ResourceBombs extends ASObject {
         if (param1.kind == "jars") {
             return KEYS.Get("#w_jars#");
         }
-        return "Sulfur Bomb";
+        return KEYS.Get("io_t3m_fx_sulfur_bomb");
     }
 
     /**

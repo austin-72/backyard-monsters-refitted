@@ -5,8 +5,9 @@ import { MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
 import { Matrix } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { BetSelector, CASINO, CasinoUI, CasinoWindow, SOUNDS } from "@game";
+import { BetSelector, CASINO, CasinoUI, CasinoWindow, GLOBAL, IoAutoPlay, KEYS, SOUNDS } from "@game";
 
+// (QoL #235: the Pit's texts in the player's language: keys io_t3c_*, the games' names left as they are)
 /**
  * Wormzer Roulette: a wheel of 29 segments (the seven monsters four times each on Lava and Ash, and
  * King Wormzer, the house's). Chips go on monsters, a colour or King Wormzer (what each pays comes
@@ -15,7 +16,7 @@ import { BetSelector, CASINO, CasinoUI, CasinoWindow, SOUNDS } from "@game";
  */
 export class RouletteGame extends Sprite {
     static {
-        as3.fields(this, { _win: null, _chip: null, _spin: null, _clear: null, _rebet: null, _total: null, _wheel: null, _ball: null, _boxes: null, _slip: null, _lastSlip: null, _results: null, _last: null, _resultText: null, _resultIcon: null, _spinning: null, _busy: false, _pulse: 0, _winners: null, _burst: null, _burstT: 0, _serverCredits: -1 });
+        as3.fields(this, { _win: null, _chip: null, _spin: null, _clear: null, _rebet: null, _total: null, _wheel: null, _ball: null, _boxes: null, _slip: null, _lastSlip: null, _results: null, _last: null, _resultText: null, _resultIcon: null, _spinning: null, _busy: false, _pulse: 0, _winners: null, _burst: null, _burstT: 0, _serverCredits: -1, _glow: null, _ioAuto: null, _ioAutoSpin: false });
     }
 
     /** The wheel's middle, from the content area's top left, and its radii (wheel.png is 240 across). */
@@ -28,6 +29,9 @@ export class RouletteGame extends Sprite {
     private static readonly R_POCKET: number = 66;
 
     private static readonly SPIN_FRAMES: int = 180;
+
+    /** QoL #389: a spin's frames with QUICK on (the wheel and ball come to the same segment, faster). */
+    private static readonly IO_QUICK_FRAMES: int = 45;
     private _win: CasinoWindow;
     private _chip: BetSelector;
     private _spin: Sprite;
@@ -51,6 +55,11 @@ export class RouletteGame extends Sprite {
     private _burst: Sprite;
     private _burstT: int;
     private _serverCredits: int;
+    private _glow: GlowFilter;
+    /** Inferno-only (QoL #388): AUTO, a run of spins of the same chips with the player's stop rules. */
+    private _ioAuto: IoAutoPlay;
+    /** QoL #388: the spin out is the run's. */
+    private _ioAutoSpin: boolean;
 
     public $ctor(win?: CasinoWindow): void {
         let wp: Sprite = null;
@@ -58,40 +67,75 @@ export class RouletteGame extends Sprite {
         this._slip = {};
         this._last = [];
         this._winners = [];
+        this._glow = new GlowFilter(0xFFD040, 1, 16, 16, 3, 2);
         super.$ctor();
         this._win = win;
         this.name = "casinoRoulette";
         // controls
         let p: Sprite = as3.as(this.addChild(CasinoUI.panel(210, 400)), Sprite);
-        let back: Sprite = CasinoUI.button("LOBBY", 90, 26, as3.bind(win, win.toLobby), true, 12);
+        let back: Sprite = CasinoUI.button(KEYS.Get("io_t3c_lobby"), 90, 26, as3.bind(win, win.toLobby), true, 12);
         back.x = 10;
         back.y = 10;
         p.addChild(back);
+        // (QoL #390: "?", the rules and pays)
+        if (GLOBAL.INFERNO_ONLY) {
+            CasinoUI.ioRulesButton(p, as3.bind(this, this.ioRules));
+            // (QoL #389: QUICK, a spin of under a second)
+            CasinoUI.ioQuickToggle(p, "roulette");
+        }
         p.addChild(CasinoUI.at(CasinoUI.label("WORMZER ROULETTE", 14, CasinoUI.GOLD, true, 190, TextFormatAlign.CENTER), 10, 44));
-        p.addChild(CasinoUI.at(CasinoUI.label("CHIP (click a place to bet it)", 10, CasinoUI.EMBER, true, 190), 12, 68));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_chip_place"), 10, CasinoUI.EMBER, true, 190), 12, 68));
         this._chip = new BetSelector(190);
         this._chip.x = 10;
         this._chip.y = 82;
         this._chip.setValue(5);
+        // (QoL #384: MAX and the dimmed chips count what is already on the table)
+        this._chip.ioAfford = (): int => (CASINO.credits() - this.slipTotal()) | 0;
         p.addChild(this._chip);
-        p.addChild(CasinoUI.at(CasinoUI.label("ON THE TABLE", 11, CasinoUI.EMBER, true, 190), 12, 212));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_on_table"), 11, CasinoUI.EMBER, true, 190), 12, 212));
         this._total = CasinoUI.label("0 Shiny", 15, CasinoUI.GOLD, true, 190);
         this._total.x = 12;
         this._total.y = 226;
         p.addChild(this._total);
-        this._spin = CasinoUI.button("SPIN", 190, 42, as3.bind(this, this.onSpin), false, 20);
+        // (Inferno-only, QoL #388: SPIN narrower, AUTO beside it: the chips on the table, or the last spin's, again and again)
+        this._spin = CasinoUI.button(KEYS.Get("io_t3c_spin"), GLOBAL.INFERNO_ONLY ? 128 : 190, 42, as3.bind(this, this.onSpin), false, 20);
         this._spin.x = 10;
         this._spin.y = 254;
         p.addChild(this._spin);
-        this._clear = CasinoUI.button("CLEAR", 92, 26, as3.bind(this, this.onClear), false, 12);
+        if (GLOBAL.INFERNO_ONLY) {
+            this._ioAuto = new IoAutoPlay("roulette", win, this, (): boolean => {
+                if (this._busy) {
+                    return false;
+                }
+                if (this.slipTotal() <= 0 && this._lastSlip) {
+                    this.onRebet();
+                }
+                if (this.slipTotal() <= 0) {
+                    this._win.message(KEYS.Get("io_acc_auto_chips"), CasinoUI.LOSS);
+                    return false;
+                }
+                this._ioAutoSpin = true;
+                this.onSpin();
+                return this._busy;
+            }, (go: Function): boolean => {
+                let total: int = this.slipTotal() > 0 ? this.slipTotal() : this.ioSlipSum(this._lastSlip);
+                if (total <= 0) {
+                    this._win.message(KEYS.Get("io_acc_auto_chips"), CasinoUI.LOSS);
+                    return true;
+                }
+                return CASINO.ioAskBig("roulette", total, go);
+            });
+            this._ioAuto.button(p, 142, 254, 58, 42);
+        }
+        this._clear = CasinoUI.button(KEYS.Get("io_t3c_clear"), 92, 26, as3.bind(this, this.onClear), false, 12);
         this._clear.x = 10;
         this._clear.y = 302;
         p.addChild(this._clear);
-        this._rebet = CasinoUI.button("AGAIN", 92, 26, as3.bind(this, this.onRebet), false, 12);
+        this._rebet = CasinoUI.button(KEYS.Get("io_t3c_again"), 92, 26, as3.bind(this, this.onRebet), false, 12);
         this._rebet.x = 108;
         this._rebet.y = 302;
         p.addChild(this._rebet);
-        p.addChild(CasinoUI.at(CasinoUI.label("LAST SPINS", 11, CasinoUI.EMBER, true, 190), 12, 336));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_last_spins"), 11, CasinoUI.EMBER, true, 190), 12, 336));
         this._results = as3.as(p.addChild(new Sprite()), Sprite);
         this._results.x = 10;
         this._results.y = 354;
@@ -120,7 +164,7 @@ export class RouletteGame extends Sprite {
         this._resultIcon = as3.as(this.addChild(new Sprite()), Sprite);
         this._resultIcon.x = RouletteGame.WX;
         this._resultIcon.y = RouletteGame.WY + 170;
-        this._resultText = CasinoUI.label("Place your chips", 13, CasinoUI.ASH, true, 240, TextFormatAlign.CENTER);
+        this._resultText = CasinoUI.label(KEYS.Get("io_t3c_place_chips"), 13, CasinoUI.ASH, true, 240, TextFormatAlign.CENTER);
         this._resultText.x = RouletteGame.WX - 120;
         this._resultText.y = RouletteGame.WY + 136;
         this.addChild(this._resultText);
@@ -144,6 +188,14 @@ export class RouletteGame extends Sprite {
     private rules(): any {
         let st: any = CASINO.state;
         return st && st.rules ? st.rules.roulette : null;
+    }
+
+    /** QoL #390: the rules and pays ("?"), from casino/state's roulette rules. */
+    private ioRules(): any[] {
+        let r: any = this.rules();
+        let segments: int = r ? r.segments | 0 : 29;
+        let monsters: int = r && r.monsters ? (as3.as(r.monsters, Array)).length | 0 : 7;
+        return ["WORMZER ROULETTE", KEYS.Get("io_t3c_rules_roul1", { "v1": r ? r.maxBets | 0 : 10 }), KEYS.Get("io_pit_rules_roul2", { "v1": segments, "v2": monsters, "v3": ((segments - 1) / Math.max(1, monsters)) | 0 }), KEYS.Get("io_pit_rules_roul3", { "v1": CasinoUI.mult(this.pays("spurtz")), "v2": CasinoUI.mult(this.pays("lava")), "v3": CasinoUI.mult(this.pays("wormzer")) }), KEYS.Get("io_pit_rules_roul4"), KEYS.Get("io_t3c_rules_roul5")];
     }
 
     /** The ten places: the seven monsters, Lava, Ash and King Wormzer. */
@@ -215,7 +267,7 @@ export class RouletteGame extends Sprite {
         let total: int = this.slipTotal();
         let chip: int = this._chip.value;
         if (CASINO.credits() < total + chip) {
-            this._win.message("You do not have enough Shiny for that.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
             return;
         }
@@ -226,12 +278,12 @@ export class RouletteGame extends Sprite {
         }
         let r: any = this.rules();
         if (this._slip[on] == null && r && count >= (r.maxBets | 0)) {
-            this._win.message("Up to " + r.maxBets + " places on one spin.", CasinoUI.ASH);
+            this._win.message(KEYS.Get("io_t3c_max_places", { "v1": r.maxBets }), CasinoUI.ASH);
             return;
         }
         SOUNDS.Play("click1");
         this._slip[on] = ((this._slip[on] || 0) | 0) + chip;
-        this._winners = [];
+        this.clearWinners();
         this.refresh();
     }
 
@@ -288,7 +340,7 @@ export class RouletteGame extends Sprite {
             need += this._lastSlip[k] | 0;
         }
         if (CASINO.credits() < need) {
-            this._win.message("You do not have enough Shiny for that.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
             return;
         }
@@ -296,15 +348,30 @@ export class RouletteGame extends Sprite {
         for (k in this._lastSlip) {
             this._slip[k] = this._lastSlip[k];
         }
-        this._winners = [];
+        this.clearWinners();
         this.refresh();
+    }
+
+    /** QoL #388: the Shiny on a slip. */
+    private ioSlipSum(slip: any): int {
+        let n: int = 0;
+        for (let k in slip || {}) {
+            n += slip[k] | 0;
+        }
+        return n;
     }
 
     private onSpin(e: MouseEvent = null): void {
         let total: int = 0;
+        // (QoL #388: SPIN pressed while AUTO plays stops the run; the spin goes as usual)
+        let auto: boolean = this._ioAutoSpin;
+        this._ioAutoSpin = false;
+        if (e != null && this._ioAuto && this._ioAuto.running) {
+            this._ioAuto.stop(KEYS.Get("io_acc_auto_stopped"));
+        }
         let st: any = CASINO.state;
         if (!st || st.closed || st.shiny_locked) {
-            this._win.message(st && st.closed ? String(st.closed) : "The Pit is not open.", CasinoUI.LOSS);
+            this._win.message(st && st.closed ? String(st.closed) : KEYS.Get("io_t3c_not_open"), CasinoUI.LOSS);
             return;
         }
         total = this.slipTotal();
@@ -312,8 +379,16 @@ export class RouletteGame extends Sprite {
             return;
         }
         if (CASINO.credits() < total) {
-            this._win.message("You do not have enough Shiny for that.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
+            return;
+        }
+        // (QoL #385: a spin of more than half the Shiny asked about first, once)
+        if (CASINO.ioAskBig("roulette", total, (): void => {
+            if (this.parent) {
+                this.onSpin();
+            }
+        })) {
             return;
         }
         let bets: any[] = [];
@@ -322,25 +397,31 @@ export class RouletteGame extends Sprite {
             bets.push({ "on": k, "amount": this._slip[k] | 0 });
         }
         this._busy = true;
-        this._winners = [];
+        this.clearWinners();
         this.refresh();
         CASINO.setCredits((CASINO.credits() - total) | 0);
-        this._resultText.text = "No more bets!";
+        this._resultText.text = KEYS.Get("io_t3c_no_more_bets");
         this._resultText.textColor = CasinoUI.ASH;
         CasinoUI.removeAll(this._resultIcon);
         CASINO.roulette(bets, (r: any): void => {
             if (!this.parent) {
+                CASINO.late(r);
                 return;
             }
             if (r.error) {
                 this._busy = false;
                 CASINO.setCredits((CASINO.credits() + total) | 0);
-                this._resultText.text = "Place your chips";
+                this._resultText.text = KEYS.Get("io_t3c_place_chips");
                 this._win.message(String(r.error), CasinoUI.LOSS);
                 SOUNDS.Play("error1");
                 this.refresh();
+                if (auto && this._ioAuto) {
+                    this._ioAuto.refused();
+                }
                 return;
             }
+            // (QoL #388: the run's spin, counted when the ball lands)
+            r.ioAuto = auto;
             this._serverCredits = r.credits | 0;
             this._lastSlip = this._slip;
             this.startSpin(r);
@@ -362,7 +443,7 @@ export class RouletteGame extends Sprite {
         // the wheel turns clockwise and stops with the segment drawn under the pointer (the top)
         let dw: number = RouletteGame.mod360(-RouletteGame.segAngle(r.segment | 0, n) - w0) + 360 * 3;
         let b0: number = Math.random() * 360;
-        this._spinning = { "r": r, "t": 0, "w0": w0, "dw": dw, "b0": b0, "db": -1, "n": n };
+        this._spinning = { "r": r, "t": 0, "w0": w0, "dw": dw, "b0": b0, "db": -1, "n": n, "frames": CasinoUI.ioQuick("roulette") ? RouletteGame.IO_QUICK_FRAMES : RouletteGame.SPIN_FRAMES };
         this._ball.visible = true;
         SOUNDS.Play("click1");
     }
@@ -372,10 +453,13 @@ export class RouletteGame extends Sprite {
     }
 
     public tick(): void {
+        if (this._ioAuto) {
+            this._ioAuto.tick();
+        }
         let s: any = this._spinning;
         if (s) {
             s.t++;
-            let u: number = Math.min(1, s.t / RouletteGame.SPIN_FRAMES);
+            let u: number = Math.min(1, s.t / (s.frames | 0 || RouletteGame.SPIN_FRAMES));
             let w: number = Number(s.w0 + s.dw * RouletteGame.easeOut(u));
             this._wheel.rotation = w;
             let target: number = RouletteGame.segAngle(s.r.segment | 0, s.n | 0);
@@ -404,13 +488,16 @@ export class RouletteGame extends Sprite {
                 this.land(s.r);
             }
         }
-        // winning places pulse
+        // winning places pulse (one glow, its strength changed every third frame: 9 October, a new filter on
+        // every frame before)
         if (this._winners.length) {
             this._pulse++;
-            let g: number = 0.55 + 0.45 * Math.sin(this._pulse / 5);
-            for (const $value of as3.values(this._winners)) {
-                let on: string = as3.str($value);
-                this._boxes[on].s.filters = [new GlowFilter(0xFFD040, g, 16, 16, 3, 2)];
+            if (this._pulse % 3 == 1) {
+                this._glow.alpha = 0.55 + 0.45 * Math.sin(this._pulse / 5);
+                for (const $value of as3.values(this._winners)) {
+                    let on: string = as3.str($value);
+                    this._boxes[on].s.filters = [this._glow];
+                }
             }
         }
         // King Wormzer bursts out
@@ -423,6 +510,17 @@ export class RouletteGame extends Sprite {
             if (this._burstT == 0) {
                 CasinoUI.removeAll(this._burst);
             }
+        }
+    }
+
+    /**
+     * The last spin's winning places no longer lit (9 October: a new bet or spin left their glow on, frozen,
+     * as if they were bets or the result).
+     */
+    private clearWinners(): void {
+        this._winners = [];
+        for (let k in this._boxes) {
+            this._boxes[k].s.filters = [];
         }
     }
 
@@ -452,11 +550,11 @@ export class RouletteGame extends Sprite {
             }
         }
         if (payout > 0) {
-            this._win.message((payout > bet ? "+" : "") + CasinoUI.number(payout) + " Shiny back on " + CasinoUI.number(bet) + " bet", payout > bet ? CasinoUI.WIN : CasinoUI.GOLD);
+            this._win.message(KEYS.Get("io_t3c_roul_back", { "v1": (payout > bet ? "+" : "") + CasinoUI.number(payout), "v2": CasinoUI.number(bet) }), payout > bet ? CasinoUI.WIN : CasinoUI.GOLD);
             SOUNDS.Play(payout >= bet * 7 ? "chaching" : "purchasepopup");
             this._win.bigWin(payout, bet);
         } else {
-            this._win.message("The house takes it.", CasinoUI.ASH);
+            this._win.message(KEYS.Get("io_t3c_house"), CasinoUI.ASH);
         }
         if (r.monster == "wormzer") {
             this.wormzerBursts();
@@ -464,6 +562,10 @@ export class RouletteGame extends Sprite {
         this.addResult(r);
         this._slip = {};
         this.refresh();
+        // (QoL #388: the run goes on, or stops by its rules)
+        if (r.ioAuto && this._ioAuto) {
+            this._ioAuto.result(bet, payout);
+        }
     }
 
     private wormzerBursts(): void {
@@ -476,7 +578,7 @@ export class RouletteGame extends Sprite {
         CasinoUI.picture(this._burst, CASINO.monsterKey("wormzer"), -80, -85, 160, 160);
         this._burst.filters = [new GlowFilter(0xB060FF, 0.9, 24, 24, 2, 2)];
         this._burstT = 70;
-        SOUNDS.Play("chaching");
+        CasinoUI.ioWinSound(true);
     }
 
     private addResult(r: any): void {
@@ -510,6 +612,9 @@ export class RouletteGame extends Sprite {
             CASINO.setCredits(this._serverCredits);
         }
         this._spinning = null;
+        if (this._ioAuto) {
+            this._ioAuto.dispose();
+        }
         if (this.parent) {
             this.parent.removeChild(this);
         }

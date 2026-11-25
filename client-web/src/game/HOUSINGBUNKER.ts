@@ -3,7 +3,7 @@ import { int, uint } from "as3";
 import { Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { ATTACK, BASE, Bunker, CreepBase, Expo, GLOBAL, HOUSING, ITargetable, IoHfoWaves, KEYS, MAP, MapRoomManager, MonsterBase, POPUPS, Targeting, TweenLite, popup_building } from "@game";
+import { ATTACK, BASE, Bunker, CreepBase, Expo, GLOBAL, HOUSING, ITargetable, IoFmiWaves, IoHfoWaves, KEYS, MAP, MapRoomManager, MonsterBase, POPUPS, Targeting, TweenLite, popup_building } from "@game";
 
 export class HOUSINGBUNKER extends Bunker {
     static {
@@ -40,6 +40,11 @@ export class HOUSINGBUNKER extends Bunker {
 
     public override StopMoveB(): void {
         super.StopMoveB();
+        this.UpdateHousedCreatureTargets();
+    }
+
+    /** (Inferno-only, #296: its monsters wander round where the Yard Planner put it) */
+    public override ioPlannerMoved(): void {
         this.UpdateHousedCreatureTargets();
     }
 
@@ -230,7 +235,7 @@ export class HOUSINGBUNKER extends Bunker {
             this._capacity = this._buildingProps.capacity[this._lvl.Get() - 1] | 0;
         }
         // Hell Freezes Over: the Compound is frozen solid while a wave is on; its monsters can't come out
-        if (GLOBAL.INFERNO_ONLY && IoHfoWaves.compoundFrozen) {
+        if (GLOBAL.INFERNO_ONLY && (IoHfoWaves.compoundFrozen || IoFmiWaves.compoundFrozen)) {
             this._targetCreeps = [];
             this._targetFlyers = [];
             this._hasTargets = false;
@@ -305,7 +310,7 @@ export class HOUSINGBUNKER extends Bunker {
     public EjectCreeps(param1: Point, param2: number): void {
         let creep: CreepBase = null;
         let waiting: any[] = null;
-        if (this.health <= 0 || this._countdownUpgrade.Get() != 0 || GLOBAL.INFERNO_ONLY && IoHfoWaves.compoundFrozen) {
+        if (this.health <= 0 || this._countdownUpgrade.Get() != 0 || GLOBAL.INFERNO_ONLY && (IoHfoWaves.compoundFrozen || IoFmiWaves.compoundFrozen)) {
             return;
         }
         waiting = this.getUnusedCreatures();

@@ -1,19 +1,248 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Backyard Monsters Refitted</title>
-    <link rel="stylesheet" href="main.css" />
-  </head>
-  <body>
-    <header>
-      <h1>Backyard Monsters Refitted</h1>
-      <p>Your server is now running, check your console for logs...</p>
-      <nav>
-        <ul></ul>
-      </nav>
-    </header>
-  </body>
+<head>
+  <base href="/web/">
+  <!-- Front page: the game's files are in /web/ (client-web/tools/publish.ts). -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Inferno Map Room 2 - Backyard Monsters Refitted (custom server)</title>
+  <!-- Search engines and link previews. __SITE_URL__ is the site's own address (https://.../), filled in by the
+       game server when it hands out this page (server.ts, seo.siteUrl in InfernoOnlyConfig). -->
+  <meta name="description" content="Inferno Map Room 2 is a Backyard Monsters Refitted server set in the Inferno. Build a hellish yard, raise Inferno monsters, raid and take over yards on a shared world map, join an alliance, and play the Devil's Arcade minigames and the Brimstone Pit. Play in your browser, no Flash needed.">
+  <meta name="application-name" content="Inferno Map Room 2">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <link rel="canonical" href="__SITE_URL__">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Inferno Map Room 2">
+  <meta property="og:title" content="Inferno Map Room 2 - Backyard Monsters Refitted (custom server)">
+  <meta property="og:description" content="A Backyard Monsters Refitted server set in the Inferno: build, raid on a shared world map, join an alliance, and play the Devil's Arcade. Play in your browser.">
+  <meta property="og:url" content="__SITE_URL__">
+  <meta property="og:image" content="__SITE_URL__web/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Inferno Map Room 2: a lava-lit valley of the Inferno, and the eyeball monster">
+  <meta property="og:locale" content="en_US">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Inferno Map Room 2 - Backyard Monsters Refitted (custom server)">
+  <meta name="twitter:description" content="A Backyard Monsters Refitted server set in the Inferno. Play in your browser.">
+  <meta name="twitter:image" content="__SITE_URL__web/og-image.jpg">
+  <meta name="theme-color" content="#1a0503">
+  <meta name="color-scheme" content="dark">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Inferno MR2">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="preload" href="fonts/groboldov.woff" as="font" type="font/woff" crossorigin>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "__SITE_URL__#site",
+        "name": "Inferno Map Room 2",
+        "alternateName": ["Inferno Maproom 2", "Inferno MR2"],
+        "url": "__SITE_URL__"
+      },
+      {
+        "@type": "VideoGame",
+        "@id": "__SITE_URL__#game",
+        "name": "Inferno Map Room 2",
+        "alternateName": "Inferno Maproom 2",
+        "url": "__SITE_URL__",
+        "image": "__SITE_URL__web/og-image.jpg",
+        "description": "A Backyard Monsters Refitted server set in the Inferno: build a hellish yard, raise Inferno monsters, raid and take over yards on a shared world map, join an alliance, and play the Devil's Arcade minigames and the Brimstone Pit.",
+        "genre": ["Strategy", "Base building", "Tower defense"],
+        "playMode": ["SinglePlayer", "MultiPlayer"],
+        "gamePlatform": ["Web browser"],
+        "applicationCategory": "Game",
+        "operatingSystem": "Any",
+        "inLanguage": ["en", "fr", "pt", "es"],
+        "isBasedOn": { "@type": "VideoGame", "name": "Backyard Monsters" }
+      }
+    ]
+  }
+  </script>
+  <style>
+    @font-face { font-family: "Groboldov"; src: url("fonts/groboldov.woff") format("woff"); font-display: swap; }
+    @font-face { font-family: "Pirata One"; src: url("fonts/pirata-one.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "Alegreya"; src: url("fonts/alegreya.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "Alegreya"; font-style: italic; src: url("fonts/alegreya-italic.woff2") format("woff2"); font-display: swap; }
+    @font-face { font-family: "Alegreya"; font-weight: bold; src: url("fonts/alegreya-bold.woff2") format("woff2"); font-display: swap; }
+    html, body { margin: 0; height: 100%; background: #0d0403; overflow: hidden; color: #f2dcc8; font: 14px system-ui, sans-serif;
+      overscroll-behavior: none; touch-action: none; -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+    #game { position: fixed; inset: 0; }
+    /* Until the game's page is up: the Inferno, its name, a glowing bar (src/player/Shell.ts takes over) */
+    .io-boot { position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+      background: radial-gradient(ellipse at 50% 60%, rgba(255, 90, 20, .28), transparent 60%), url("inferno-bg.jpg") center / cover, #0d0403; }
+    .io-boot::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 30%, rgba(8, 2, 1, .85)); pointer-events: none; }
+    .io-boot > div { position: relative; z-index: 1; padding: 24px; }
+    .io-boot h1 { margin: 0; font: 400 clamp(34px, 7vw, 72px)/1.05 "Groboldov", Impact, sans-serif; letter-spacing: .5px;
+      background: linear-gradient(#ffe9a0, #ff9a3a 55%, #e0401a); -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 3px 0 #2d0602) drop-shadow(0 0 22px rgba(255, 90, 20, .55)); }
+    .io-boot p { margin: 14px 0 0; font: 400 clamp(15px, 2.2vw, 20px) "Groboldov", sans-serif; color: #ffd8b0; text-shadow: 0 2px 0 #2d0602; }
+    .io-bar { width: min(320px, 70vw); height: 8px; margin: 26px auto 0; border-radius: 4px; overflow: hidden; background: rgba(40, 8, 4, .85); box-shadow: 0 0 0 1px #6a2410; }
+    .io-bar i { display: block; height: 100%; width: 40%; border-radius: 4px; background: linear-gradient(90deg, #ff5a1a, #ffd060);
+      box-shadow: 0 0 12px #ff6a1a; animation: io-run 1.4s ease-in-out infinite; }
+    @keyframes io-run { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+    /* (QoL #239) once its share is known, the bar fills; the stage under it, and a line when it takes long */
+    .io-bar { position: relative; }
+    .io-bar em { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background: linear-gradient(90deg, #ff5a1a, #ffd060); box-shadow: 0 0 12px #ff6a1a; transition: width .25s ease-out; }
+    .io-bar.io-pct i { display: none; }
+    .io-boot small { display: block; margin-top: 10px; font-size: 13px; color: #e8b890; min-height: 1.4em; font-variant-numeric: tabular-nums; }
+    .io-boot small + small { margin-top: 4px; color: #ffb08a; }
+    .io-err { color: #ffb08a; }
+    /* For screen readers and search engines: what the site is (the game covers the page) */
+    .io-about { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div class="io-boot" role="status"><div>
+      <h1>Inferno Map Room 2</h1>
+      <p>Opening the gates of the Inferno...</p>
+      <div class="io-bar" data-io-load-bar><i></i><em></em></div>
+      <small data-io-load-text></small><small data-io-load-slow></small>
+      <noscript><p class="io-err">The game needs JavaScript. Please turn it on and reload the page.</p></noscript>
+    </div></div>
+  </div>
+  <main class="io-about">
+    <h1>Inferno Map Room 2</h1>
+    <p>Inferno Map Room 2 is a Backyard Monsters Refitted server set in the Inferno, playable in your browser with no Flash or download.</p>
+    <h2>What you can do</h2>
+    <ul>
+      <li>Build a hellish yard of Inferno buildings and towers, and defend it with walls, traps and monsters.</li>
+      <li>Raise Inferno monsters and champions, and raid other yards on Map Room 2, a shared world map of the Inferno.</li>
+      <li>Take over yards as outposts, and join an alliance with other players.</li>
+      <li>Play the Devil's Arcade, a building full of minigames with leaderboards, from Spurtz Smash to Hellgate Defense.</li>
+      <li>Try your luck in the Brimstone Pit with Shiny, and work through the quest book.</li>
+    </ul>
+  </main>
+  <script>
+    // (Inferno-only, QoL #239) How far the loading is: each stage's share (0 to 1), shown as one percentage with the
+    // stage's name, on this page's boot screen and then on the game page's (src/player/Shell.ts), until the game is up.
+    // The art (art.bin, most of the bytes) is counted as it arrives; the game's code (a compressed script, whose size
+    // can't be told) counts once it runs; then unpacking the art (src/player/preload.ts) and the game starting
+    // (src/main.ts). After a while without the end: "Slow connection, still working".
+    (function () {
+      var W = { version: 4, code: 26, art: 45, lib: 15, game: 10 };
+      var L = window.__ioLoad = {
+        t0: Date.now(), last: Date.now(), finished: false, parts: { version: 0, code: 0, art: 0, lib: 0, game: 0 }, art: [0, 0], timer: 0,
+        set: function (k, v) { if (L.parts[k] !== v) { L.parts[k] = Math.max(L.parts[k] || 0, Math.min(1, v)); L.last = Date.now(); } L.render(); },
+        pct: function () { var n = 0; for (var k in W) n += W[k] * (L.parts[k] || 0); return Math.min(100, Math.floor(n)); },
+        text: function () {
+          var p = L.parts, mb = function (b) { return (b / 1048576).toFixed(1); };
+          if (p.version < 1) return "Finding the latest version";
+          if (p.art < 1 && L.art[0] > 0) return L.art[1] ? "Downloading the art: " + mb(L.art[0]) + " of " + mb(L.art[1]) + " MB" : "Downloading the art: " + mb(L.art[0]) + " MB";
+          if (p.code < 1) return "Downloading the game";
+          if (p.art < 1) return "Downloading the art";
+          if (p.lib < 1) return "Unpacking the art";
+          return "Starting the game";
+        },
+        render: function () {
+          if (L.finished) return;
+          var pct = L.pct(), now = Date.now(), i, els;
+          els = document.querySelectorAll("[data-io-load-bar]");
+          for (i = 0; i < els.length; i++) {
+            if (pct > 0) els[i].classList.add("io-pct");
+            var em = els[i].querySelector("em");
+            if (em) em.style.width = pct + "%";
+          }
+          els = document.querySelectorAll("[data-io-load-text]");
+          for (i = 0; i < els.length; i++) els[i].textContent = L.text() + "... " + pct + "%";
+          var slow = now - L.t0 > 15000 || (now - L.t0 > 6000 && now - L.last > 6000);
+          els = document.querySelectorAll("[data-io-load-slow]");
+          // (once everything is downloaded, it's the device that takes its time)
+          var downloaded = L.parts.version >= 1 && L.parts.code >= 1 && L.parts.art >= 1;
+          for (i = 0; i < els.length; i++) els[i].textContent = !slow ? "" : downloaded ? "Still working..." : "Slow connection, still working...";
+        },
+        done: function () { L.set("game", 1); L.finished = true; clearInterval(L.timer); },
+        fail: function () { L.finished = true; clearInterval(L.timer); }
+      };
+      L.timer = setInterval(L.render, 500);
+      L.render();
+    })();
+    /**
+     * (QoL #239) The art file read as it arrives, counting its bytes (before, it waited, unread, for the game's code:
+     * the browser stops downloading a response nobody reads after a little). A response like the server's is handed
+     * on (src/player/preload.ts reads it from memory). Nothing for 20 s: given up here, and preload.ts asks again.
+     */
+    function ioCounted(r) {
+      if (!r.body || typeof ReadableStream !== "function") return r;
+      var L = window.__ioLoad, enc = r.headers.get("Content-Encoding");
+      var total = enc && enc !== "identity" ? 0 : Number(r.headers.get("Content-Length")) || 0;
+      var reader = r.body.getReader(), chunks = [], got = 0;
+      L.art = [0, total];
+      return new Promise(function (resolve, reject) {
+        var pump = function () {
+          var timer = setTimeout(function () { reader.cancel().catch(function () {}); reject(new Error("art: stalled")); }, 20000);
+          reader.read().then(function (x) {
+            clearTimeout(timer);
+            if (x.done) {
+              L.art[0] = got;
+              L.set("art", 1);
+              resolve(new Response(new ReadableStream({ start: function (c) { for (var i = 0; i < chunks.length; i++) c.enqueue(chunks[i]); chunks = []; c.close(); } }), { status: r.status, statusText: r.statusText, headers: r.headers }));
+              return;
+            }
+            chunks.push(x.value);
+            got += x.value.length;
+            L.art[0] = got;
+            L.last = Date.now();
+            if (total) L.parts.art = Math.min(0.99, got / total);
+            pump();
+          }, function (e) { clearTimeout(timer); reject(e); });
+        };
+        pump();
+      });
+    }
+    // Loads the current build: version.json names the content-hashed bundle (see tools/build.ts).
+    fetch("version.json?t=" + Date.now(), { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (v) {
+        window.__BYMR_VERSION = v.id;
+        window.__BYMR_PACK = v.pack;
+        window.__ioLoad.set("version", 1);
+        // What the game reads before it starts, asked for now, while its code is still on the way
+        // (src/player/preload.ts takes these; anything that fails there is asked for again)
+        var pre = window.__BYMR_PREFETCH = {};
+        ["swf/fonts.json", "embed/manifest.json", "swf/library.json"].concat(v.pack ? [v.pack] : []).forEach(function (f) {
+          pre[f] = fetch(f + "?v=" + v.id).then(function (r) { if (!r.ok) throw new Error(f + ": HTTP " + r.status); return f === v.pack ? ioCounted(r) : r; });
+          pre[f].catch(function () {});
+        });
+        var s = document.createElement("script");
+        s.type = "module";
+        s.src = v.script;
+        document.body.appendChild(s);
+        // ?watch=1 (development, tools/watch.ts): reload when a new build is published
+        if (/[?&]watch=1(&|$)/.test(location.search)) {
+          setInterval(function () {
+            fetch("version.json?t=" + Date.now(), { cache: "no-store" })
+              .then(function (r) { return r.json(); })
+              .then(function (n) { if (n.id !== v.id) location.reload(); })
+              .catch(function () {});
+          }, 2000);
+        }
+      })
+      .catch(function () {
+        var p = document.querySelector(".io-boot p"), bar = document.querySelector(".io-bar");
+        if (window.__ioLoad) window.__ioLoad.fail();
+        if (p) { p.textContent = "The game could not be loaded. Please reload the page."; p.className = "io-err"; }
+        if (bar) bar.remove();
+        var small = document.querySelectorAll(".io-boot small");
+        for (var i = 0; i < small.length; i++) small[i].remove();
+      });
+    // (Inferno-only, QoL #243) The home-screen icon's offline page: a service worker (sw.js, next to this page) that
+    // answers a page load the network can't with a small "you're offline" page. It keeps nothing else: the game's
+    // files and its server are always asked for as before. Once the page is up, so it costs the loading nothing.
+    if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost" || location.hostname === "127.0.0.1")) {
+      window.addEventListener("load", function () {
+        setTimeout(function () { navigator.serviceWorker.register("sw.js").catch(function () {}); }, 10000);
+      });
+    }
+  </script>
+</body>
 </html>
-
-<script></script>

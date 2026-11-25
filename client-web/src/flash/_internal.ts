@@ -4,7 +4,7 @@ import { FLASH_CONSTANTS } from "./_constants";
 
 /**
  * Registers a runtime class under its AS3 name and installs its static
- * constants with the exact values from playerglobal.swc.
+ * constants with the exact values Flash Player had (_constants.ts).
  */
 export function flashClass(cls: any, qname: string): void {
   const consts = FLASH_CONSTANTS[qname];
@@ -60,7 +60,13 @@ export const renderSettings = { gpu: false };
 
 /** Every 2D context the runtime uses comes from here. */
 export function context2d(canvas: HTMLCanvasElement, options: CanvasRenderingContext2DSettings = {}): CanvasRenderingContext2D {
-  return canvas.getContext("2d", renderSettings.gpu ? options : { ...options, willReadFrequently: true })!;
+  // (21 October: kept on the canvas: a canvas has one 2D context, its settings those of the first call, so asking the
+  // browser again (a few times for every filtered or cached thing drawn) only cost the asking)
+  const had = (canvas as any).$ioCtx2d;
+  if (had) return had;
+  const ctx = canvas.getContext("2d", renderSettings.gpu ? options : { ...options, willReadFrequently: true })!;
+  if (ctx) (canvas as any).$ioCtx2d = ctx;
+  return ctx;
 }
 
 /** 0xRRGGBB → "rgba(r,g,b,a)". */

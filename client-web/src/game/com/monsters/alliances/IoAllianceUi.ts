@@ -1,9 +1,10 @@
 import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
 import { Bitmap, BitmapData, DisplayObjectContainer, Graphics, MovieClip, Sprite } from "flash/display";
-import { MouseEvent } from "flash/events";
+import { Event, MouseEvent } from "flash/events";
 import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
-import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, GLOBAL, ImageCache, IoMapShare, IoMapUi, KEYS, SOUNDS } from "@game";
+import { setTimeout } from "flash/utils";
+import { IoFormat, AllianceConstants, ALLIANCES, ALLIANCEWINDOW, BYMChat, Chat, GLOBAL, ImageCache, IoCrest, IoMapShare, IoMapUi, KEYS, SOUNDS } from "@game";
 
 /**
  * Inferno-only: the pieces the redesigned Alliances window is drawn with (the user's design of 2 October),
@@ -111,6 +112,9 @@ export class IoAllianceUi extends ASObject {
 
     /** "now", "33s", "2m", "4h", "3d" since a time (seconds). */
     public static ago(ts: number): string {
+        if (GLOBAL.INFERNO_ONLY) {
+            return IoFormat.ago(ts, true); // (QoL #572: the game's one "time ago")
+        }
         let sec: int = Math.max(0, GLOBAL.Timestamp() - (ts | 0)) | 0;
         if (sec < 5) {
             return KEYS.Get("io_alliance_now");
@@ -155,8 +159,11 @@ export class IoAllianceUi extends ASObject {
         IoMapShare.OpenOwnWorld(x, y);
     }
 
-    /** The alliance's emblem, fitted into a square of `size`. */
-    public static emblem(container: DisplayObjectContainer, id: int, size: int): void {
+    /** The alliance's emblem, fitted into a square of `size`: its own crest when it has one (14 October: IoCrest). */
+    public static emblem(container: DisplayObjectContainer, id: int, size: int, crest: any = null): void {
+        if (IoCrest.fit(container, crest, size)) {
+            return;
+        }
         if (id <= 0) {
             return;
         }
@@ -185,6 +192,123 @@ export class IoAllianceUi extends ASObject {
             return true;
         }
         return false;
+    }
+
+    // ---- (Inferno-only, QoL #179) the board's top pin as one line on top of the chat box, on its Alliance tab
+    private static _banner: Sprite = null;
+
+    private static _bannerPin: any = null;
+
+    /** The pin the player closed the banner on (it comes back for another pin). */
+    private static _bannerClosed: int = 0;
+
+    /**
+     * Called when the alliance has loaded (ALLIANCES): the banner shows its top pin, or goes. Drawn into the chat's
+     * own box (as its "new lines" pill is), just above its title bar, shown only while the chat is open on the
+     * Alliance tab; a click opens the Board, its x hides it until another pin is on top. No change to the chat's code.
+     * `board`: the Board tab's own list, just loaded (top first), when it has one.
+     */
+    public static pinBanner(board: any[] = null): void {
+        let data: any = ALLIANCES.ioData();
+        let pins: any[] = board != null ? board : (data ? as3.as(data.pins_top, Array) : null);
+        IoAllianceUi._bannerPin = pins && pins.length ? pins[0] : null;
+        if (IoAllianceUi._bannerPin == null) {
+            if (IoAllianceUi._banner) {
+                IoAllianceUi._banner.visible = false;
+            }
+            return;
+        }
+        if (!IoAllianceUi._banner) {
+            let b: Sprite = new Sprite();
+            b.name = "ioAlPinBanner";
+            b.visible = false;
+            let label: Sprite = new Sprite();
+            label.name = "ioAlPinBannerText";
+            label.buttonMode = true;
+            label.mouseChildren = false;
+            label.addChild(IoAllianceUi.text("", 11, 0xFFF4E0, false, 300));
+            label.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                e.stopPropagation();
+                ALLIANCEWINDOW.Show();
+                // (once the window is up, as the quest book opens a tab of it)
+                setTimeout((): void => {
+                    if (ALLIANCEWINDOW._open && ALLIANCEWINDOW._mc != null) {
+                        ALLIANCEWINDOW._mc.SelectTab(AllianceConstants.IO_TAB_BOARD);
+                    }
+                }, 50);
+            });
+            b.addChild(label);
+            let close: Sprite = new Sprite();
+            close.name = "ioAlPinBannerClose";
+            close.buttonMode = true;
+            close.mouseChildren = false;
+            close.addChild(IoAllianceUi.text("x", 11, 0xFFD24A, true, 14, IoAllianceUi.CENTER));
+            close.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                e.stopPropagation();
+                SOUNDS.Play("click1");
+                IoAllianceUi._bannerClosed = IoAllianceUi._bannerPin ? IoAllianceUi._bannerPin.id | 0 : 0;
+                b.visible = false;
+            });
+            b.addChild(close);
+            b.addEventListener(Event.ENTER_FRAME, (e: Event): void => {
+                IoAllianceUi.placeBanner();
+            });
+            IoAllianceUi._banner = b;
+        }
+        let t: TextField = as3.as(as3.cast(IoAllianceUi._banner.getChildByName("ioAlPinBannerText"), Sprite).getChildAt(0), TextField);
+        t.text = KEYS.Get("io_al2_pin_banner", { "v1": String(IoAllianceUi._bannerPin.title || "") });
+        (IoAllianceUi._banner as any).ioDrawnW = -1;
+        IoAllianceUi.placeBanner();
+    }
+
+    /** Each frame: in the chat box now showing, at the top of its lines, while the Alliance tab is up. */
+    private static placeBanner(): void {
+        let b: Sprite = IoAllianceUi._banner;
+        let chat: BYMChat = Chat._bymChat;
+        let bg: MovieClip = chat != null && chat.chatBox != null ? chat.chatBox.background : null;
+        let mask: any = bg ? (bg as any).mcMask : null;
+        let pin: any = IoAllianceUi._bannerPin;
+        let show: boolean = Boolean(GLOBAL.INFERNO_ONLY && mask && pin && chat._open && chat.ioMode == BYMChat.IO_ALLIANCE && ALLIANCES._allianceID > 0 && (pin.id | 0) != IoAllianceUi._bannerClosed);
+        if (!show) {
+            b.visible = false;
+            return;
+        }
+        if (b.parent != bg) {
+            bg.addChild(b);
+        }
+        b.visible = true;
+        // (just above the box's title bar: over the lines it would hide the first one)
+        let header: any = (bg as any).header;
+        b.x = Math.round(Number(mask.x));
+        b.y = Math.round((header ? Number(header.y) : 0) - 20);
+        // (clear of the scroll bar on the right)
+        let w: int = Math.max(120, Number(mask.width) - 20) | 0;
+        if (((b as any).ioDrawnW | 0) != w) {
+            (b as any).ioDrawnW = w;
+            const h: int = 18;
+            b.graphics.clear();
+            b.graphics.lineStyle(1, 0xFFB35A, 1);
+            b.graphics.beginFill(0x5A1E08, 0.94);
+            b.graphics.drawRect(0, 0, w, h);
+            b.graphics.endFill();
+            let label: Sprite = as3.cast(b.getChildByName("ioAlPinBannerText"), Sprite);
+            let t: TextField = as3.as(label.getChildAt(0), TextField);
+            t.width = w - 26;
+            t.height = h;
+            t.x = 4;
+            t.y = 0;
+            label.graphics.clear();
+            label.graphics.beginFill(0, 0);
+            label.graphics.drawRect(0, 0, w - 20, h);
+            label.graphics.endFill();
+            let close: Sprite = as3.cast(b.getChildByName("ioAlPinBannerClose"), Sprite);
+            close.x = w - 18;
+            close.y = 0;
+            close.graphics.clear();
+            close.graphics.beginFill(0, 0);
+            close.graphics.drawRect(0, 0, 16, h);
+            close.graphics.endFill();
+        }
     }
 
     /** A light rule across a card. */

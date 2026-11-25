@@ -1,4 +1,5 @@
 import { AllianceRole } from "../../enums/Alliance.js";
+import { tagOf } from "./allianceTag.js";
 import { Alliance } from "../../database/models/alliance.model.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
@@ -9,14 +10,19 @@ interface AllianceData {
   alliance_id: number;
   name: string;
   image: number;
+  /** Inferno-only (14 October): the alliance's designed crest, or null for the preset shield. */
+  crest: string | null;
   is_leader: boolean;
   relationships: Relationship;
+  /** Inferno-only (13 October): the alliance's chat tag. */
+  tag?: string;
 }
 
 export interface AllianceRosterEntry {
   alliance_id: number;
   name: string;
   image: number;
+  crest: string | null;
   relationships: Relationship;
 }
 
@@ -33,11 +39,12 @@ export const getAllianceData = async (user: User): Promise<AllianceData | null> 
   if (!alliance) return null;
 
   const { id, name, image } = alliance;
+  const crest = alliance.crest ?? null;
 
   const isLeader = user.alliance_role === AllianceRole.LEADER;
   const relationships = await getAllianceRelationships(id);
 
-  return { alliance_id: id, name, image, is_leader: isLeader, relationships };
+  return { alliance_id: id, name, image, crest, is_leader: isLeader, relationships, tag: tagOf(alliance) };
 };
 
 /**
@@ -53,13 +60,14 @@ export const getAllianceRoster = async (allianceIds: number[]): Promise<Alliance
   const alliances = await postgres.em.find(
     Alliance,
     { id: { $in: allianceIds } },
-    { fields: ["id", "name", "image"] }
+    { fields: ["id", "name", "image", "crest"] }
   );
 
-  return alliances.map(({ id, name, image }) => ({
+  return alliances.map(({ id, name, image, crest }) => ({
     alliance_id: id,
     name,
     image,
+    crest: crest ?? null,
     relationships: {},
   }));
 };

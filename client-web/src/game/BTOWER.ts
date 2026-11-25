@@ -1,14 +1,14 @@
 import * as as3 from "as3";
 import { Vector, int, uint } from "as3";
 import { MovieClip, Shape, Sprite } from "flash/display";
-import { MouseEvent } from "flash/events";
+import { Event, MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BASE, BFOUNDATION, BYMConfig, CREEPS, Expo, GLOBAL, GRID, IAttackable, IMapRoomCell, IoHfoArt, Jars, KEYS, MAP, MapRoomManager, MonsterBase, PATHING, POPUPS, SOUNDS, SPRITES, SecNum, SiegeWeapons, SpriteData, SpriteSheetAnimation, Targeting, TweenLite, Vacuum, VacuumHose, popup_building } from "@game";
+import { BASE, BFOUNDATION, BYMConfig, CREEPS, Expo, GLOBAL, GRID, IAttackable, IMapRoomCell, IoHfoArt, IoTd, Jars, KEYS, MAP, MapRoomManager, MonsterBase, PATHING, POPUPS, SOUNDS, SPRITES, SecNum, SiegeWeapons, SpriteData, SpriteSheetAnimation, Targeting, TweenLite, Vacuum, VacuumHose, popup_building, IoDevil } from "@game";
 
 export class BTOWER extends BFOUNDATION {
     static {
-        as3.fields(this, { creeps: null, maxDist: 0, minDist: 0, _frameNumber: 0, _hasTargets: false, _targetCreeps: null, _priority: 0, _retarget: 0, _top: 0, _fireTick: 0, _target: null, pointA: null, pointB: null, _radiusGraphic: null, _jarAnimation: null, _jarHealth: null, _ioJarMs: 0, _ioJarLanded: 0, _ioJarStage: 0, _ioJarX: 0, _targetVacuum: false, _maxTargets: 1, _ioIceHold: 0, _ioIceArt: null });
+        as3.fields(this, { creeps: null, maxDist: 0, minDist: 0, _frameNumber: 0, _hasTargets: false, _targetCreeps: null, _priority: 0, _retarget: 0, _top: 0, _fireTick: 0, _target: null, pointA: null, pointB: null, _radiusGraphic: null, _jarAnimation: null, _jarHealth: null, _ioJarMs: 0, _ioJarLanded: 0, _ioJarStage: 0, _ioJarX: 0, _targetVacuum: false, _maxTargets: 1, _ioIceHold: 0, _ioIceArt: null, _ioRing: null });
     }
 
     private static _targetFlyerMode: any = { "20": 0, "21": 1, "23": 0, "25": 1, "115": 2, "118": 0, "129": 0, "130": 0, "132": 1, "144": 1, "145": 1 };
@@ -85,10 +85,83 @@ export class BTOWER extends BFOUNDATION {
         } else if (this._lvl.Get() > GLOBAL._buildingProps[this._type - 1].stats.length) {
             throw new Error("ILLEGAL TOWER LEVEL Type: " + this._type + " Level: " + this._lvl.Get());
         }
+        // Inferno-only (Hellgate Defense): its damage, fire rate and range are its upgrade paths' (IoTd.tune)
+        if (GLOBAL.ioTdMode()) {
+            IoTd.tune(this);
+        } else if (GLOBAL.INFERNO_ONLY && this._lvl.Get() > 0) {
+            // (13 November: its owner's Devil's Contract, Bone Bastion: more damage, less range, against anyone)
+            let ioDmg: number = IoDevil.yardMul("towerDamage");
+            let ioRange: number = IoDevil.yardMul("towerRange");
+            if (ioDmg != 1) {
+                this.damageProperty.value = Number(GLOBAL._buildingProps[this._type - 1].stats[this._lvl.Get() - 1].damage) * ioDmg;
+            }
+            if (ioRange != 1) {
+                this._range = Math.max(1, Math.floor(this._range * ioRange)) | 0;
+            }
+        }
         this._fireTick = this._rate;
     }
 
+    // ---- Inferno-only (QoL #44, #379, 14 October): the range ring follows a tower being placed or moved
+    private _ioRing: Sprite;
+
+    private ioRingRange(): number {
+        if (this._range > 0) {
+            return this._range;
+        }
+        try {
+            let stats: any[] = GLOBAL._buildingProps[this._type - 1].stats;
+            return Number(stats[Math.max(0, Math.min(stats.length - 1, this._lvl.Get() - 1))].range) || 0;
+        } catch (e) {
+        }
+        return 0;
+    }
+
+    private ioRingOn(): void {
+        if (!GLOBAL.INFERNO_ONLY || !MAP._BUILDINGFOOTPRINTS || !this._mc) {
+            return;
+        }
+        let range: number = this.ioRingRange();
+        if (!(range > 0)) {
+            return;
+        }
+        if (!this._ioRing) {
+            this._ioRing = new Sprite();
+            this._ioRing.name = "ioTowerRing";
+            this._ioRing.mouseEnabled = false;
+            this._ioRing.mouseChildren = false;
+            this._ioRing.graphics.beginFill(16777215, 0.1);
+            this._ioRing.graphics.lineStyle(1, 16777215, 0.35);
+            this._ioRing.graphics.drawEllipse(-range * 1.4, -range * 0.6, range * 2.8, range * 1.2);
+            this._ioRing.graphics.endFill();
+        }
+        if (this._ioRing.parent != MAP._BUILDINGFOOTPRINTS) {
+            MAP._BUILDINGFOOTPRINTS.addChild(this._ioRing);
+        }
+        let h: number = this._footprint && this._footprint.length ? this._footprint[0].height * 0.25 : 0;
+        this._ioRing.x = this._mc.x;
+        this._ioRing.y = this._mc.y + h;
+    }
+
+    private ioRingOff(): void {
+        if (this._ioRing && this._ioRing.parent) {
+            this._ioRing.parent.removeChild(this._ioRing);
+        }
+        this._ioRing = null;
+    }
+
+    public override FollowMouseB(param1: Event = null): void {
+        super.FollowMouseB(param1);
+        this.ioRingOn();
+    }
+
+    public override StopMoveB(): void {
+        this.ioRingOff();
+        super.StopMoveB();
+    }
+
     public override Place(param1: MouseEvent = null): void {
+        this.ioRingOff();
         ++GLOBAL._bTowerCount;
         GLOBAL._bTower = this;
         super.Place(param1);
@@ -111,16 +184,81 @@ export class BTOWER extends BFOUNDATION {
                 _loc3_ = BTOWER.AdjustTowerRange(GLOBAL._currentCell, _loc3_);
                 _loc4_ = BTOWER.AdjustTowerRange(GLOBAL._currentCell, _loc4_);
             }
-            if (_loc1_.range < _loc2_.range) {
+            // (Inferno-only, QoL #579: the range in cells, and the damage as per shot × shots a second = DPS)
+            if (GLOBAL.INFERNO_ONLY) {
+                this._upgradeDescription += BTOWER.ioUpgradeLines(this._type, _loc1_, _loc2_, _loc3_, _loc4_);
+            } else if (_loc1_.range < _loc2_.range) {
                 this._upgradeDescription += KEYS.Get("bdg_tower_rangeupgrade", { "v1": _loc3_, "v2": _loc4_ }) + "<br>";
             }
-            if (_loc1_.damage * (40 / _loc1_.rate) < _loc2_.damage * (40 / _loc2_.rate)) {
+            if (!GLOBAL.INFERNO_ONLY && _loc1_.damage * (40 / _loc1_.rate) < _loc2_.damage * (40 / _loc2_.rate)) {
                 this._upgradeDescription += KEYS.Get("bdg_tower_damageupgrade", { "v1": (_loc1_.damage * (40 / _loc1_.rate)) | 0, "v2": (_loc2_.damage * (40 / _loc2_.rate)) | 0 }) + "<br>";
             }
             if (_loc1_.splash < _loc2_.splash) {
                 this._upgradeDescription += KEYS.Get("bdg_tower_explosionupgrade", { "v1": _loc1_.splash, "v2": _loc2_.splash }) + "<br>";
             }
         }
+    }
+
+    // ---- Inferno-only (QoL #579): tower stats with their units. A tower shoots every 2 × rate of the game's 80 steps a
+    // second (TickAttack; two steps a frame), so 40 / rate shots a second, as the stock "building_stats_dps" works it
+    // out; a range is in the yard's grid units, 10 to a cell (the planner's cell: a wall is two across).
+    /** Towers whose `rate` is not their shots' pace (the Tesla's shots a charge; the Guard Tower's own timer): no DPS. */
+    public static readonly IO_NO_DPS: any[] = [25, 138];
+
+    public static readonly IO_CELL: int = 10;
+
+    /** Shots a second at this `rate`. */
+    public static ioShotsPerSecond(param1: number): number {
+        return param1 > 0 ? 40 / param1 : 0;
+    }
+
+    /** A range in cells, to a tenth ("6.5"). */
+    public static ioCells(param1: number): string {
+        return String(Math.round(Number(param1) / BTOWER.IO_CELL * 10) / 10);
+    }
+
+    /** "76 per shot × 1.3/s = 99 DPS" (or "76 per shot" for a tower in IO_NO_DPS). */
+    public static ioShotText(param1: int, param2: number, param3: number): string {
+        let dmg: number = Math.round(Number(param2) || 0);
+        if (BTOWER.IO_NO_DPS.indexOf(param1) >= 0 || !(param3 > 0)) {
+            return KEYS.Get("io_yin_tower_pershot", { "v1": GLOBAL.FormatNumber(dmg) });
+        }
+        let shots: number = BTOWER.ioShotsPerSecond(param3);
+        return KEYS.Get("io_yin_tower_dps", { "v1": GLOBAL.FormatNumber(dmg), "v2": Math.round(shots * 10) / 10, "v3": GLOBAL.FormatNumber(Math.round(dmg * shots)) });
+    }
+
+    /**
+     * The upgrade's range and damage lines, from one level's stats to the next's (`param4`, `param5`: the ranges as
+     * shown, an outpost's adjusted): "Range: 6.5 cells, rising to 7 cells", "Damage: 76 per shot × 1.3/s = 99 DPS,
+     * rising to 90 per shot × 1.3/s = 117 DPS". Only what goes up.
+     */
+    public static ioUpgradeLines(param1: int, param2: any, param3: any, param4: number, param5: number): string {
+        let out: string = "";
+        if (!param2 || !param3) {
+            return out;
+        }
+        if (Number(param2.range) < Number(param3.range)) {
+            out += KEYS.Get("io_yin_tower_range_up", { "v1": BTOWER.ioCells(param4), "v2": BTOWER.ioCells(param5) }) + "<br>";
+        }
+        let nowDps: number = Number(param2.damage) * BTOWER.ioShotsPerSecond(Number(param2.rate));
+        let nextDps: number = Number(param3.damage) * BTOWER.ioShotsPerSecond(Number(param3.rate));
+        if (Number(param2.damage) < Number(param3.damage) || nowDps < nextDps) {
+            out += KEYS.Get("io_yin_tower_dmg_up", { "v1": BTOWER.ioShotText(param1, Number(param2.damage), Number(param2.rate)), "v2": BTOWER.ioShotText(param1, Number(param3.damage), Number(param3.rate)) }) + "<br>";
+        }
+        return out;
+    }
+
+    /** The tower's own stats now, for its menu in the yard (BUILDINGINFO): DPS, per shot × a second, and range. */
+    public static ioInfoText(param1: BTOWER): string {
+        if (!param1 || param1._lvl.Get() <= 0) {
+            return "";
+        }
+        let dmg: number = Math.round(param1.damage);
+        if (BTOWER.IO_NO_DPS.indexOf(param1._type) >= 0 || !(param1._rate > 0)) {
+            return KEYS.Get("io_yin_tower_info_nodps", { "v1": GLOBAL.FormatNumber(dmg), "v2": BTOWER.ioCells(param1._range) });
+        }
+        let shots: number = BTOWER.ioShotsPerSecond(param1._rate);
+        return KEYS.Get("io_yin_tower_info", { "v1": GLOBAL.FormatNumber(Math.round(dmg * shots)), "v2": GLOBAL.FormatNumber(dmg), "v3": Math.round(shots * 10) / 10, "v4": BTOWER.ioCells(param1._range) });
     }
 
     public get canAttack(): boolean {
@@ -400,6 +538,9 @@ export class BTOWER extends BFOUNDATION {
                 as3.sortOn(this.creeps, ["hp"], Array.NUMERIC | Array.DESCENDING);
             } else if (param2 == 4) {
                 as3.sortOn(this.creeps, ["hp"], Array.NUMERIC);
+            } else if (param2 == IoTd.FIRST && GLOBAL.ioTdMode()) {
+                // Inferno-only (Hellgate Defense): "first", the monster with the least way left to the Hall
+                as3.sort(this.creeps, IoTd.byFirst);
             }
             _loc8_ = 0;
             for (_loc5_ in this.creeps) {
@@ -460,6 +601,7 @@ export class BTOWER extends BFOUNDATION {
     }
 
     public override Cancel(): void {
+        this.ioRingOff();
         GLOBAL._bTower = null;
         --GLOBAL._bTowerCount;
         super.Cancel();
@@ -514,7 +656,9 @@ export class BTOWER extends BFOUNDATION {
     }
 
     public override Over(param1: MouseEvent): void {
-        if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._lvl.Get() > 0 && this._countdownBuild.Get() == 0 && this._countdownFortify.Get() == 0 && this._countdownUpgrade.Get() == 0 && this.health > 0) {
+        // (Inferno-only, QoL #670: and in a yard being scouted or attacked)
+        let ioModeOk: boolean = GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.VIEW || GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == "wmview"));
+        if (ioModeOk && this._lvl.Get() > 0 && this._countdownBuild.Get() == 0 && this._countdownFortify.Get() == 0 && this._countdownUpgrade.Get() == 0 && this.health > 0 && !this._moving) {
             TweenLite.delayedCall(0.25, as3.bind(this, this.RangeIndicator));
         }
     }
@@ -522,7 +666,7 @@ export class BTOWER extends BFOUNDATION {
     private RangeIndicator(): void {
         // Inferno-only: the yard may have gone in the quarter second since the mouse came over (report #61:
         // into an attack, with no footprint layer)
-        if (GLOBAL.INFERNO_ONLY && (!MAP._BUILDINGFOOTPRINTS || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD)) {
+        if (GLOBAL.INFERNO_ONLY && !MAP._BUILDINGFOOTPRINTS) {
             return;
         }
         let _loc1_: uint = 16777215;
@@ -544,9 +688,14 @@ export class BTOWER extends BFOUNDATION {
     }
 
     public override Out(param1: MouseEvent): void {
-        if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && Boolean(this._radiusGraphic)) {
-            if (this._radiusGraphic.parent) {
-                this._radiusGraphic.parent.removeChild(this._radiusGraphic);
+        if ((GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.INFERNO_ONLY) && Boolean(this._radiusGraphic)) {
+            // (the holder too: the ring's Sprite stayed behind, empty, under every tower hovered)
+            let ioHolder: any = this._radiusGraphic.parent;
+            if (ioHolder) {
+                ioHolder.removeChild(this._radiusGraphic);
+                if (GLOBAL.INFERNO_ONLY && ioHolder.parent && ioHolder.numChildren == 0) {
+                    ioHolder.parent.removeChild(ioHolder);
+                }
             }
             this._radiusGraphic = null;
         }

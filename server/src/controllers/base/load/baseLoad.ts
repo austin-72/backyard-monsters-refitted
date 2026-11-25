@@ -1,4 +1,9 @@
+import { devilEffects, devilEnabled, devilState } from "../../../services/devil/devilContract.js";
+import { giftTotPumpkins } from "../../../services/events/trickOrTreat.js";
+import { logger } from "../../../utils/logger.js";
 import { addPlayerFlags } from "../../../services/user/playerFlags.js";
+import { checkAttackLoad } from "../../../services/anticheat/requestChecks.js";
+import { notePool } from "../../../services/anticheat/lootChecks.js";
 import { gauntletAttack, isGauntletBaseId } from "../../../services/events/gauntlet.js";
 import { referralsEnabled, takeReferralNotice } from "../../../services/user/referrals.js";
 import { getRequiredBuild } from "../../../services/clientBuild.js";
@@ -21,6 +26,7 @@ import { WorldMapCell } from "../../../database/models/worldmapcell.model.js";
 import { getDefenderCoords, isDefensiveStructure } from "../../../services/maproom/v3/getDefenderCoords.js";
 import { getHexDistance } from "../../../services/maproom/v3/getHexNeighborOffsets.js";
 import { Status } from "../../../enums/StatusCodes.js";
+import { ClientSafeError } from "../../../middleware/clientSafeError.js";
 import { baseModeView } from "./modes/baseModeView.js";
 import { baseModeBuild } from "./modes/baseModeBuild.js";
 import { baseModeAttack } from "./modes/baseModeAttack.js";
@@ -43,17 +49,27 @@ import { mapSaveData } from "../../../services/base/mapSaveData.js";
 import { clearExpiredStoreItems } from "../../../services/base/clearExpiredStoreItems.js";
 import { extractTownHall } from "../../../utils/extractTownHall.js";
 import { getChatChannel, getOrCreateChatToken } from "../../../chat/chatChannels.js";
+import { allianceBannerOf } from "../../../services/alliance/allianceCrest.js";
 import { getAllianceData } from "../../../services/alliance/allianceData.js";
 import { runningPowerups } from "../../../services/alliance/powerups.js";
 import { cellRelationship, findRelationships } from "../../../services/alliance/relationships.js";
 import { INFERNO_CHAT_CHANNEL } from "../../../config/ChatConfig.js";
 import { underworldConfig } from "../../../config/UnderworldConfig.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
+import { AlliancePowerupType } from "../../../enums/Alliance.js";
+import { daveForYard } from "../../../services/yard/dave.js";
+import { terrainEnabled, terrainOf, terrainsFor } from "../../../services/yard/terrain.js";
 import { listPets, petsEnabled, petsForGame, petsInfo } from "../../../services/pets/pets.js";
+import { shopEnabled, shopOf, shopView, statueOf, takeShopNotices, treatsUntil } from "../../../services/shop/ioShop.js";
 import { replayYard, startReplay } from "../../../services/replays/replays.js";
+import { liveAttacksOn, liveWatchFor, noteLiveAttack } from "../../../services/replays/liveAttacks.js";
 import { permissionErr } from "../../../errors/errors.js";
-import { designInfo, isDesignBaseId, parseDesignBaseId } from "../../../services/admin/designs.js";
+import { designInfo, endTryIt, isDesignBaseId, parseDesignBaseId, tryItYard } from "../../../services/admin/designs.js";
+import { isTdBaseId, parseTdBaseId, tdInfo } from "../../../services/td/hellgate.js";
+import { td2Info } from "../../../services/td/hellgate2.js";
+import { isSiegeBaseId, siegeYard } from "../../../services/arcade/siege.js";
 import { isAdmin } from "../../../services/admin/admin.js";
+import { withYardLock } from "../../../services/maproom/yardLock.js";
 
 type Stronghold = { level: number; cell?: { x: number; y: number } | null };
 
@@ -73,7 +89,17 @@ const INFERNO_SAVE_MODES = new Set<string>([BaseMode.IBUILD, BaseMode.IATTACK, B
  * @returns {Promise<void>} A promise that resolves when the base load process is complete.
  * @throws Will throw an error if the base load process fails.
  */
+/** (16 October, bug reports #96, #97) the loads that may make a yard on the spot: one at a time per yard (yardLock.ts). */
+const YARD_MAKING_MODES = new Set<string>([BaseMode.VIEW, BaseMode.ATTACK, BaseMode.WMVIEW, BaseMode.WMATTACK]);
+
 export const baseLoad: KoaController = async (ctx) => {
+  const body = (ctx.request.body ?? {}) as Record<string, unknown>;
+  const baseid = String(body.baseid ?? "");
+  if (baseid && YARD_MAKING_MODES.has(String(body.type ?? ""))) return withYardLock(baseid, () => baseLoadOne(ctx));
+  return baseLoadOne(ctx);
+};
+
+const baseLoadOne: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
   const { baseid, type, mapversion, attackData, attackcost } = BaseLoadSchema.parse(ctx.request.body);
   // Inferno-only: an attack replay's yard, as it was when the attack began (view mode, the replay's key)
@@ -89,8 +115,17 @@ export const baseLoad: KoaController = async (ctx) => {
   if (isGauntletBaseId(baseid) && type !== BaseMode.ATTACK && type !== BaseMode.WMATTACK) throw permissionErr();
 
   // A Designer draft (services/admin/designs.ts) is only ever opened, in build mode, by the admin it belongs to.
-  if (isDesignBaseId(baseid) && (type !== BaseMode.BUILD || !isAdmin(user) || parseDesignBaseId(baseid)!.userid !== user.userid))
+  // (QoL #416: or attacked by them, as a wild monster yard (wmattack), while test mode is on: the Designer's "Try it")
+  if (isDesignBaseId(baseid) && (!(type === BaseMode.BUILD || (type === BaseMode.WMATTACK && (await isTestMode(user)))) || !isAdmin(user) || parseDesignBaseId(baseid)!.userid !== user.userid))
     throw permissionErr();
+  // (QoL #416: the draft opened again in build mode: a Try it on it is over, and its saves are taken again)
+  if (isDesignBaseId(baseid) && type === BaseMode.BUILD) await endTryIt(user.userid);
+
+  // A Siege yard (the Devil's Arcade, services/arcade/siege.ts) is only ever attacked, by its player, from the arcade.
+  if (isSiegeBaseId(baseid) && type !== BaseMode.ATTACK && type !== BaseMode.WMATTACK) throw permissionErr();
+
+  // A Hellgate Defense run's yard (services/td/hellgate.ts) is only ever opened, in build mode, by its player.
+  if (isTdBaseId(baseid) && (type !== BaseMode.BUILD || parseTdBaseId(baseid)!.userid !== user.userid)) throw permissionErr();
 
   await postgres.em.populate(user, INFERNO_SAVE_MODES.has(type) ? ["save", "infernosave"] : ["save"]);
 
@@ -107,6 +142,8 @@ export const baseLoad: KoaController = async (ctx) => {
       if (replayKey) {
         // (any yard the replay was of, wherever it is now: the replay says what it looked like)
         replayView = await replayYard(user, replayKey).catch(() => null);
+        // (13 October: an imported replay names any base id: a Designer draft or a Hellgate run is still its owner's only)
+        if (replayView && (isDesignBaseId(replayView.baseid) || isTdBaseId(replayView.baseid))) replayView = null;
         baseSave = replayView ? await postgres.em.findOne(Save, { baseid: replayView.baseid }) : null;
         if (!baseSave) {
           ctx.status = Status.OK;
@@ -121,11 +158,17 @@ export const baseLoad: KoaController = async (ctx) => {
     case BaseMode.ATTACK:
       if (!ctx.meetsDiscordAgeCheck) throw discordAgeErr();
 
+      // (Inferno-only: Map Room 3's attack payment can't come from an Inferno game: services/anticheat)
+      if (!isGauntletBaseId(baseid) && !isSiegeBaseId(baseid) && !(await checkAttackLoad(user, mapversion, attackcost, baseid))) throw permissionErr();
       await validateAttack(user, attackData, mapversion);
       // Moloch's Gauntlet (services/events/gauntlet.ts): the player's own ladder yard, not a map cell.
       baseSave = isGauntletBaseId(baseid)
         ? await gauntletAttack(user, baseid, await isTestMode(user))
-        : await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
+        : isSiegeBaseId(baseid)
+          ? await siegeYard(user, baseid).catch(() => {
+              throw permissionErr();
+            })
+          : await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
       break;
 
     case BaseMode.IDESCENT:
@@ -161,14 +204,27 @@ export const baseLoad: KoaController = async (ctx) => {
     case BaseMode.WMATTACK:
       if (!ctx.meetsDiscordAgeCheck && !MR1_TRIBE_IDS.has(baseid)) throw discordAgeErr();
       
+      // (Inferno-only: Map Room 3's attack payment can't come from an Inferno game: services/anticheat)
+      if (!isGauntletBaseId(baseid) && !isSiegeBaseId(baseid) && !(await checkAttackLoad(user, mapversion, attackcost, baseid))) throw permissionErr();
       await validateAttack(user, attackData, mapversion);
       baseSave = isGauntletBaseId(baseid)
         ? await gauntletAttack(user, baseid, await isTestMode(user))
-        : await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
+        : isSiegeBaseId(baseid)
+          ? await siegeYard(user, baseid).catch(() => {
+              throw permissionErr();
+            })
+          : isDesignBaseId(baseid)
+            ? // (QoL #416: the Designer's "Try it": the admin's draft as a wild monster yard of nobody's, read and changed
+              // apart, never written; no attack record, no map cell: services/admin/designs.ts tryItYard)
+              await tryItYard(user, baseid, true).catch(() => {
+                throw permissionErr();
+              })
+            : await baseModeAttack({ user, baseid, mapversion, attackCost: attackcost });
       break;
 
     default:
-      throw new Error(`Base type not handled, type: ${type}.`);
+      // (18 October: a type the game never sends is the request's fault: 400, not a server bug)
+      throw new ClientSafeError({ message: `That kind of yard load isn't known (${String(type).slice(0, 20)}).`, status: Status.BAD_REQUEST, data: {}, isClientFriendly: true });
   }
 
   if (!baseSave) throw new Error("Base save not found.");
@@ -204,6 +260,16 @@ export const baseLoad: KoaController = async (ctx) => {
     await postgres.em.flush();
   }
 
+  // (Inferno-only, 20 October: Trick or Treat over, its Mini-Pumpkins put in the main yard's storage, once: said to the
+  // game by the flag io_tot_gift)
+  const totGift =
+    infernoOnlyConfig.enabled && isOwner && type === BaseMode.BUILD && baseSave.basesaveid === user.save?.basesaveid
+      ? await giftTotPumpkins(user, baseSave).catch((err) => {
+          logger.error(`Trick or Treat: Mini-Pumpkins not given to '${user.username}': ${err}`);
+          return 0;
+        })
+      : 0;
+
   const filteredSave = await mapSaveData(baseSave, user);
   // Inferno-only has no tutorial (it is an overworld walkthrough); production would otherwise send stage 0.
   const isTutorialEnabled = devConfig.skipTutorial || infernoOnlyConfig.enabled ? 205 : filteredSave.tutorialstage;
@@ -219,6 +285,7 @@ export const baseLoad: KoaController = async (ctx) => {
     // Any one-time referral notice waiting for the player.
     flags.io_notice = await takeReferralNotice(user);
   }
+  if (totGift > 0) flags.io_tot_gift = totGift;
   flags.discordOldEnough = Number(ctx.meetsDiscordAgeCheck);
 
   const townHall = extractTownHall(userSave.buildingdata || {});
@@ -377,6 +444,13 @@ export const baseLoad: KoaController = async (ctx) => {
   const powerups = isOwnMainYard ? await runningPowerups(user.alliance_id) : [];
 
   const attpowerups = isOverworldAttack ? await runningPowerups(user.alliance_id) : [];
+  // Inferno-only (26 October, the user's: "Make sure that every alliance power up ... actually works"): attacking another
+  // player's yard, its alliance's running Armament (towers' and blocks' hit points, traps' damage), for the attacker's
+  // game, which plays the defence. It was only ever sent to the yard's owner, so it never defended against anyone.
+  const defpowerups =
+    infernoOnlyConfig.enabled && isOverworldAttack && ownerAllianceId && ownerAllianceId !== user.alliance_id
+      ? (await runningPowerups(ownerAllianceId)).filter((p) => p.id === AlliancePowerupType.ARMAMENT)
+      : [];
 
   const relationship = isOwnMainYard
     ? EnumBaseRelationship.SELF
@@ -399,6 +473,7 @@ export const baseLoad: KoaController = async (ctx) => {
     pic_square: avatar,
     chatservers: [process.env.CHAT_WS_HOST!],
     ...(isAttack && { attpowerups }),
+    ...(defpowerups.length ? { io_defpowerups: defpowerups } : {}),
     ...(isOwner && {
       chatenabled: 1,
       chattoken,
@@ -427,6 +502,9 @@ export const baseLoad: KoaController = async (ctx) => {
     if (totalDefenderStrongholdBonus > 0) response.defendingplayer = { buffs: { 6: totalDefenderStrongholdBonus } };
   }
 
+  // Inferno-only: the cheat detector notes what the yard attacked holds, the most its loot can be (services/anticheat/lootChecks.ts)
+  if (isAttack && !replayView && !isGauntletBaseId(baseSave.baseid) && !isSiegeBaseId(baseSave.baseid)) await notePool(user, baseSave, response);
+
   // Inferno-only: an attack replay shows the yard as it was when the attack began, with no monsters of its own (the
   // recording has the battle's), and the attack on another player's yard starts its replay (services/replays).
   if (replayView) {
@@ -438,7 +516,20 @@ export const baseLoad: KoaController = async (ctx) => {
     response.io_replay_view = { key: replayKey };
   } else if (type === BaseMode.ATTACK && !(await isTestMode(user))) {
     const key = await startReplay(user, baseSave);
-    if (key) response.io_replay = { key, rec: 1 };
+    // (18 October, the user's: an attack on a player's yard is noted for its player to watch, services/replays/
+    // liveAttacks.ts; and when they are playing, the attacker's game sends its recording in short parts at once)
+    const defenderOnline = liveAttacksOn() && (baseSave.type === BaseType.MAIN || baseSave.type === BaseType.OUTPOST) && baseSave.saveuserid !== user.userid
+      ? Number((await redis.get(`last-seen:main:${baseSave.saveuserid}`).catch(() => null)) ?? 0) >= getCurrentDateTime() - 90
+      : false;
+    if (key) response.io_replay = { key, rec: 1, ...(defenderOnline ? { live: 1 } : {}) };
+    if (!isGauntletBaseId(baseSave.baseid) && !isSiegeBaseId(baseSave.baseid)) await noteLiveAttack(user, baseSave, key);
+  }
+
+  // (18 October, the user's) the player's own yard under another player's attack: its game shows the attack instead
+  // (the yard can't be played meanwhile: its saves are refused)
+  if (type === BaseMode.BUILD && liveAttacksOn()) {
+    const watch = await liveWatchFor(user, baseSave);
+    if (watch) response.io_watch = watch;
   }
 
   // Inferno-only: a main yard's pets (services/pets/pets.ts): all of them for its owner (the Pets tab shows the
@@ -447,6 +538,53 @@ export const baseLoad: KoaController = async (ctx) => {
     const pets = await listPets(baseSave.userid);
     response.io_pets = petsForGame(isOwner ? pets : pets.filter((p) => p.out));
     if (isOwner) response.io_petinfo = await petsInfo(baseSave.userid);
+    // (22 October) Pet Treats: until when they do tricks and the zoomies by themselves (services/shop/ioShop.ts)
+    response.io_pet_treats = await treatsUntil(Number(baseSave.userid)).catch(() => 0);
+  }
+
+  // Inferno-only (22 October): the Store's Extras (services/shop/ioShop.ts): the player's own, with their main yard
+  // (and, once, gifts from alliance members and what Raid Insurance paid back); and for anyone loading a yard, the
+  // champion its Champion Statues show
+  if (shopEnabled() && !replayView && baseSave.type !== "design") {
+    if (isOwner && baseSave.type === BaseType.MAIN && type === BaseMode.BUILD) {
+      const notices = await takeShopNotices(user.userid).catch(() => ({ gifts: [], insurance: null }));
+      response.io_shop = shopView(await shopOf(user.userid));
+      if (notices.gifts.length || notices.insurance) response.io_shop_notices = notices;
+    }
+    if (Number(baseSave.userid) > 0) response.io_statue = await statueOf(Number(baseSave.userid)).catch(() => null);
+  }
+
+  // Inferno-only (13 November): the Devil's Contract (services/devil/devilContract.ts). The player's own main yard: the
+  // offer (made now if one is due) and what they signed. Any player's main yard or outpost: what its owner's contracts
+  // do now (io_devil_yard), for the towers and traps of the game that plays its defence.
+  if (devilEnabled() && !replayView && (baseSave.type === BaseType.MAIN || baseSave.type === BaseType.OUTPOST)) {
+    if (isOwner && baseSave.type === BaseType.MAIN && type === BaseMode.BUILD) {
+      response.io_devil = await devilState(user.userid).catch((err) => {
+        logger.error(`Devil's Contract: state for '${user.username}' not read: ${err}`);
+        return null;
+      });
+    }
+    const owner = Number(baseSave.saveuserid || baseSave.userid) || 0;
+    if (owner > 0) response.io_devil_yard = await devilEffects(owner).catch(() => ({}));
+  }
+
+  // Inferno-only: the ground its owner chose for a main yard (the D.A.V.E. Club; services/yard/terrain.ts), for
+  // everyone who loads it; and for the owner, the grounds they may choose.
+  if (terrainEnabled() && baseSave.type === BaseType.MAIN && !replayView) {
+    response.io_terrain = await terrainOf(baseSave.userid);
+    if (isOwner) response.io_terrains = await terrainsFor(baseSave.userid);
+  }
+
+  // Inferno-only: its owner's D.A.V.E. Club looks (services/yard/dave.ts): the workers' and the champions', for
+  // everyone who loads one of their yards (a main yard or an outpost).
+  if (infernoOnlyConfig.enabled && Number(baseSave.userid) > 0 && !replayView && baseSave.type !== "design") {
+    response.io_dave = await daveForYard(Number(baseSave.userid));
+  }
+
+  // Inferno-only (16 October): the yard owner's alliance shield, for the Alliance Banner decoration (client
+  // IoAllianceBanner): { image, crest }, or null for no alliance
+  if (infernoOnlyConfig.enabled && Number(baseSave.userid) > 0 && baseSave.type !== "design") {
+    response.io_ally_banner = await allianceBannerOf(Number(baseOwner?.alliance_id ?? 0)).catch(() => null);
   }
 
   // Inferno-only: a Designer draft, so the game shows the design bar and lifts the limits (GLOBAL.ioDesign).
@@ -454,6 +592,13 @@ export const baseLoad: KoaController = async (ctx) => {
     response.io_design = designInfo(baseSave.baseid);
     // its monsters' levels are the draft's (the Monsters window), not the admin's own Academy's
     response.academy = baseSave.academy ?? {};
+  }
+
+  // Inferno-only: a Hellgate Defense run, so the game plays it (GLOBAL.ioTd): the arena, when the run began
+  if (baseSave.type === "td") {
+    // (Hellgate Defense 2's runs: their map and settings, io_td.v2; services/td/hellgate2.ts)
+    response.io_td = (await td2Info(baseSave)) ?? tdInfo(baseSave);
+    response.academy = {};
   }
 
   // Only send descent tribe IDs (201-213) to the client

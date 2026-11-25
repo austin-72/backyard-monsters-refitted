@@ -1,4 +1,6 @@
-import { randomBytes } from "crypto";
+import { tellMuted } from "../../chat/chatControl.js";
+import { sendAlert } from "./alerts.js";
+import { createHash, randomBytes } from "crypto";
 
 import { User } from "../../database/models/user.model.js";
 import { AdminLog } from "../../database/models/adminlog.model.js";
@@ -31,8 +33,66 @@ import { logger } from "../../utils/logger.js";
  */
 export const configuredAdmins = () => infernoOnlyConfig.admins.map((name) => name.trim()).filter(Boolean);
 
-export const isAdmin = (user?: User | null) =>
+/**
+ * Inferno-only (16 October, QoL #261): admin roles, kept on the account (user.admin_role, migration
+ * 20261109_AdminRoles) and set from the panel by an owner:
+ *
+ *   owner    everything, and sets other accounts' roles. The names in infernoOnlyConfig.admins are owners whatever
+ *            their account says (they bootstrap the rest), and their role can't be changed from the panel.
+ *   admin    everything else: the panel, test mode, the Designer, playing on in maintenance.
+ *   support  the panel, read only: every tool that changes something is refused (adminMayRun, checked once for
+ *            every panel request), and so are test mode and the Designer. The game's Admin menu shows.
+ *
+ * isAdmin is "owner or admin", as it was for the config's names, so the checks made with it everywhere (test mode,
+ * the Designer, maintenance logins, design yards) are the same; isStaff (any role) lets in to the panel.
+ */
+export type AdminRole = "owner" | "admin" | "support";
+export const ADMIN_ROLES: readonly AdminRole[] = ["owner", "admin", "support"];
+
+export const adminRole = (user?: User | null): AdminRole | null => {
+  if (!user || !infernoOnlyConfig.enabled || !user.username) return null;
+  if (configuredAdmins().includes(user.username)) return "owner";
+  const stored = String(user.admin_role ?? "");
+  return (ADMIN_ROLES as readonly string[]).includes(stored) ? (stored as AdminRole) : null;
+};
+
+/** The role comes from the config's names (it can't be changed from the panel). */
+export const isConfigOwner = (user?: User | null) =>
   !!user && infernoOnlyConfig.enabled && !!user.username && configuredAdmins().includes(user.username);
+
+export const isAdmin = (user?: User | null) => {
+  const role = adminRole(user);
+  return role === "owner" || role === "admin";
+};
+
+/** (QoL #261) Any role: the panel (read only for support) and the game's Admin menu. */
+export const isStaff = (user?: User | null) => adminRole(user) !== null;
+
+export const isOwner = (user?: User | null) => adminRole(user) === "owner";
+
+/**
+ * (QoL #261) The panel's tools that only read: all a support account may use. Anything not here changes something
+ * and is refused for support, so a tool added later is refused until it is listed. designImport only looks unless
+ * `apply` is 1.
+ */
+const READ_ONLY_ACTIONS = new Set([
+  "status", "players", "search", "player", "account", "monsters", "compensatePreview", "quests", "online", "sessions",
+  "testModeList", "reports", "cheats", "invites", "cell", "worlds", "bugs", "health", "kitBackups", "designExport",
+  "fmi", "fmiPlayer", "fmiControl", "totControl", "wartBloom", "loginHistory", "inactive", "chat", "shinyLedger", "playerActions", "yardBackups", "log",
+]);
+/** (QoL #261) Tools for owners only. */
+const OWNER_ACTIONS = new Set(["setRole"]);
+
+/** Whether this panel account may use this tool: "" when it may, else why not (one check for every request). */
+export const adminMayRun = (admin: User, action: string, body: Record<string, unknown>): string => {
+  const role = adminRole(admin);
+  if (!role) return "Not an admin.";
+  if (OWNER_ACTIONS.has(action) && role !== "owner") return "Only an owner can do this.";
+  if (role !== "support") return "";
+  if (READ_ONLY_ACTIONS.has(action)) return "";
+  if (action === "designImport" && String(body?.apply ?? "") !== "1") return "";
+  return "Your role is support: the panel is read only for you.";
+};
 
 /** One of the configured admin names, in any capitals (register and rename refuse it). */
 export const isReservedAdminName = (username?: string | null) => {
@@ -114,9 +174,9 @@ export const createSignInCode = async (admin: User) => {
 export const exchangeSignInCode = async (code: string) => {
   if (!/^[a-f0-9]{48}$/.test(code)) return null;
   const key = `admin:code:${code}`;
-  const userid = await redis.get(key);
+  // (13 October: taken in one step: read then deleted, two requests at once both made a session of one code)
+  const userid = await redis.getdel(key);
   if (!userid) return null;
-  await redis.del(key);
 
   const token = randomBytes(32).toString("hex");
   await redis.setex(`admin:session:${token}`, SESSION_TTL, userid);
@@ -129,10 +189,78 @@ export const sessionAdmin = async (token?: string) => {
   const userid = await redis.get(`admin:session:${token}`);
   if (!userid) return null;
   const user = await postgres.em.fork().findOne(User, { userid: Number(userid) });
-  return user && !user.banned && isAdmin(user) ? user : null;
+  // (QoL #261: any role; support's tools are limited by adminMayRun)
+  return user && !user.banned && isStaff(user) ? user : null;
 };
 
-export const endSession = (token?: string) => (token ? redis.del(`admin:session:${token}`) : null);
+export const endSession = async (token?: string) => {
+  if (!token) return null;
+  await redis.del(`admin:sessinfo:${sessionId(token)}`).catch(() => 0);
+  return redis.del(`admin:session:${token}`);
+};
+
+/** Inferno-only (QoL #259): a session's short id (never the token itself, which signs in). */
+const sessionId = (token: string) => createHash("sha256").update(token).digest("hex").slice(0, 12);
+
+/** Inferno-only (QoL #259): who opened a session, when and from where, kept as long as it lasts. */
+export const noteSession = async (token: string, admin: User, ip: string, agent: string) => {
+  await redis.setex(`admin:sessinfo:${sessionId(token)}`, SESSION_TTL, JSON.stringify({ token, userid: admin.userid, username: admin.username, at: Date.now(), ip, agent }));
+};
+
+/** The panel's sessions now (each with its short id; `mine` for the one asking). */
+export const listSessions = async (mineToken?: string) => {
+  const out: { id: string; username: string; at: number; ip: string; agent: string; mine: boolean }[] = [];
+  let cursor = "0";
+  do {
+    const [next, keys] = (await redis.send("SCAN", [cursor, "MATCH", "admin:sessinfo:*", "COUNT", "200"])) as [string, string[]];
+    cursor = next;
+    for (const key of keys) {
+      try {
+        const info = JSON.parse(String(await redis.get(key)));
+        if (!(await redis.get(`admin:session:${info.token}`))) continue;
+        out.push({ id: key.slice("admin:sessinfo:".length), username: info.username, at: info.at, ip: info.ip, agent: info.agent, mine: info.token === mineToken });
+      } catch {
+        // (unreadable: left to run out)
+      }
+    }
+  } while (cursor !== "0");
+  return out.sort((a, b) => b.at - a.at);
+};
+
+/** Inferno-only (QoL #244): every panel session of one account ended (its "Sign out everywhere"). How many. */
+export const endPanelSessionsOf = async (userid: number) => {
+  let ended = 0;
+  let cursor = "0";
+  do {
+    const [next, keys] = (await redis.send("SCAN", [cursor, "MATCH", "admin:sessinfo:*", "COUNT", "200"])) as [string, string[]];
+    cursor = next;
+    for (const key of keys) {
+      try {
+        const info = JSON.parse(String(await redis.get(key)));
+        if (Number(info.userid) !== userid) continue;
+        await endSession(info.token);
+        ended++;
+      } catch {
+        // (unreadable: left to run out)
+      }
+    }
+  } while (cursor !== "0");
+  return ended;
+};
+
+/** Ends one session by its short id, or every other one (`others`). How many ended. */
+export const endSessionById = async (id: string, mineToken: string | undefined, others: boolean, onlyUsername?: string) => {
+  let ended = 0;
+  for (const s of await listSessions(mineToken)) {
+    if (s.mine || (!others && s.id !== id)) continue;
+    // (18 October: a non-owner admin ends only their own other sessions)
+    if (onlyUsername !== undefined && s.username !== onlyUsername) continue;
+    const info = JSON.parse(String(await redis.get(`admin:sessinfo:${s.id}`)));
+    await endSession(info.token);
+    ended++;
+  }
+  return ended;
+};
 
 // ---------------------------------------------------------------------------------------------
 // Maintenance mode: new logins refused (admins excepted) with a message.
@@ -141,7 +269,51 @@ export const endSession = (token?: string) => (token ? redis.del(`admin:session:
 const MAINTENANCE_KEY = "admin:maintenance";
 let maintenanceCache: { value: string | null; at: number } = { value: null, at: 0 };
 
+/**
+ * Inferno-only (QoL #400, #210): maintenance planned for a time: players in the game are warned at 15, 5 and 1
+ * minutes before (flag io_maintenance), and at the time maintenance mode goes on by itself.
+ */
+const MAINT_SCHEDULE_KEY = "admin:maintenance:at";
+let scheduleCache: { value: { at: number; message: string } | null; at: number } = { value: null, at: 0 };
+
+export const getMaintenanceSchedule = async (): Promise<{ at: number; message: string } | null> => {
+  if (Date.now() - scheduleCache.at >= 5000) {
+    let value: { at: number; message: string } | null = null;
+    try {
+      const raw = await redis.get(MAINT_SCHEDULE_KEY);
+      value = raw ? JSON.parse(raw) : null;
+    } catch {
+      value = null;
+    }
+    scheduleCache = { value, at: Date.now() };
+  }
+  const plan = scheduleCache.value;
+  if (plan && plan.at <= Date.now()) {
+    // the time has come: on by itself, and the plan done
+    await redis.del(MAINT_SCHEDULE_KEY).catch(() => 0);
+    scheduleCache = { value: null, at: Date.now() };
+    await setMaintenance(plan.message);
+    logger.info(`Maintenance mode on, as planned: ${plan.message}`);
+    sendAlert("maintenance", `maintenance mode is on, as planned: ${plan.message.slice(0, 200)}`);
+    return null;
+  }
+  return plan;
+};
+
+export const scheduleMaintenance = async (minutes: number, message: string) => {
+  const plan = { at: Date.now() + Math.round(minutes * 60_000), message };
+  await redis.set(MAINT_SCHEDULE_KEY, JSON.stringify(plan));
+  scheduleCache = { value: plan, at: Date.now() };
+  return plan;
+};
+
+export const cancelMaintenanceSchedule = async () => {
+  await redis.del(MAINT_SCHEDULE_KEY);
+  scheduleCache = { value: null, at: Date.now() };
+};
+
 export const getMaintenance = async () => {
+  await getMaintenanceSchedule().catch(() => null);
   if (Date.now() - maintenanceCache.at < 5000) return maintenanceCache.value;
   const value = (await redis.get(MAINTENANCE_KEY)) || null;
   maintenanceCache = { value, at: Date.now() };
@@ -167,6 +339,15 @@ export interface Announcement {
 
 /** Read on every poll of every player: kept for 5 seconds, as the maintenance message is. */
 let announceCache: { value: Announcement | null; at: number } = { value: null, at: 0 };
+
+/** QoL #485: the announcement an account has been shown (its id), so it is shown once per account, not per browser. */
+const seenKey = (userid: number) => `announce:seen:${userid}`;
+
+export const announcementSeen = async (userid: number): Promise<string> => String((await redis.get(seenKey(userid))) ?? "");
+
+export const markAnnouncementSeen = async (userid: number, id: string): Promise<void> => {
+  await redis.set(seenKey(userid), String(id).slice(0, 64), "EX", String(15 * 86_400));
+};
 
 export const getAnnouncement = async (): Promise<Announcement | null> => {
   if (Date.now() - announceCache.at < 5000) return announceCache.value;
@@ -205,10 +386,26 @@ export const clearAnnouncement = () => {
 
 export const muteKey = (userid: number) => `chat:mute:${userid}`;
 
-export const muteUser = (userid: number, minutes: number) =>
-  redis.setex(muteKey(userid), Math.max(60, Math.round(minutes * 60)), String(Date.now() + minutes * 60_000));
+/**
+ * A chat mute for some minutes. Inferno-only (QoL #262): with a reason, kept as long as the mute and shown to the
+ * player (when they try to talk, and at once if they are in chat).
+ */
+export const muteUser = async (userid: number, minutes: number, reason = "") => {
+  const ttl = Math.max(60, Math.round(minutes * 60));
+  await redis.setex(muteKey(userid), ttl, String(Date.now() + minutes * 60_000));
+  const why = String(reason ?? "").replace(/[<>]/g, "").trim().slice(0, 200);
+  if (why) await redis.setex(`chat:mutereason:${userid}`, ttl, why);
+  else await redis.del(`chat:mutereason:${userid}`).catch(() => 0);
+  await tellMuted(userid, Math.max(1, Math.round(minutes)), why).catch(() => undefined);
+};
 
-export const unmuteUser = (userid: number) => redis.del(muteKey(userid));
+export const unmuteUser = async (userid: number) => {
+  await redis.del(`chat:mutereason:${userid}`).catch(() => 0);
+  return redis.del(muteKey(userid));
+};
+
+/** QoL #262: the reason a mute was given, or "". */
+export const muteReason = async (userid: number) => (await redis.get(`chat:mutereason:${userid}`).catch(() => null)) ?? "";
 
 /** Epoch ms the mute ends, or null. */
 export const mutedUntil = async (userid: number) => {

@@ -5,7 +5,7 @@ import { Invasion } from "../../../enums/Invasion.js";
  * Determines which invasion type is currently active based on dev overrides or month scheduling.
  * 
  * Checks dev configuration overrides first, then falls back to the standard monthly alternating schedule
- * where WMI1 runs in odd months and WMI2 runs in even months.
+ * where WMI1 runs in even months and WMI2 runs in odd months (as setupInvasionEvent's dates; in UTC).
  * This ensures only one invasion type is active at any time.
  *
  * @returns {Invasion} The currently active invasion type (WMI1 or WMI2)
@@ -15,6 +15,6 @@ export const getActiveInvasion = (): Invasion => {
 
   if (devConfig.wmi2StartNowOverride) return Invasion.WMI2;
 
-  const currentMonth = new Date().getMonth() + 1;
+  const currentMonth = new Date().getUTCMonth() + 1;
   return currentMonth % 2 === 0 ? Invasion.WMI1 : Invasion.WMI2;
 };

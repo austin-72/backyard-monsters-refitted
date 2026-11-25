@@ -1,16 +1,16 @@
 /**
- * The SWF library at runtime: characters converted by tools/swf-assets
- * (library.json + bitmaps), instantiated for [Embed(symbol=...)] classes and
+ * The game's library at runtime: the characters of its original Flash library
+ * (public/swf: library.json + bitmaps), instantiated for [Embed(symbol=...)] classes and
  * timeline placements, with MovieClip timelines replayed like Flash Player.
  */
 import { registeredClasses } from "as3";
 import {
   DisplayObject, DisplayObjectContainer, Sprite, MovieClip, Shape, Bitmap, SimpleButton, FrameLabel,
-  player, shapeHooks, mul, trackStage, type M6,
+  player, shapeHooks, mul, trackStage, touch, type M6,
 } from "./core";
 import { BitmapData, libraryImages } from "./BitmapData";
 import { ColorTransform, Rectangle } from "../geom";
-import { Event } from "../events";
+import { Event, anyCaptureListeners } from "../events";
 import { TextField, StaticText, fontById } from "../text";
 import { DropShadowFilter, GlowFilter, BlurFilter, BevelFilter, ColorMatrixFilter, ConvolutionFilter } from "../filters";
 import { cssColor, unimplemented, context2d } from "../_internal";
@@ -21,12 +21,26 @@ const symbolIds = new Map<string, number>();
 const symbolOfId = new Map<number, string>();
 let classOfSymbol: Map<string, any> | null = null;
 
-/** Loads library.json and its bitmaps. Must finish before game code runs. */
-export async function loadLibrary(base: string, versioned: (url: string) => string = (u) => u): Promise<void> {
-  const lib = await (await fetch(versioned(`${base}swf/library.json`))).json();
+const TYPES: Record<string, string> = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif" };
+/** A file out of the art pack as the network would have given it. */
+export function packedBlob(bytes: Uint8Array, path: string): Blob {
+  return new Blob([bytes as BlobPart], { type: TYPES[path.split(".").pop()!.toLowerCase()] ?? "" });
+}
+
+/**
+ * Loads library.json and its bitmaps. Must finish before game code runs. The bitmaps come out of the art pack
+ * when there is one (src/player/preload.ts), else one request each; library.json from `get` when given (the
+ * loader page may have asked for it already).
+ */
+export async function loadLibrary(base: string, versioned: (url: string) => string = (u) => u,
+  pack: Map<string, Uint8Array> | null = null, get: ((path: string) => Promise<Response>) | null = null): Promise<void> {
+  const lib = await (await (get ? get("swf/library.json") : fetch(versioned(`${base}swf/library.json`)))).json();
   chars = lib.chars;
   for (const [name, id] of Object.entries(lib.symbols as Record<string, number>)) { symbolIds.set(name, id); symbolOfId.set(id, name); }
-  const load = async (file: string) => createImageBitmap(await fetchStalled(versioned(`${base}swf/${file}`)));
+  const load = async (file: string) => {
+    const packed = pack?.get(`swf/${file}`);
+    return createImageBitmap(packed ? packedBlob(packed, file) : await fetchStalled(versioned(`${base}swf/${file}`)));
+  };
   const watchdog = setInterval(abortIfStalled, 5000);
   try {
     await loadBitmaps(load);
@@ -214,6 +228,7 @@ function buildButton(b: SimpleButton, def: Def): void {
     return sp;
   };
   b.$up = state(1); b.$over = state(2); b.$down = state(4); b.$hit = state(8);
+  b.$adopt();
   b.$trackAsMenu = !!def.menu;
 }
 
@@ -236,6 +251,7 @@ function makeFilter(f: any): any {
 
 /** Applies a timeline placement's properties (transform unless code has taken it over). */
 function applyPlacement(c: DisplayObject, st: any): void {
+  const shown = c.$visible && c.$alpha > 0;
   if (st.m && !c.$scripted) { const m = st.m; c.$setMatrix(m[0], m[1], m[2], m[3], m[4], m[5]); }
   if (st.cx && !c.$scripted) {
     const x = st.cx;
@@ -247,6 +263,7 @@ function applyPlacement(c: DisplayObject, st: any): void {
   if (st.bm !== undefined) c.$blendMode = BLEND[st.bm] ?? "normal";
   if (st.v !== undefined) c.$visible = !!st.v;
   if (st.cd) c.$clipDepth = st.cd;
+  touch(c, shown);
 }
 
 // ------------------------------------------------------------ timelines
@@ -256,6 +273,8 @@ export class Timeline {
   readonly totalFrames: number;
   readonly labels: FrameLabel[];
   private states: (Map<number, DepthState> | undefined)[] = [];
+  /** each frame's depths in order (gotoFrame; sorted once, not at every step of a playing clip) */
+  private depths: (number[] | undefined)[] = [];
   constructor(readonly id: number, private def: Def) {
     this.totalFrames = def.n;
     this.labels = def.labels.map(([n, f]: [string, number]) => new FrameLabel(n, f));
@@ -284,7 +303,11 @@ export class Timeline {
   gotoFrame(mc: DisplayObjectContainer, frame: number, initial = false): void {
     const want = this.state(frame);
     const kids = mc.$children;
-    for (const c of kids.slice()) {
+    touch(mc);
+    // (most steps of a playing clip only move what it holds: the removal pass, a copy of the children, is then left out)
+    let gone = false;
+    for (let i = 0; i < kids.length && !gone; i++) { const c = kids[i]; if (c.$depth === undefined) continue; const w = want.get(c.$depth); gone = !w || w.key !== c.$placeKey; }
+    if (gone) for (const c of kids.slice()) {
       if (c.$depth === undefined) continue;
       const w = want.get(c.$depth);
       if (w && w.key === c.$placeKey) continue;
@@ -292,7 +315,8 @@ export class Timeline {
       else if (c.$parent === mc) mc.$detach(c);
       if (c.$name && (mc as any)[c.$name] === c) (mc as any)[c.$name] = null;
     }
-    for (const d of [...want.keys()].sort((a, b) => a - b)) {
+    const order = this.depths[frame] ?? (this.depths[frame] = [...want.keys()].sort((a, b) => a - b));
+    for (const d of order) {
       const w = want.get(d)!;
       const existing = kids.find((k) => k.$depth === d && k.$placeKey === w.key);
       if (existing) {
@@ -325,11 +349,13 @@ function swapCharacter(o: DisplayObject, id: number): void {
   if (o instanceof Shape && def?.type === "shape") {
     o.$shapeDef = def;
     (o as any).$renderVersion = ((o as any).$renderVersion ?? 0) + 1;
+    touch(o);
   }
 }
 function dispatchStageEvents(o: DisplayObject, type: string): void {
   trackStage(o, type === Event.ADDED_TO_STAGE);
-  o.dispatchEvent(new Event(type));
+  // (21 October: only to an object listening for it, unless something listens in the capture phase: core.ts's dispatchStageEvent)
+  if ((o as any).$listeners?.get(type)?.length || anyCaptureListeners(type)) o.dispatchEvent(new Event(type));
   if (o instanceof DisplayObjectContainer) for (const c of o.$children.slice()) dispatchStageEvents(c, type);
 }
 function defined(op: any): any {

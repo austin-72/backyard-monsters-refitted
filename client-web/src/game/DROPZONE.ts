@@ -2,11 +2,12 @@ import * as as3 from "as3";
 import { Vector, int } from "as3";
 import { Event, MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { ATTACK, BASE, BFOUNDATION, BTOWER, BUILDING22, CREEPS, DROPZONE_CLIP, HOUSINGBUNKER, MAP, ResourceBombs, SIEGEWEAPONPOPUP, UI2 } from "@game";
+import { Sprite } from "flash/display";
+import { ATTACK, BASE, BFOUNDATION, BTOWER, BUILDING22, CREEPS, DROPZONE_CLIP, GLOBAL, HOUSINGBUNKER, MAP, ResourceBombs, SIEGEWEAPONPOPUP, UI2 } from "@game";
 
 export class DROPZONE extends DROPZONE_CLIP {
     static {
-        as3.fields(this, { _size: 0, _middle: null, _dropTarget: 1, _targetedBuildings: null });
+        as3.fields(this, { _size: 0, _middle: null, _dropTarget: 1, _targetedBuildings: null, _ioHit: null });
     }
 
     public static readonly GROUND: int = 1;
@@ -47,6 +48,39 @@ export class DROPZONE extends DROPZONE_CLIP {
         this._dropTarget = param2;
         this.ring1.width = this._size * 1.2;
         this.ring1.height = this._size * 1.2 * 0.5;
+        this.ioMinHit();
+    }
+
+    /** Inferno-only (22 October): a ring smaller than a click (test mode's 0.01× to 0.1×) gets an unseen one round it. */
+    private _ioHit: Sprite;
+
+    private ioMinHit(): void {
+        let w: number = this._size * 1.2;
+        if (!GLOBAL.INFERNO_ONLY || w >= 40) {
+            if (this._ioHit) {
+                this._ioHit.visible = false;
+            }
+            return;
+        }
+        if (!this._ioHit) {
+            // (a click a pixel or two off a ring 2 px across, or the ring a frame behind the pointer, went to the map:
+            // nothing dropped; and so small its colour, where a drop is allowed, can't be seen: a cross marks it)
+            let h: Sprite = new Sprite();
+            h.graphics.beginFill(0, 0);
+            h.graphics.drawEllipse(-20, -10, 40, 20);
+            h.graphics.endFill();
+            h.graphics.lineStyle(1, 0xffffff, 0.9);
+            h.graphics.moveTo(-5, 0);
+            h.graphics.lineTo(5, 0);
+            h.graphics.moveTo(0, -3);
+            h.graphics.lineTo(0, 3);
+            h.buttonMode = true;
+            h.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.Place));
+            h.addEventListener(MouseEvent.MOUSE_DOWN, MAP.Click);
+            this.addChild(h);
+            this._ioHit = h;
+        }
+        this._ioHit.visible = true;
     }
 
     public Place(param1: MouseEvent): void {
@@ -104,7 +138,12 @@ export class DROPZONE extends DROPZONE_CLIP {
 
     public Clear(): void {
         while (this._targetedBuildings.length) {
-            this._targetedBuildings.pop().disableHighlight();
+            let b: BFOUNDATION = this._targetedBuildings.pop();
+            if (GLOBAL.INFERNO_ONLY) {
+                b.ioTarget(false);
+            } else {
+                b.disableHighlight();
+            }
         }
     }
 
@@ -119,7 +158,15 @@ export class DROPZONE extends DROPZONE_CLIP {
 
     public UpdateTargetBuildings(param1: number, param2: number, param3: number): void {
         let _loc4_: int = 0;
-        this.Clear();
+        // (Inferno-only, 26 October: the yard's hover outline, not a tint; kept on the buildings still under the ring,
+        // not taken off and made again every frame)
+        let was: Vector<BFOUNDATION> = null;
+        if (GLOBAL.INFERNO_ONLY) {
+            was = this._targetedBuildings;
+            this._targetedBuildings = new Vector<BFOUNDATION>(0, false, BFOUNDATION);
+        } else {
+            this.Clear();
+        }
         BASE.GetBuildingOverlap(param1, param2, param3, this._targetedBuildings);
         switch (this._dropTarget) {
             case DROPZONE.SIEGEWEAPON_BUILDINGS:
@@ -139,6 +186,17 @@ export class DROPZONE extends DROPZONE_CLIP {
                     }
                     _loc4_--;
                 }
+        }
+        if (was) {
+            for (const b of as3.values(was)) {
+                if (this._targetedBuildings.indexOf(b) < 0) {
+                    b.ioTarget(false);
+                }
+            }
+            for (const b of as3.values(this._targetedBuildings)) {
+                b.ioTarget(true);
+            }
+            return;
         }
         _loc4_ = 0;
         while (_loc4_ < this._targetedBuildings.length) {

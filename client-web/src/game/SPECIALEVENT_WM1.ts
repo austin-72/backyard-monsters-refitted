@@ -6,7 +6,7 @@ import { Point } from "flash/geom";
 import { BASE, BFOUNDATION, BTOTEM, CREEPS, CUSTOMATTACKS, ChampionBase, DEFENSEEVENTPOPUP_WM1, EnumInvasionType, GLOBAL, GRID, KEYS, LOGGER, MAP, POPUPS, SOUNDS, SPECIALEVENT, UI2, UI_BOTTOM, URLLoaderApi, WMATTACK, WMIEXTENSIONPOPUP_WM1, WMIROUNDCOMPLETE_WM1 } from "@game";
 
 /*
- * This is the original SPECIALEVENT.as class for Wild Monster Invasion 1.
+ * This is the original SPECIALEVENT.ts class for Wild Monster Invasion 1.
  * The original developers rewrote this class when Wild Monster Invasion 2 was released
  * instead of creating a new class.
  *
@@ -101,6 +101,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static Setup(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (SPECIALEVENT_WM1._setupCalled) {
             return;
         }
@@ -127,6 +131,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static StartRound(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (SPECIALEVENT_WM1._active) {
             return;
         }
@@ -210,7 +218,7 @@ export class SPECIALEVENT_WM1 extends ASObject {
         let _loc7_: any = undefined;
         let _loc8_: number = NaN;
         let _loc9_: Point = null;
-        // Original version had a CHAMPIONMONSTER.as class before the refactor to ChampionBase.as
+        // Original version had a CHAMPIONMONSTER.as class before the refactor to ChampionBase.ts
         // var _loc10_:CHAMPIONMONSTER = null;
         let champion: ChampionBase = null;
         if (SPECIALEVENT_WM1._round >= SPECIALEVENT_WM1.WAVES.length) {
@@ -278,6 +286,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static Tick(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc1_: int = 0;
         let _loc2_: any[] = null;
         let _loc3_: uint = 0;
@@ -333,6 +345,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static TimerClicked(param1: MouseEvent): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (!SPECIALEVENT_WM1._active) {
             if (SPECIALEVENT_WM1.invasionpop == 5) {
                 SPECIALEVENT_WM1.ShowExtensionPopup("now");
@@ -343,6 +359,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static ShowDefenseEventPopup(param1: string): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc2_: MovieClip = null;
         if (!DEFENSEEVENTPOPUP_WM1.open && !SPECIALEVENT_WM1._active) {
             _loc2_ = new DEFENSEEVENTPOPUP_WM1(SPECIALEVENT_WM1.invasionpop | 0);
@@ -352,6 +372,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static ShowExtensionPopup(param1: string): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc2_: MovieClip = null;
         if (!WMIEXTENSIONPOPUP_WM1.open && !SPECIALEVENT_WM1._active) {
             _loc2_ = new WMIEXTENSIONPOPUP_WM1();
@@ -361,6 +385,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static ShowTShirtPopup(param1: string): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc2_: MovieClip = null;
         if (!DEFENSEEVENTPOPUP_WM1.open && !SPECIALEVENT_WM1._active) {
             _loc2_ = new DEFENSEEVENTPOPUP_WM1(5);
@@ -370,6 +398,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static ShowEventEndPopup(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc1_: MovieClip = null;
         if (!WMIROUNDCOMPLETE_WM1.open && !SPECIALEVENT_WM1._active) {
             _loc1_ = new WMIROUNDCOMPLETE_WM1(SPECIALEVENT_WM1.EVENTEND);
@@ -379,6 +411,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static EventActive(): boolean {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return false;
+        }
         if (BASE.isOutpost || BASE.isInfernoMainYardOrOutpost) {
             return false;
         }
@@ -405,6 +441,10 @@ export class SPECIALEVENT_WM1 extends ASObject {
     }
 
     public static FlagChanged(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         SPECIALEVENT_WM1._knownFlag = SPECIALEVENT_WM1.invasionpop | 0;
         switch (SPECIALEVENT_WM1._knownFlag) {
             case -1:

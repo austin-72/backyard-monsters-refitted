@@ -13,7 +13,13 @@ export const petsConfig = {
   maxPerKind: 5,
   /** The longest name a pet can have (names are optional). */
   nameLength: 16,
+  /**
+   * Magma (the main yard's r4) a pet is fed to grow to full size, for good (the pet's menu in the yard, pets/grow;
+   * 10 October). Taken by the server from the yard's save.
+   */
+  growCost: 1_000_000,
   /** Pets a player can own in all (in the yard and in storage). */
+
   maxOwned: 60,
   /**
    * The monsters that can be pets: every Inferno monster but the champions (Korath IC9, Drull IC10, Ashkarr IC24

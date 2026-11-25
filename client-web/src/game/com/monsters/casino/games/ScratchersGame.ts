@@ -5,8 +5,9 @@ import { MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
 import { Matrix, Rectangle } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { CASINO, CasinoUI, CasinoWindow, ImageCache, SOUNDS } from "@game";
+import { CASINO, CasinoUI, CasinoWindow, GLOBAL, ImageCache, KEYS, SOUNDS } from "@game";
 
+// (QoL #235: the Pit's texts in the player's language: keys io_t3c_*, the games' names left as they are)
 /**
  * Brimstone Scratchers: a 3 x 3 card bought for 5, 25 or 100 Shiny; three of one symbol win that
  * symbol's prize times the price. The server draws the card when it is bought
@@ -15,12 +16,20 @@ import { CASINO, CasinoUI, CasinoWindow, ImageCache, SOUNDS } from "@game";
  */
 export class ScratchersGame extends Sprite {
     static {
-        as3.fields(this, { _win: null, _tier: "bone", _tierButtons: null, _buy: null, _revealAll: null, _card: null, _cardArt: null, _symbols: null, _cells: null, _coating: null, _coatingBitmap: null, _coatings: null, _disposed: false, _scratched: null, _scratchedCount: 0, _brush: null, _stamp: null, _hint: null, _ticketName: null, _ticket: null, _buying: false, _revealed: true, _fading: 0, _scratching: false, _lastX: 0, _lastY: 0, _pulse: 0, _serverCredits: -1 });
+        as3.fields(this, { _win: null, _tier: "bone", _tierButtons: null, _buy: null, _revealAll: null, _card: null, _cardArt: null, _symbols: null, _cells: null, _coating: null, _coatingBitmap: null, _coatings: null, _disposed: false, _scratched: null, _scratchedCount: 0, _brush: null, _stamp: null, _hint: null, _ticketName: null, _ticket: null, _buying: false, _revealed: true, _fading: 0, _scratching: false, _lastX: 0, _lastY: 0, _pulse: 0, _serverCredits: -1, _winGlow: null });
     }
 
     public static readonly TIERS: any[] = ["bone", "obsidian", "magma"];
 
     public static readonly NAMES: any = { "crown": "Moloch's Crown", "balthazar": "Balthazar", "spurtz": "Spurtz", "magma": "Magma", "sulfur": "Sulfur", "coal": "Coal", "bone": "Bone" };
+
+    /**
+     * QoL #235: a symbol's name in the player's language (the monsters keep theirs; NAMES is the English, and what
+     * isn't a symbol comes back undefined, as NAMES gives it).
+     */
+    public static ioName(id: string): string {
+        return ["crown", "sulfur", "coal", "bone"].indexOf(id) >= 0 ? KEYS.Get("io_t3c_sym_" + id) : ScratchersGame.NAMES[id];
+    }
 
     /** The card, from the content area's top left, and its cells in the card. */
     private static readonly CARD_X: int = 310;
@@ -73,6 +82,7 @@ export class ScratchersGame extends Sprite {
     private _lastY: number;
     private _pulse: int;
     private _serverCredits: int;
+    private _winGlow: GlowFilter;
 
     public $ctor(win?: CasinoWindow): void {
         let table: Sprite = null;
@@ -80,17 +90,22 @@ export class ScratchersGame extends Sprite {
         this._cells = [];
         this._coatings = {};
         this._scratched = [];
+        this._winGlow = new GlowFilter(0xFFD040, 1, 18, 18, 3, 2);
         super.$ctor();
         this._win = win;
         this.name = "casinoScratchers";
         // controls
         let p: Sprite = as3.as(this.addChild(CasinoUI.panel(210, 400)), Sprite);
-        let back: Sprite = CasinoUI.button("LOBBY", 90, 26, as3.bind(win, win.toLobby), true, 12);
+        let back: Sprite = CasinoUI.button(KEYS.Get("io_t3c_lobby"), 90, 26, as3.bind(win, win.toLobby), true, 12);
         back.x = 10;
         back.y = 10;
         p.addChild(back);
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #389: QUICK, a card bought shows at once, as REVEAL ALL does)
+            CasinoUI.ioQuickToggle(p, "scratch");
+        }
         p.addChild(CasinoUI.at(CasinoUI.label("SCRATCHERS", 14, CasinoUI.GOLD, true, 190, TextFormatAlign.CENTER), 10, 44));
-        p.addChild(CasinoUI.at(CasinoUI.label("TICKET", 11, CasinoUI.EMBER, true, 190), 12, 68));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_ticket"), 11, CasinoUI.EMBER, true, 190), 12, 68));
         let i: int = 0;
         while (i < ScratchersGame.TIERS.length) {
             let id: string = as3.str(ScratchersGame.TIERS[i]);
@@ -106,15 +121,15 @@ export class ScratchersGame extends Sprite {
             p.addChild(price);
             i++;
         }
-        this._buy = CasinoUI.button("BUY", 190, 40, as3.bind(this, this.onBuy), true, 18);
+        this._buy = CasinoUI.button(KEYS.Get("io_t3c_buy"), 190, 40, as3.bind(this, this.onBuy), true, 18);
         this._buy.x = 10;
         this._buy.y = 136;
         p.addChild(this._buy);
-        this._revealAll = CasinoUI.button("REVEAL ALL", 190, 28, as3.bind(this, this.onRevealAll), false, 13);
+        this._revealAll = CasinoUI.button(KEYS.Get("io_t3c_reveal_all"), 190, 28, as3.bind(this, this.onRevealAll), false, 13);
         this._revealAll.x = 10;
         this._revealAll.y = 182;
         p.addChild(this._revealAll);
-        p.addChild(CasinoUI.at(CasinoUI.label("THREE OF A KIND PAYS", 11, CasinoUI.EMBER, true, 190), 12, 220));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_three_pays"), 11, CasinoUI.EMBER, true, 190), 12, 220));
         let prizes: any[] = this.prizes();
         i = 0;
         while (i < prizes.length) {
@@ -122,7 +137,7 @@ export class ScratchersGame extends Sprite {
             row.x = 12;
             row.y = 238 + i * 22;
             CasinoUI.picture(row, "casino/scratch/symbol_" + prizes[i].symbol + ".png", 0, 0, 20, 20);
-            row.addChild(CasinoUI.at(CasinoUI.label(as3.str(ScratchersGame.NAMES[prizes[i].symbol] || prizes[i].symbol), 11, 15260872, false, 120), 26, 1));
+            row.addChild(CasinoUI.at(CasinoUI.label(as3.str(ScratchersGame.ioName(prizes[i].symbol) || prizes[i].symbol), 11, 15260872, false, 120), 26, 1));
             row.addChild(CasinoUI.at(CasinoUI.label(CasinoUI.mult(Number(prizes[i].pays)), 11, CasinoUI.GOLD, true, 50, TextFormatAlign.RIGHT), 136, 1));
             i++;
         }
@@ -228,12 +243,13 @@ export class ScratchersGame extends Sprite {
         return (e: MouseEvent): void => {
             if (!this.tierOpen(id)) {
                 let t: any = this.tierRules(id);
-                this._win.message(id.charAt(0).toUpperCase() + id.substr(1) + " tickets are sold from Pit level " + (t ? t.level | 0 : 3) + ".", CasinoUI.ASH);
+                this._win.message(KEYS.Get("io_t3c_tier_level", { "v1": id.charAt(0).toUpperCase() + id.substr(1), "v2": (t ? t.level | 0 : 3) }), CasinoUI.ASH);
                 SOUNDS.Play("error1");
                 return;
             }
-            if (this._ticket && !this._revealed) {
-                this._win.message("Scratch the card you have first.", CasinoUI.ASH);
+            // (9 October: also while a ticket is being bought, or its result came under the other ticket's art)
+            if (this._buying || (this._ticket && !this._revealed)) {
+                this._win.message(KEYS.Get("io_t3c_scratch_first"), CasinoUI.ASH);
                 return;
             }
             this.setTier(id);
@@ -247,13 +263,13 @@ export class ScratchersGame extends Sprite {
             CasinoUI.choose(as3.cast(this._tierButtons[k], Sprite), k == id);
             this._tierButtons[k].alpha = this.tierOpen(k) ? 1 : 0.45;
         }
-        this._ticketName.text = id.toUpperCase() + " TICKET  -  " + this.tierPrice(id) + " SHINY";
+        this._ticketName.text = KEYS.Get("io_t3c_ticket_name", { "v1": id.toUpperCase(), "v2": this.tierPrice(id) });
         CasinoUI.removeAll(this._cardArt);
         CasinoUI.picture(this._cardArt, "casino/scratch/card_" + id + ".png", 0, 0, ScratchersGame.CARD, ScratchersGame.CARD);
         if (!this._ticket || this._revealed) {
             this.clearCard();
             this.cover();
-            this._hint.text = "BUY A TICKET";
+            this._hint.text = KEYS.Get("io_t3c_buy_ticket");
         }
     }
 
@@ -296,7 +312,7 @@ export class ScratchersGame extends Sprite {
         let price: int = 0;
         let st: any = CASINO.state;
         if (!st || st.closed || st.shiny_locked) {
-            this._win.message(st && st.closed ? String(st.closed) : "The Pit is not open.", CasinoUI.LOSS);
+            this._win.message(st && st.closed ? String(st.closed) : KEYS.Get("io_t3c_not_open"), CasinoUI.LOSS);
             return;
         }
         if (this._buying || (this._ticket && !this._revealed)) {
@@ -307,8 +323,16 @@ export class ScratchersGame extends Sprite {
         }
         price = this.tierPrice(this._tier);
         if (CASINO.credits() < price) {
-            this._win.message("You do not have enough Shiny for that ticket.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny_ticket"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
+            return;
+        }
+        // (QoL #385: a ticket of more than half the Shiny asked about first, once)
+        if (CASINO.ioAskBig("scratch", price, (): void => {
+            if (this.parent) {
+                this.onBuy();
+            }
+        })) {
             return;
         }
         this._buying = true;
@@ -321,11 +345,12 @@ export class ScratchersGame extends Sprite {
         CASINO.scratch(tier, (r: any): void => {
             this._buying = false;
             if (!this.parent) {
+                CASINO.late(r);
                 return;
             }
             if (r.error) {
                 CASINO.setCredits((CASINO.credits() + price) | 0);
-                this._hint.text = "BUY A TICKET";
+                this._hint.text = KEYS.Get("io_t3c_buy_ticket");
                 this._win.message(String(r.error), CasinoUI.LOSS);
                 SOUNDS.Play("error1");
                 return;
@@ -347,7 +372,11 @@ export class ScratchersGame extends Sprite {
             i++;
         }
         SOUNDS.Play("purchasepopup");
-        this._win.message("Scratch the card!", CasinoUI.GOLD);
+        this._win.message(KEYS.Get("io_t3c_scratch"), CasinoUI.GOLD);
+        // (QoL #389: QUICK: the whole card at once, and its prize)
+        if (CasinoUI.ioQuick("scratch")) {
+            this.reveal();
+        }
     }
 
     private onDown(e: MouseEvent): void {
@@ -465,13 +494,13 @@ export class ScratchersGame extends Sprite {
                 cell.graphics.endFill();
                 cell.filters = [new GlowFilter(0xFFD040, 1, 18, 18, 3, 2)];
             }
-            label = CasinoUI.title("WIN " + CasinoUI.number(payout) + " SHINY!", 26, 360);
-            this._win.message("Three " + (ScratchersGame.NAMES[r.prize] || r.prize) + ": " + CasinoUI.mult(Number(r.multiplier)) + ", +" + CasinoUI.number(payout) + " Shiny", CasinoUI.WIN);
+            label = CasinoUI.title(KEYS.Get("io_t3c_scratch_win", { "v1": CasinoUI.number(payout) }), 26, 360);
+            this._win.message(KEYS.Get("io_t3c_three_win", { "v1": String(ScratchersGame.ioName(String(r.prize)) || r.prize), "v2": CasinoUI.mult(Number(r.multiplier)), "v3": CasinoUI.number(payout) }), CasinoUI.WIN);
             SOUNDS.Play(Number(r.multiplier) >= 10 ? "chaching" : "purchasepopup");
             this._win.bigWin(payout, r.price | 0);
         } else {
-            label = CasinoUI.label("NO WIN - TRY ANOTHER", 16, CasinoUI.ASH, true, 360, TextFormatAlign.CENTER);
-            this._win.message("No three of a kind on this one.", CasinoUI.ASH);
+            label = CasinoUI.label(KEYS.Get("io_t3c_no_win"), 16, CasinoUI.ASH, true, 360, TextFormatAlign.CENTER);
+            this._win.message(KEYS.Get("io_t3c_no_three"), CasinoUI.ASH);
         }
         label.x = -180;
         label.y = -16;
@@ -500,10 +529,13 @@ export class ScratchersGame extends Sprite {
         }
         if (this._ticket && this._revealed && this._ticket.prize) {
             this._pulse++;
-            let a: number = 0.6 + 0.4 * Math.sin(this._pulse / 5);
-            for (const $value of as3.values(this._ticket.cells)) {
-                let c: int = $value | 0;
-                this._cells[c].filters = [new GlowFilter(0xFFD040, a, 18, 18, 3, 2)];
+            // (one glow, set every third frame: 9 October, a new filter every frame before)
+            if (this._pulse % 3 == 1) {
+                this._winGlow.alpha = 0.6 + 0.4 * Math.sin(this._pulse / 5);
+                for (const $value of as3.values(this._ticket.cells)) {
+                    let c: int = $value | 0;
+                    this._cells[c].filters = [this._winGlow];
+                }
             }
         }
         let busy: boolean = this._buying || (this._ticket != null && !this._revealed);

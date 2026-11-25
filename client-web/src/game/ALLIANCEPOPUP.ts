@@ -71,6 +71,10 @@ export class ALLIANCEPOPUP extends MovieClip {
             // once from the store (the window opened a second time), before ALLIANCEWINDOW has added the
             // window, and a tab draws nothing off the stage: the first tab stayed empty.
             this._ioFirstTab = this._ioInAlliance() ? AllianceConstants.IO_TAB_OVERVIEW : 0;
+            // (QoL #468: the tab you had open last, this session, while in the same alliance state)
+            if (ALLIANCEPOPUP._ioLastTab >= 0 && ALLIANCEPOPUP._ioLastIn == this._ioInAlliance()) {
+                this._ioFirstTab = ALLIANCEPOPUP._ioLastTab;
+            }
             this._activeTab = this._ioFirstTab;
             this.addEventListener(Event.ADDED_TO_STAGE, as3.bind(this, this._ioOnStage));
             return;
@@ -116,7 +120,7 @@ export class ALLIANCEPOPUP extends MovieClip {
         shield.x = 8;
         shield.y = 6;
         this._header.addChild(shield);
-        IoAllianceUi.emblem(shield, data.image | 0, 52);
+        IoAllianceUi.emblem(shield, data.image | 0, 52, data.crest);
         IoAllianceUi.addText(this._header, String(data.name), 70, 6, 18, AllianceConstants.IO_INK, true, 330);
         let role: string = ALLIANCES.ioRole();
         let line: string = KEYS.Get("io_alliance_header_line", { "v1": String(data.rank || "-"), "v2": String(data.avg_level), "v3": String(data.leader_name) });
@@ -247,6 +251,9 @@ export class ALLIANCEPOPUP extends MovieClip {
             }
             btn.Setup(tabLabel, false, this._tabWidth(i), ALLIANCEPOPUP.TAB_H, "#ECBF88");
             btn.focusRect = false;
+            // (a name to find it by whatever the language: 0 browse, 1 overview, 2 power-ups, 3 members, 4 recruit,
+            // 5 invites, 6 board, 7 outposts)
+            btn.name = "ioAllianceTab" + i;
             btn.x = currentX;
             btn.y = this._tabY;
             btn.addEventListener(MouseEvent.CLICK, this._onTabClick(i));
@@ -348,6 +355,10 @@ export class ALLIANCEPOPUP extends MovieClip {
             i++;
         }
         this._activeTab = idx;
+        if (this._io) {
+            ALLIANCEPOPUP._ioLastTab = idx;
+            ALLIANCEPOPUP._ioLastIn = this._ioInAlliance();
+        }
         while (this._contentMC.numChildren > 0) {
             this._contentMC.removeChildAt(0);
         }
@@ -413,6 +424,11 @@ export class ALLIANCEPOPUP extends MovieClip {
      * tabs that were just un/locked by that change.
      * @param {int} idx - TAB_LABELS index to switch to.
      */
+    /** (Inferno-only, QoL #468) the tab last open this session, and whether the player was in an alliance then */
+    private static _ioLastTab: int = -1;
+
+    private static _ioLastIn: boolean = false;
+
     public SelectTab(idx: int): void {
         this._rebuildTabs();
         this._switchTab(idx);

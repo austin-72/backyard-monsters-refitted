@@ -5,8 +5,9 @@ import { MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
 import { Matrix } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { BetSelector, CASINO, CasinoUI, CasinoWindow, SOUNDS } from "@game";
+import { BetSelector, CASINO, CasinoUI, CasinoWindow, GLOBAL, KEYS, SOUNDS } from "@game";
 
+// (QoL #235: the Pit's texts in the player's language: keys io_t3c_*, the games' names left as they are)
 /**
  * Magma Derby: a race every few minutes for every player, run by the server
  * (server/src/services/casino/derbyRounds.ts). Six monsters with odds; bet on one or more to win while
@@ -16,7 +17,7 @@ import { BetSelector, CASINO, CasinoUI, CasinoWindow, SOUNDS } from "@game";
  */
 export class DerbyGame extends Sprite {
     static {
-        as3.fields(this, { _win: null, _chip: null, _total: null, _place: null, _clear: null, _status: null, _mine: null, _celebrated: -1, _track: null, _ground: null, _finish: null, _gate: null, _runnersLayer: null, _runners: null, _board: null, _rows: null, _podium: null, _bettors: null, _clock: null, _state: null, _offset: 0, _polling: false, _pollT: 0, _sending: false, _slip: null, _shownRound: -1, _shownPhase: "", _t: 0 });
+        as3.fields(this, { _win: null, _chip: null, _total: null, _place: null, _clear: null, _status: null, _mine: null, _celebrated: -1, _track: null, _ground: null, _finish: null, _gate: null, _runnersLayer: null, _runners: null, _board: null, _rows: null, _podium: null, _bettors: null, _clock: null, _state: null, _offset: 0, _polling: false, _pollT: 0, _sending: false, _slip: null, _shownRound: -1, _shownPhase: "", _t: 0, _pollAfter: 0, _bettorsKey: "", _ioTakeMode: false });
     }
 
     private static readonly SX: int = 220;
@@ -61,6 +62,11 @@ export class DerbyGame extends Sprite {
     private _shownRound: int;
     private _shownPhase: string;
     private _t: int;
+    /** No asking again before this (Date ms) after an error: 9 October, an error was asked again every frame. */
+    private _pollAfter: number;
+    private _bettorsKey: string;
+    /** QoL #504: CLEAR reads TAKE BACK (nothing on the slip, the player's slips on a race still taking bets). */
+    private _ioTakeMode: boolean;
 
     public $ctor(win?: CasinoWindow): void {
         this._runners = {};
@@ -70,30 +76,44 @@ export class DerbyGame extends Sprite {
         this._win = win;
         this.name = "casinoDerby";
         let p: Sprite = as3.as(this.addChild(CasinoUI.panel(210, 400)), Sprite);
-        let back: Sprite = CasinoUI.button("LOBBY", 90, 26, as3.bind(win, win.toLobby), true, 12);
+        let back: Sprite = CasinoUI.button(KEYS.Get("io_t3c_lobby"), 90, 26, as3.bind(win, win.toLobby), true, 12);
         back.x = 10;
         back.y = 10;
         p.addChild(back);
+        // (QoL #390: "?", the rules and pays)
+        if (GLOBAL.INFERNO_ONLY) {
+            CasinoUI.ioRulesButton(p, as3.bind(this, this.ioRules));
+        }
         p.addChild(CasinoUI.at(CasinoUI.label("MAGMA DERBY", 14, CasinoUI.GOLD, true, 190, TextFormatAlign.CENTER), 10, 44));
-        p.addChild(CasinoUI.at(CasinoUI.label("CHIP (click a monster to bet it)", 10, CasinoUI.EMBER, true, 190), 12, 68));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_chip_monster"), 10, CasinoUI.EMBER, true, 190), 12, 68));
         this._chip = new BetSelector(190);
         this._chip.x = 10;
         this._chip.y = 82;
         this._chip.setValue(10);
+        // (QoL #384: MAX and the dimmed chips count what is already on the slip)
+        this._chip.ioAfford = (): int => (CASINO.credits() - this.slipTotal()) | 0;
         p.addChild(this._chip);
-        p.addChild(CasinoUI.at(CasinoUI.label("ON YOUR SLIP", 11, CasinoUI.EMBER, true, 190), 12, 206));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_slip"), 11, CasinoUI.EMBER, true, 190), 12, 206));
         this._total = CasinoUI.label("0 Shiny", 14, CasinoUI.GOLD, true, 190);
         this._total.x = 12;
         this._total.y = 220;
         p.addChild(this._total);
-        this._place = CasinoUI.button("PLACE BET", 190, 38, as3.bind(this, this.onPlace), false, 17);
+        this._place = CasinoUI.button(KEYS.Get("io_t3c_place_bet"), 190, 38, as3.bind(this, this.onPlace), false, 17);
         this._place.x = 10;
         this._place.y = 244;
         p.addChild(this._place);
-        this._clear = CasinoUI.button("CLEAR", 92, 24, as3.bind(this, this.onClear), false, 11);
+        this._clear = CasinoUI.button(KEYS.Get("io_t3c_clear"), 92, 24, as3.bind(this, this.onClear), false, 11);
         this._clear.x = 10;
         this._clear.y = 288;
         p.addChild(this._clear);
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #391: PAST RACES beside CLEAR: the last races' winners and their odds)
+            let past: Sprite = CasinoUI.toggle(KEYS.Get("io_pit_past"), 92, 24, as3.bind(this, this.ioPastRaces));
+            past.name = "ioPitPast";
+            past.x = 108;
+            past.y = 288;
+            p.addChild(past);
+        }
         this._status = CasinoUI.label("", 12, CasinoUI.GOLD, true, 190, TextFormatAlign.CENTER);
         this._status.name = "casinoDerbyStatus";
         this._status.x = 10;
@@ -177,13 +197,16 @@ export class DerbyGame extends Sprite {
 
     private poll(): void {
         let sent: number = NaN;
-        if (this._polling) {
+        if (this._polling || new Date().getTime() < this._pollAfter) {
             return;
         }
         this._polling = true;
         sent = new Date().getTime();
         CASINO.derbyState((r: any): void => {
             this._polling = false;
+            if (r.error) {
+                this._pollAfter = new Date().getTime() + 2000;
+            }
             if (!this.parent || r.error) {
                 return;
             }
@@ -215,6 +238,12 @@ export class DerbyGame extends Sprite {
 
     /** The race's bettors, biggest first (a line per player and runner), and how many are in. */
     private showBettors(r: any): void {
+        // (drawn again only when they change: every poll rebuilt the pictures and labels; 9 October)
+        let key: string = String(r.phase) + "|" + (r.players | 0) + "|" + (r.pot | 0) + "|" + (r.bettors ? JSON.stringify(r.bettors) : "");
+        if (key == this._bettorsKey) {
+            return;
+        }
+        this._bettorsKey = key;
         CasinoUI.removeAll(this._bettors);
         this._bettors.graphics.clear();
         let list: any[] = as3.as(r.bettors, Array);
@@ -227,7 +256,7 @@ export class DerbyGame extends Sprite {
         this._bettors.graphics.drawRoundRect(0, 0, 224, 24 + Math.max(1, rows) * 15 + 4, 10, 10);
         this._bettors.graphics.endFill();
         let players: int = r.players | 0;
-        this._bettors.addChild(CasinoUI.at(CasinoUI.label(players == 0 ? "NO BETS YET - BE THE FIRST" : (players == 1 ? "1 PLAYER" : players + " PLAYERS") + " - " + CasinoUI.number(r.pot | 0) + " SHINY IN", 10, CasinoUI.GOLD, true, 216, TextFormatAlign.CENTER), 4, 5));
+        this._bettors.addChild(CasinoUI.at(CasinoUI.label(players == 0 ? KEYS.Get("io_t3c_derby_nobets") : (players == 1 ? KEYS.Get("io_t3c_derby_pot1", { "v1": CasinoUI.number(r.pot | 0) }) : KEYS.Get("io_t3c_derby_pot", { "v1": players, "v2": CasinoUI.number(r.pot | 0) })), 10, CasinoUI.GOLD, true, 216, TextFormatAlign.CENTER), 4, 5));
         let i: int = 0;
         while (i < rows) {
             let b: any = list[i];
@@ -301,7 +330,7 @@ export class DerbyGame extends Sprite {
             odds.x = 152;
             odds.y = 4;
             row.addChild(odds);
-            let note: TextField = CasinoUI.label(place > 0 ? (place == 1 ? "WINNER" : "#" + place) : "odds", 9, (place == 1 ? 0xFFD040 : CasinoUI.ASH) >>> 0, true, 70, TextFormatAlign.RIGHT);
+            let note: TextField = CasinoUI.label(place > 0 ? (place == 1 ? KEYS.Get("io_t3c_winner") : "#" + place) : KEYS.Get("io_t3c_odds"), 9, (place == 1 ? 0xFFD040 : CasinoUI.ASH) >>> 0, true, 70, TextFormatAlign.RIGHT);
             note.x = 152;
             note.y = 30;
             row.addChild(note);
@@ -315,6 +344,39 @@ export class DerbyGame extends Sprite {
             i++;
         }
         this.refresh();
+    }
+
+    /** QoL #390: the rules ("?"); the odds are the race's own (on the board). */
+    private ioRules(): any[] {
+        let runners: any[] = this._state ? as3.as(this._state.runners, Array) : null;
+        return ["MAGMA DERBY", KEYS.Get("io_pit_rules_derby1", { "v1": runners && runners.length ? runners.length : 6 }), KEYS.Get("io_t3c_rules_derby2"), KEYS.Get("io_pit_rules_derby3"), KEYS.Get("io_pit_rules_derby4"), KEYS.Get("io_pit_rules_derby5")];
+    }
+
+    /**
+     * QoL #391: the last races (derby/state's history, newest first, up to 10): who won, at what odds, who came second,
+     * how long ago (the server's clock).
+     */
+    private ioPastRaces(e: MouseEvent = null): void {
+        let h: any[] = this._state ? as3.as(this._state.history, Array) : null;
+        if (!h || !h.length) {
+            GLOBAL.Message("<b>" + KEYS.Get("io_pit_past_title") + "</b><br><br>" + KEYS.Get("io_pit_past_none"));
+            return;
+        }
+        let now: number = this.serverNow();
+        let lines: any[] = [];
+        for (let race of as3.values(h)) {
+            if (race.winner == null) {
+                continue;
+            }
+            let ago: int = Math.max(0, Math.round((now - Number(race.at)) / 60000)) | 0;
+            lines.push(KEYS.Get("io_pit_past_line", {
+                "v1": String(CASINO.MONSTER_NAMES[race.winner] || race.winner),
+                "v2": race.odds != null ? CasinoUI.multFixed(Number(race.odds)) : "-",
+                "v3": race.second != null ? String(CASINO.MONSTER_NAMES[race.second] || race.second) : "-",
+                "v4": Number(race.at) > 0 ? KEYS.Get("io_pit_past_ago", { "v1": ago }) : ""
+            }));
+        }
+        GLOBAL.Message("<b>" + KEYS.Get("io_pit_past_title") + "</b><br><br>" + (lines.length ? "• " + lines.slice(0, 10).join("<br>• ") : KEYS.Get("io_pit_past_none")));
     }
 
     private rowClick(id: string): Function {
@@ -334,7 +396,7 @@ export class DerbyGame extends Sprite {
         }
         let chip: int = this._chip.value;
         if (CASINO.credits() < this.slipTotal() + chip) {
-            this._win.message("You do not have enough Shiny for that.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
             return;
         }
@@ -362,7 +424,7 @@ export class DerbyGame extends Sprite {
             // what everyone has on it
             let all: int = this._state && this._state.totals ? (this._state.totals[k] || 0) | 0 : 0;
             if (this._rows[k].place == 0) {
-                this._rows[k].note.text = all > 0 ? CasinoUI.number(all) + " bet" : "odds";
+                this._rows[k].note.text = all > 0 ? KEYS.Get("io_t3c_n_bet", { "v1": CasinoUI.number(all) }) : KEYS.Get("io_t3c_odds");
                 this._rows[k].note.textColor = all > 0 ? CasinoUI.WIN : CasinoUI.ASH;
             }
             if (amount > 0) {
@@ -380,7 +442,22 @@ export class DerbyGame extends Sprite {
         let total: int = this.slipTotal();
         this._total.text = CasinoUI.number(total) + " Shiny";
         CasinoUI.enable(this._place, total > 0 && this.betting() && !this._sending);
-        CasinoUI.enable(this._clear, total > 0 && !this._sending);
+        // (Inferno-only, QoL #504: with nothing on the slip, CLEAR takes back the slips placed on this race while it
+        // still takes bets)
+        this._ioTakeMode = GLOBAL.INFERNO_ONLY && total == 0 && this.betting() && this.ioHasOpenBets();
+        CasinoUI.relabel(this._clear, this._ioTakeMode ? KEYS.Get("io_acc_pit_takeback") : KEYS.Get("io_t3c_clear"));
+        CasinoUI.enable(this._clear, (total > 0 || this._ioTakeMode) && !this._sending);
+    }
+
+    /** QoL #504: the player has slips on this race not yet settled. */
+    private ioHasOpenBets(): boolean {
+        let r: any = this._state;
+        for (let b of as3.values(r && r.my_bets ? r.my_bets : [])) {
+            if (String(b.status) == "open") {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** What the player has on a runner already (placed slips). */
@@ -401,20 +478,56 @@ export class DerbyGame extends Sprite {
     }
 
     private onClear(e: MouseEvent = null): void {
+        if (GLOBAL.INFERNO_ONLY && this._ioTakeMode && this.slipTotal() == 0) {
+            this.ioTakeBack();
+            return;
+        }
         this._slip = {};
         this.refresh();
+    }
+
+    /** QoL #504: every slip on this race taken back (the server pays them back if the race hasn't started). */
+    private ioTakeBack(): void {
+        let r: any = this._state;
+        if (!r || this._sending) {
+            return;
+        }
+        this._sending = true;
+        this.refresh();
+        CASINO.ioTakeBack("derby", r.round_id | 0, (res: any): void => {
+            this._sending = false;
+            if (!this.parent) {
+                return;
+            }
+            if (res.error) {
+                this._win.message(String(res.error), CasinoUI.LOSS);
+                SOUNDS.Play("error1");
+            } else {
+                this._win.message(KEYS.Get("io_acc_pit_taken", { "v1": CasinoUI.number(res.refunded | 0) }), CasinoUI.GOLD);
+            }
+            this.refresh();
+            this.poll();
+        });
     }
 
     private onPlace(e: MouseEvent = null): void {
         let total: int = 0;
         let st: any = CASINO.state;
         if (!st || st.closed || st.shiny_locked) {
-            this._win.message(st && st.closed ? String(st.closed) : "The Pit is not open.", CasinoUI.LOSS);
+            this._win.message(st && st.closed ? String(st.closed) : KEYS.Get("io_t3c_not_open"), CasinoUI.LOSS);
             return;
         }
         let r: any = this._state;
         total = this.slipTotal();
         if (!this.betting() || total <= 0 || this._sending) {
+            return;
+        }
+        // (QoL #385: a slip of more than half the Shiny asked about first, once)
+        if (CASINO.ioAskBig("derby", total, (): void => {
+            if (this.parent) {
+                this.onPlace();
+            }
+        })) {
             return;
         }
         let bets: any[] = [];
@@ -435,7 +548,7 @@ export class DerbyGame extends Sprite {
             } else {
                 this._slip = {};
                 SOUNDS.Play("purchasepopup");
-                this._win.message("Bet placed: " + CasinoUI.number(total) + " Shiny. Good luck!", CasinoUI.GOLD);
+                this._win.message(KEYS.Get("io_t3c_bet_placed", { "v1": CasinoUI.number(total) }), CasinoUI.GOLD);
             }
             this.poll();
         });
@@ -444,7 +557,7 @@ export class DerbyGame extends Sprite {
     private showMine(r: any): void {
         let list: any[] = as3.as(r.my_bets, Array);
         if (!list || !list.length) {
-            this._mine.text = r.phase == "betting" ? "Pick monsters on the board, then place the bet." : "";
+            this._mine.text = r.phase == "betting" ? KEYS.Get("io_t3c_derby_pick") : "";
             this._mine.textColor = 15260872;
             return;
         }
@@ -463,18 +576,19 @@ export class DerbyGame extends Sprite {
                 settled = false;
             }
             for (let x of as3.values(b.bets)) {
-                parts.push(String(CASINO.MONSTER_NAMES[x.on] || x.on) + " " + x.amount + " @ " + Number(odds[x.on]).toFixed(2));
+                // (QoL #581: the odds as the Pit writes multipliers, 3.20×)
+                parts.push(String(CASINO.MONSTER_NAMES[x.on] || x.on) + " " + x.amount + " @ " + (GLOBAL.INFERNO_ONLY ? CasinoUI.multFixed(Number(odds[x.on])) : Number(odds[x.on]).toFixed(2)));
             }
         }
         if (settled && r.phase == "results") {
-            this._mine.text = paid > 0 ? "You won " + CasinoUI.number(paid) + " Shiny!" : "No luck this race (" + CasinoUI.number(staked) + " Shiny).";
+            this._mine.text = paid > 0 ? KEYS.Get("io_t3c_derby_won", { "v1": CasinoUI.number(paid) }) : KEYS.Get("io_t3c_derby_noluck", { "v1": CasinoUI.number(staked) });
             if (paid > 0 && this._celebrated != (r.round_id | 0)) {
                 this._celebrated = r.round_id | 0;
                 this._win.bigWin(paid, staked);
             }
             this._mine.textColor = paid > 0 ? CasinoUI.WIN : CasinoUI.LOSS;
         } else {
-            this._mine.text = "Your bets: " + parts.join(", ");
+            this._mine.text = KEYS.Get("io_t3c_your_bets", { "v1": parts.join(", ") });
             this._mine.textColor = 15260872;
         }
     }
@@ -505,7 +619,7 @@ export class DerbyGame extends Sprite {
             }
             i++;
         }
-        this._podium.addChild(CasinoUI.at(CasinoUI.title(String(CASINO.MONSTER_NAMES[order[0]] || order[0]).toUpperCase() + " WINS!", 20, 300), 90, 44));
+        this._podium.addChild(CasinoUI.at(CasinoUI.title(KEYS.Get("io_t3c_derby_wins", { "v1": String(CASINO.MONSTER_NAMES[order[0]] || order[0]).toUpperCase() }), 20, 300), 90, 44));
     }
 
     /** Where a runner is on the track `ms` into the race: along its checkpoints, a little past the finish. */
@@ -542,7 +656,8 @@ export class DerbyGame extends Sprite {
             this.poll();
         }
         if (!r) {
-            this._status.text = "Finding the race...";
+            // (set only when they change: every frame laid them out again; 9 October)
+            CasinoUI.setText(this._status, KEYS.Get("io_t3c_derby_finding"));
             return;
         }
         let now: number = this.serverNow();
@@ -551,8 +666,8 @@ export class DerbyGame extends Sprite {
             let left: number = Math.max(0, Number(r.starts_at) - now);
             let sec: int = Math.ceil(left / 1000) | 0;
             let clock: string = ((sec / 60) | 0) + ":" + (sec % 60 < 10 ? "0" : "") + (sec % 60);
-            this._status.text = phase == "waiting" || now < Number(r.betting_opens_at) ? "Next race soon..." : "RACE IN " + clock;
-            this._clock.text = phase == "betting" ? "BETS CLOSE IN " + clock : "";
+            CasinoUI.setText(this._status, phase == "waiting" || now < Number(r.betting_opens_at) ? KEYS.Get("io_t3c_derby_soon") : KEYS.Get("io_t3c_derby_race_in", { "v1": clock }));
+            CasinoUI.setText(this._clock, phase == "betting" ? KEYS.Get("io_t3c_bets_close_caps", { "v1": clock }) : "");
             if (left <= 0) {
                 this.poll();
             }
@@ -576,8 +691,8 @@ export class DerbyGame extends Sprite {
             }
             // the view follows the leader
             this._ground.x = -Math.max(0, Math.min(DerbyGame.TRACK + 80 - DerbyGame.SW, lead - 330));
-            this._status.text = phase == "racing" ? "RACING!" : "WINNER: " + String(CASINO.MONSTER_NAMES[r.order[0]] || r.order[0]).toUpperCase();
-            this._clock.text = phase == "racing" ? ((ms / 1000) >= 0 ? (ms / 1000).toFixed(1) + "s" : "") : "";
+            CasinoUI.setText(this._status, phase == "racing" ? KEYS.Get("io_t3c_derby_racing") : KEYS.Get("io_t3c_winner_is", { "v1": String(CASINO.MONSTER_NAMES[r.order[0]] || r.order[0]).toUpperCase() }));
+            CasinoUI.setText(this._clock, phase == "racing" ? ((ms / 1000) >= 0 ? (ms / 1000).toFixed(1) + "s" : "") : "");
         }
         if (this._t % 20 == 0) {
             this.refresh();

@@ -145,11 +145,17 @@ export class BUILDING115 extends BTOWER {
                 _loc3_ = BTOWER.AdjustTowerRange(GLOBAL._currentCell, _loc3_);
                 _loc4_ = BTOWER.AdjustTowerRange(GLOBAL._currentCell, _loc4_);
             }
-            if (_loc1_.range < _loc2_.range) {
-                this._upgradeDescription += KEYS.Get("building_rangeincrease", { "v1": _loc3_, "v2": _loc4_ }) + "<br>";
-            }
-            if (_loc1_.damage < _loc2_.damage) {
-                this._upgradeDescription += KEYS.Get("building_dpsincrease", { "v1": _loc1_.damage, "v2": _loc2_.damage }) + "<br>";
+            // (Inferno-only, QoL #579: the range in cells, and the damage as per shot × shots a second = DPS; it said
+            // "Damage per shot" and an unlabelled range)
+            if (GLOBAL.INFERNO_ONLY) {
+                this._upgradeDescription += BTOWER.ioUpgradeLines(this._type, _loc1_, _loc2_, _loc3_, _loc4_);
+            } else {
+                if (_loc1_.range < _loc2_.range) {
+                    this._upgradeDescription += KEYS.Get("building_rangeincrease", { "v1": _loc3_, "v2": _loc4_ }) + "<br>";
+                }
+                if (_loc1_.damage < _loc2_.damage) {
+                    this._upgradeDescription += KEYS.Get("building_dpsincrease", { "v1": _loc1_.damage, "v2": _loc2_.damage }) + "<br>";
+                }
             }
             if (this._lvl.Get() > 1) {
                 this._upgradeDescription += KEYS.Get("building_sfpsincrease", { "v1": this._targetArray[this._lvl.Get() - 1], "v2": this._targetArray[this._lvl.Get()] }) + "<br>";

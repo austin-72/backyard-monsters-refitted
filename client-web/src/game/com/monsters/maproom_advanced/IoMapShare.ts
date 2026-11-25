@@ -5,7 +5,7 @@ import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { TextField } from "flash/text";
 import { Dictionary } from "flash/utils";
-import { ALLIANCES, BASE, BYMChat, Chat, GLOBAL, IoMapSnapshot, IoMapUi, IoPinEditorPopup, IoQuests, IoReplays, IoUnderworld, SOUNDS, TweenLite, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { ALLIANCES, ArcadeWindow, BASE, BYMChat, Chat, GLOBAL, IoMapSnapshot, IoMapUi, IoPinEditorPopup, IoPlanShare, IoQuests, IoReplays, IoUnderworld, KEYS, SOUNDS, TweenLite, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
 
 /**
  * Inferno-only: sharing a place on the map in chat.
@@ -20,7 +20,7 @@ export class IoMapShare extends ASObject {
     private static readonly TOKEN: RegExp = /\[map:(\d{1,3}),(\d{1,3})(?::([0-9a-zA-Z]{1,12}))?\]/g;
 
     /** A place, or an attack replay ([replay:key]: the fourth group). */
-    private static readonly ANY_TOKEN: RegExp = /\[map:(\d{1,3}),(\d{1,3})(?::([0-9a-zA-Z]{1,12}))?\]|\[replay:([0-9a-zA-Z]{6,24})\]/g;
+    private static readonly ANY_TOKEN: RegExp = /\[map:(\d{1,3}),(\d{1,3})(?::([0-9a-zA-Z]{1,12}))?\]|\[replay:([0-9a-zA-Z]{6,24})(?:\|([0-9A-Za-z_. -]{1,16})\|([0-9A-Za-z_. -]{1,16})\|(\d{1,3}))?\]|\[arcade:([a-z0-9]{2,16}):([a-z0-9]{2,12})\]|\[layout:([0-9a-zA-Z]{6,16})\|([0-9A-Za-z_. -]{1,16})\|(\d{1,4})\]/g; // (QoL #98: a replay token may carry "Ann vs Bob · 87%"; QoL #372: [arcade:game:mode], a JOIN pill)
 
     private static readonly NBSP: string = " ";
 
@@ -65,7 +65,7 @@ export class IoMapShare extends ASObject {
         IoMapShare.HideChooser();
         IoMapUi.glass(bubble.graphics, w, h, 9);
         title = IoMapUi.label("", 12, IoMapUi.LIGHT, false, (w - 34) | 0);
-        title.htmlText = "Share <b>" + IoMapUi.coord(cellX, cellY) + "</b> in";
+        title.htmlText = KEYS.Get("io_t3m_ms_share_in", { "v1": IoMapUi.coord(cellX, cellY) });
         title.x = 10;
         title.y = 7;
         bubble.addChild(title);
@@ -80,13 +80,13 @@ export class IoMapShare extends ASObject {
             IoMapShare.HideChooser();
         });
         bubble.addChild(close);
-        global = IoMapUi.button("Global", 104, 26, (e: MouseEvent): void => {
+        global = IoMapUi.button(KEYS.Get("io_t3m_ch_tab_global"), 104, 26, (e: MouseEvent): void => {
             IoMapShare.share(host, area, BYMChat.IO_GLOBAL, cellX, cellY);
         }, "gold");
         global.x = 10;
         global.y = 32;
         bubble.addChild(global);
-        alliance = IoMapUi.button("Alliance", 104, 26, (e: MouseEvent): void => {
+        alliance = IoMapUi.button(KEYS.Get("io_t3m_ch_tab_alliance"), 104, 26, (e: MouseEvent): void => {
             IoMapShare.share(host, area, BYMChat.IO_ALLIANCE, cellX, cellY);
         }, "grey");
         alliance.x = 122;
@@ -94,7 +94,7 @@ export class IoMapShare extends ASObject {
         Object(alliance).setEnabled(inAlliance);
         bubble.addChild(alliance);
         if (canPin) {
-            let pin: MovieClip = IoMapUi.button("Pin to alliance board", (w - 20) | 0, 26, (e: MouseEvent): void => {
+            let pin: MovieClip = IoMapUi.button(KEYS.Get("io_t3m_ms_pin"), (w - 20) | 0, 26, (e: MouseEvent): void => {
                 IoMapShare.HideChooser();
                 IoPinEditorPopup.Show({ "x": cellX, "y": cellY, "world_id": IoMapSnapshot.world, "title": "", "body": "" });
             }, "grey");
@@ -141,13 +141,13 @@ export class IoMapShare extends ASObject {
     }
 
     private static share(host: DisplayObjectContainer, area: Rectangle, mode: string, cellX: int, cellY: int): void {
-        let error: string = Chat._bymChat ? Chat._bymChat.ioShareLocation(mode, IoMapShare.Token(cellX, cellY)) : "The chat is not connected right now.";
+        let error: string = Chat._bymChat ? Chat._bymChat.ioShareLocation(mode, IoMapShare.Token(cellX, cellY)) : KEYS.Get("io_t3m_ch_not_connected");
         IoMapShare.HideChooser();
         if (error) {
             GLOBAL.Message(error);
             return;
         }
-        IoMapShare.Toast(host, "Posted to " + (mode == BYMChat.IO_ALLIANCE ? "Alliance" : "Global") + " chat", area.x + area.width * 0.5, area.bottom - 60);
+        IoMapShare.Toast(host, KEYS.Get(mode == BYMChat.IO_ALLIANCE ? "io_t3m_ms_posted_alliance" : "io_t3m_ms_posted_global"), area.x + area.width * 0.5, area.bottom - 60);
     }
 
     /** A short note over the map that fades away. */
@@ -180,15 +180,27 @@ export class IoMapShare extends ASObject {
     public static RenderChat(html: string): any {
         let links: any[] = null;
         links = [];
-        if (!html || (html.indexOf("[map:") < 0 && html.indexOf(IoReplays.TOKEN_START) < 0)) {
+        if (!html || (html.indexOf("[map:") < 0 && html.indexOf(IoReplays.TOKEN_START) < 0 && html.indexOf("[arcade:") < 0 && html.indexOf(IoPlanShare.TOKEN_START) < 0)) {
             return null;
         }
         // (3 October: attack replays shared from the attack logs or a replay, [replay:key], show as a pill too,
         // with a play mark; clicking one watches it: IoReplays.Watch)
         IoMapShare.ANY_TOKEN.lastIndex = 0;
         let out: string = html.replace(IoMapShare.ANY_TOKEN, (...match: any[]): string => {
+            if (match[10]) {
+                // (QoL #688: a Yard Planner layout: its pill opens the planner's Import with it)
+                let layoutLabel: string = IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + IoPlanShare.PillLabel(match[11], match[12]) + IoMapShare.NBSP;
+                links.push({ "layout": String(match[10]), "label": layoutLabel });
+                return "<font color=\"#6A3F00\"><b>" + layoutLabel + "</b></font>";
+            }
+            if (match[8]) {
+                // (QoL #372: an arcade announcement's JOIN: the same game and mode, waiting for the match)
+                let joinLabel: string = IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + KEYS.Get("io_arc2_join_pill") + IoMapShare.NBSP;
+                links.push({ "arcade": String(match[8]), "mode": String(match[9]), "label": joinLabel });
+                return "<font color=\"#6A3F00\"><b>" + joinLabel + "</b></font>";
+            }
             if (match[4]) {
-                let replayLabel: string = IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + "Attack replay" + IoMapShare.NBSP;
+                let replayLabel: string = IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + IoMapShare.NBSP + IoReplays.PillLabel(match[5], match[6], match[7]) + IoMapShare.NBSP;
                 links.push({ "replay": String(match[4]), "label": replayLabel });
                 return "<font color=\"#6A3F00\"><b>" + replayLabel + "</b></font>";
             }
@@ -231,7 +243,11 @@ export class IoMapShare extends ASObject {
             if (hit) {
                 e.stopPropagation();
                 SOUNDS.Play("click1");
-                if (hit.replay) {
+                if (hit.arcade) {
+                    ArcadeWindow.ioJoin(String(hit.arcade), String(hit.mode));
+                } else if (hit.layout) {
+                    IoPlanShare.OpenShared(String(hit.layout));
+                } else if (hit.replay) {
                     IoReplays.Watch(String(hit.replay));
                 } else {
                     IoMapShare.Open(hit.x | 0, hit.y | 0, String(hit.tag));
@@ -327,7 +343,7 @@ export class IoMapShare extends ASObject {
     public static Open(cellX: int, cellY: int, tag: string): void {
         let where: Point = new Point(cellX, cellY);
         if (tag && IoMapSnapshot.world && tag != IoMapSnapshot.worldTag) {
-            GLOBAL.Message("This place was shared on another world, so it is not on your map.");
+            GLOBAL.Message(KEYS.Get("io_t3m_ms_other_world"));
             return;
         }
         IoQuests.once("map_openlink");
@@ -341,14 +357,14 @@ export class IoMapShare extends ASObject {
             return;
         }
         if (BASE.ioAttackRunning() || GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
-            GLOBAL.Message("Not during an attack. Open it again when you are back in your yard.");
+            GLOBAL.Message(KEYS.Get("io_t3m_ms_not_attack"));
             return;
         }
         IoMapShare._pendingTag = tag && !IoMapSnapshot.world ? tag : null;
         MapRoom.ioFocus = where;
         MapRoom.ioMark = where;
         GLOBAL.ShowMap();
-        if (!GLOBAL._showMapWaiting && !GLOBAL.isMapOpen()) {
+        if (!GLOBAL.ioMapOpening()) {
             MapRoom.ioFocus = null;
             // the map didn't open: don't jump there the next time it does
             MapRoom.ioMark = null;
@@ -372,13 +388,13 @@ export class IoMapShare extends ASObject {
             return;
         }
         if (BASE.ioAttackRunning() || GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
-            GLOBAL.Message("Not during an attack. Open it again when you are back in your yard.");
+            GLOBAL.Message(KEYS.Get("io_t3m_ms_not_attack"));
             return;
         }
         MapRoom.ioFocus = where;
         MapRoom.ioMark = where;
         GLOBAL.ShowMap();
-        if (!GLOBAL._showMapWaiting && !GLOBAL.isMapOpen()) {
+        if (!GLOBAL.ioMapOpening()) {
             MapRoom.ioFocus = null;
             // the map didn't open: don't jump there the next time it does
             MapRoom.ioMark = null;
@@ -389,7 +405,7 @@ export class IoMapShare extends ASObject {
     public static CheckPendingWorld(): void {
         if (IoMapShare._pendingTag && IoMapSnapshot.world) {
             if (IoMapShare._pendingTag != IoMapSnapshot.worldTag) {
-                GLOBAL.Message("That place was shared on another world, so it is not on your map.");
+                GLOBAL.Message(KEYS.Get("io_t3m_ms_other_world2"));
             }
             IoMapShare._pendingTag = null;
         }

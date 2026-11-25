@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
-import { AllianceArmamentBuff, AllianceConquestBuff, AllianceDeclareWarBuff, AutoBankBaseBuff, BaseBuff, BuildingDefenseBuff, Console, MonsterAttackDamageBuff, MonsterDamageBuff, MonsterDefenseDamageBuff, ResourceCapacityBaseBuff, TowerDamageBuff } from "@game";
+import { AllianceArmamentBuff, AllianceBuildersGuildBuff, AllianceConquestBuff, AllianceDeclareWarBuff, AllianceHarvestMoonBuff, AutoBankBaseBuff, BaseBuff, BuildingDefenseBuff, Console, MonsterAttackDamageBuff, MonsterDamageBuff, MonsterDefenseDamageBuff, ResourceCapacityBaseBuff, TowerDamageBuff } from "@game";
 
 export class BaseBuffLibrary extends ASObject {
     public static readonly k_ATTACKING: string = "attacking";
@@ -22,6 +22,9 @@ export class BaseBuffLibrary extends ASObject {
         BaseBuffLibrary.addBaseBuff(ResourceCapacityBaseBuff.ID, new BuffData(ResourceCapacityBaseBuff));
         BaseBuffLibrary.addBaseBuff(AutoBankBaseBuff.ID, new BuffData(AutoBankBaseBuff));
         BaseBuffLibrary.addBaseBuff(AllianceDeclareWarBuff.ID, new BuffData(AllianceDeclareWarBuff));
+        // (Inferno-only, 22 October)
+        BaseBuffLibrary.addBaseBuff(AllianceHarvestMoonBuff.ID, new BuffData(AllianceHarvestMoonBuff));
+        BaseBuffLibrary.addBaseBuff(AllianceBuildersGuildBuff.ID, new BuffData(AllianceBuildersGuildBuff));
     }
 
     private static addBaseBuff(param1: uint, ...rest: any[]): void {

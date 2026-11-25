@@ -5,7 +5,7 @@ import { Event, MouseEvent } from "flash/events";
 import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { Matrix } from "flash/geom";
 import { AntiAliasType, TextField, TextFormat, TextFormatAlign } from "flash/text";
-import { BASE, Button_CLIP, GLOBAL, POPUPSETTINGS, SOUNDS, URLLoaderApi, frame_CLIP, io_daily_tile7_done, io_daily_tile7_future, io_daily_tile7_today, io_daily_tile_done, io_daily_tile_future, io_daily_tile_today } from "@game";
+import { BASE, Button_CLIP, GLOBAL, KEYS, POPUPSETTINGS, SOUNDS, URLLoaderApi, frame_CLIP, io_daily_tile7_done, io_daily_tile7_future, io_daily_tile7_today, io_daily_tile_done, io_daily_tile_future, io_daily_tile_today } from "@game";
 
 /**
  * Inferno-only daily login reward popup (opened from the Daily Reward button, the gift button's place
@@ -14,10 +14,13 @@ import { BASE, Button_CLIP, GLOBAL, POPUPSETTINGS, SOUNDS, URLLoaderApi, frame_C
  * counting past 14, and the tiles then show days 15-28, and so on. Art: assets/popups/daily/tile[7]-{done,today,future}.png;
  * day labels and amounts are live text, so they follow InfernoOnlyConfig.dailyLogin.
  * Server: services/user/dailyLogin.ts (flag io_streak, POST dailyreward/collect).
+ * (QoL #126: under the tiles, the streak savers held (one per completed 14-day stretch, forgiving one missed day) and a
+ * line when one saved the streak; a streak that broke today can be bought back for Shiny (POST dailyreward/buyback),
+ * the Collect button then being "Start again". The server decides all of it; this only shows it and asks.)
  */
 export class IoDailyPopup extends ASObject {
     static {
-        as3.fields(this, { _mc: null, _status: null, _tiles: null, _subtitle: null, _button: null, _busy: false });
+        as3.fields(this, { _mc: null, _status: null, _tiles: null, _subtitle: null, _button: null, _busy: false, _savers: null, _notice: null, _buyButton: null });
     }
 
     private static readonly BG_W: int = 660;
@@ -43,6 +46,12 @@ export class IoDailyPopup extends ASObject {
     private _subtitle: TextField;
     private _button: Button_CLIP;
     private _busy: boolean;
+    /** (QoL #126) The streak savers held, under the tiles. */
+    private _savers: TextField;
+    /** (QoL #126) "Your streak was saved", or the buy-back offer. */
+    private _notice: TextField;
+    /** (QoL #126) Buy back the streak that broke (shown only while the server offers it). */
+    private _buyButton: Button_CLIP;
 
     public $ctor(status?: any): void {
         super.$ctor();
@@ -79,12 +88,43 @@ export class IoDailyPopup extends ASObject {
         this._button = as3.as(this._mc.addChild(new Button_CLIP()), Button_CLIP);
         this._button.addEventListener(MouseEvent.CLICK, as3.bind(this, this.onButton));
 
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #126: the savers' line and the notice, between the tiles (they end 308 down) and the button)
+            this._mc.name = "ioDailyPopup";
+            this._button.name = "ioDailyCollect";
+            this._savers = as3.as(this._mc.addChild(this.text("Verdana", 11, 4600350, false)), TextField);
+            this._savers.name = "ioDailySavers";
+            this._savers.width = IoDailyPopup.BG_W - 60;
+            this._savers.height = 18;
+            this._savers.x = frameX + 30;
+            this._savers.y = frameY + 314;
+            this._notice = as3.as(this._mc.addChild(this.text("Verdana", 12, 4600350, false)), TextField);
+            this._notice.name = "ioDailyNotice";
+            this._notice.width = IoDailyPopup.BG_W - 60;
+            this._notice.height = 20;
+            this._notice.x = frameX + 30;
+            this._notice.y = frameY + 336;
+            this._buyButton = as3.as(this._mc.addChild(new Button_CLIP()), Button_CLIP);
+            this._buyButton.name = "ioDailyBuyBack";
+            this._buyButton.visible = false;
+            this._buyButton.addEventListener(MouseEvent.CLICK, as3.bind(this, this.onBuyBack));
+        }
+
         this.render();
 
         GLOBAL.BlockerAdd(GLOBAL._layerTop);
         GLOBAL._layerTop.addChild(this._mc);
         POPUPSETTINGS.AlignToCenter(this._mc);
         POPUPSETTINGS.ScaleUp(this._mc);
+    }
+
+    /** "Next reward in 5h 12m (at 02:00 your time)": the days are UTC days. */
+    public static nextLine(): string {
+        let now: number = GLOBAL.Timestamp();
+        let next: number = (Math.floor(now / 86400) + 1) * 86400;
+        let at: Date = new Date(next * 1000);
+        let clock: string = (at.getHours() < 10 ? "0" : "") + at.getHours() + ":" + (at.getMinutes() < 10 ? "0" : "") + at.getMinutes();
+        return "Next reward in " + GLOBAL.ioDuration(next - now) + " (at " + clock + " your time).";
     }
 
     public static Show(status: any): void {
@@ -127,10 +167,16 @@ export class IoDailyPopup extends ASObject {
         while (next % week != 0) {
             next++;
         }
+        // (QoL #126: with a streak saver held, a missed day doesn't start it again)
+        let missLine: string = GLOBAL.INFERNO_ONLY && (this._status.savers | 0) > 0 ? KEYS.Get("io_daily2_miss_saver") : "Miss a day and it starts again.";
         if (this.waiting) {
             this._subtitle.text = "Day " + today + ": collect " + (this._status.offerShiny | 0) + " Shiny!" + (known && next != today ? "  Keep going: day " + next + " pays " + this.payoutFor(next) + "." : "");
         } else {
-            this._subtitle.text = "Day " + done + " collected. Come back tomorrow for day " + (done + 1) + (known ? " (" + this.payoutFor((done + 1) | 0) + " Shiny)" : "") + ". Miss a day and it starts again.";
+            this._subtitle.text = "Day " + done + " collected. Come back tomorrow for day " + (done + 1) + (known ? " (" + this.payoutFor((done + 1) | 0) + " Shiny)" : "") + ". " + missLine;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #127: when "tomorrow" is: the next UTC day, in the player's own time)
+                this._subtitle.text += " " + IoDailyPopup.nextLine();
+            }
         }
 
         while (this._tiles.numChildren > 0) {
@@ -154,6 +200,123 @@ export class IoDailyPopup extends ASObject {
         this._button.Highlight = this.waiting;
         this._button.x = -75;
         this._button.y = ((IoDailyPopup.BG_H / 2) | 0) - 34 - 26;
+        if (GLOBAL.INFERNO_ONLY) {
+            this.renderSaver();
+        }
+    }
+
+    /** (QoL #126) The buy-back the server offers now (a streak that broke today), or null. */
+    private get buyBack(): any {
+        let offer: any = this._status ? this._status.buyBack : null;
+        if (!offer || (offer.streak | 0) <= 0 || !this.waiting) {
+            return null;
+        }
+        // (the offer ends at the next UTC midnight: past it, it is gone, whatever the flag still says)
+        if (Number(offer.until) > 0 && Number(offer.until) / 1000 <= GLOBAL.Timestamp()) {
+            return null;
+        }
+        return offer;
+    }
+
+    /**
+     * (QoL #126) The savers' line ("Streak savers: 1/1"), the notice (the streak saved, or the buy-back offer) and, while a
+     * buy-back is offered, its button beside Collect, which then reads "Start again".
+     */
+    private renderSaver(): void {
+        if (!this._savers) {
+            return;
+        }
+        let held: int = this._status.savers | 0;
+        let most: int = Math.max(1, this._status.saverMax | 0) | 0;
+        let every: int = Math.max(1, (this._status.saverEvery || this._status.streakDays || 14) | 0) | 0;
+        let line: string = KEYS.Get("io_daily2_savers", { "v1": held, "v2": most, "v3": every });
+        if (held < most) {
+            // the next completed stretch earns one: the day collected next that is a multiple of `every`
+            let from: int = (this.waiting ? Math.max(1, this._status.offerDay | 0) : ((this._status.day | 0) + 1)) | 0;
+            let at: int = (Math.ceil(from / every) * every) | 0;
+            line += " " + KEYS.Get("io_daily2_next_saver", { "v1": at });
+        }
+        this._savers.text = this._status.savers === undefined ? "" : line;
+        GLOBAL.ioFitText(this._savers, 8);
+
+        let offer: any = this.buyBack;
+        if (this.waiting && (this._status.saved | 0) == 1) {
+            this.notice(KEYS.Get("io_daily2_saved"), 0x2E7D32);
+        } else if (offer) {
+            let left: number = Number(offer.until) > 0 ? Math.max(60, Number(offer.until) / 1000 - GLOBAL.Timestamp()) : 0;
+            this.notice(KEYS.Get("io_daily2_offer", { "v1": offer.streak | 0, "v2": GLOBAL.FormatNumber(offer.price | 0), "v3": left > 0 ? GLOBAL.ioDuration(left) : "" }), 0xA02010);
+        } else {
+            this.notice("", 4600350);
+        }
+
+        this._buyButton.visible = Boolean(offer);
+        if (offer) {
+            // [Buy back: 100 Shiny] [Start again], centred together
+            this._buyButton.Setup(KEYS.Get("io_daily2_buy_btn", { "v1": GLOBAL.FormatNumber(offer.price | 0) }), false, 210, 34);
+            this._buyButton.Highlight = true;
+            this._buyButton.x = -185;
+            this._buyButton.y = this._button.y;
+            this._button.Setup(KEYS.Get("io_daily2_restart_btn"), false, 150, 34);
+            this._button.Highlight = false;
+            this._button.x = 35;
+        }
+    }
+
+    /** (QoL #126) The notice line's text, in its colour (set after the text: a new text takes the field's default format). */
+    private notice(text: string, color: uint): void {
+        if (!this._notice) {
+            return;
+        }
+        this._notice.text = text;
+        this._notice.textColor = color;
+        GLOBAL.ioFitText(this._notice, 8);
+    }
+
+    /** (QoL #126) Spends the Shiny (asked first, by the page's settings and the account's Shiny lock), then buys the streak back. */
+    private onBuyBack(e: MouseEvent = null): void {
+        let offer: any = this.buyBack;
+        if (!this._mc || this._busy || !offer) {
+            return;
+        }
+        if (!GLOBAL.ioConfirmShiny(offer.price | 0, KEYS.Get("io_daily2_confirm", { "v1": offer.streak | 0 }), (): void => {
+            this.onBuyBack();
+        })) {
+            return;
+        }
+        this._busy = true;
+        this._buyButton.Setup(KEYS.Get("io_daily2_buying"), false, 210, 34);
+        new URLLoaderApi().load(GLOBAL.serverUrl + "dailyreward/buyback", [["streak", offer.streak | 0]], as3.bind(this, this.onBoughtBack), as3.bind(this, this.onBuyFailed));
+    }
+
+    private onBoughtBack(serverData: any): void {
+        this._busy = false;
+        if (serverData && serverData.status) {
+            GLOBAL._flags.io_streak = JSON.stringify(serverData.status);
+            this._status = serverData.status;
+        }
+        if (serverData && serverData.error == 0) {
+            BASE._credits.Set(serverData.credits | 0);
+            BASE._hpCredits = serverData.credits | 0;
+            GLOBAL._credits.Set(serverData.credits | 0);
+            SOUNDS.Play("purchasepopup");
+            if (this._mc) {
+                this.render();
+                this.notice(KEYS.Get("io_daily2_bought", { "v1": serverData.streak | 0 }), 0x2E7D32);
+            }
+            return;
+        }
+        if (this._mc) {
+            this.render();
+        }
+        GLOBAL.Message(serverData && serverData.message ? String(serverData.message) : KEYS.Get("io_daily2_buy_failed"));
+    }
+
+    private onBuyFailed(e: Event): void {
+        this._busy = false;
+        if (this._mc) {
+            this.render();
+        }
+        GLOBAL.Message(KEYS.Get("io_daily2_buy_failed"));
     }
 
     private addTile(x: int, y: int, day: int, last: boolean, state: string, amount: int): void {
@@ -252,12 +415,26 @@ export class IoDailyPopup extends ASObject {
         if (this._busy) {
             return;
         }
+        // (QoL #126: collecting while a buy-back is offered starts again at day 1: asked first)
+        let offer: any = GLOBAL.INFERNO_ONLY ? this.buyBack : null;
+        if (offer && e) {
+            GLOBAL.Message(KEYS.Get("io_daily2_restart_confirm", { "v1": offer.streak | 0 }), KEYS.Get("btn_yes"), (): void => {
+                if (this._mc) {
+                    this.onButton(null);
+                }
+            }, null, KEYS.Get("btn_no"), (): void => {
+            });
+            return;
+        }
+        let saversBefore: int = this._status.savers | 0;
         this._busy = true;
         this._button.Setup("Collecting...", false, 150, 34);
-        new URLLoaderApi().load(GLOBAL.serverUrl + "dailyreward/collect", [["collect", 1]], as3.bind(this, this.onCollected), as3.bind(this, this.onFailed));
+        new URLLoaderApi().load(GLOBAL.serverUrl + "dailyreward/collect", [["collect", 1]], (serverData: any): void => {
+            this.onCollected(serverData, saversBefore);
+        }, as3.bind(this, this.onFailed));
     }
 
-    private onCollected(serverData: any): void {
+    private onCollected(serverData: any, saversBefore: int = 0): void {
         this._busy = false;
         if (serverData && serverData.error == 0) {
             BASE._credits.Set(serverData.credits | 0);
@@ -267,11 +444,23 @@ export class IoDailyPopup extends ASObject {
                 GLOBAL._flags.io_streak = JSON.stringify(serverData.status);
                 this._status = serverData.status;
             }
-            SOUNDS.Play("click1");
+            // (QoL #629: a reward's sound, not a plain click)
+            SOUNDS.Play("chaching", 0.6);
             if (this._mc) {
                 this.render();
                 this._subtitle.text = "You collected " + (serverData.shiny | 0) + " Shiny! " + this._subtitle.text;
                 GLOBAL.ioFitText(this._subtitle, 9);
+                // (QoL #126: a saver covered the missed day; or this completed a stretch and earned one)
+                if (GLOBAL.INFERNO_ONLY && this._notice) {
+                    let earned: boolean = serverData.savers !== undefined && (serverData.savers | 0) > saversBefore - ((serverData.saved | 0) == 1 ? 1 : 0);
+                    let note: string = (serverData.saved | 0) == 1 ? KEYS.Get("io_daily2_saved") : "";
+                    if (earned) {
+                        note = (note != "" ? note + " " : "") + KEYS.Get("io_daily2_earned");
+                    }
+                    if (note != "") {
+                        this.notice(note, 0x2E7D32);
+                    }
+                }
             }
             return;
         }

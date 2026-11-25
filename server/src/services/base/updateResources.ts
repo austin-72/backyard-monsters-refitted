@@ -31,14 +31,20 @@ export const updateResources = (
   saveResources: JsonObject,
   operation: Operation = Operation.ADD
 ) => {
-  if (resources) {
+  if (resources && typeof resources === "object") {
     Object.keys(resources).forEach((key) => {
       const resourceKey = key as keyof Resources;
+      // (18 October) only the four resources and their capacities, and only as numbers: a change sent as text
+      // ("5000") was joined to the stored amount as text, "123" + "5000" = "1235000"
+      if (!/^r[1-4](max)?$/.test(key)) return;
+      const change = Number(resources[resourceKey]);
+      if (!Number.isFinite(change)) return;
       if (key.endsWith("max")) {
-        saveResources[resourceKey] = resources[resourceKey];
+        saveResources[resourceKey] = change;
       } else {
-        saveResources[resourceKey] +=
-          operation === Operation.ADD ? resources[resourceKey] : -resources[resourceKey]!;
+        const stored = Number(saveResources[resourceKey]);
+        const before = Number.isFinite(stored) ? stored : 0;
+        saveResources[resourceKey] = before + (operation === Operation.ADD ? change : -change);
       }
     });
   }

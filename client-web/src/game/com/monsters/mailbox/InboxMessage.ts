@@ -4,7 +4,7 @@ import { DisplayObject, Loader } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
 import { URLRequest } from "flash/net";
 import { LoaderContext } from "flash/system";
-import { Contact, InboxMessage_CLIP, KEYS, LOGIN, SOUNDS, ThreadData, TimeUtils } from "@game";
+import { Contact, GLOBAL, InboxMessage_CLIP, IoFormat, KEYS, LOGIN, SOUNDS, ThreadData, TimeUtils } from "@game";
 
 export class InboxMessage extends InboxMessage_CLIP {
     static {
@@ -84,6 +84,10 @@ export class InboxMessage extends InboxMessage_CLIP {
             this.dot_mc.visible = false;
         }
         this.sendtime = this.data.sendtime;
+        // (Inferno-only, QoL #572: the exact date and time when the pointer is over "3 days ago")
+        if (GLOBAL.INFERNO_ONLY) {
+            IoFormat.hover(this.sent_txt, Number(this.data.sendtime));
+        }
         this.subject = this.data.subject;
         this.userid_txt.htmlText = KEYS.Get("label_userid", { "v1": this.data.userid });
         this.replies_txt.htmlText = KEYS.Get("mail_numreplies", { "v1": this.data.messagecount - 1 });

@@ -1,6 +1,8 @@
 # Release checklist
 
-Everything in the code is set for release. What is left can only be done on your machine.
+Two lists: **First launch** (sections 1 to 5, once, before the world opens to players) and **Every release**
+(the last section, each time you put out an update to a running world). Sections 1 to 5 are for a world nobody
+plays in yet: section 2 deletes everything.
 
 ## 1. Server settings
 
@@ -10,8 +12,8 @@ Create or edit `server\.env` so it contains:
 ENV=production
 SECRET_KEY=<a long random string of your own, 32+ characters, never shared>
 USE_VERSION_MANAGEMENT=disabled
-BASE_URL=https://inferno-mr2.maproom2.com
-CHAT_WS_HOST=inferno-mr2.maproom2.com:3010
+BASE_URL=https://inferno.maproom2.com
+CHAT_WS_HOST=inferno.maproom2.com:3010
 ```
 
 `ENV=production` (the server also accepts `prod`) turns request and database-query logging off, turns attack validation on and uses the normal (hourly)
@@ -19,9 +21,13 @@ rate limits. `SECRET_KEY` signs every login: with the default, anyone can forge 
 prints a `!!! SECURITY` warning at start-up while either is wrong, so check the first lines of
 `docker compose logs web` after starting: there should be no such warning.
 
-## 2. Fresh world
+## 2. Fresh world (first launch only)
 
-Your test world holds a 500M shiny account and the outposts the kits were built from.
+**Never on a running world:** `down -v` deletes the database, every player's yard and account, for good. For an
+update, see "Every release" below.
+
+Your test world holds test accounts and whatever you built while testing (admin test mode puts your own
+account back when you switch it off, but other test accounts keep what they did).
 
 ```
 cd D:\@bymr-inferno-mr2\server
@@ -34,32 +40,20 @@ The kits are not affected: they are built into the client and also live in
 
 ## 3. Player build
 
-Ctrl+Shift+B > **BYMR - Release**. It stamps the build with the date and time (`stamp-build.cmd`), compiles
-BYMR - Stable, and publishes it (`publish-client.cmd` copies `bin\bymr-stable.swf` into
-`server\public\client\`), then builds the browser client from the same stamped sources
-(`publish-web.cmd`, into `server\public\web\`; see `WEB-CLIENT.md`). The server reads the stamp out of the published SWF and logs
-`Published client build: <stamp>`; from then on a client with an older stamp is asked to restart, on the
-login screen if it is just starting, at its next yard change if it was already running. Nothing to
-configure and nothing to bump by hand. If the log instead says the client carries no build stamp, the
-check is off for that build: tell whoever maintains this. Players start the game with
+Run `publish-web.cmd` (Linux/macOS: `./publish-web.sh`), or Ctrl+Shift+B > **BYMR - Release**, which runs
+`stamp-build.cmd` and then `publish-web.cmd`. `publish-web` stamps the build itself with the date and time
+(`npm run stamp`, into `client-web\src\game\IOBuild.ts`), builds the game and publishes it into
+`server\public\web\` (see `WEB-CLIENT.md`, "Publishing"); `stamp-build` is not needed first. The server reads the
+stamp from `server\public\web\version.json` and logs `Published browser client build: <stamp>`; from then on a
+client with an older stamp is asked to reload, on the login screen if it is just starting, at its next yard change
+if it was already running. Nothing to configure and nothing to bump by hand. Players open
 
 ```
-flashplayer.exe https://inferno-mr2.maproom2.com/play.swf
+https://inferno.maproom2.com/
 ```
 
-That address is a 2 KB launcher (`server\public\client\launcher.swf`, shipped built). It asks the server
-which build is current and loads exactly that build from an address containing the build, so no cache
-can ever hand out an old game. (`/bymr-stable.swf` gives the launcher too, but a player whose Flash has
-an old game cached under that address should switch to `/play.swf`.)
-
-(No quotes around the address: the projector treats a closing quote as part of it.)
-
-Give players `Inferno-MR2.zip`: the Flash projector, a `Launch-inferno-mr2` shortcut that runs exactly
-that line, and `instructions.txt` (unzip, double-click the shortcut). The shortcut and instructions are
-kept in `player-pack\`; the zip is those two files plus `client\archived\flashplayers\flashplayer.exe`.
-Nobody downloads a SWF by hand, and publishing a new build updates every player at their next launch:
-no server rebuild, no restart, no new zip. (Debug and Local
-builds still talk to localhost and are opened from disk.)
+in a browser: nothing to install, and a new build reaches everyone at their next load, with no server rebuild
+and no restart. (No Flash client is built any more; see RUNNING-INFERNO-ONLY.md, "2. Client".)
 
 ## 4. Try it as a player, with a friend
 
@@ -90,6 +84,32 @@ being made.)
 
 ## Known gaps you are shipping with
 
-Overworld art on a few buildings, missing Inferno quest icons, no champions / catapult / monster lab /
-siege buildings, academy training capped at level 5, no wild monster invasions. The performance work
-has not been tested under real load: if a big battle bogs down, keep the server log.
+No champion cage (the Inferno's champions are monsters, housed in the Compound), no monster lab or siege
+buildings, and no Wild Monster Invasions (switched off: `invasions` in `InfernoOnlyConfig.ts`). A few
+mission icons in `server/public/assets/missionicon` are missing (also in the base game). The performance
+work has not been tested under real load: if a big battle bogs down, keep the server log.
+
+## Every release
+
+For an update to a world players are using (a delta zip or a new full copy). Nothing here deletes data.
+
+1. **Back up**: `backup-db.cmd` (Linux/macOS: `./backup-db.sh`), and check the new `.dump` in `server\backups`.
+2. **Warn the players**: on the admin panel's Status tab, plan maintenance 15 minutes ahead with a message
+   ("Back at 18:00 UTC"). Players in the game are warned at 15, 5 and 1 minutes; at the time maintenance mode goes
+   on, their yards are saved and they are told.
+3. **Put the files in place**: extract the zip over the project folder (it holds only changed files). Never copy
+   `client-web\src\game\IOBuild.ts` from somewhere else: `publish-web` stamps it.
+4. **Server**: `cd server` then `docker compose up --build -d`. The `db-init` service applies any new migrations
+   before the server starts (without Docker: `bun run migration:up` in `server`, then restart). Check
+   `docker compose logs web`: `Server running on:` and no `!!! SECURITY` lines.
+5. **Client**: `publish-web.cmd` (Linux/macOS: `./publish-web.sh`) when anything under `client-web` changed. Open
+   games are asked to reload. `publish-web` also writes the players' Shiny page again (`server\public\docs\shiny.html`,
+   at `/shiny`) from the server's settings. When a Shiny price or reward in `InfernoOnlyConfig.ts` changed, also run
+   `bun server/scripts/shinyPage.ts` from the project folder, even with no client change, and with Docker before
+   step 4: `public\docs` is built into the image, so the page goes live with `docker compose up --build -d`.
+6. **Check**: log in as a player; the Status tab shows the new published build; the Change Log shows the new day.
+7. **Open again**: turn maintenance mode off and clear any announcement.
+
+If something is wrong after step 4, the backup from step 1 and `restore-db.cmd` put the database back
+(RUNNING-INFERNO-ONLY.md, "Backups"); the previous files go back the same way they came.
+

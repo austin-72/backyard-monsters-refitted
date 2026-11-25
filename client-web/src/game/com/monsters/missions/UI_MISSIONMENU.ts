@@ -2,11 +2,12 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { DisplayObject, MovieClip, Shape, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
+import { SharedObject } from "flash/net";
 import { BASE, Expo, GLOBAL, IoQuestTracker, IoQuests, KEYS, MISSIONS_ITEM, MapRoomManager, QUESTS, Quad, SOUNDS, ScrollSet, TUTORIAL, TweenLite, UI_BOTTOM, UI_MISSIONMENU_CLIP } from "@game";
 
 export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
     static {
-        as3.fields(this, { _counter: 0, _prioritycounter: 0, _CollectedMissions: null, _CompletedMissions: null, _PriorityMissions: null, _ActiveMissions: null, _Container: null, _Missions: null, _PriorityContainer: null, _Priority: null, _PriorityMask: null, _ScrollBar: null, _numDisplayItems: 10, _numDisplaySlots: 4, _numPinnedItems: 1, _UI_OffsetY: 10, _ItemPaddingY: 2, _Width: 380, _Height: 208, _seperatePriorities: true, _animating: false, _windowState: 1, _alertsCounter: 0, _disableMissions: false, _skinTag: 1, _enabled: false, _maximized: false, _open: true, _skinnedElements: null, _originProps: null, _maxProps: null, _openProps: null, _closeProps: null, _chatWidthDefault: null, _ioVersion: -1 });
+        as3.fields(this, { _counter: 0, _prioritycounter: 0, _CollectedMissions: null, _CompletedMissions: null, _PriorityMissions: null, _ActiveMissions: null, _Container: null, _Missions: null, _PriorityContainer: null, _Priority: null, _PriorityMask: null, _ScrollBar: null, _numDisplayItems: 10, _numDisplaySlots: 4, _numPinnedItems: 1, _UI_OffsetY: 10, _ItemPaddingY: 2, _Width: 380, _Height: 208, _seperatePriorities: true, _animating: false, _windowState: 1, _alertsCounter: 0, _disableMissions: false, _skinTag: 1, _enabled: false, _maximized: false, _open: true, _skinnedElements: null, _originProps: null, _maxProps: null, _openProps: null, _closeProps: null, _chatWidthDefault: null, _ioVersion: -1, _ioSummary: false, _ioSumProps: null, _ioFold: null });
     }
 
     private _counter: int;
@@ -45,6 +46,11 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
     private _chatWidthDefault: any;
     /** Inferno-only: the quest book's version the rows were drawn from (IoQuestTracker). */
     private _ioVersion: int;
+    /** Inferno-only (QoL #316): folded to its one-line summary (the book's pinned row) under the title bar. */
+    private _ioSummary: boolean;
+    private _ioSumProps: any;
+    /** Inferno-only (QoL #316): the title bar's fold button, left of the X. */
+    private _ioFold: Sprite;
 
     public $ctor(): void {
         this._skinnedElements = [];
@@ -52,6 +58,8 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
         this._maxProps = { "screenHeight": 470, "maskHeight": 470 - 12, "y": -(470 + 30), "scrollerY": -470, "scrollHeight": 470 - 16, "footerY": -12 };
         this._openProps = { "screenHeight": 240, "maskHeight": 136, "y": -178, "scrollerY": -148, "scrollHeight": 120, "footerY": -12 };
         this._closeProps = { "screenHeight": 114, "maskHeight": 105, "y": 0, "scrollerY": 30, "scrollHeight": 105, "footerY": 27 };
+        // (Inferno-only, QoL #316: the title bar right on the pinned row, the list folded away under it)
+        this._ioSumProps = { "screenHeight": 240, "maskHeight": 1, "y": -42, "scrollerY": -12, "scrollHeight": 1, "footerY": -12 };
         this._chatWidthDefault = { "sizeW": 380, "headerW": 380, "headerX": -5, "titleTxtX": 70, "alertX": 220, "arrowUpX": 343, "arrowUpY": 16, "arrowDownX": 325, "arrowDownY": 13, "borderW": 380, "mcMaskW": 348, "tOutputW": 330, "mcScreenW": 350, "inputWoodBgW": 380, "inputTxtBgW": 310, "inputTxtW": 310, "sendBtnX": 331, "scrollerX": 347, "ignoreBtnX": 315 };
         super.$ctor();
         this.frame.tTitle.htmlText = KEYS.Get("quests_title");
@@ -116,7 +124,115 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
         this.frame.mcToggle.useHandCursor = true;
         this.frame.mcToggle.gotoAndStop(this._enabled ? "on" + this._skinTag : "close" + this._skinTag);
         this.frame.mcToggle.visible = TUTORIAL.hasFinished;
+        if (GLOBAL.INFERNO_ONLY && this.frame.header) {
+            // (QoL #546: the title bar folds and opens the dock, as the X does; the X alone was 19 pixels)
+            this.frame.header.buttonMode = true;
+            this.frame.header.useHandCursor = true;
+            if (this.frame.tTitle) {
+                this.frame.tTitle.mouseEnabled = false;
+            }
+            this.frame.header.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                if (this.frame.mcToggle.visible) {
+                    this.frame.mcToggle.dispatchEvent(new MouseEvent(MouseEvent.MOUSE_DOWN));
+                }
+            });
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            this._ioSummary = UI_MISSIONMENU.ioSummarySaved();
+            this.ioMakeFold();
+        }
         this.toggleHide();
+    }
+
+    // ---- Inferno-only (QoL #316): the dock folds to its one-line summary, with a toggle on its title bar
+    /** The open dock's shape: the summary's when folded to it. */
+    private ioOpenProps(): any {
+        return GLOBAL.INFERNO_ONLY && this._ioSummary ? this._ioSumProps : this._openProps;
+    }
+
+    private static ioSummarySaved(): boolean {
+        try {
+            return SharedObject.getLocal("bymr_data", "/").data.ioDockSummary == 1;
+        } catch (e) {
+        }
+        return false;
+    }
+
+    private ioMakeFold(): void {
+        let b: Sprite = new Sprite();
+        b.name = "ioDockFold";
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        b.addEventListener(MouseEvent.MOUSE_DOWN, (e: MouseEvent): void => {
+            e.stopPropagation();
+        });
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            e.stopPropagation();
+            this.ioSetSummary(!this._ioSummary);
+        });
+        this._ioFold = b;
+        this.frame.addChild(b);
+        this.ioDrawFold();
+    }
+
+    /** The fold button: a chevron down (fold to one line) or up (the whole list again), left of the X. */
+    private ioDrawFold(): void {
+        let b: Sprite = this._ioFold;
+        if (!b) {
+            return;
+        }
+        b.graphics.clear();
+        b.graphics.lineStyle(1.5, 14708778, 1);
+        b.graphics.beginFill(0x2A1006, 0.9);
+        b.graphics.drawRoundRect(0, 0, 20, 18, 6, 6);
+        b.graphics.endFill();
+        b.graphics.lineStyle(0, 0, 0);
+        b.graphics.beginFill(0xFFC870, 1);
+        if (this._ioSummary) {
+            b.graphics.moveTo(5, 12);
+            b.graphics.lineTo(10, 6);
+            b.graphics.lineTo(15, 12);
+        } else {
+            b.graphics.moveTo(5, 6);
+            b.graphics.lineTo(10, 12);
+            b.graphics.lineTo(15, 6);
+        }
+        b.graphics.endFill();
+        let x: any = this.frame.mcToggle;
+        if (x) {
+            let r: any = x.getBounds(this.frame);
+            b.x = Math.round(r.x - 26);
+            b.y = Math.round(r.y + (r.height - 18) / 2);
+        }
+        b.visible = Boolean(x && x.visible) && this._open;
+    }
+
+    /** Folds the open dock to its summary (on) or opens its list again, and keeps the choice on this computer. */
+    private ioSetSummary(on: boolean): void {
+        if (this._animating) {
+            return;
+        }
+        this._ioSummary = on;
+        try {
+            let so: SharedObject = SharedObject.getLocal("bymr_data", "/");
+            so.data.ioDockSummary = on ? 1 : 0;
+            so.flush();
+        } catch (e) {
+        }
+        SOUNDS.Play("click1");
+        this.ioDrawFold();
+        if (!this._open || this._maximized) {
+            return;
+        }
+        let p: any = this.ioOpenProps();
+        if (!on) {
+            this._Container.visible = true;
+        }
+        this._ScrollBar.visible = false;
+        this._animating = true;
+        TweenLite.to(this.frame, 0.35, { "y": p.y, "onUpdate": as3.bind(this, this.toggleOnUpdate), "onComplete": as3.bind(this, this.toggleVisibleB) });
+        TweenLite.to(this.frame.mcMask, 0.35, { "height": p.maskHeight });
+        TweenLite.to(this._ScrollBar, 0.35, { "y": p.scrollerY });
     }
 
     public Skin(): void {
@@ -199,6 +315,7 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
             if (this._ioVersion != IoQuests.version) {
                 this.RebuildContainer();
             }
+            this.ioDrawFold();
             return;
         }
         let _loc2_: boolean = false;
@@ -331,8 +448,12 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
         this._prioritycounter = 1;
         this.frame.mcMask.height = this._numDisplaySlots * (32 + this._ItemPaddingY);
         this._ScrollBar.Update();
-        this.frame.y = Number(this._maximized ? this._maxProps.y : this._openProps.y);
+        // (QoL #316: or the summary's place)
+        this.frame.y = Number(this._maximized ? this._maxProps.y : this.ioOpenProps().y);
         this.footer.y = Number(this._openProps.footerY);
+        if (this._ioSummary && !this._maximized) {
+            this.frame.mcMask.height = Number(this._ioSumProps.maskHeight);
+        }
         this.addChild(this._ScrollBar);
         this._ScrollBar.Update();
     }
@@ -373,7 +494,7 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
         }
         if (!this._open) {
             if (BASE.isInfernoMainYardOrOutpost) {
-                SOUNDS.Play("iquestshow");
+                SOUNDS.Play("iquestshow", 1); // (QoL #619: louder; the file is quiet)
             } else {
                 SOUNDS.Play("click1");
             }
@@ -385,7 +506,7 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
         let _loc5_: number = 0.5;
         if (param1 == null) {
             if (this._open) {
-                _loc4_ = this._openProps;
+                _loc4_ = this.ioOpenProps();
             } else {
                 _loc4_ = this._closeProps;
             }
@@ -398,7 +519,7 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
             if (!(!_loc2_ && !_loc3_)) {
                 return;
             }
-            _loc4_ = this._openProps;
+            _loc4_ = this.ioOpenProps();
             this._maximized = false;
             this.frame.arrowUp.gotoAndStop("on" + this._skinTag);
             this.frame.arrowDown.gotoAndStop("on" + this._skinTag);
@@ -429,7 +550,7 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
             if (!(_loc2_ || _loc3_)) {
                 return;
             }
-            _loc4_ = this._openProps;
+            _loc4_ = this.ioOpenProps();
             this._maximized = false;
             this.frame.arrowUp.gotoAndStop("on" + this._skinTag);
             this.frame.arrowDown.gotoAndStop("on" + this._skinTag);
@@ -482,6 +603,15 @@ export class UI_MISSIONMENU extends UI_MISSIONMENU_CLIP {
         } else {
             this._ScrollBar.visible = true;
             this._ScrollBar.ScrollTo(0, true);
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #316: folded to the summary: no list, no bar)
+            let folded: boolean = this._open && this._ioSummary && !this._maximized;
+            this._Container.visible = !folded;
+            if (folded) {
+                this._ScrollBar.visible = false;
+            }
+            this.ioDrawFold();
         }
         UI_BOTTOM.Resize();
     }

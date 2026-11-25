@@ -51,7 +51,7 @@ export class PopupRelocateMe extends PopupRelocateMe_CLIP {
             this.SHINYCOST = new SecNum(GLOBAL.ioPrice("move_main", 1200));
             if (GLOBAL.INFERNO_ONLY && !MapRoom._inviteCrossWorld) {
                 // Same world: only the main yard moves; the player keeps every outpost.
-                this.tDescription.htmlText = "Your main yard will move onto this outpost. Your own outposts stay yours.";
+                this.tDescription.htmlText = KEYS.Get("io_t3m_pa_move_here_desc");
             } else {
                 this.tDescription.htmlText = "<font color=\"#CC0000\">" + KEYS.Get("msg_moveyard_warn") + "</font>";
             }
@@ -108,7 +108,21 @@ export class PopupRelocateMe extends PopupRelocateMe_CLIP {
         }
     }
 
+    /** (Inferno-only, QoL #495) the second question was answered: the next RelocateConfirm goes ahead */
+    private _ioSure: boolean;
+
     public RelocateConfirm(param1: boolean): void {
+        // (Inferno-only, QoL #495: moving the main yard onto an outpost is asked a second time, in red, with Keep as
+        // the safe answer; one click on the resource button moved it)
+        if (GLOBAL.INFERNO_ONLY && this._mode != "invite" && !this._ioSure) {
+            let shiny: boolean = param1;
+            GLOBAL.ioDanger(KEYS.Get("io_move_main_ask", { "v1": this._cell ? this._cell.X + ", " + this._cell.Y : "" }), KEYS.Get("io_move_main_yes"), (): void => {
+                this._ioSure = true;
+                this.RelocateConfirm(shiny);
+            });
+            return;
+        }
+        this._ioSure = false;
         let useShiny: boolean = false;
         let RelocateSuccess: Function = null;
         let RelocateFail: Function = null;
@@ -178,7 +192,7 @@ export class PopupRelocateMe extends PopupRelocateMe_CLIP {
                 POPUPS.DisplayGetShiny();
                 return;
             }
-            if (!GLOBAL.ioConfirmShiny(this.SHINYCOST.Get() | 0, "to move here", (): void => {
+            if (!GLOBAL.ioConfirmShiny(this.SHINYCOST.Get() | 0, KEYS.Get("io_t3m_pa_shiny_move_here"), (): void => {
                 this.RelocateConfirm(true);
             })) {
                 return;

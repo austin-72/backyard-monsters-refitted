@@ -9,11 +9,11 @@
 ![Redis](https://img.shields.io/badge/redis-%23DD0031.svg?style=for-the-badge&logo=redis&logoColor=white)
 ![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
 ![Postgres](https://img.shields.io/badge/postgres-%23316192.svg?style=for-the-badge&logo=postgresql&logoColor=white)
-![ActionScript](https://img.shields.io/badge/ActionScript-%23DD0031.svg?style=for-the-badge)
+![Browser](https://img.shields.io/badge/browser-%23E8501C.svg?style=for-the-badge&logo=googlechrome&logoColor=white)
 
 <br>
 
-## About this fork: Inferno MR2
+## About this fork: Inferno Map Room 2
 
 This is a fork of [Backyard Monsters Refitted](https://github.com/bym-refitted/backyard-monsters-refitted),
 the preservation project that rebuilt Kixeye's 2010 Flash strategy game with a new server.
@@ -28,30 +28,11 @@ It is built on base commit `6d706bd`.
 
 ## How to connect
 
-The public server is **https://inferno-mr2.maproom2.com**.
+The public server is **https://inferno.maproom2.com**.
 
-**In a browser (no Flash):** open https://inferno-mr2.maproom2.com/ and play. It also works on phones and
-tablets; see `WEB-CLIENT.md` for details.
-
-**With Flash:** you need the standalone Adobe Flash Player (the "projector"), which is a single program
-with no install.
-
-1. Get the standalone Flash Player for your system (Windows, Mac or Linux) from this repository's
-   [Releases page](https://github.com/austin-72/backyard-monsters-refitted/releases). It is a single
-   program, nothing to install.
-2. Open it, choose **File > Open**, and enter the address below, without quotes:
-   ```
-   https://inferno-mr2.maproom2.com/play.swf
-   ```
-   From a command line: `flashplayer.exe https://inferno-mr2.maproom2.com/play.swf`
-3. Register an account in the game and play.
-
-Windows users can instead download `Inferno-MR2.zip` from the Releases page, unzip it, and double-click
-**Launch-inferno-mr2**: the same thing with the address filled in.
-
-That address is a small launcher. Each time it starts it asks the server which build of the game is
-current and downloads exactly that one, so there is nothing to update by hand. If the game ever says a
-newer version has been published, close it and start it again.
+Open it in a current browser (Chrome, Edge, Firefox or Safari) and play. There is nothing to install and
+nothing to update: every visit loads the current build. It also works on phones and tablets; see
+`WEB-CLIENT.md` for details. The game is made for the browser only: no Flash version is built any more.
 
 Accounts are made in the game itself (email and password). They belong to this server only and are not
 shared with the main Backyard Monsters Refitted servers.
@@ -67,21 +48,46 @@ starts the game from that link and registers earns you both 250 shiny, paid when
 | | Original (Refitted) | This fork |
 |---|---|---|
 | Where you play | Overworld yard; the Inferno is unlocked later | An Inferno yard from the first minute, no tutorial |
-| World map | Map Room 1, 2 or 3 | Map Room 2 only, with a lava theme, a zoom-out view and jump-to-coordinates |
+| World map | Map Room 1, 2 or 3 | Map Room 2 only (0-399 on each side), in Inferno art, with a zoom-out view and jump-to-coordinates. Portals lead down to the Depths of Hell, a 10 x 10 layer of Moloch strongholds |
 | Resources | Twigs, pebbles, putty, goo | Bone, coal, sulfur, magma everywhere: top bar, store, map, quests |
-| Wild monsters | Four overworld tribes | The same four tribes as devils: Inferno buildings and monsters, yards turned around |
+| Wild monsters | Four overworld tribes | The same four tribes as devils (Hellionnaire, Kozmodeus, Abaddonakki, Beelzenaut): Inferno buildings and monsters, yards turned around |
 | Bosses on the map | None | Moloch strongholds (levels 46 and 50) built from the last Inferno descent bases |
-| Outpost kits | Three - Regular, Mega, and Ultra | Six - Ember, Brimstone, Demon, Damnnation, Underlord, and Apocalypse |
+| Outposts | One worker | Two workers in every outpost |
+| Outpost kits | Three - Regular, Mega, and Ultra | Six - Ember, Brimstone, Demon, Damnation, Underlord, and Apocalypse - plus three kits of your own, saved from your outposts |
 | Catapult | Twigs, pebbles, putty | Marilyn Monstroe, Candy Jars and Sulfur Bombs, four sizes each |
 | Defenders after an attack | Survivors are back at full health | Wounded defenders stay wounded until their owner comes home |
 | Pace | Original build times and production | Faster building/upgrading (4x), doubled production (magma x4), one-second hatching |
+| Shiny | A monthly grant | A daily login reward, a streak that pays more every 7th and 14th day |
 | Invites | Facebook invites | An invite link that pays both players 250 shiny |
-| Chat | WebSocket on its own ports | Rides on ordinary web requests, so it works behind a web-only tunnel |
-| Getting the game | Download a client, update it yourself | Opened from a web address; checks for and downloads updates at every start |
+| Chat | WebSocket on its own ports | Rides on ordinary web requests, so it works behind a web-only tunnel. Global and Alliance tabs, Who's Online, emotes, moderators |
+| Getting the game | Download a client, update it yourself | Played in the browser (TypeScript, no Flash), always the current build |
 
-Also in: Rezghul (bought with magma), the Hatchery Control Center, General Store and Yard
-Planner working in the Inferno, overworld decorations, alliances with their powerups, and a long list of
-fixes to battle performance and to crashes the Inferno had in the base game.
+**New in the game:**
+- **Monsters and towers:** Korath and Drull as monsters, Rezghul (bought with magma), Ashkarr, Clinkerjaw,
+  Flickerfiend, Fusebug and Emberghoul; the Cinder Coil and the Obsidian Mortar.
+- **The Brimstone Pit** (a building): games played with Shiny, among them Magma Drop, Brimstone
+  Scratchers, Higher or Lower, Wormzer Roulette, Bone Pile, Cinderjack, Magma Slots, Devil's Dice, The
+  Undertaker's Offer, Balthazar's Ascent, Magma Derby and Korath's Fortune. More games open as the Pit
+  levels up.
+- **The Devil's Arcade** (a building): sixteen games, solo or against other players, for its leaderboards
+  only (nothing is won or lost). Among them Hellgate Defense and Hellgate Defense 2 (tower defense), Siege,
+  Wormzer, Fusebug Blast, Balthazar's Flight and Valgos Golf.
+- **Moloch's Gauntlet:** a monthly ladder of Moloch yards, played from the main yard, with Shiny and
+  resource rewards.
+- **The Quest Book:** a tree of quests in categories, with chests and three daily quests.
+- **Leaderboards, attack logs and replays:** Outposts, Alliances, Gamblers and Hellgate boards; My attacks
+  and Attacks on me, with replays to watch, share in chat or download.
+- **Alliances:** a window with Overview, Board, Outposts, Members, Power-Ups, Recruit, Invites and Browse;
+  officers; tags and crests; relocation invites between members. They rank by empire value.
+- **Your yard:** pets, the D.A.V.E. Club (yard grounds, signs, champion skins), animated decorations,
+  overworld decorations, the Yard Planner working in the Inferno (with export and import), the Incubation
+  Control Station, General Store and Monster Juicer in the Inferno, and worker sacrifice for Shiny.
+- **Play:** keyboard shortcuts in the yard, the map and attacks; saved logins on the login page; one play
+  session at a time, with a choice to play here; the page's own settings (resolution, volume, ask before
+  spending Shiny, reduce motion).
+
+Plus a long list of fixes to battle performance and to crashes the Inferno had in the base game. The
+in-game Change Log (top bar) lists what changed each day.
 
 <br>
 
@@ -89,19 +95,33 @@ fixes to battle performance and to crashes the Inferno had in the base game.
 
 | Document | What it covers |
 |---|---|
-| [RUNNING-INFERNO-ONLY.md](./RUNNING-INFERNO-ONLY.md) | Setting the server up with Docker, going public behind a tunnel, building the client |
+| [RUNNING-INFERNO-ONLY.md](./RUNNING-INFERNO-ONLY.md) | Setting the server up with Docker, backups, building the client, going public |
+| [CONFIG.md](./CONFIG.md) | Every config file, what it controls, and what an operator usually changes |
 | [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) | What to check and set before other people play on it |
-| [INFERNO-ONLY-NOTES.md](./INFERNO-ONLY-NOTES.md) | What was changed and why, and every setting |
+| [UPDATES.md](./UPDATES.md) | How to put out an update: the server, the game, the Change Log, the notes and GitHub |
+| [GOING-PUBLIC-CLOUDFLARE.md](./GOING-PUBLIC-CLOUDFLARE.md) | Running behind a Cloudflare tunnel |
+| [ADMIN-GUIDE.md](./ADMIN-GUIDE.md) | The operator's daily work: bug and cheat reports, bans, compensation, announcements, maintenance, backups |
+| [OPERATIONS-LOGS-AND-SECRETS.md](./OPERATIONS-LOGS-AND-SECRETS.md) | Logs, secrets, admins and moderators |
+| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Problems an operator meets, and their fixes |
+| [WEB-CLIENT.md](./WEB-CLIENT.md) | The browser client: publishing, watch mode, phones, working on the game's code |
+| [BUG-REPORTS.md](./BUG-REPORTS.md) | How the automatic bug reports work |
+| [SECURITY.md](./SECURITY.md) | How to report a security problem |
 
-Nearly everything that can be tuned is in one file, `server/src/config/InfernoOnlyConfig.ts`, and most of it
-reaches the client as flags, so changing a number needs a server restart and no new client. Your own server's
-address goes in `asconfig.stable.json`; the launcher and the player-pack shortcut carry the public server's
-address and need changing too.
+The settings are in several files, not one. Most of the game's numbers are in
+`server/src/config/InfernoOnlyConfig.ts`; the Brimstone Pit, the Devil's Arcade, alliances, pets, replays and
+the Depths of Hell have config files of their own next to it; the server's address, ports, database and
+secrets are in `server/.env`. `CONFIG.md` lists them all. Most settings reach the client as flags on every
+yard load, so changing a number needs a server restart (with Docker, `docker compose up --build -d`) and no
+new client. Your own server's address is given to the game when it is published (`SERVER_URL` for
+`publish-web`; see RUNNING-INFERNO-ONLY.md). `publish-web` stamps the build itself and builds the game made to
+load fast (minified, its art in one file, compressed ahead, kept by browsers until the next build):
+WEB-CLIENT.md "Publishing".
 
 The base project's setup guides still apply to everything this fork did not touch:
 [server and database](https://github.com/bym-refitted/backyard-monsters-refitted/wiki/Server-&-Database-Setup),
-[client recompilation](https://github.com/bym-refitted/backyard-monsters-refitted/wiki/Client-Recompilation-Guide),
-[Docker](https://github.com/bym-refitted/backyard-monsters-refitted/wiki/Docker-Setup).
+[Docker](https://github.com/bym-refitted/backyard-monsters-refitted/wiki/Docker-Setup). (Its client recompilation
+guide is for the Flash client, which this fork no longer has: the game is the TypeScript in `client-web/src`,
+built with `publish-web`.)
 
 <br>
 
@@ -110,7 +130,8 @@ The base project's setup guides still apply to everything this fork did not touc
 Backyard Monsters was made by Kixeye. The restoration is the work of the
 [Backyard Monsters Refitted team](https://github.com/bym-refitted/backyard-monsters-refitted); if you want to
 help preserve the original game, contribute there. Issues and pull requests about the Inferno-only changes
-are welcome here. The base project's [contributing guidelines](./CONTRIBUTING.md) apply.
+are welcome here. The base project's [contributing guidelines](./CONTRIBUTING.md) apply. Security problems
+in this fork go to this server's operator, not to the upstream team: see [SECURITY.md](./SECURITY.md).
 
 <br>
 

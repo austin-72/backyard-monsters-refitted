@@ -5,7 +5,8 @@ import { Event, MouseEvent } from "flash/events";
 import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { Matrix, Point } from "flash/geom";
 import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
-import { BYMConfig, CREATURELOCKER, GLOBAL, ImageCache, IoHfo, IoHfoArt, IoHfoWaves, IoRimegrave, KEYS, MAP, PLEASEWAIT, POPUPS, POPUPSETTINGS, RasterData, SOUNDS, SPRITES, WMATTACK } from "@game";
+import { SharedObject } from "flash/net";
+import { BYMConfig, CREATURELOCKER, GLOBAL, LOGIN, ImageCache, IoHfo, IoHfoArt, IoHfoIce, IoHfoWaves, IoKit, IoRimegrave, KEYS, MAP, PLEASEWAIT, POPUPS, POPUPSETTINGS, RasterData, SOUNDS, SPRITES, WMATTACK } from "@game";
 
 /**
  * Hell Freezes Over: what the player sees of the event besides the yard (IoHfo): the line under the top bar
@@ -36,8 +37,46 @@ export class IoHfoUi extends ASObject {
         }
         let text: string = null;
         let click: boolean = false;
+        let pan: boolean = false;
         if ((f.day | 0) == 3 && f.towers.iced) {
             text = KEYS.Get("hfo_hud_towers", { "v1": (as3.as(f.towers.thawed, Array)).length, "v2": (as3.as(f.towers.iced, Array)).length });
+            // (QoL #587: a click shows the next tower still sealed: on a big yard the last ones were hard to find)
+            if (GLOBAL.INFERNO_ONLY && IoHfoUi.towerIces().length > 0) {
+                text += "  ·  " + KEYS.Get("io_hfo2_hud_towers_find");
+                pan = true;
+            }
+            // (QoL #588: towers still sealed that are busy (built, upgraded, fortified) can't be freed yet: how long)
+            if (GLOBAL.INFERNO_ONLY) {
+                let busy: any[] = IoHfoUi.ioBusyTowers();
+                if ((busy[0] | 0) > 0) {
+                    text += "  ·  " + KEYS.Get("io_ev3_hud_busy", { "v1": busy[0] | 0, "v2": GLOBAL.ioDuration(Math.max(1, busy[1] | 0)) });
+                }
+            }
+        } else if (((f.day | 0) == 1 || (f.day | 0) == 2) && f.ready) {
+            // (QoL #584: Day 1 and Day 2 say how far along they are, and when the next day can start)
+            let next: number = Number(f.nextAt) || 0;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #108: the next day begins in the yard when its time comes: no visit or reload needed)
+                text = next > GLOBAL.Timestamp() ? KEYS.Get("io_ev3_hud_daydone_at", { "v1": (f.day | 0) + 1, "v2": IoHfoUi.clock(next) }) : KEYS.Get("io_ev3_hud_daydone", { "v1": (f.day | 0) + 1 });
+            } else {
+                text = next > GLOBAL.Timestamp() ? KEYS.Get("io_hfo_hud_daydone_at", { "v1": IoHfoUi.clock(next) }) : KEYS.Get("io_hfo_hud_daydone");
+            }
+        } else if ((f.day | 0) == 1 && f.small) {
+            text = KEYS.Get("io_hfo_hud_ice", { "v1": f.small.cleared | 0, "v2": f.small.total | 0 });
+            // (QoL #107: when the next patch comes, and the next day)
+            if (GLOBAL.INFERNO_ONLY) {
+                let more: number = IoHfoUi.nextPatchAt(f);
+                if (more > 0) {
+                    text += "  ·  " + KEYS.Get("io_hfo2_hud_more_ice", { "v1": IoHfoUi.clock(more) });
+                }
+                text += IoHfoUi.nextDayNote(f);
+            }
+        } else if ((f.day | 0) == 2 && f.big) {
+            text = KEYS.Get("io_hfo_hud_cursed", { "v1": (as3.as(f.big.tried, Array) || []).length, "v2": f.big.total | 0 });
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #107)
+                text += IoHfoUi.nextDayNote(f);
+            }
         } else if ((f.day | 0) >= 4 && !(Number(f.done) > 0) && (f.current | 0) > 13) {
             text = KEYS.Get("hfo_banner_weakening");
             click = true;
@@ -67,6 +106,12 @@ export class IoHfoUi extends ASObject {
             IoHfoUi._hud.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
                 IoHfoUi.ShowWindow();
             });
+        } else if (pan) {
+            IoHfoUi._hud.buttonMode = true;
+            IoHfoUi._hud.mouseChildren = false;
+            IoHfoUi._hud.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                IoHfoUi.panToTower();
+            });
         } else {
             IoHfoUi._hud.mouseEnabled = false;
             IoHfoUi._hud.mouseChildren = false;
@@ -82,6 +127,266 @@ export class IoHfoUi extends ASObject {
             IoHfoUi._hud.parent.removeChild(IoHfoUi._hud);
         }
         IoHfoUi._hud = null;
+    }
+
+    /** QoL #107: when Day 1's next small patch comes (seconds), or 0 (all of them are here). As IoHfo.spawnPatches. */
+    private static nextPatchAt(f: any): number {
+        let start: number = f.dayAt ? Number(f.dayAt[1]) || 0 : 0;
+        let total: int = f.small.total | 0;
+        let every: int = Math.max(1, f.small.every | 0) | 0;
+        if (start <= 0) {
+            return 0;
+        }
+        let allowed: int = Math.min(total, 6 + Math.floor(Math.max(0, GLOBAL.Timestamp() - start) / every)) | 0;
+        return allowed >= total ? 0 : start + (allowed - 6 + 1) * every;
+    }
+
+    /** QoL #107: "  ·  Day 2 after 09:30" while the next day's time is still to come, or "". */
+    private static nextDayNote(f: any): string {
+        let next: number = Number(f.nextAt) || 0;
+        return next > GLOBAL.Timestamp() ? "  ·  " + KEYS.Get("io_hfo2_hud_next_day", { "v1": (f.day | 0) + 1, "v2": IoHfoUi.clock(next) }) : "";
+    }
+
+    /** The ice of the towers still sealed (Day 3), in a steady order. */
+    private static towerIces(): any[] {
+        let out: any[] = [];
+        for (let ice of as3.values(IoHfo.ices())) {
+            if (ice.kind == IoHfoIce.TOWER && ice._mc) {
+                out.push(ice);
+            }
+        }
+        out.sort((a: any, b: any): number => (a.ioServerId | 0) - (b.ioServerId | 0));
+        return out;
+    }
+
+    /**
+     * QoL #588: the towers still sealed that are busy (being built, upgraded or fortified, so their ice can't be broken
+     * yet): [how many, the longest wait in seconds].
+     */
+    public static ioBusyTowers(): any[] {
+        let n: int = 0;
+        let longest: int = 0;
+        for (let ice of as3.values(IoHfoUi.towerIces())) {
+            let left: int = ice.tower ? IoHfo.ioBusyFor(ice.tower) : 0;
+            if (left > 0) {
+                n++;
+                longest = Math.max(longest, left) | 0;
+            }
+        }
+        return [n, longest];
+    }
+
+    /** The next tower the HUD's click shows (QoL #587). */
+    private static _panAt: int = 0;
+
+    /** QoL #587: the view moves to the next tower still sealed (one with no worker on it first). */
+    private static panToTower(): void {
+        let list: any[] = IoHfoUi.towerIces();
+        let free: any[] = [];
+        for (let ice of as3.values(list)) {
+            if (!ice._picking) {
+                free.push(ice);
+            }
+        }
+        if (free.length) {
+            list = free;
+        }
+        if (!list.length) {
+            return;
+        }
+        let ice: any = list[IoHfoUi._panAt % list.length];
+        IoHfoUi._panAt = (IoHfoUi._panAt + 1) | 0;
+        SOUNDS.Play("click1");
+        MAP.FocusTo(ice._mc.x | 0, ice._mc.y | 0, 0.5);
+    }
+
+    /** QoL #109: a wave's prize in Shiny (the server's `prizes`), or 0 (not known). */
+    public static prize(f: any, wave: int): int {
+        let prizes: any[] = f ? as3.as(f.prizes, Array) : null;
+        return prizes && wave >= 1 && wave <= prizes.length ? prizes[wave - 1] | 0 : 0;
+    }
+
+    /**
+     * QoL #593: the button's tip: where the player is (towers freed, the wave to fight and its tries and prize, the
+     * waves skipped), as Frozen Monster Invasion's says. (UI_TOP.ioMakeHfoButton)
+     */
+    public static tip(): string {
+        let title: string = "<b>" + KEYS.Get("hfo_event_title") + "</b>";
+        let f: any = IoHfo.flag();
+        if (!f) {
+            return title;
+        }
+        let day: int = f.day | 0;
+        if (day == 3 && f.towers && f.towers.iced) {
+            return title + "<br>" + KEYS.Get("hfo_hud_towers", { "v1": (as3.as(f.towers.thawed, Array) || []).length, "v2": (as3.as(f.towers.iced, Array)).length });
+        }
+        if (day < 4) {
+            return title;
+        }
+        if (Number(f.done) > 0) {
+            return title + "<br>" + KEYS.Get("io_hfo2_tip_done");
+        }
+        let current: int = f.current | 0;
+        if (current > 13) {
+            return title + "<br>" + KEYS.Get("hfo_banner_weakening");
+        }
+        let w: any[] = as3.as(f.waves, Array) ? as3.as(f.waves[current - 1], Array) : null;
+        let line: string = KEYS.Get("io_hfo2_tip_wave", { "v1": current }) + "  ·  " + KEYS.Get("hfo_hud_tries", { "v1": Math.max(0, (f.tries | 0) - (w ? w[0] | 0 : 0)) });
+        let prize: int = IoHfoUi.prize(f, current);
+        if (prize > 0) {
+            line += "  ·  " + KEYS.Get("io_hfo2_prize", { "v1": prize });
+        }
+        return title + "<br>" + line;
+    }
+
+    // ---- QoL #113: the wave's bar under the top bar (both frozen events' waves: IoHfoWaves, IoFmiWaves)
+    private static _waveBar: Sprite = null;
+
+    private static _waveBarText: TextField = null;
+
+    private static readonly BAR_H: int = 10;
+
+    // ---- QoL #114: the waves at twice the speed (both frozen events' waves), as Hellgate Defense's fast forward
+    /** The speed the player picked (1 or 2), kept for the next wave this session. */
+    private static _ioSpeedWant: int = 1;
+
+    /** A wave is on at the picked speed (GLOBAL.ioStepScale is the waves' own until it ends). */
+    private static _ioSpeedOn: boolean = false;
+
+    private static _ioSpeedBtn: Sprite = null;
+
+    /**
+     * A wave starts (IoHfoWaves.begin, IoFmiWaves.begin): it runs at the picked speed. GLOBAL.ioStepScale runs the
+     * battle's steps (monsters, towers, shots, the wave's own step clock: its surges, the blizzard and the melt keep
+     * their fighting time); building timers, workers and the raids' clocks are not in it.
+     */
+    public static ioSpeedStart(): void {
+        if (!GLOBAL.INFERNO_ONLY) {
+            return;
+        }
+        IoHfoUi._ioSpeedOn = true;
+        GLOBAL.ioStepScale = IoHfoUi._ioSpeedWant;
+        IoHfoUi.ioSpeedButton();
+    }
+
+    /** The wave is over (won, lost, or the yard left): back to the usual speed. */
+    public static ioSpeedStop(): void {
+        if (!IoHfoUi._ioSpeedOn) {
+            return;
+        }
+        IoHfoUi._ioSpeedOn = false;
+        GLOBAL.ioStepScale = 1;
+        IoHfoUi.ioSpeedButton();
+    }
+
+    /** The speed now (1 or 2), while a wave is on; 1 otherwise. */
+    public static get ioSpeed(): int {
+        return IoHfoUi._ioSpeedOn ? IoHfoUi._ioSpeedWant : 1;
+    }
+
+    /** 1x or 2x, while a wave is on (the speed button; tests too). */
+    public static ioSetSpeed(n: int): void {
+        IoHfoUi._ioSpeedWant = n >= 2 ? 2 : 1;
+        if (IoHfoUi._ioSpeedOn) {
+            GLOBAL.ioStepScale = IoHfoUi._ioSpeedWant;
+        }
+        IoHfoUi.ioSpeedButton();
+    }
+
+    /** The button at the right of the wave's bar ("Speed 1x" / "Speed 2x"), drawn again with the speed. */
+    private static ioSpeedButton(): void {
+        if (IoHfoUi._ioSpeedBtn && IoHfoUi._ioSpeedBtn.parent) {
+            IoHfoUi._ioSpeedBtn.parent.removeChild(IoHfoUi._ioSpeedBtn);
+        }
+        IoHfoUi._ioSpeedBtn = null;
+        if (!IoHfoUi._ioSpeedOn || !IoHfoUi._waveBar) {
+            return;
+        }
+        let b: Sprite = IoHfoUi.iceButton(KEYS.Get("io_ev3_speed", { "v1": IoHfoUi._ioSpeedWant }), 104, 26, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            IoHfoUi.ioSetSpeed(IoHfoUi._ioSpeedWant >= 2 ? 1 : 2);
+        }, true, IoHfoUi._ioSpeedWant >= 2);
+        b.name = "ioWaveSpeed";
+        b.x = IoHfoUi._ioBarHalf + 8;
+        b.y = 9;
+        IoHfoUi._ioSpeedBtn = b;
+        IoHfoUi._waveBar.mouseChildren = true;
+        IoHfoUi._waveBar.addChild(b);
+    }
+
+    /** Half the wave bar's width (its panel, without the speed button). */
+    private static _ioBarHalf: int = 150;
+
+    /** Shows or updates the bar: `text` over it, the yard destroyed filling it, a line where the wave is lost. */
+    public static WaveBar(name: string, text: string, destroyed: int, lose: int): void {
+        if (!GLOBAL._layerUI) {
+            return;
+        }
+        if (!IoHfoUi._waveBar || IoHfoUi._waveBar.name != name) {
+            IoHfoUi.WaveBarOff();
+            IoHfoUi._waveBar = new Sprite();
+            IoHfoUi._waveBar.name = name;
+            IoHfoUi._waveBar.mouseEnabled = false;
+            // (QoL #114: its speed button takes clicks; the bar and its text don't)
+            IoHfoUi._waveBar.mouseChildren = GLOBAL.INFERNO_ONLY && IoHfoUi._ioSpeedOn;
+            IoHfoUi._waveBarText = IoHfoUi.label("", 12, 15267583, true, 600, TextFormatAlign.CENTER);
+            IoHfoUi._waveBarText.name = name + "Text";
+            IoHfoUi._waveBarText.filters = [new GlowFilter(0x0A2A4A, 1, 4, 4, 6, 1)];
+            IoHfoUi._waveBarText.y = 4;
+            IoHfoUi._waveBar.addChild(IoHfoUi._waveBarText);
+        }
+        let t: TextField = IoHfoUi._waveBarText;
+        t.text = text;
+        let w: int = Math.max(300, (t.textWidth | 0) + 40) | 0;
+        t.width = w - 16;
+        t.height = 20;
+        t.x = -t.width / 2;
+        let barW: int = (w - 40) | 0;
+        let barX: int = (-barW / 2) | 0;
+        let barY: int = 26;
+        let g: any = IoHfoUi._waveBar.graphics;
+        g.clear();
+        g.lineStyle(2, 10149119, 1);
+        g.beginFill(928324, 0.88);
+        g.drawRoundRect(-w / 2, 0, w, 44, 14, 14);
+        g.endFill();
+        g.lineStyle(1, 0x3A6A94, 1);
+        g.beginFill(0x081626, 1);
+        g.drawRect(barX, barY, barW, IoHfoUi.BAR_H);
+        g.endFill();
+        let pct: number = Math.max(0, Math.min(100, destroyed));
+        g.lineStyle(0, 0, 0);
+        g.beginFill((destroyed >= lose - 20 ? 0xE0501C : 0xFF9A3A) >>> 0, 1);
+        g.drawRect(barX + 1, barY + 1, Math.max(0, (barW - 2) * pct / 100), IoHfoUi.BAR_H - 2);
+        g.endFill();
+        // the losing line
+        g.lineStyle(2, 16777215, 1);
+        g.moveTo(barX + barW * lose / 100, barY - 3);
+        g.lineTo(barX + barW * lose / 100, barY + IoHfoUi.BAR_H + 3);
+        // (QoL #114: the speed button at its right, moved with its width)
+        if (IoHfoUi._ioSpeedOn) {
+            IoHfoUi._ioBarHalf = (w / 2) | 0;
+            if (!IoHfoUi._ioSpeedBtn) {
+                IoHfoUi.ioSpeedButton();
+            } else {
+                IoHfoUi._ioSpeedBtn.x = IoHfoUi._ioBarHalf + 8;
+            }
+        }
+        GLOBAL.RefreshScreen();
+        IoHfoUi._waveBar.x = (GLOBAL._SCREEN.x + GLOBAL._SCREEN.width / 2) | 0;
+        IoHfoUi._waveBar.y = (GLOBAL._SCREEN.y + 84) | 0;
+        if (IoHfoUi._waveBar.parent != GLOBAL._layerUI) {
+            GLOBAL._layerUI.addChild(IoHfoUi._waveBar);
+        }
+    }
+
+    public static WaveBarOff(): void {
+        if (IoHfoUi._waveBar && IoHfoUi._waveBar.parent) {
+            IoHfoUi._waveBar.parent.removeChild(IoHfoUi._waveBar);
+        }
+        IoHfoUi._waveBar = null;
+        IoHfoUi._waveBarText = null;
+        IoHfoUi._ioSpeedBtn = null;
     }
 
     /** buttons: [[text, onClick], ...]; the first is the main one. */
@@ -108,6 +413,7 @@ export class IoHfoUi extends ASObject {
         bg.graphics.drawRoundRect(left + 5, top + 5, IoHfoUi.POP_W - 10, h - 10, 20, 20);
         bg.filters = [new GlowFilter(0x6AC8FF, 0.6, 18, 18, 2, 2)];
         mc.addChild(bg);
+        IoKit.rim(mc, "ioHfoRim", left, top, IoHfoUi.POP_W, h, bg, "frame_ice");
         art = new Sprite();
         art.x = -220;
         art.y = top + 20;
@@ -142,6 +448,43 @@ export class IoHfoUi extends ASObject {
         POPUPS.Push(mc, null, null, "", "", false, "now");
     }
 
+    /** A time of day, in the player's own time (HH:MM). */
+    private static clock(seconds: number): string {
+        let d: Date = new Date(seconds * 1000);
+        return (d.getHours() < 10 ? "0" : "") + d.getHours() + ":" + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    }
+
+    /**
+     * QoL #583: the first time a day of the event is seen in this browser, what it wants. (Ice just appeared, and
+     * Day 2's task was never said.) Kept per player and per run of the event.
+     */
+    public static DayPopup(begun: boolean = false): void {
+        let f: any = IoHfo.flag();
+        let day: int = f ? f.day | 0 : 0;
+        if (day < 1 || day > 3) {
+            return;
+        }
+        let key: string = "ioHfoDay" + LOGIN._playerID + "_" + (Number(f.t0) || 0) + "_" + day;
+        try {
+            let so: SharedObject = SharedObject.getLocal("bymr_data", "/");
+            if (so.data[key]) {
+                return;
+            }
+            so.data[key] = 1;
+            so.flush();
+        } catch (e) {
+            return;
+        }
+        let body: string = KEYS.Get("io_hfo_day" + day + "_body");
+        if (begun && GLOBAL.INFERNO_ONLY) {
+            // (QoL #108: the day began in the yard, without a reload: it says so)
+            body = "<b>" + KEYS.Get("io_ev3_day_begun", { "v1": day }) + "</b><br><br>" + body;
+        }
+        IoHfoUi.show(IoHfoUi.popup("popup_frozen.png", KEYS.Get("io_hfo_day" + day + "_title"), body, [[KEYS.Get("btn_ok"), (e: MouseEvent): void => {
+            POPUPS.Next();
+        }]]));
+    }
+
     /** "Hell has frozen over!": the last tower is free and the waves begin. */
     public static FrozenPopup(): void {
         IoHfoUi.show(IoHfoUi.popup("popup_frozen.png", KEYS.Get("hfo_pop_frozen_title"), KEYS.Get("hfo_pop_frozen_body"), [[KEYS.Get("hfo_pop_frozen_btn"), (e: MouseEvent): void => {
@@ -149,6 +492,14 @@ export class IoHfoUi extends ASObject {
             IoHfo.call("seen", [["what", "frozen"]], (r: any): void => {
                 IoHfoUi.Hud();
                 IoHfoWaves.Start(IoHfo.flag().current | 0);
+            });
+        }], [KEYS.Get("io_hfo_later"), (e: MouseEvent): void => {
+            // (QoL #582: it can be put off; it came back on every load and its only button began wave 1 at once,
+            // using a try. Marked seen, the waves start from the event's window when the player is ready.)
+            POPUPS.Next();
+            IoHfo.call("seen", [["what", "frozen"]], (r: any): void => {
+                IoHfoUi.Hud();
+                GLOBAL.Message(KEYS.Get("io_hfo_later_note"));
             });
         }]]));
         SOUNDS.Play("quake", 0.3);
@@ -346,6 +697,8 @@ export class IoHfoUi extends ASObject {
         }
         bg.filters = [new GlowFilter(0x6AC8FF, 0.6, 22, 22, 2, 2)];
         mc.addChild(bg);
+        // (the frozen kit's rim, 11 October)
+        IoKit.rim(mc, "ioHfoRim", left, top, IoHfoUi.W, IoHfoUi.H, bg, "frame_ice");
 
         // the banner
         banner = new Sprite();
@@ -412,6 +765,21 @@ export class IoHfoUi extends ASObject {
             noteField.x = left + 120;
             noteField.y = y;
             mc.addChild(noteField);
+            y = (noteField.y + noteField.textHeight + 12) | 0;
+        }
+        if (GLOBAL.INFERNO_ONLY && !(Number(f.done) > 0)) {
+            // (QoL #109: the wave to fight, what it pays and its tries)
+            let current: int = f.current | 0;
+            if ((f.day | 0) >= 4 && current >= 1 && current <= 13) {
+                let cw: any[] = as3.as(waves[current - 1], Array);
+                let prize: int = IoHfoUi.prize(f, current);
+                let line: string = "<b>" + KEYS.Get("hfo_wave_n", { "v1": current }) + "</b>" + (prize > 0 ? ": " + KEYS.Get("io_hfo2_prize", { "v1": prize }) : "") + "  ·  " + KEYS.Get("hfo_hud_tries", { "v1": Math.max(0, (f.tries | 0) - (cw ? cw[0] | 0 : 0)) });
+                y = IoHfoUi.windowNote(mc, "ioHfoNoteWave", line, 0xFFD27A, left, y);
+            }
+            // (QoL #594: the Compound is sealed while a wave is on, as the invasions' window says)
+            if ((f.day | 0) >= 3) {
+                y = IoHfoUi.windowNote(mc, "ioHfoNoteCompound", KEYS.Get("io_hfo2_compound"), 0xA8C8E8, left, y);
+            }
         }
 
         // the waves: two columns
@@ -450,6 +818,20 @@ export class IoHfoUi extends ASObject {
         POPUPSETTINGS.ScaleUp(mc);
     }
 
+    /** A note in the window's left column, under the story (QoL #109, #594); the y under it. */
+    private static windowNote(mc: MovieClip, name: string, html: string, color: uint, left: int, y: int): int {
+        let field: TextField = IoHfoUi.label("", 11, color, false, 250, TextFormatAlign.LEFT);
+        field.name = name;
+        field.multiline = true;
+        field.wordWrap = true;
+        field.htmlText = html;
+        field.autoSize = TextFieldAutoSize.LEFT;
+        field.x = left + 120;
+        field.y = y;
+        mc.addChild(field);
+        return (field.y + field.textHeight + 10) | 0;
+    }
+
     /** One wave in the list: its mark, its number and state, the tries left (the one to fight), a button. */
     private static waveRow(wave: int, w: any[], f: any): Sprite {
         let mark: Sprite = null;
@@ -481,6 +863,15 @@ export class IoHfoUi extends ASObject {
         state.x = 36;
         state.y = 18;
         row.addChild(state);
+        // (QoL #109: what a wave still to win pays; the one to fight says it in the left column, by its tries)
+        let prize: int = GLOBAL.INFERNO_ONLY && !won && !skipped && !current ? IoHfoUi.prize(f, wave) : 0;
+        if (prize > 0) {
+            let pay: TextField = IoHfoUi.label(KEYS.Get("io_hfo2_prize", { "v1": prize }), 9, 0xFFD27A, true, 66, TextFormatAlign.RIGHT);
+            pay.name = "ioHfoWavePrize" + wave;
+            pay.x = 90;
+            pay.y = 4;
+            row.addChild(pay);
+        }
         if (current) {
             // the tries left, then Start
             for (let t: int = 0; t < (f.tries | 0); t++) {
@@ -528,12 +919,19 @@ export class IoHfoUi extends ASObject {
         m.createGradientBox(width, height, Math.PI / 2, 0, 0);
         draw = (hot: boolean): void => {
             b.graphics.clear();
+            // the frozen events' kit (11 October): frozen glass (main), frosted steel, dulled when it can't be used
+            if (IoKit.slice(b.graphics, !enabled ? "btn_ice_d" : (main ? "btn_ice" : "btn_steel") + (hot ? "_h" : ""), 0, 0, width, height)) {
+                return;
+            }
             b.graphics.lineStyle(2, (enabled ? 0xE8F8FF : 0x5A6A7A) >>> 0, 1);
             b.graphics.beginGradientFill(GradientType.LINEAR, !enabled ? [0x4A5A6A, 0x2A3644, 0x1A2430] : (main ? (hot ? [0xB8F0FF, 0x3AA8F0, 0x1050A8] : [0x9ADCFF, 0x2A88D8, 0x0C3C88]) : (hot ? [0x7A9AB8, 0x3A5A7A, 0x20384E] : [0x6A88A6, 0x2E4A66, 0x182C40])), [1, 1, 1], [0, 140, 255], m);
             b.graphics.drawRoundRect(0, 0, width, height, 12, 12);
             b.graphics.endFill();
         };
         draw(false);
+        IoKit.whenLoaded(["btn_ice", "btn_ice_h", "btn_ice_d", "btn_steel", "btn_steel_h"], (): void => {
+            draw(false);
+        });
         let t: TextField = IoHfoUi.label(text, height >= 30 ? 16 : 11, 16777215, height < 30, width, TextFormatAlign.CENTER, height >= 30 ? "Groboldov" : "Verdana");
         t.embedFonts = height >= 30;
         t.height = height;

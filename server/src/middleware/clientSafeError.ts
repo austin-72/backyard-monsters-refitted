@@ -1,6 +1,7 @@
 import type { Context, Next } from "koa";
 import { logger } from "../utils/logger.js";
 import { Status } from "../enums/StatusCodes.js";
+import { ZodError } from "zod";
 
 interface ConstructorParams {
   status: number;
@@ -65,10 +66,15 @@ export const ErrorInterceptor = async (ctx: Context, next: Next) => {
   try {
     await next();
   } catch (err) {
+    // (18 October) a request whose fields aren't what the route takes (a schema's parse, or a field's JSON) is the
+    // request's fault: 400, said so, and not filed as a server bug (anyone signed in could fill the Bugs tab with them)
+    if (err instanceof ZodError || (err instanceof SyntaxError && /JSON/i.test(err.message))) {
+      err = new ClientSafeError({ message: "That request isn't valid.", status: Status.BAD_REQUEST, data: {}, isClientFriendly: true });
+    }
     // Check if the error is client safe
     const isSafe = err instanceof ClientSafeError;
     let clientError = isSafe
-      ? err
+      ? (err as ClientSafeError)
       : new ClientSafeError({
           message: "Something went wrong, please contact support.",
           status: Status.INTERNAL_SERVER_ERROR,

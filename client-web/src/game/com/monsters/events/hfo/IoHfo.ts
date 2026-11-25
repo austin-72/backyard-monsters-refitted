@@ -4,7 +4,7 @@ import { BitmapData, BlendMode, IBitmapDrawable, MovieClip, Sprite } from "flash
 import { Event, IOErrorEvent } from "flash/events";
 import { ColorTransform, Matrix, Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BASE, BFOUNDATION, BMUSHROOM, BTOWER, BTRAP, BYMConfig, CREATURELOCKER, GLOBAL, GRID, InstanceManager, IoHfoArt, IoHfoIce, IoHfoUi, IoHfoWaves, KEYS, MAP, MAPBG, POPUPS, QUEUE, RasterData, SOUNDS, URLLoaderApi, WORKERS } from "@game";
+import { BASE, BFOUNDATION, BMUSHROOM, BTOWER, BTRAP, BYMConfig, CREATURELOCKER, GLOBAL, GRID, InstanceManager, IoFmiWaves, IoHfoArt, IoHfoIce, IoHfoUi, IoHfoWaves, KEYS, LOGGER, MAP, MAPBG, POPUPS, QUEUE, RasterData, SOUNDS, URLLoaderApi, WMATTACK, WORKERS } from "@game";
 
 /**
  * Hell Freezes Over (the user's hell_freezes_over.md, 1 October): a one-time story event in the player's main
@@ -24,6 +24,7 @@ import { BASE, BFOUNDATION, BMUSHROOM, BTOWER, BTRAP, BYMConfig, CREATURELOCKER,
  *    there; he can now be unlocked in the Strongbox.
  *
  * Only on the player's own main yard in build mode (not outposts, attacks, visits or Designer drafts).
+ * (QoL #108: a new day also begins while the player is in the yard, no reload needed: ioCheckDay.)
  */
 export class IoHfo extends ASObject {
     // ---- the player's progress (flag io_hfo)
@@ -44,6 +45,15 @@ export class IoHfo extends ASObject {
 
     // ---- the reveal: all 13 won
     private static _revealing: boolean = false;
+
+    /** QoL #108: the day the yard was set up for (-1: none): a later one in the flag is set up where the player is. */
+    private static _ioDay: int = -1;
+
+    /** QoL #588: when the line under the top bar was last brought up to date for a busy tower's wait (getTimer). */
+    private static _ioBusyHudAt: int = 0;
+
+    /** QoL #588: a busy tower's wait was showing in that line at its last update. */
+    private static _ioBusyShown: boolean = false;
 
     /** The progress as the server last said, or null (not started, or not on an own yard). */
     public static flag(): any {
@@ -114,6 +124,8 @@ export class IoHfo extends ASObject {
         IoHfo._setupAt = getTimer();
         let f: any = IoHfo.flag();
         let day: int = f.day | 0;
+        // (QoL #108)
+        IoHfo._ioDay = day;
         let revealed: boolean = Boolean(Number(f.done) > 0 && f.seen && Number(f.seen.reveal) > 0);
         let p: any[] = null;
         for (p of as3.values(as3.as(f.small.patches, Array))) {
@@ -136,6 +148,9 @@ export class IoHfo extends ASObject {
             IoHfo._ticker = new Sprite();
         }
         IoHfo._ticker.addEventListener(Event.ENTER_FRAME, IoHfo.tick);
+        if (day >= 1 && day <= 3) {
+            IoHfoUi.DayPopup();
+        }
         if (day >= 4 && !(f.seen && Number(f.seen.frozen) > 0)) {
             IoHfoUi.FrozenPopup();
         } else if (Number(f.done) > 0 && !revealed) {
@@ -154,6 +169,8 @@ export class IoHfo extends ASObject {
         IoHfoArt.clearBattleIce();
         IoHfoUi.HudOff();
         IoHfo._busy = {};
+        IoHfo._ioDay = -1;
+        IoHfo._ioBusyShown = false;
     }
 
     private static tick(e: Event): void {
@@ -164,6 +181,27 @@ export class IoHfo extends ASObject {
         if (now - IoHfo._lastSpawnCheck > 60000) {
             IoHfo._lastSpawnCheck = now;
             IoHfo.spawnPatches();
+            // (QoL #107: the line under the top bar says when the next patch and the next day come: kept current)
+            let f: any = IoHfo.flag();
+            if (GLOBAL.INFERNO_ONLY && f && (f.day | 0) >= 1 && (f.day | 0) <= 2 && !IoHfoWaves.running) {
+                IoHfoUi.Hud();
+            }
+            // (QoL #108: the next day begins here once its time has come, without a reload)
+            if (GLOBAL.INFERNO_ONLY) {
+                IoHfo.ioCheckDay();
+            }
+        }
+        // (QoL #588: on Day 3 a busy tower's wait counts down in the line under the top bar, and goes when it is over)
+        if (GLOBAL.INFERNO_ONLY && now - IoHfo._ioBusyHudAt > 5000) {
+            IoHfo._ioBusyHudAt = now;
+            let fd: any = IoHfo.flag();
+            if (fd && (fd.day | 0) == 3 && !IoHfoWaves.running && !IoFmiWaves.running && !WMATTACK._inProgress) {
+                let busy: boolean = (IoHfoUi.ioBusyTowers()[0] | 0) > 0;
+                if (busy || IoHfo._ioBusyShown) {
+                    IoHfo._ioBusyShown = busy;
+                    IoHfoUi.Hud();
+                }
+            }
         }
         IoHfo.tombLines(now);
         IoHfoWaves.Tick();
@@ -217,10 +255,14 @@ export class IoHfo extends ASObject {
                     IoHfoIce.patch(kind == "small" ? IoHfoIce.SMALL : IoHfoIce.BIG, p[0] | 0, p[1] | 0, p[2] | 0, p[3] | 0);
                 }
             }
+            if (GLOBAL.INFERNO_ONLY && IoHfo.inYard()) {
+                // (QoL #107: the next patch's time moves on)
+                IoHfoUi.Hud();
+            }
             BASE.Save();
         }, (): void => {
             IoHfo._busy.spawn = false;
-        });
+        }, false, true);
     }
 
     /** A free grid spot of size x size inside the yard (with room round it), or null. */
@@ -239,6 +281,28 @@ export class IoHfo extends ASObject {
             }
             // (with a margin, so a worker can reach it and it doesn't wall anything in)
             if (!clash && !GRID.FootprintBlocked([new Rectangle(-10, -10, size + 20, size + 20)], GRID.ToISO(x, y, 0), true)) {
+                return new Point(x, y);
+            }
+        }
+        // (QoL #586, 14 October: a yard with no room left: the ring just outside it, where warts grow too. The ice
+        // never came on a packed yard, and the event stood still with no word why.)
+        let edgeW: number = GLOBAL._mapWidth * 0.5;
+        let edgeH: number = GLOBAL._mapHeight * 0.5;
+        for (let tries: int = 0; tries < 3000; tries++) {
+            let x: int = (((((Math.random() * 2 - 1) * (edgeW + 180)) / 10) | 0) * 10) | 0;
+            let y: int = (((((Math.random() * 2 - 1) * (edgeH + 180)) / 10) | 0) * 10) | 0;
+            if (!(x + size <= -edgeW || x >= edgeW || y + size <= -edgeH || y >= edgeH)) {
+                continue;
+            }
+            let clash: boolean = false;
+            for (let r of as3.values(taken)) {
+                if (r.intersects(new Rectangle(x, y, size, size))) {
+                    clash = true;
+                    break;
+                }
+            }
+            // (outside the yard's grid nothing is built: free, as for the warts out there)
+            if (!clash) {
                 return new Point(x, y);
             }
         }
@@ -291,7 +355,7 @@ export class IoHfo extends ASObject {
                 }
             }, (): void => {
                 IoHfo._busy.towers = false;
-            });
+            }, false, true);
             return;
         }
         IoHfo.placeTowerIce();
@@ -325,7 +389,7 @@ export class IoHfo extends ASObject {
                     if (r.frozen) {
                         IoHfoUi.FrozenPopup();
                     }
-                });
+                }, null, false, true);
             }
         }
     }
@@ -336,7 +400,8 @@ export class IoHfo extends ASObject {
             return;
         }
         if (ice.kind == IoHfoIce.TOWER && ice.tower && (ice.tower._countdownBuild.Get() + ice.tower._countdownUpgrade.Get() + ice.tower._countdownFortify.Get() > 0)) {
-            GLOBAL.Message(KEYS.Get("hfo_tower_busy"));
+            // (QoL #588: and for how long: an upgrade held Day 3 up with no word of when it would be over)
+            GLOBAL.Message(GLOBAL.INFERNO_ONLY ? KEYS.Get("io_ev3_tower_busy", { "v1": GLOBAL.ioDuration(Math.max(1, IoHfo.ioBusyFor(ice.tower))) }) : KEYS.Get("hfo_tower_busy"));
             return;
         }
         if (QUEUE.Add("hfoice" + ice._id, ice)) {
@@ -345,6 +410,17 @@ export class IoHfo extends ASObject {
         } else {
             POPUPS.DisplayWorker(2, ice);
         }
+    }
+
+    /**
+     * QoL #588: how long a tower is still busy (being built, upgraded or fortified), in seconds; 0: not busy. Its ice
+     * waits till then (a worker is on the tower's own work, and the tower changes when it is done).
+     */
+    public static ioBusyFor(t: BFOUNDATION): int {
+        if (!t) {
+            return 0;
+        }
+        return Math.max(0, t._countdownBuild.Get() | 0, t._countdownUpgrade.Get() | 0, t._countdownFortify.Get() | 0) | 0;
     }
 
     /** The worker has done what can be done: the server settles it and deals the worker's line. */
@@ -362,9 +438,12 @@ export class IoHfo extends ASObject {
             let y: number = ice._mc.y;
             if (ice.kind == IoHfoIce.SMALL) {
                 ice.ioRemove();
+                IoHfoUi.Hud();
                 IoHfoArt.play(ice.picture + "_shatter", x, y, IoHfoArt.mapDepth(x, y + 20), 4);
                 SOUNDS.Play("ihit" + ((1 + Math.random() * 7) | 0), 0.6);
             } else if (ice.kind == IoHfoIce.BIG) {
+                // (QoL #585: the count of patches tried goes up, and its name says it was tried)
+                IoHfoUi.Hud();
                 // it cracks... and snaps back
                 IoHfoArt.play(ice.picture + "_crack", x, y, IoHfoArt.depthOf(ice) + 20, 6, (): void => {
                     ice.ioReset();
@@ -386,6 +465,96 @@ export class IoHfo extends ASObject {
             QUEUE.Remove("hfoice" + ice._id, false);
             ice.ioReset();
         });
+    }
+
+    // ---- QoL #108: the next day, in the yard
+    /**
+     * The next day begins where the player is, without a reload: once its time has come and today's work is done
+     * (or an admin's "Next day now" waits), the server is asked (hfo/status, advance: the same rule as at a load),
+     * and the new day comes as at a load, with its popup ("Day 3 has begun"). A day begun elsewhere (a load in
+     * another tab) comes the same way with the flag. Not during a fight or a raid; tried again each minute (IoHfo.tick).
+     */
+    public static ioCheckDay(): void {
+        let f: any = IoHfo.flag();
+        if (!GLOBAL.INFERNO_ONLY || !f || !IoHfo.inYard() || IoHfo._ioDay < 0 || IoHfo._busy.day) {
+            return;
+        }
+        let day: int = f.day | 0;
+        if (day > IoHfo._ioDay) {
+            IoHfo.ioNewDay();
+            return;
+        }
+        if (day >= 3 || IoHfo._revealing || WMATTACK._inProgress || BASE.ioAttackRunning() || IoHfoWaves.running || IoFmiWaves.running) {
+            return;
+        }
+        let next: number = Number(f.nextAt) || 0;
+        if (!(Number(f.force) > 0) && !(f.ready && next > 0 && GLOBAL.Timestamp() >= next)) {
+            return;
+        }
+        IoHfo._busy.day = true;
+        IoHfo.call("status", [["advance", "1"]], (r: any): void => {
+            IoHfo._busy.day = false;
+            IoHfo.ioNewDay();
+        }, (): void => {
+            IoHfo._busy.day = false;
+        }, false, true);
+    }
+
+    /** The day in the flag is later than the one the yard was set up for: its ice, ground, towers and popup. */
+    private static ioNewDay(): void {
+        let f: any = IoHfo.flag();
+        if (!f || !IoHfo.inYard() || IoHfo._ioDay < 0) {
+            return;
+        }
+        let day: int = f.day | 0;
+        if (day <= IoHfo._ioDay) {
+            return;
+        }
+        IoHfo._ioDay = day;
+        if (!f.small || !f.big || !f.towers) {
+            // (not the server's whole progress: a load sets the yard up)
+            return;
+        }
+        if (day > 3) {
+            // (the waves opened elsewhere: the line under the top bar now; the yard's ice goes at the next load)
+            IoHfoUi.Hud();
+            return;
+        }
+        // the patches the server has that aren't in this yard yet (placed elsewhere), then the new ones
+        IoHfo.ioPlaceMissing();
+        if (day == 3) {
+            // the ground freezes, every tower is sealed (the server is told which), the tomb stands
+            if (IoHfo.frozenGround() && MAP.texture != "hfo_frozen") {
+                IoHfo.fadeGround("hfo_frozen");
+            }
+            IoHfo.setupTowers();
+            IoHfo.drawTomb();
+        }
+        IoHfo.spawnPatches();
+        IoHfoUi.Hud();
+        IoHfoUi.DayPopup(true);
+    }
+
+    /** The small and big patches in the flag that aren't in the yard (as at a load: IoHfo.Setup). */
+    private static ioPlaceMissing(): void {
+        let f: any = IoHfo.flag();
+        let placed: any = {};
+        for (let ice of as3.values(IoHfo.ices())) {
+            placed[ice.kind + ice.ioServerId] = true;
+        }
+        let p: any[] = null;
+        for (p of as3.values(as3.as(f.small.patches, Array) || [])) {
+            if (!placed[IoHfoIce.SMALL + (p[0] | 0)]) {
+                IoHfoIce.patch(IoHfoIce.SMALL, p[0] | 0, p[1] | 0, p[2] | 0, p[3] | 0);
+            }
+        }
+        if (!(Number(f.done) > 0)) {
+            for (p of as3.values(as3.as(f.big.patches, Array) || [])) {
+                if (!placed[IoHfoIce.BIG + (p[0] | 0)]) {
+                    IoHfoIce.patch(IoHfoIce.BIG, p[0] | 0, p[1] | 0, p[2] | 0, p[3] | 0);
+                }
+            }
+        }
     }
 
     // ---- the tomb: Rimegrave's ice, just off the yard's right-hand corner
@@ -501,25 +670,25 @@ export class IoHfo extends ASObject {
                 IoHfo._revealing = false;
                 IoHfo.call("seen", [["what", "reveal"]], (r: any): void => {
                     IoHfoUi.Hud();
-                });
+                }, null, false, true);
                 IoHfoUi.ChampionPopup();
             });
         };
         next();
     }
 
-    /** The frozen ground fades back into the lava ground. */
-    private static fadeGround(): void {
+    /** The frozen ground fades back into the lava ground. (QoL #108: or, `to` "hfo_frozen", Day 3's ground in.) */
+    private static fadeGround(to: string = "lava"): void {
         let lava: BitmapData = null;
         let step: int = 0;
         let fader: Sprite = null;
         let ct: ColorTransform = null;
         let fade: Function = null;
         if (!BYMConfig.instance.RENDERER_ON || !MAP.effectsBMD) {
-            MAP.swapBG("lava");
+            MAP.swapBG(to);
             return;
         }
-        lava = MAPBG.MakeTile("lava");
+        lava = MAPBG.MakeTile(to);
         step = 0;
         fader = new Sprite();
         ct = new ColorTransform(1, 1, 1, 0.12);
@@ -535,7 +704,7 @@ export class IoHfo extends ASObject {
             if (step >= 75) {
                 fader.removeEventListener(Event.ENTER_FRAME, fade);
                 lava.dispose();
-                MAP.swapBG("lava");
+                MAP.swapBG(to);
             }
         };
         fader.addEventListener(Event.ENTER_FRAME, fade);
@@ -543,12 +712,31 @@ export class IoHfo extends ASObject {
 
     // ---- the server
     /** POST hfo/<action>; `ok` gets the answer (its progress is applied first), `failed` an error. */
-    public static call(action: string, vars: any[], ok: Function = null, failed: Function = null): void {
+    /** `quiet`: no message when the server can't be reached (`failed(true)`: the caller tries again). */
+    /**
+     * `background` (QoL #458): a call the game makes by itself (the ice put down at a load, Day 3's towers, a
+     * recycled tower, the champion's reveal): never a message, whatever went wrong ("The ice is acting up" popped
+     * up on a shaky line for things the player didn't do); it is logged, and tried again at the next load.
+     */
+    public static call(action: string, vars: any[], ok: Function = null, failed: Function = null, quiet: boolean = false, background: boolean = false): void {
         new URLLoaderApi().load(GLOBAL.serverUrl + "hfo/" + action, vars || [["v", "1"]], (r: any): void => {
             if (!r || r.error) {
+                if (background) {
+                    LOGGER.Log("log", "hfo/" + action + " (in the background) failed: " + (r && r.error ? String(r.error) : "no answer"));
+                    if (failed != null) {
+                        failed(!r);
+                    }
+                    return;
+                }
+                if (quiet && !r) {
+                    if (failed != null) {
+                        failed(true);
+                    }
+                    return;
+                }
                 GLOBAL.Message(r && r.error ? String(r.error) : KEYS.Get("hfo_err_server"));
                 if (failed != null) {
-                    failed();
+                    failed(false);
                 }
                 return;
             }
@@ -559,9 +747,11 @@ export class IoHfo extends ASObject {
                 ok(r);
             }
         }, (e: IOErrorEvent): void => {
-            GLOBAL.Message(KEYS.Get("hfo_err_server"));
+            if (!quiet && !background) {
+                GLOBAL.Message(KEYS.Get("hfo_err_server"));
+            }
             if (failed != null) {
-                failed();
+                failed(true);
             }
         });
     }

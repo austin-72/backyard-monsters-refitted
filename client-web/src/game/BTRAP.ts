@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { int } from "as3";
 import { Point } from "flash/geom";
-import { ATTACK, BFOUNDATION, BYMConfig, EFFECTS, GIBLETS, GLOBAL, KEYS, MonsterBase, RasterData, SOUNDS, Targeting } from "@game";
+import { ATTACK, BFOUNDATION, BYMConfig, EFFECTS, GIBLETS, GLOBAL, KEYS, MonsterBase, RasterData, SOUNDS, Targeting, IoDevil } from "@game";
 
 export class BTRAP extends BFOUNDATION {
     static {
@@ -27,6 +27,10 @@ export class BTRAP extends BFOUNDATION {
         let _loc1_: RasterData = null;
         super.SetProps();
         this.damageProperty.value = Number(this._buildingProps.damage[0]);
+        // (Inferno-only, 13 November: its owner's Devil's Contract, Wrath Traps)
+        if (GLOBAL.INFERNO_ONLY && IoDevil.yardMul("trapDamage") != 1) {
+            this.damageProperty.value = Number(this._buildingProps.damage[0]) * IoDevil.yardMul("trapDamage");
+        }
         if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
             this._mc.visible = false;
             this._mcBase.visible = false;

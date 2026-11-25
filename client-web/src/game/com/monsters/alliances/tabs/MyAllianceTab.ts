@@ -1,12 +1,12 @@
 import * as as3 from "as3";
 import { int, uint } from "as3";
-import { Bitmap, BitmapData, Loader, MovieClip } from "flash/display";
+import { Bitmap, BitmapData, Loader, MovieClip, Sprite } from "flash/display";
 import { Event, IOErrorEvent, KeyboardEvent, MouseEvent } from "flash/events";
 import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { URLRequest } from "flash/net";
 import { AntiAliasType, TextField, TextFieldType, TextFormat, TextFormatAlign } from "flash/text";
 import { Keyboard } from "flash/ui";
-import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, AllianceFormPopup, AllianceMessageType, AllianceTabBase, BYMChat, Button_CLIP, Channel, Chat, ChatEvent, GLOBAL, IChatSystem, ImageCache, KEYS, SOUNDS, ScrollSetV, TimeUtils, URLLoaderApi } from "@game";
+import { AllianceConstants, AllianceFormPopup, AllianceMessageType, ALLIANCES, AllianceTabBase, ALLIANCEWINDOW, Button_CLIP, BYMChat, Channel, Chat, ChatEvent, GLOBAL, IChatSystem, ImageCache, IoAllianceUi, IoCrest, IoEmotes, KEYS, ScrollSetV, SOUNDS, TimeUtils, URLLoaderApi } from "@game";
 
 export class MyAllianceTab extends AllianceTabBase {
     static {
@@ -212,7 +212,7 @@ export class MyAllianceTab extends AllianceTabBase {
         shield.mouseEnabled = false;
         shield.x = MyAllianceTab.LEFT_X + MyAllianceTab.LEFT_W - MyAllianceTab.LEFT_INNER - MyAllianceTab.SHIELD_PAD_R - MyAllianceTab.SHIELD_SIZE;
         shield.y = MyAllianceTab.TITLE_Y + 10;
-        this._loadAllianceIcon(shield, data.image | 0, MyAllianceTab.SHIELD_SIZE);
+        this._loadAllianceIcon(shield, data.image | 0, MyAllianceTab.SHIELD_SIZE, data.crest);
 
         let descBg: MovieClip = as3.as(this.addChild(new MovieClip()), MovieClip);
         descBg.mouseEnabled = false;
@@ -371,7 +371,8 @@ export class MyAllianceTab extends AllianceTabBase {
 
         let messageType: string = as3.as(event.Get("messagetype"), String);
         if (messageType != null && messageType != AllianceMessageType.MESSAGE) {
-            this._appendSystemRow(message, picSquare, ts, event.Get("allianceimage") | 0);
+            // (Inferno-only, 22 October: a planned power-up's time in the player's own clock)
+            this._appendSystemRow(BYMChat.ioShoutTimes(message), picSquare, ts, event.Get("allianceimage") | 0);
             return;
         }
 
@@ -418,7 +419,7 @@ export class MyAllianceTab extends AllianceTabBase {
         body.mouseEnabled = false;
         body.width = textW;
         body.defaultTextFormat = new TextFormat("Verdana", 12, 0x333333);
-        body.text = message;
+        body.text = GLOBAL.INFERNO_ONLY ? IoEmotes.plain(message) : message;
         let bodyH: int = ((body.textHeight | 0) + 6) | 0;
 
         let rowH: int = Math.max(MIN_ROW_H, BODY_Y + bodyH + PAD_BOTTOM) | 0;
@@ -567,7 +568,7 @@ export class MyAllianceTab extends AllianceTabBase {
         let fmt: TextFormat = new TextFormat("Verdana", 12, 0x333333, true);
         fmt.align = TextFormatAlign.CENTER;
         body.defaultTextFormat = fmt;
-        body.text = message;
+        body.text = GLOBAL.INFERNO_ONLY ? IoEmotes.plain(message) : message;
         let bodyH: int = ((body.textHeight | 0) + 6) | 0;
 
         let rowH: int = Math.max(MIN_ROW_H, BODY_Y + bodyH + PAD_BOTTOM) | 0;
@@ -741,7 +742,11 @@ export class MyAllianceTab extends AllianceTabBase {
      * Loads an alliance shield icon into a container via ImageCache, scaled to fit.
      * IDs 1-20 use the _large suffix; 21+ use _medium (matches AllianceFormPopup).
      */
-    private _loadAllianceIcon(container: MovieClip, id: int, size: int): void {
+    private _loadAllianceIcon(container: MovieClip, id: int, size: int, crest: any = null): void {
+        // (14 October: its own crest, when it has one)
+        if (IoCrest.fit(container, crest, size)) {
+            return;
+        }
         let suffix: string = id <= 20 ? "_large" : "_medium";
         let key: string = "alliances/" + id + suffix + ".png";
         ImageCache.GetImageWithCallBack(key, (k: string, bmd: BitmapData, args: any[]): void => {
@@ -765,7 +770,7 @@ export class MyAllianceTab extends AllianceTabBase {
             return;
         }
 
-        new AllianceFormPopup().Show(AllianceFormPopup.MODE_EDIT, String(this._data.name), this._data.image | 0, String(this._data.description));
+        new AllianceFormPopup().Show(AllianceFormPopup.MODE_EDIT, String(this._data.name), this._data.image | 0, String(this._data.description), this._data.tag != null ? String(this._data.tag) : null, this._data.tag_default != null ? String(this._data.tag_default) : null, this._data.crest ? String(this._data.crest) : null);
     }
 
     /**
@@ -910,6 +915,47 @@ export class MyAllianceTab extends AllianceTabBase {
         btn.x = ((this.CONTENT_W - MyAllianceTab.BTN_W) / 2) | 0;
         btn.y = tBody.y + tBody.height + MyAllianceTab.BTN_GAP;
         btn.addEventListener(MouseEvent.CLICK, as3.bind(this, this._onCreateAlliance));
+        // (Inferno-only, QoL #502: the alliance they disbanded in the last 14 days, with Restore)
+        let kept: any = GLOBAL.INFERNO_ONLY ? ALLIANCES.ioKept() : null;
+        if (kept && Number(kept.until) > GLOBAL.Timestamp()) {
+            this._ioBuildKept(kept, (btn.y + MyAllianceTab.BTN_H + 30) | 0);
+        }
+    }
+
+    /** (QoL #502) "Hellions can still be restored": when it was disbanded, how long it is kept, and Restore. */
+    private _ioBuildKept(kept: any, y: int): void {
+        const w: int = MyAllianceTab.CONTENT_W_INNER;
+        const h: int = 92;
+        let card: Sprite = new Sprite();
+        card.name = "ioSocKept";
+        card.x = ((this.CONTENT_W - w) / 2) | 0;
+        card.y = y;
+        IoAllianceUi.card(card.graphics, 0, 0, w, h, AllianceConstants.IO_CARD, AllianceConstants.IO_CARD_EDGE);
+        this.addChild(card);
+        let name: string = String(kept.name || "");
+        IoAllianceUi.addText(card, KEYS.Get("io_soc_restore_title", { "v1": name }), 14, 10, 13, AllianceConstants.IO_INK, true, (w - 28) | 0);
+        let left: int = Math.max(60, (Number(kept.until) - GLOBAL.Timestamp()) | 0) | 0;
+        let body: TextField = IoAllianceUi.addText(card, KEYS.Get("io_soc_restore_body", { "v1": IoAllianceUi.ago(Number(kept.at)), "v2": IoAllianceUi.span(left) }), 14, 32, 11, AllianceConstants.IO_MUTED, false, (w - 28 - 170) | 0, "left", false, true);
+        body.height = 54;
+        body.name = "ioSocKeptText";
+        const bw: int = 156;
+        let restore: MovieClip = IoAllianceUi.button(KEYS.Get("io_soc_restore_btn", { "v1": name.length > 14 ? name.substr(0, 13) + "..." : name }), bw, 32, (e: MouseEvent): void => {
+            GLOBAL.Message(KEYS.Get("io_soc_restore_confirm", { "v1": name }), KEYS.Get("io_soc_restore_btn", { "v1": name.length > 14 ? name.substr(0, 13) + "..." : name }), (): void => {
+                ALLIANCES.ioRestore((response: any): void => {
+                    if (IoAllianceUi.failed(response)) {
+                        return;
+                    }
+                    GLOBAL.Message(KEYS.Get("io_soc_restored", { "v1": String(response.name || name) }));
+                    if (ALLIANCEWINDOW._mc != null) {
+                        ALLIANCEWINDOW._mc.SelectTab(AllianceConstants.IO_TAB_OVERVIEW);
+                    }
+                });
+            });
+        }, "gold", 11);
+        restore.name = "ioSocRestore";
+        restore.x = w - 14 - bw;
+        restore.y = ((h - 32) / 2 + 10) | 0;
+        card.addChild(restore);
     }
 
     private _onCreateAlliance(e: MouseEvent): void {

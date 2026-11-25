@@ -2,11 +2,11 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { MouseEvent } from "flash/events";
 import { TextFieldAutoSize } from "flash/text";
-import { Console, GLOBAL, MESSAGE_CLIP, POPUPSETTINGS, SOUNDS, print } from "@game";
+import { Console, GLOBAL, MESSAGE_CLIP, POPUPS, POPUPSETTINGS, SOUNDS, print } from "@game";
 
 export class MESSAGE extends MESSAGE_CLIP {
     static {
-        as3.fields(this, { _mc: null, _action: null, _action2: null, _args: null, _args2: null });
+        as3.fields(this, { _mc: null, _action: null, _action2: null, _args: null, _args2: null, ioQueued: false });
     }
 
     public _mc: MESSAGE_CLIP;
@@ -14,6 +14,11 @@ export class MESSAGE extends MESSAGE_CLIP {
     public _action2: Function;
     public _args: any[];
     public _args2: any[];
+    /**
+     * Inferno-only (QoL #463): shown by the popup queue in its turn (GLOBAL.Message while a yard loads), with the
+     * queue's backdrop, rather than at once on top of the queue's popup with a second one. Set before Show.
+     */
+    public ioQueued: boolean;
 
     public $ctor(): void {
         super.$ctor();
@@ -46,6 +51,12 @@ export class MESSAGE extends MESSAGE_CLIP {
         this.tMessage.y = this.mcBG.y + 20;
         this.bAction.y = this.mcBG.y + this.mcBG.height - 45;
         this.bAction2.y = this.mcBG.y + this.mcBG.height - 45;
+        if (this.ioQueued) {
+            // (QoL #463: POPUPS adds it, centres it and darkens behind it when its turn comes)
+            this._mc = this;
+            POPUPS.ioPushMessage(this);
+            return this;
+        }
         GLOBAL.BlockerAdd(GLOBAL._layerTop);
         this._mc = as3.as(GLOBAL._layerTop.addChild(this), MESSAGE_CLIP);
         this._mc.Center();
@@ -93,6 +104,15 @@ export class MESSAGE extends MESSAGE_CLIP {
     }
 
     public Hide(param1: MouseEvent = null): void {
+        if (this.ioQueued) {
+            // (QoL #463: the queue goes on to its next popup; one not shown yet just leaves the queue)
+            if (this._mc) {
+                SOUNDS.Play("close");
+            }
+            this._mc = null;
+            POPUPS.ioDone(this);
+            return;
+        }
         GLOBAL.BlockerRemove();
         SOUNDS.Play("close");
         if (Boolean(this._mc) && Boolean(this._mc.parent)) {

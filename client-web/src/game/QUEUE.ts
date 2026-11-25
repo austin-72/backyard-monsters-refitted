@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { BASE, BFOUNDATION, GLOBAL, KEYS, LOGGER, MAP, STORE, TUTORIAL, UI_WORKERS, WORKERS } from "@game";
+import { BASE, BFOUNDATION, GLOBAL, IoQuests, IoShop, KEYS, LOGGER, MAP, STORE, TUTORIAL, UI_WORKERS, WORKERS, IoDevil } from "@game";
 
 export class QUEUE extends ASObject {
     public static _mc: MovieClip = null;
@@ -32,6 +32,7 @@ export class QUEUE extends ASObject {
 
     public static Spawn(param1: int = 0): void {
         let _loc3_: int = 0;
+        let ioFirst: boolean = param1 == 0 && BASE.isMainYard;
         if (!BASE.isMainYard) {
             if (QUEUE._workerCount > 0) {
                 QUEUE._workerCount = WORKERS._workers.length;
@@ -65,6 +66,17 @@ export class QUEUE extends ASObject {
             }
             UI_WORKERS.Update();
         }
+        // (Inferno-only, 22 October: the Apprentice (the Store's Construction tab): one more worker while it's hired,
+        // or while the job it was on isn't done)
+        if (ioFirst && GLOBAL.INFERNO_ONLY && IoShop.apprenticeWorkers() > 0) {
+            IoShop.spawnApprentice();
+        }
+        // (Inferno-only, 13 November: the Devil's Contract's Second Shift: his worker, or his job left to finish)
+        if (ioFirst && GLOBAL.INFERNO_ONLY) {
+            for (let ioLent: int = IoDevil.spawnCount(); ioLent > 0; ioLent--) {
+                IoDevil.spawnWorker();
+            }
+        }
     }
 
     public static CanDo(): any {
@@ -80,9 +92,11 @@ export class QUEUE extends ASObject {
             }
             stackIndex++;
         }
-        if (GLOBAL.INFERNO_ONLY && BASE.isOutpostOrInfernoOutpost) {
+        if (GLOBAL.INFERNO_ONLY) {
             // (bug report B24: an outpost has its own workers (2); no General Store to hire another)
-            errorName = KEYS.Get("ui_worker_waitforfinish");
+            // Inferno-only (14 October, QoL #11): workers can't be bought here (5 in the main yard, 2 in an
+            // outpost), so no "purchase another worker from the General Store": say which job ends first.
+            errorName = QUEUE.ioBusyText();
         } else if (!STORE.CheckUpgrade("BEW")) {
             if (GLOBAL._bStore) {
                 errorName = KEYS.Get("ui_worker_busy");
@@ -100,6 +114,24 @@ export class QUEUE extends ASObject {
             errorName = KEYS.Get("ui_worker_xbusy", { "v1": STORE.CheckUpgrade("BEW").q + 1, "v2": STORE.CheckUpgrade("BEW").q + 1 });
         }
         return { "error": true, "errormessage": errorName };
+    }
+
+    /**
+     * Inferno-only (QoL #11 / #307): "All your workers are busy" with the job that ends first: its building,
+     * the time left and that it's free to finish under the Close Enough time, or (when every worker is
+     * picking a wart or breaking ice, which the speed-ups don't cover) that they'll be back in a moment.
+     */
+    public static ioBusyText(): string {
+        let b: BFOUNDATION = QUEUE.GetBuilding();
+        if (!b) {
+            return KEYS.Get("io_worker_busy_away");
+        }
+        let left: int = (b._countdownUpgrade.Get() + b._countdownBuild.Get() + b._countdownFortify.Get()) | 0;
+        let name: string = KEYS.Get(b._buildingProps.name);
+        if (left <= GLOBAL.ioCloseEnough) {
+            return KEYS.Get("io_worker_busy_free", { "v1": name, "v2": GLOBAL.ioDuration(left) });
+        }
+        return KEYS.Get("io_worker_busy_next", { "v1": name, "v2": GLOBAL.ioDuration(left), "v3": QUEUE.GetFinishCost() });
     }
 
     public static GetBuilding(): BFOUNDATION {
@@ -163,6 +195,19 @@ export class QUEUE extends ASObject {
                     stackIndex++;
                 }
                 QUEUE._placed += 1;
+                // Inferno-only quest book: every worker busy at once
+                if (GLOBAL.INFERNO_ONLY && !GLOBAL._catchup && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                    let ioIdle: boolean = false;
+                    for (let ioSlot of as3.values(QUEUE._stack)) {
+                        if (!ioSlot.active) {
+                            ioIdle = true;
+                            break;
+                        }
+                    }
+                    if (!ioIdle && QUEUE._stack.length > 0) {
+                        IoQuests.once("workers_all");
+                    }
+                }
             }
             QUEUE.Sort();
             QUEUE.Tick();

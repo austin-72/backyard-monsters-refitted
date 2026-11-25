@@ -25,6 +25,8 @@ export enum ChatControlType {
   RefreshUser = "refresh_user",
   /** Inferno-only admin panel: a line shown to everyone connected to chat. */
   Announce = "announce",
+  /** Inferno-only (QoL #262): a player was just muted: told at once, with the reason. */
+  Muted = "muted",
 }
 
 /**

@@ -18,7 +18,7 @@ export interface CellTribe {
   tribe: Tribe;
   /** Index into `Tribes` (0-3), or MOLOCH_INDEX. */
   tribeIndex: number;
-  /** wmid sent to the client. Must match an id list in the client's TRIBES.as. */
+  /** wmid sent to the client. Must match an id list in the client's TRIBES.ts. */
   wmid: number;
   level: number;
   /** Moloch only: stable per-stronghold number that varies which yard loads. */

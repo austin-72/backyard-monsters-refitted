@@ -1,14 +1,16 @@
 import * as as3 from "as3";
 import { Vector, int } from "as3";
-import { Bitmap, BitmapData, Loader, MovieClip } from "flash/display";
+import { Bitmap, BitmapData, Loader, MovieClip, Sprite } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
+import { Rectangle } from "flash/geom";
 import { URLRequest } from "flash/net";
+import { TextField, TextFormatAlign } from "flash/text";
 import { getTimer } from "flash/utils";
-import { ATTACK, AllyInfo, BASE, CATAPULTITEM, CREATURELOCKER, CellData, ChampionBase, EnumYardType, GLOBAL, ImageCache, IoUnderworld, KEYS, LOGGER, MapRoomCell, MapRoomManager, POPUPS, POWERUPS, PopupAttackA_CLIP, PopupInfoMonster, ResourceBombs, ScrollSet, SecNum, SiegeWeapon, SiegeWeapons, TRIBES, bubblepopup3, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { ATTACK, AllyInfo, BASE, CATAPULTITEM, CREATURELOCKER, CasinoUI, CellData, ChampionBase, EnumYardType, GLOBAL, ImageCache, IoUnderworld, IoWin, KEYS, LOGGER, MapRoomCell, MapRoomManager, PLEASEWAIT, POPUPS, URLLoaderApi, POWERUPS, PopupAttackA_CLIP, PopupInfoMonster, ResourceBombs, ScrollSet, SecNum, SiegeWeapon, SiegeWeapons, TRIBES, bubblepopup3, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
 
 export class PopupAttackA extends PopupAttackA_CLIP {
     static {
-        as3.fields(this, { _cell: null, _mcResources: null, _attackResources: null, _monstersInRange: false, _cellsInRange: null, _enabled: false, _profilePic: null, _profileBmp: null, _protectedInRange: false, _scroller: null, _ioWaitFrom: 0 });
+        as3.fields(this, { _cell: null, _mcResources: null, _attackResources: null, _monstersInRange: false, _cellsInRange: null, _enabled: false, _profilePic: null, _profileBmp: null, _protectedInRange: false, _scroller: null, _ioWaitFrom: 0, _ioYardsBtn: null, _ioYardsWin: null });
     }
 
     private _cell: MapRoomCell;
@@ -53,6 +55,11 @@ export class PopupAttackA extends PopupAttackA_CLIP {
         while (profilePics--) {
             this.mcProfilePic.mcBG.removeChildAt(profilePics);
         }
+        // (Inferno-only, QoL #71: the Yards panel goes with it)
+        if (this._ioYardsWin) {
+            this._ioYardsWin.close();
+            this._ioYardsWin = null;
+        }
         MapRoom._mc.HideAttack();
     }
 
@@ -66,11 +73,15 @@ export class PopupAttackA extends PopupAttackA_CLIP {
             this.tAttackText.htmlText = "<b>" + KEYS.Get("newmap_att3", { "v1": TRIBES.DisplayName(this._cell._name) }) + "</b>";
         } else {
             LOGGER.Log("err", "Cell at (" + this._cell.X + "," + this._cell.Y + ") has invalid base type " + this._cell._base + " when being attacked");
-            this.tAttackText.htmlText = "<b>Attack</b>";
+            this.tAttackText.htmlText = "<b>" + KEYS.Get("io_t3m_pa_attack") + "</b>";
         }
         this._enabled = false;
         this._ioWaitFrom = getTimer();
         this.bAttack.Enabled = false;
+        // (Inferno-only, QoL #71: counted afresh for this target)
+        if (this._ioYardsBtn) {
+            this._ioYardsBtn.visible = false;
+        }
         this.ProfilePic();
         if (this._cell._alliance) {
             this.AlliancePic(as3.str(AllyInfo._picURLs.sizeM), as3.cast(this.mcAlliancePic.mcImage, MovieClip), as3.cast(this.mcAlliancePic.mcBG, MovieClip), true);
@@ -94,11 +105,28 @@ export class PopupAttackA extends PopupAttackA_CLIP {
         MapRoom._mc.HideAttack();
         if ((GLOBAL.ioTestMode() || !this._cell._protected && !(this._cell._truce && this._cell._truce > GLOBAL.Timestamp())) && this._monstersInRange) {
             if (this._protectedInRange) {
-                GLOBAL.Message(KEYS.Get("newmap_attack"), KEYS.Get("confirm_btn"), as3.bind(this, this.DoAttack));
+                // (Inferno-only, QoL #70: and which yards they are)
+                let ask: string = KEYS.Get("newmap_attack");
+                if (GLOBAL.INFERNO_ONLY && this._ioProtNames && this._ioProtNames.length > 0) {
+                    ask = KEYS.Get("io_attack_prot_ask", { "v1": this._ioProtNames.join(", ") });
+                }
+                GLOBAL.Message(ask, KEYS.Get("confirm_btn"), as3.bind(this, this.DoAttack));
                 return;
             }
+            // (Inferno-only, QoL #69: a player's yard or outpost is asked about first, so a refusal is said here on
+            // the map; it used to load home and say so there, where a wild raid could start straight away)
+            if (GLOBAL.INFERNO_ONLY && !GLOBAL.ioTestMode() && this._cell._base != 1 && !this._ioAsked) {
+                this.ioAskFirst();
+                return;
+            }
+            this._ioAsked = false;
             GLOBAL._attackerMapResources = this._attackResources;
-            GLOBAL._attackerCellsInRange = this._cellsInRange;
+            // (Inferno-only, QoL #71: the yards left at home aren't in range for the attack: BASE's save takes no
+            // monsters from them and leaves their protection alone)
+            GLOBAL._attackerCellsInRange = GLOBAL.INFERNO_ONLY ? this.ioSendingCells() : this._cellsInRange;
+            if (this._ioYardsWin) {
+                this._ioYardsWin.close();
+            }
             MapRoomManager.instance.Hide();
             MapRoom.ClearCells();
             GLOBAL._currentCell = this._cell;
@@ -112,7 +140,7 @@ export class PopupAttackA extends PopupAttackA_CLIP {
             if (!MapRoom._open) {
                 POPUPS.Next();
             }
-            GLOBAL.Message(KEYS.Get("newmap_dp"));
+            GLOBAL.Message(this._cell.ioProtectedText());
         } else if (Boolean(this._cell._truce) && this._cell._truce > GLOBAL.Timestamp()) {
             if (!MapRoom._open) {
                 POPUPS.Next();
@@ -133,6 +161,42 @@ export class PopupAttackA extends PopupAttackA_CLIP {
 
     public DoAttack(): void {
         this._protectedInRange = false;
+        this.Attack(null);
+    }
+
+    /** (Inferno-only, QoL #70) your protected yards whose monsters are in range: "Main yard (12, 40)" */
+    private _ioProtNames: string[];
+
+    /** (Inferno-only, QoL #69) the server said the yard can be attacked: the next Attack goes */
+    private _ioAsked: boolean;
+
+    /**
+     * Inferno-only (QoL #69): worldmapv2/canattack (the checks the attack's load makes: protection, under attack,
+     * online). Yes: the attack goes as before. No: why, on the map. No answer: the attack goes, and the load decides.
+     */
+    private ioAskFirst(): void {
+        let cell: MapRoomCell = this._cell;
+        PLEASEWAIT.Show(KEYS.Get("io_attack_checking"));
+        new URLLoaderApi().load(GLOBAL._mapURL + "canattack", [["baseid", String(cell._baseID)]], (r: any): void => {
+            PLEASEWAIT.Hide();
+            if (r && r.error == 0 && (r.ok | 0) == 0) {
+                if (r.refused == "online") {
+                    cell._online = 1;
+                }
+                let why: string = r.refused == "protected" || r.refused == "underattack" || r.refused == "online" ? KEYS.Get("io_attack_ref_" + r.refused) : String(r.message || "");
+                GLOBAL.Message(KEYS.Get("io_attack_refused", { "v1": TRIBES.DisplayName(cell._name), "v2": why }));
+                return;
+            }
+            this.ioGo();
+        }, (e: IOErrorEvent): void => {
+            PLEASEWAIT.Hide();
+            this.ioGo();
+        });
+    }
+
+    private ioGo(): void {
+        this._ioAsked = true;
+        this._enabled = true;
         this.Attack(null);
     }
 
@@ -197,6 +261,7 @@ export class PopupAttackA extends PopupAttackA_CLIP {
         if (!this._enabled) {
             this._monstersInRange = false;
             this._protectedInRange = false;
+            this._ioProtNames = [];
             MapRoom._flingerInRange = false;
             this._attackResources = { "r1": GLOBAL._resources.r1.Get(), "r2": GLOBAL._resources.r2.Get(), "r3": GLOBAL._resources.r3.Get(), "catapult": new SecNum(0), "flinger": new SecNum(0) };
             if (!MapRoomManager.instance.isInMapRoom3) {
@@ -204,13 +269,19 @@ export class PopupAttackA extends PopupAttackA_CLIP {
                 for (cellData of (this._cellsInRange ?? [])) {
                     mapRoomCell = as3.cast(cellData["cell"], MapRoomCell);
                     cellRange = cellData["range"] | 0;
-                    if (Boolean(mapRoomCell) && Boolean(mapRoomCell._mine)) {
+                    // (Inferno-only, QoL #71: a yard the player keeps at home sends nothing)
+                    if (Boolean(mapRoomCell) && Boolean(mapRoomCell._mine) && !ATTACK.ioIsExcluded(mapRoomCell)) {
                         if (mapRoomCell._flingerRange.Get() + powerUpBonus >= cellRange) {
                             for (monsterType in mapRoomCell._monsters) {
                                 monsterQuantity = mapRoomCell._monsters[monsterType].Get() | 0;
                                 this._monstersInRange = true;
                                 if (monsterQuantity > 0 && Boolean(mapRoomCell._protected)) {
                                     this._protectedInRange = true;
+                                    // (QoL #70: which of your yards)
+                                    let where: string = (mapRoomCell._base == 2 ? KEYS.Get("io_attack_prot_main") : KEYS.Get("io_attack_prot_outpost")) + " (" + mapRoomCell.X + ", " + mapRoomCell.Y + ")";
+                                    if (this._ioProtNames.indexOf(where) < 0) {
+                                        this._ioProtNames.push(where);
+                                    }
                                 }
                                 if (ATTACK._curCreaturesAvailable[monsterType]) {
                                     ATTACK._curCreaturesAvailable[monsterType] += monsterQuantity;
@@ -408,6 +479,9 @@ export class PopupAttackA extends PopupAttackA_CLIP {
             this.addChild(this._mcResources);
             this.bAttack.Enabled = true;
             this._enabled = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioYardsButton();
+            }
         }
         let cellInfo: string = "";
         cellInfo = "X:" + this._cell.X + " Y:" + this._cell.Y + "<br>_base:" + this._cell._base + "<br>_height:" + this._cell._height + "<br>_water:" + this._cell._water + "<br>_mine:" + this._cell._mine + "<br>_flinger:" + this._cell._flingerRange + "<br>_catapult:" + this._cell._catapult + "<br>_userID:" + this._cell._userID + "<br>_truce:" + this._cell._truce + "<br>_name:" + this._cell._name + "<br>_protected:" + this._cell._protected + "<br>_resources:" + JSON.stringify(this._cell._resources) + "<br>_ticks:" + JSON.stringify(this._cell._ticks) + "<br>_monsters:" + JSON.stringify(this._cell._monsters);
@@ -421,6 +495,149 @@ export class PopupAttackA extends PopupAttackA_CLIP {
             this._scroller.Update();
         }
         return this._enabled;
+    }
+
+    // ---- Inferno-only (QoL #71): which of the player's yards send their monsters
+    /** The Yards button, left of Cancel and Attack ("Yards: 2 of 3"). */
+    private _ioYardsBtn: Sprite;
+
+    /** The Yards panel while it is open (IoWin.openPanel). */
+    private _ioYardsWin: any;
+
+    /** The player's yards whose flinger reaches the target and that have monsters: [CellData, monsters] each. */
+    private ioMyYards(): any[] {
+        let bonus: number = POWERUPS.CheckPowers(POWERUPS.ALLIANCE_DECLAREWAR, "NORMAL") ? POWERUPS.Apply(POWERUPS.ALLIANCE_DECLAREWAR, [0]) : 0;
+        let out: any[] = [];
+        for (let cd of (this._cellsInRange ?? [])) {
+            let c: MapRoomCell = cd ? as3.as(cd.cell, MapRoomCell) : null;
+            if (!c || !c._mine || !c._flingerRange || c._flingerRange.Get() + bonus < (cd.range | 0)) {
+                continue;
+            }
+            let n: int = 0;
+            for (let k in c._monsters) {
+                n += c._monsters[k] ? c._monsters[k].Get() | 0 : 0;
+            }
+            if (n > 0) {
+                out.push([cd, n]);
+            }
+        }
+        return out;
+    }
+
+    /** The cells in range less the player's yards kept at home (GLOBAL._attackerCellsInRange for the attack). */
+    private ioSendingCells(): Vector<CellData> {
+        let keep: any[] = [];
+        for (let cd of (this._cellsInRange ?? [])) {
+            let c: MapRoomCell = cd ? as3.as(cd.cell, MapRoomCell) : null;
+            if (c && c._mine && ATTACK.ioIsExcluded(c)) {
+                continue;
+            }
+            keep.push(cd);
+        }
+        return Vector.from(keep, CellData);
+    }
+
+    /** The Yards button: shown with two of the player's yards in range or more (or one kept at home), its count. */
+    private ioYardsButton(): void {
+        let yards: any[] = MapRoomManager.instance.isInMapRoom3 || GLOBAL.ioTestMode() ? [] : this.ioMyYards();
+        let home: int = 0;
+        for (let y of as3.values(yards)) {
+            if (ATTACK.ioIsExcluded(as3.as(y[0], CellData).cell)) {
+                home++;
+            }
+        }
+        let show: boolean = yards.length >= 2 || home > 0;
+        if (!show) {
+            if (this._ioYardsBtn) {
+                this._ioYardsBtn.visible = false;
+            }
+            return;
+        }
+        let label: string = KEYS.Get("io_away_atk_yards", { "v1": yards.length - home, "v2": yards.length });
+        if (!this._ioYardsBtn) {
+            this._ioYardsBtn = as3.as(this.addChild(CasinoUI.button(label, 118, 26, (e: MouseEvent): void => {
+                this.ioYardsPanel();
+            }, true, 12)), Sprite);
+            this._ioYardsBtn.name = "ioAtkYards";
+            // left of Cancel and Attack, on their line; above them when the frame has no room there
+            let a: Rectangle = this.bAttack.getBounds(this);
+            let c: Rectangle = this.bCancel.getBounds(this);
+            let f: Rectangle = this.mcFrame ? this.mcFrame.getBounds(this) : new Rectangle(-200, -170, 400, 340);
+            let left: number = Math.min(a.x, c.x);
+            let top: number = Math.min(a.y, c.y);
+            let mid: number = top + Math.max(a.height, c.height) / 2;
+            if (left - 126 >= f.x + 14) {
+                this._ioYardsBtn.x = Math.round(left - 126);
+                this._ioYardsBtn.y = Math.round(mid - 13);
+            } else {
+                this._ioYardsBtn.x = Math.round(Math.max(f.x + 14, left));
+                this._ioYardsBtn.y = Math.round(top - 32);
+            }
+        } else {
+            CasinoUI.relabel(this._ioYardsBtn, label);
+            this.setChildIndex(this._ioYardsBtn, this.numChildren - 1);
+        }
+        this._ioYardsBtn.visible = true;
+    }
+
+    /** The Yards panel: a row for each of the player's yards in range, Sends / Stays home; the count follows. */
+    private ioYardsPanel(): void {
+        if (this._ioYardsWin) {
+            this._ioYardsWin.close();
+        }
+        let yards: any[] = this.ioMyYards();
+        if (!yards.length) {
+            return;
+        }
+        let W: int = 460;
+        let H: int = (118 + yards.length * 36) | 0;
+        let win: any = IoWin.openPanel("ioAtkYardsWin", W, H, KEYS.Get("io_away_atk_title"));
+        this._ioYardsWin = win;
+        let mc: MovieClip = win.mc;
+        let sub: TextField = as3.as(mc.addChild(CasinoUI.label(KEYS.Get("io_away_atk_sub"), 11, CasinoUI.ASH, true, W - 44, TextFormatAlign.LEFT)), TextField);
+        sub.multiline = true;
+        sub.wordWrap = true;
+        sub.height = 32;
+        sub.x = win.left + 22;
+        sub.y = win.top + 48;
+        let i: int = 0;
+        for (let y of as3.values(yards)) {
+            let cd: CellData = as3.as(y[0], CellData);
+            let cell: MapRoomCell = cd.cell;
+            let row: Sprite = as3.as(mc.addChild(CasinoUI.panel(W - 40, 32, 0.9)), Sprite);
+            row.name = "ioAtkYard:" + cell.X + "," + cell.Y;
+            row.x = win.left + 20;
+            row.y = win.top + 84 + i * 36;
+            let where: string = KEYS.Get(cell._base == 2 ? "io_away_yard_main" : "io_away_yard_outpost", { "v1": cell.X, "v2": cell.Y });
+            let t: TextField = as3.as(row.addChild(CasinoUI.label(KEYS.Get("io_away_atk_row", { "v1": where, "v2": GLOBAL.FormatNumber(y[1] | 0) }), 12, CasinoUI.GOLD, true, W - 40 - 150, TextFormatAlign.LEFT)), TextField);
+            GLOBAL.ioFitText(t, 8);
+            t.x = 10;
+            t.y = 7;
+            let toggle: Sprite = null;
+            let draw: Function = (): void => {
+                let home: boolean = ATTACK.ioIsExcluded(cell);
+                CasinoUI.relabel(toggle, KEYS.Get(home ? "io_away_atk_home" : "io_away_atk_sends"));
+                CasinoUI.choose(toggle, !home);
+            };
+            toggle = as3.as(row.addChild(CasinoUI.toggle(KEYS.Get("io_away_atk_sends"), 130, 26, (e: MouseEvent): void => {
+                ATTACK.ioSetExcluded(cell, !ATTACK.ioIsExcluded(cell));
+                draw();
+                // (counted again: the monsters and the flinger the attack has)
+                this._enabled = false;
+                this.Update();
+            })), Sprite);
+            toggle.name = "ioAtkYardSend:" + cell.X + "," + cell.Y;
+            toggle.x = W - 40 - 136;
+            toggle.y = 3;
+            draw();
+            i++;
+        }
+        let done: Sprite = as3.as(mc.addChild(CasinoUI.button(KEYS.Get("io_away_atk_done"), 120, 28, (e: MouseEvent): void => {
+            win.close();
+        }, true, 13)), Sprite);
+        done.name = "ioAtkYardsDone";
+        done.x = -60;
+        done.y = -win.top - 40;
     }
 
     private onSiegeIconComplete(param1: string, param2: BitmapData, param3: any[] = null): void {

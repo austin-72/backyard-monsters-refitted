@@ -13,7 +13,9 @@ export const SendMessageSchema = z.object({
    * The subject of the message, set when compose first thread
    * @type {string}
    */
-  subject: z.string(),
+  // (18 October, SUSPECTED-BUGS.md: any length, and markup the game put into its htmlText: a letter could pass for
+  // a system message) at most 100 characters, no control characters or angle brackets
+  subject: z.string().transform((s) => s.replace(/[\u0000-\u001f\u007f<>]/g, "").slice(0, 100)),
 
   /**
    * The message type.

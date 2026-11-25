@@ -48,7 +48,8 @@ export const baseModeView = async (baseid: string, mapversion: MapRoomVersion = 
   if (mapversion === MapRoomVersion.V1 && MR1_TRIBE_IDS.has(baseid))
     return tribeSaveHandler(baseid, mapversion, worldid, user);
 
-  let save = await postgres.em.findOne(Save, { baseid });
+  // (16 October: the oldest, when a yard was made twice: bug report #96)
+  let save = await postgres.em.findOne(Save, { baseid }, { orderBy: { basesaveid: "asc" } });
 
   if (!save) save = await tribeSaveHandler(baseid, mapversion, worldid, user);
 

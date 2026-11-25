@@ -37,6 +37,8 @@ export interface SnapshotAlliance {
   world: string;
   name: string;
   image: number;
+  /** Inferno-only (14 October): its designed crest, when it has one. */
+  crest?: string;
   description: string;
   leader: number;
   createdAt: number;
@@ -48,6 +50,7 @@ interface AllianceRow {
   id: number;
   name: string;
   image: number;
+  crest: string | null;
   description: string;
   leader_userid: number;
   world_id: string;
@@ -86,6 +89,7 @@ const buildSnapshot = async (): Promise<AllianceSnapshot> => {
       "a.id", 
       "a.name", 
       "a.image", 
+      "a.crest",
       "a.description", 
       "a.leader_userid", 
       "a.world_id", 
@@ -116,6 +120,7 @@ const buildSnapshot = async (): Promise<AllianceSnapshot> => {
       world: row.world_id,
       name: row.name,
       image: row.image,
+      ...(row.crest && { crest: row.crest }),
       description: row.description,
       leader: row.leader_userid,
       createdAt: Math.floor(new Date(row.created_at).getTime() / 1000),

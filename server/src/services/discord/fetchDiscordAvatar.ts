@@ -37,7 +37,12 @@ export const fetchDiscordAvatar = async (userid: number, discordid: string) => {
       headers: { Authorization: `Bot ${discordToken}` },
     });
 
-    if (!response.ok) return;
+    // (18 October, SUSPECTED-BUGS.md: a refusal set no checked time, so every load asked Discord again)
+    if (!response.ok) {
+      user.discord_avatar_checked_at = new Date();
+      await em.flush();
+      return;
+    }
 
     const { avatar } = await response.json() as DiscordUser;
 
@@ -49,7 +54,7 @@ export const fetchDiscordAvatar = async (userid: number, discordid: string) => {
 
     await em.flush();
   } catch (err) {
-    logger.warn`Failed to refresh Discord avatar for user ${userid}: ${err}`;
+    logger.warn(`Failed to refresh Discord avatar for user ${userid}: ${err}`);
   }
 };
 

@@ -5,6 +5,7 @@ import { Save } from "../../database/models/save.model.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { logger } from "../../utils/logger.js";
+import { roleOf } from "../../chat/chatModeration.js";
 
 /**
  * Referrals (inferno-only).
@@ -78,6 +79,17 @@ export const creditReferral = async (user: User, newSave: Save) => {
   if (!referralsEnabled() || !user.referred_by || user.referral_credited) return;
 
   user.referral_credited = true;
+  // (13 October) claimed in the database first: two first loads at once both saw it not credited and paid twice
+  const claimed = (await postgres.em.getConnection().execute(
+    `UPDATE bym."user" SET referral_credited = true WHERE userid = ? AND NOT COALESCE(referral_credited, false) RETURNING userid`,
+    [user.userid], "all")) as { userid: number }[];
+  if (claimed.length !== 1) return;
+  try {
+    const meta = postgres.em.getUnitOfWork().getOriginalEntityData(user);
+    if (meta) (meta as Record<string, unknown>).referral_credited = true;
+  } catch {
+    // (no original data)
+  }
 
   const inviter = await postgres.em.findOne(User, { userid: user.referred_by }, { populate: ["save"] });
   if (!inviter?.save) {
@@ -105,7 +117,19 @@ export const creditReferral = async (user: User, newSave: Save) => {
   }
 
   newSave.credits = (newSave.credits ?? 0) + shiny;
-  inviter.save.credits = (inviter.save.credits ?? 0) + shiny;
+  // (the inviter's Shiny added in the database, not written back whole: what they spent meanwhile stays spent)
+  const [paid] = (await postgres.em.getConnection().execute(
+    `UPDATE bym.save SET credits = COALESCE(credits, 0) + ? WHERE basesaveid = ? RETURNING credits`,
+    [shiny, inviter.save.basesaveid], "all")) as { credits: number }[];
+  if (paid) {
+    inviter.save.credits = paid.credits;
+    try {
+      const meta = postgres.em.getUnitOfWork().getOriginalEntityData(inviter.save);
+      if (meta) (meta as Record<string, unknown>).credits = paid.credits;
+    } catch {
+      // (no original data)
+    }
+  }
   user.referral_result = "paid";
 
   user.referral_notice = `You joined through ${inviter.username}'s invite: you both get ${shiny} shiny.`;
@@ -114,6 +138,58 @@ export const creditReferral = async (user: User, newSave: Save) => {
   await postgres.em.flush();
   logger.info(`Referral credited: '${inviter.username}' invited '${user.username}', ${shiny} shiny each`);
 };
+
+/**
+ * Invites accepted (12 October): the friends who joined through the player's link and were credited (paid: not on the
+ * player's own connection, the player not barred). They open the invite-only looks (INVITE_UNLOCKS).
+ */
+export const acceptedInvites = async (userid: number): Promise<number> => {
+  if (!userid) return 0;
+  const rows = (await postgres.em
+    .getConnection()
+    .execute(`SELECT count(*)::int AS n FROM bym."user" WHERE referred_by = ? AND referral_result = 'paid'`, [userid])) as { n: number }[];
+  return Number(rows[0]?.n ?? 0);
+};
+
+/**
+ * Inferno-only (QoL #192): the player's own invite progress, for the Invite Friends popup: friends who joined through
+ * the link, how many were paid, and how many haven't loaded the game yet (nothing decided).
+ */
+export const inviteProgress = async (userid: number): Promise<{ joined: number; paid: number; waiting: number }> => {
+  if (!userid) return { joined: 0, paid: 0, waiting: 0 };
+  const rows = (await postgres.em.getConnection().execute(
+    `SELECT count(*)::int AS joined, count(*) FILTER (WHERE referral_result = 'paid')::int AS paid,
+            count(*) FILTER (WHERE referral_result IS NULL AND NOT coalesce(referral_credited, false))::int AS waiting
+       FROM bym."user" WHERE referred_by = ?`,
+    [userid]
+  )) as { joined: number; paid: number; waiting: number }[];
+  return { joined: Number(rows[0]?.joined ?? 0), paid: Number(rows[0]?.paid ?? 0), waiting: Number(rows[0]?.waiting ?? 0) };
+};
+
+/** Admins and moderators have the invite-only looks without inviting anyone. */
+export const inviteLooksFree = async (userid: number): Promise<boolean> => {
+  if (!userid) return false;
+  const rows = (await postgres.em.getConnection().execute(`SELECT username FROM bym."user" WHERE userid = ?`, [userid])) as { username: string }[];
+  if (!rows[0]?.username) return false;
+  return (await roleOf(userid, rows[0].username).catch(() => null)) != null;
+};
+
+/** The invites the looks are opened by: the friends who joined, or all of them for admins and moderators. */
+export const invitesForLooks = async (userid: number): Promise<number> =>
+  (await inviteLooksFree(userid).catch(() => false)) ? Number.MAX_SAFE_INTEGER : acceptedInvites(userid);
+
+/**
+ * The looks only inviting friends opens (12 October), by the invites accepted each needs: a ground (terrain.ts) and a
+ * name effect for chat (dave.ts) at 1, 2 and 3, each better than the one before.
+ */
+export const INVITE_UNLOCKS = {
+  grounds: { io_ashfall: 1, io_obsidian: 2, io_soulfire: 3 } as Record<string, number>,
+  nameFx: { fx_ember: 1, fx_brimstone: 2, fx_soulfire: 3 } as Record<string, number>,
+};
+
+/** "Invite 2 friends to have this (1 so far)." */
+export const inviteLockText = (need: number, have: number) =>
+  `Invite ${need} friend${need == 1 ? "" : "s"} to have this (${have} so far): a friend counts once they join through your invite link.`;
 
 /** A one-time notice for the player, cleared once handed out. */
 export const takeReferralNotice = async (user: User): Promise<string> => {

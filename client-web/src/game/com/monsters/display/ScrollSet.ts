@@ -1,13 +1,13 @@
 import * as as3 from "as3";
 import { int } from "as3";
-import { MovieClip, Sprite } from "flash/display";
+import { MovieClip, Sprite, Stage } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
-import { GLOBAL, ScrollSet_CLIP, TweenLite } from "@game";
+import { GLOBAL, IoPinchZoom, ScrollSet_CLIP, TweenLite } from "@game";
 
 export class ScrollSet extends ScrollSet_CLIP {
     static {
-        as3.fields(this, { _IsInitialized: false, _Container: null, _ContainerHeight: 0, _Mask: null, _ScrollBarHeight: NaN, _OffsetY: 0, _Easing: 1, _Margin: 1, _Thresh: 0.03, _BottomPadding: 0, _AutoHideEnabled: true, isHiddenWhileUnnecessary: false, _MinScrollerHeight: NaN, _IsDragging: false });
+        as3.fields(this, { _IsInitialized: false, _Container: null, _ContainerHeight: 0, _Mask: null, _ScrollBarHeight: NaN, _OffsetY: 0, _Easing: 1, _Margin: 1, _Thresh: 0.03, _BottomPadding: 0, _AutoHideEnabled: true, isHiddenWhileUnnecessary: false, _MinScrollerHeight: NaN, _IsDragging: false, _ioPressY: NaN, _ioPressContainerY: NaN, _ioSwiped: false, _ioSwipeStage: null });
     }
 
     public static readonly BROWN: int = 0;
@@ -29,6 +29,11 @@ export class ScrollSet extends ScrollSet_CLIP {
     public isHiddenWhileUnnecessary: boolean;
     private _MinScrollerHeight: number;
     private _IsDragging: boolean;
+    /** Inferno-only (QoL #545): a finger dragging the list itself: where it went down, the list then, if it moved. */
+    private _ioPressY: number;
+    private _ioPressContainerY: number;
+    private _ioSwiped: boolean;
+    private _ioSwipeStage: Stage;
 
     public $ctor(): void {
         super.$ctor();
@@ -61,6 +66,12 @@ export class ScrollSet extends ScrollSet_CLIP {
         this.addEventListener(MouseEvent.MOUSE_OUT, as3.bind(this, this.Hide), false, 0, true);
         this._Container.addEventListener(Event.RESIZE, as3.bind(this, this.onResize), false, 0, true);
         this.mcScroller.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ScrollerDown), false, 0, true);
+        // (Inferno-only, QoL #545: swipe to scroll: a finger dragging the list moves it, and the bar with it; the tap
+        // that ends a swipe is no click on a row)
+        if (GLOBAL.INFERNO_ONLY) {
+            this._Container.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ioSwipeDown), false, 0, true);
+            this._Container.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ioSwipeClick), true, 0, true);
+        }
         if (Boolean(this.parent) && param1.height < this._Mask.height) {
             this.parent.removeChild(this);
         } else {
@@ -151,6 +162,67 @@ export class ScrollSet extends ScrollSet_CLIP {
         this.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.OnDrag));
         this.mcScroller.stopDrag();
         this._IsDragging = false;
+    }
+
+    /** How far the list can scroll (0: it fits). */
+    private ioRange(): number {
+        return Number(this._ContainerHeight - this._Mask.height + this._BottomPadding);
+    }
+
+    private ioSwipeDown(param1: MouseEvent): void {
+        this._ioSwiped = false;
+        if (!IoPinchZoom.fingerDown || !this._IsInitialized || !this.stage || !this.visible || !this._Container.parent || this.ioRange() <= 0) {
+            return;
+        }
+        this.ioSwipeEnd();
+        this._ioPressY = this._Container.parent.mouseY;
+        this._ioPressContainerY = this._Container.y;
+        this._ioSwipeStage = this.stage;
+        this._ioSwipeStage.addEventListener(MouseEvent.MOUSE_MOVE, as3.bind(this, this.ioSwipeMove));
+        this._ioSwipeStage.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ioSwipeEnd));
+        this.addEventListener(Event.REMOVED_FROM_STAGE, as3.bind(this, this.ioSwipeEnd));
+    }
+
+    private ioSwipeMove(param1: MouseEvent): void {
+        if (!this._Container.parent) {
+            this.ioSwipeEnd();
+            return;
+        }
+        let dy: number = this._Container.parent.mouseY - this._ioPressY;
+        if (!this._ioSwiped && Math.abs(dy) > 8) {
+            this._ioSwiped = true;
+            TweenLite.killTweensOf(this.mcScroller);
+            this.Show();
+        }
+        let range: number = this.ioRange();
+        if (!this._ioSwiped || range <= 0) {
+            return;
+        }
+        let y: number = Math.max(this._OffsetY - range, Math.min(this._OffsetY, this._ioPressContainerY + dy));
+        this._Container.y = Math.round(y);
+        // (the bar where its own drag would have put the list: OnDrag the other way round)
+        let room: number = this.mcBG.height - this.mcScroller.height - this._Margin;
+        if (room > 0) {
+            let lo: number = this.mcBG.y + this._Margin;
+            let hi: number = lo + this.mcBG.height - this.mcScroller.height - 2 * this._Margin;
+            this.mcScroller.y = Math.max(lo, Math.min(hi, (this._OffsetY - y) / range * room - this._Margin));
+        }
+    }
+
+    private ioSwipeEnd(param1: Event = null): void {
+        if (this._ioSwipeStage) {
+            this._ioSwipeStage.removeEventListener(MouseEvent.MOUSE_MOVE, as3.bind(this, this.ioSwipeMove));
+            this._ioSwipeStage.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ioSwipeEnd));
+            this._ioSwipeStage = null;
+        }
+        this.removeEventListener(Event.REMOVED_FROM_STAGE, as3.bind(this, this.ioSwipeEnd));
+    }
+
+    private ioSwipeClick(param1: MouseEvent): void {
+        if (this._ioSwiped) {
+            this._ioSwiped = false;
+            param1.stopImmediatePropagation();
+        }
     }
 
     public Show(param1: MouseEvent = null): void {

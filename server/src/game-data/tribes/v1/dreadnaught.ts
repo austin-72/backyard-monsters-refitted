@@ -1,7 +1,7 @@
 import type { SaveData } from "../../../types/EntityData.js";
 import { TribeScale } from "../../../enums/Tribes.js";
 
-// Baseids match TRIBES.as D_IDS entries (31=NEW, 32=TH3, 33=TH4, 34=TH5, 35=HIGH)
+// Baseids match TRIBES.ts D_IDS entries (31=NEW, 32=TH3, 33=TH4, 34=TH5, 35=HIGH)
 export const dreadnaught: Record<TribeScale, SaveData> = {
   [TribeScale.NEW]: {
     baseid: "31",

@@ -35,13 +35,27 @@ server/src/scripts/anticheat/priv/*
 *server/src/scripts/mr3
 
 # Inferno-only: build artefacts and local data
-# (the launcher in server/public/client IS committed; the published game next to it is a build output)
+# (the old Flash launcher in server/public/client IS committed; a Flash game next to it was a build output)
 server/public/client/bymr-stable.swf
 server/backups/
 server/dump.rdb
 
-# Browser client: build outputs (client-web/node_modules and client-web/dist are covered above).
-# client-web/src/game and client-web/public/{swf,embed} are generated too but committed, so the
-# browser client builds without re-converting; publish-web regenerates them from client/scripts.
+# The game (client-web): build outputs (client-web/node_modules and client-web/dist are covered above).
+# client-web/src and client-web/public are the game's sources.
 server/public/web/
 server/public/web-dev/
+
+# The balance runs (client-web/tools/hfo-balance, fmi-balance): the test account kept while they run, and a cache.
+client-web/tools/*-balance/account-backup-*.json
+client-web/tools/fmi-balance/levels.json
+
+# Never published (publish-to-github.bat leaves them out too): personal files, database dumps, a list of
+# possible exploits on a live server, and the publish script's own files and published copy.
+vidya/
+.github/@bymr-inferno-mr2/
+*.dump
+firewall-event-*.json
+SUSPECTED-BUGS.md
+commit-message.txt
+publish-github.log
+bymr-upload/

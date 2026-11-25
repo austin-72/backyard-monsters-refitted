@@ -20,7 +20,7 @@ export class INFERNO_MAGMA_TOWER extends BTOWER {
     protected _projectileType: string;
 
     public $ctor(): void {
-        this._targetArray = [4, 4, 6, 8, 10, 12];
+        this._targetArray = [4, 4, 6, 8, 10, 12, 14, 16];
         super.$ctor();
         this._frameNumber = 0;
         this._type = 132;
@@ -48,9 +48,9 @@ export class INFERNO_MAGMA_TOWER extends BTOWER {
     public override Fire(param1: IAttackable): void {
         super.Fire(param1);
         if (Math.random() * 2 <= 1) {
-            SOUNDS.Play("magma1");
+            SOUNDS.ioPlayAt("magma1", 0.8, this._mc.x, this._mc.y);
         } else {
-            SOUNDS.Play("magma2");
+            SOUNDS.ioPlayAt("magma2", 0.8, this._mc.x, this._mc.y);
         }
         let _loc2_: number = 0.5 + 0.5 / this.maxHealth * this.health;
         let _loc3_: number = 1;
@@ -103,11 +103,17 @@ export class INFERNO_MAGMA_TOWER extends BTOWER {
                 _loc3_ = BTOWER.AdjustTowerRange(GLOBAL._currentCell, _loc3_);
                 _loc4_ = BTOWER.AdjustTowerRange(GLOBAL._currentCell, _loc4_);
             }
-            if (_loc1_.range < _loc2_.range) {
-                this._upgradeDescription += KEYS.Get("building_rangeincrease", { "v1": _loc3_, "v2": _loc4_ }) + "<br>";
-            }
-            if (_loc1_.damage < _loc2_.damage) {
-                this._upgradeDescription += KEYS.Get("building_dpsincrease", { "v1": _loc1_.damage, "v2": _loc2_.damage }) + "<br>";
+            // (Inferno-only, QoL #579: the range in cells, and the damage as per shot × shots a second = DPS; it said
+            // "Damage per shot" and an unlabelled range)
+            if (GLOBAL.INFERNO_ONLY) {
+                this._upgradeDescription += BTOWER.ioUpgradeLines(this._type, _loc1_, _loc2_, _loc3_, _loc4_);
+            } else {
+                if (_loc1_.range < _loc2_.range) {
+                    this._upgradeDescription += KEYS.Get("building_rangeincrease", { "v1": _loc3_, "v2": _loc4_ }) + "<br>";
+                }
+                if (_loc1_.damage < _loc2_.damage) {
+                    this._upgradeDescription += KEYS.Get("building_dpsincrease", { "v1": _loc1_.damage, "v2": _loc2_.damage }) + "<br>";
+                }
             }
             if (this._lvl.Get() > 1) {
                 this._upgradeDescription += KEYS.Get("building_sfpsincrease", { "v1": this._targetArray[this._lvl.Get() - 1], "v2": this._targetArray[this._lvl.Get()] }) + "<br>";

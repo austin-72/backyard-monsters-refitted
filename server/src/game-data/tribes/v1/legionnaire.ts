@@ -1,7 +1,7 @@
 import type { SaveData } from "../../../types/EntityData.js";
 import { TribeScale } from "../../../enums/Tribes.js";
 
-// Baseids match TRIBES.as L_IDS entries (2=NEW, 3=TH3, 4=TH4, 5=TH5, 6=HIGH)
+// Baseids match TRIBES.ts L_IDS entries (2=NEW, 3=TH3, 4=TH4, 5=TH5, 6=HIGH)
 export const legionnaire: Record<TribeScale, SaveData> = {
   [TribeScale.NEW]: {
     baseid: "2",

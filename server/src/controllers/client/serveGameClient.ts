@@ -6,8 +6,9 @@ import path from "path";
 import { getPublishedBuild } from "../../services/clientBuild.js";
 
 /**
- * Serving the game client, so players start the standalone Flash Player from a web address and
- * always run the current build.
+ * Serving the old Flash client, for players who still start the standalone Flash Player from a web address. The
+ * game is now made for the browser only (client-web) and no Flash client is built any more: what is served here
+ * is the last one published, until it is out of date (services/clientBuild.ts). Remove public/client/ to stop it.
  *
  *   /play.swf                    the launcher (public/client/launcher.swf): 2 KB, no game code. It asks
  *   /bymr-stable.swf             /client/version which build is current and loads exactly that one:
@@ -19,8 +20,7 @@ import { getPublishedBuild } from "../../services/clientBuild.js";
  * question "which build?" is a POST, which is never cached. The launcher itself never changes, so a
  * cached launcher is as good as a fresh one; it is still sent "do not store".
  *
- * Everything lives in public/client/, which docker-compose binds to the host: publishing a build is
- * copying one file (publish-client.cmd), no image rebuild, no restart.
+ * Everything lives in public/client/, which docker-compose binds to the host.
  */
 
 const CLIENT_DIR = path.resolve("public/client");
@@ -75,7 +75,7 @@ export const serveGameClient = async (ctx: Context, next: Next) => {
   if (!wanted) {
     ctx.status = 404;
     ctx.type = "text/plain";
-    ctx.body = `${name} has not been published. Copy the built SWF into server/public/client/ (publish-client.cmd does it).`;
+    ctx.body = `${name} has not been published. The game is played in the browser.`;
     return;
   }
 

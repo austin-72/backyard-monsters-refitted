@@ -4,6 +4,7 @@ import { postgres } from "../../server.js";
 import { PurchasePowerupSchema } from "../../schemas/AllianceSchemas.js";
 import { requireAllianceMember } from "../../services/alliance/allianceAccess.js";
 import { reducePowerupCharge, type PowerupPurchase } from "../../services/alliance/powerups.js";
+import { powerupRow } from "../../services/alliance/powerups.js";
 import { isShinyLocked } from "../../services/user/shinyLock.js";
 import { shinyLockedErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
@@ -45,15 +46,7 @@ export const purchasePowerup: KoaController = async (ctx) => {
   const resolved = await reducePowerupCharge(purchase);
   void questBump(user.userid, "powerup");
 
-  const powerups = resolved.map(({ rules, status }) => ({
-    powerup_id: rules.powerup_id,
-    type: rules.type,
-    active: status.active,
-    endTime: status.end_time,
-    hourly_cost: rules.hourly_cost,
-    total_running_time: rules.running_time,
-    total_recharge_time: rules.recharge_time,
-  }));
+  const powerups = resolved.map(powerupRow);
 
   ctx.status = Status.OK;
   ctx.body = { error: 0, powerups, credits: user.save!.credits };

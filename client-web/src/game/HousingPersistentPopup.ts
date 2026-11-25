@@ -204,8 +204,8 @@ export class HousingPersistentPopup extends HousingPersistentPopup_CLIP {
         let _loc4_: int = GLOBAL.player.getResourceCostByID(param1.m_creatureID) | 0;
         if (BASE._pendingPurchase.length == 0) {
             if (_loc2_ > BASE._credits.Get()) {
-                POPUPS.DisplayGetShiny();
-            } else if (!GLOBAL.ioConfirmShiny(_loc2_, "to make up the missing resources and heal", (): void => {
+                POPUPS.ioShinyNeed(_loc2_);
+            } else if (!GLOBAL.ioConfirmShiny(_loc2_, KEYS.Get("io_t3k_for_topoff_heal"), (): void => {
                 this.startHealWithShiny(param1);
             })) {
                 return;
@@ -223,8 +223,8 @@ export class HousingPersistentPopup extends HousingPersistentPopup_CLIP {
         let _loc2_: int = this.getAllShinyCost();
         if (BASE._pendingPurchase.length == 0) {
             if (_loc2_ > BASE._credits.Get()) {
-                POPUPS.DisplayGetShiny();
-            } else if (!GLOBAL.ioConfirmShiny(_loc2_, "to heal all your monsters now", (): void => {
+                POPUPS.ioShinyNeed(_loc2_);
+            } else if (!GLOBAL.ioConfirmShiny(_loc2_, KEYS.Get("io_t3k_for_heal_all_now"), (): void => {
                 this.healInstantAllShinyCheck(param1);
             })) {
                 return;
@@ -242,8 +242,8 @@ export class HousingPersistentPopup extends HousingPersistentPopup_CLIP {
         let _loc3_: int = _loc2_.getTimeCost();
         if (BASE._pendingPurchase.length == 0) {
             if (_loc3_ > BASE._credits.Get()) {
-                POPUPS.DisplayGetShiny();
-            } else if (!GLOBAL.ioConfirmShiny(_loc3_, "to heal this monster now", (): void => {
+                POPUPS.ioShinyNeed(_loc3_);
+            } else if (!GLOBAL.ioConfirmShiny(_loc3_, KEYS.Get("io_t3k_for_heal_now"), (): void => {
                 this.healInstantShinyCheck(param1);
             })) {
                 return;
@@ -542,6 +542,31 @@ export class HousingPersistentPopup extends HousingPersistentPopup_CLIP {
         for (_loc10_ in this._juiceList) {
             _loc4_ = this._juiceList[_loc10_] | 0;
             _loc3_ += _loc4_;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #282, 14 October: as the Juicer pays: the healthiest go first (MonsterData.juiceCreep), each by
+                // its own health against its own most (CreepBase.Blend). The total took them in list order, by the
+                // stock health, so it showed wounded or upgraded monsters at the wrong value.)
+                let creeps: any[] = [];
+                for (let info of as3.values(_loc7_.monsterListByID(_loc10_).m_creeps)) {
+                    if (!info.ownerID) {
+                        creeps.push(info);
+                    }
+                }
+                creeps.sort((a: any, b: any): number => Number(b.health) - Number(a.health));
+                for (let k: int = 0; k < Math.min(_loc4_, creeps.length); k++) {
+                    let live: any = creeps[k].self;
+                    if (!live) {
+                        continue;
+                    }
+                    let part: number = live.maxHealth > 0 ? Math.max(0, Math.min(1, live.health / live.maxHealth)) : 1;
+                    if (BASE.isInfernoMainYardOrOutpost || _loc10_.substr(0, 1) == "I" || BASE.isInfernoCreep(_loc10_)) {
+                        _loc6_ += CREATURES.GetProperty(_loc10_, "cResource") * part;
+                    } else {
+                        _loc5_ += CREATURES.GetProperty(_loc10_, "cResource") * part;
+                    }
+                }
+                continue;
+            }
             _loc8_ = (_loc9_ = _loc7_.monsterListByID(_loc10_).m_creeps).length | 0;
             _loc13_ = 0;
             while (_loc13_ < _loc8_ && Boolean(_loc4_)) {

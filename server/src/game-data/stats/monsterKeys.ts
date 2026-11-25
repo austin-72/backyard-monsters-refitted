@@ -45,4 +45,5 @@ export const inferoMonsters = [
   "IC20",   // Emberghoul (inferno-only)
   "IC24",   // Ashkarr, the Ember Herald (inferno-only)
   "IC25",   // Rimegrave, the ice champion (inferno-only: Hell Freezes Over)
+  "IC32",   // the Basilisk (inferno-only: 200 battles won)
 ];

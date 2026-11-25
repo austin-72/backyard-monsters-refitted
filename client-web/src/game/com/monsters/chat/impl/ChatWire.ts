@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, Vector, int } from "as3";
 import { EventDispatcher } from "flash/events";
 import { Dictionary } from "flash/utils";
-import { AllianceMessageType, Channel, ChatData, ChatEvent, ChatRoom, ChatUser } from "@game";
+import { AllianceMessageType, Channel, ChatData, ChatEvent, ChatRoom, ChatUser, LOGGER } from "@game";
 
 /**
  * The chat server's messages turned into ChatEvents, the same for both transports (HttpChatSystem,
@@ -30,9 +30,17 @@ export class ChatWire extends ASObject {
                 params.set("channel", new Channel(channelName, "system"));
                 to.dispatchEvent(new ChatEvent(ChatEvent.JOIN, true, params));
                 if (as3.is(msg.history, Array)) {
+                    // (13 October: a line the game can't show is skipped, not the whole history after it)
+                    let failed: int = 0;
                     for (entry of as3.values(as3.as(msg.history, Array))) {
-                        ChatWire.nameMap(to, String(entry.userId | 0), String(entry.displayName));
-                        ChatWire.say(to, channelName, entry);
+                        try {
+                            ChatWire.nameMap(to, String(entry.userId | 0), String(entry.displayName));
+                            ChatWire.say(to, channelName, entry);
+                        } catch (err) {
+                            if (failed++ == 0) {
+                                LOGGER.Log("err", "Chat: a history line of " + channelName + " not shown: " + err + " | " + JSON.stringify(entry).substr(0, 300));
+                            }
+                        }
                     }
                 }
                 break;
@@ -76,6 +84,10 @@ export class ChatWire extends ASObject {
             case "notice":
                 params = new Dictionary();
                 params.set("text", String(msg.text));
+                // (QoL #152, #153: the game's own words for it, KEYS, with what fills them in)
+                params.set("key", msg.key != null ? String(msg.key) : null);
+                params.set("v1", msg.v1 != null ? String(msg.v1) : null);
+                params.set("v2", msg.v2 != null ? String(msg.v2) : null);
                 to.dispatchEvent(new ChatEvent(ChatEvent.NOTICE, true, params));
                 break;
             case "error":
@@ -83,6 +95,10 @@ export class ChatWire extends ASObject {
                 params.set("code", String(msg.code));
                 params.set("name", msg.name != null ? String(msg.name) : null);
                 params.set("minutes", msg.minutes | 0);
+                // (QoL #262: a mute's reason)
+                params.set("reason", msg.reason != null ? String(msg.reason) : null);
+                // (QoL #153: muted just now, not a line refused)
+                params.set("fresh", msg.fresh == true);
                 to.dispatchEvent(new ChatEvent(ChatEvent.SERVER_ERROR, true, params));
                 break;
         }
@@ -134,6 +150,13 @@ export class ChatWire extends ASObject {
         params.set("displayname", m.displayName != null ? String(m.displayName) : null);
         params.set("id", m.id != null ? String(m.id) : null);
         params.set("role", m.role != null ? String(m.role) : null);
+        params.set("color", m.color != null ? String(m.color) : null);
+        // (13 October: the speaker's alliance tag, and whether they are online)
+        params.set("allianceid", m.allianceId != null ? (m.allianceId | 0) : 0);
+        params.set("alliancetag", m.allianceTag != null ? String(m.allianceTag) : null);
+        params.set("online", m.online == null ? null : (m.online ? "1" : "0"));
+        // (QoL #149: "all" / "officers" from the alliance's staff)
+        params.set("ping", m.ping != null ? String(m.ping) : null);
         to.dispatchEvent(new ChatEvent(ChatEvent.SAY, true, params));
     }
 }

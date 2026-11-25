@@ -7,14 +7,16 @@ import { ByteArray } from "flash/utils";
 import { Event, MouseEvent, KeyboardEvent, FocusEvent, UncaughtErrorEvent, FullScreenEvent, TouchEvent, TransformGestureEvent } from "flash/events";
 import {
   Stage, LoaderInfo, DisplayObject, DisplayObjectContainer, InteractiveObject, MovieClip, Sprite, SimpleButton,
-  player, stageHooks, broadcastLists, renderObject, pick, dragState, activeClips, redrawRegions, setCullRects, interp, type M6,
+  player, stageHooks, broadcastLists, renderObject, pick, dragState, activeClips, redrawRegions, setCullRects, rearmDrawOcc, occludedRect, findPrefix, drawPrefix, endPrefix, interp, type M6,
 } from "../flash/display/core";
 import { TextField, inputBridge, textCache } from "flash/text";
 import { cursorState, keyState, Multitouch } from "flash/ui";
 import { resumeAudio } from "flash/media";
 import { runtimeHooks } from "../flash/_runtime";
-import { later, pageHidden } from "../flash/_clock";
+import { later, cancelTimer, pageHidden } from "../flash/_clock";
+import { filterSettings } from "../flash/filters";
 import { cssColor, context2d } from "../flash/_internal";
+import { glRememberedBlack } from "../flash/_glYard";
 
 export interface PlayerOptions {
   container: HTMLElement;
@@ -27,6 +29,29 @@ export interface PlayerOptions {
   url: string;
 }
 
+/** (21 October) A real graphics card that WebGL 2 uses, and the page's "Draw with the graphics card" on: player.glDirect. */
+function glDirectWanted(): boolean {
+  try {
+    const st = JSON.parse(localStorage.getItem("bymr-web-settings") || "{}") || {};
+    if (st.gl === false) return false;
+  } catch (e) { /* no settings */ }
+  // (26 October: a card whose frames came out black in this browser before (Renderer, GlYard.blackFrame): not used)
+  if (glRememberedBlack()) return false;
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 1;
+    const gl = c.getContext("webgl2") as WebGL2RenderingContext | null;
+    if (!gl) return false;
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    const soft = /swiftshader|llvmpipe|softpipe|software|basic render|mesa offscreen/i.test(name);
+    gl.getExtension("WEBGL_lose_context")?.loseContext();
+    return !soft;
+  } catch (e) {
+    return false;
+  }
+}
+
 export async function startPlayer(o: PlayerOptions): Promise<any> {
   const canvas = document.createElement("canvas");
   canvas.tabIndex = 0;
@@ -35,7 +60,28 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
   o.container.style.overflow = "hidden";
   o.container.appendChild(canvas);
   inputBridge.install(o.container);
-  const ctx = context2d(canvas, { alpha: false });
+  // (21 October) The yard straight from the graphics card (player.glDirect, see display/core): decided now, as the
+  // game's canvas then needs an alpha channel, which a context can't change later. Only with a real graphics card
+  // (a software one draws the card's canvas more slowly than the canvas itself) and the page's setting on.
+  // ?gldirect=1 / 0 for testing.
+  const glDirect = o.parameters.gldirect === "1" ? true : o.parameters.gldirect === "0" ? false : glDirectWanted();
+  const ctx = context2d(canvas, { alpha: glDirect });
+  player.mainCtx = ctx;
+  player.glDirect = glDirect;
+  player.showGlLayer = (c: HTMLCanvasElement | null, on: boolean) => {
+    if (!c) return;
+    if (on) {
+      if (c.parentNode !== o.container || c.nextSibling !== canvas) {
+        Object.assign(c.style, { position: "absolute", left: "0", top: "0", width: "100%", height: "100%", pointerEvents: "none" });
+        o.container.insertBefore(c, canvas);
+      }
+      if (c.style.display === "none") c.style.display = "";
+      player.glLayer = c;
+    } else {
+      if (c.parentNode && c.style.display !== "none") c.style.display = "none";
+      if (player.glLayer === c) player.glLayer = null;
+    }
+  };
 
   const stage = new Stage();
   stage.$frameRate = o.frameRate;
@@ -109,6 +155,9 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
    * default: a lowered resolution is too visible. Query parameters still override them for testing:
    * ?hidpi=1, ?quality=auto (dynamic on), ?redraw=full.
    */
+  // (22 October: ?fpscap= empty, not a number or below 0 ignored: it read as 0, no limit at all)
+  const capParam: string = o.parameters.fpscap;
+  const capParamOk: boolean = capParam !== undefined && String(capParam).trim() !== "" && Number.isFinite(Number(capParam)) && Number(capParam) >= 0;
   const settings = {
     renderScale: 1, // 1, 0.75, 0.5: fixed rendering resolution, scaled up by the browser
     hidpi: o.parameters.hidpi === "1", // draw at the display's full resolution on scaled displays
@@ -116,15 +165,47 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     dynamic: o.parameters.quality === "auto", // lower the resolution automatically when frames are late
     fullRedraw: o.parameters.redraw === "full", // redraw the whole window every frame
     // frame interpolation: made-up frames shown between two of the game's (0 = off); ?interp=N for testing
-    interpolate: Math.max(0, Math.min(4, Number(o.parameters.interp) | 0)),
+    // (Inferno-only, QoL #241: -1 = Auto, one drawing at every refresh of the screen (requestAnimationFrame); ?interp=auto)
+    interpolate: o.parameters.interp === "auto" ? -1 : Math.max(0, Math.min(4, Number(o.parameters.interp) | 0)),
+    // (Inferno-only, 18 October, the user's: the frame rate limit: at most this many drawings a second, 0 = no limit
+    // (every refresh of the screen); 60 unless chosen; ?fpscap=N for testing. The game itself still runs 40 frames a
+    // second, whatever is drawn: its monsters, paths, attacks and timers count those, so nothing goes faster or
+    // slower with the limit. Over 40, the frames between the game's are made up (the interpolation above, timed to
+    // the screen); at 40 the game's own frames are drawn; under 40 some of them aren't drawn (the game still runs).
+    // ?interp=N or auto, for testing, sets the interpolation itself instead.
+    fpsCap: capParamOk ? Math.min(1000, Number(capParam) | 0) : o.parameters.interp !== undefined ? 0 : 60,
+    // (Inferno-only, QoL #242: no glow filters; ?noglow=1 for testing)
+    noGlow: o.parameters.noglow === "1",
+    // (Inferno-only, QoL #227: the interface size, 1 (100%), 1.25 or 1.5: the whole stage drawn larger, as far as the
+    // window leaves it at least 760 x 670 stage pixels; ?uiscale=1.25 for testing)
+    uiScale: Math.max(1, Math.min(1.5, Number(o.parameters.uiscale) || 1)),
   };
   const applySettings = (p: Partial<typeof settings>) => {
+    const wasAuto = settings.interpolate < 0;
     Object.assign(settings, p);
-    settings.interpolate = Math.max(0, Math.min(4, settings.interpolate | 0));
+    capInterp();
+    settings.interpolate = Math.max(-1, Math.min(4, settings.interpolate | 0));
+    // (QoL #241: Auto chosen again: the screen is given a new chance at once)
+    if (settings.interpolate < 0 && !wasAuto) { slowScreenUntil = 0; slowScreenWait = 10_000; }
     if (!settings.dynamic) { adaptive.scale = 1; adaptive.failed.clear(); adaptive.slow = adaptive.fast = 0; }
+    // (QoL #242: the glows' switch; what was filtered before is filtered again)
+    settings.noGlow = settings.noGlow === true;
+    settings.uiScale = Math.max(1, Math.min(1.5, Number(settings.uiScale) || 1)); // (QoL #227)
+    if (filterSettings.noGlow !== settings.noGlow) { filterSettings.noGlow = settings.noGlow; filterSettings.epoch++; }
     fullNext = true;
     layout();
+    pickDriver(); // (QoL #241)
   };
+  /**
+   * (18 October) The frame rate limit sets the interpolation: over 40 (or none), frames made up at the screen's
+   * refreshes (Auto), as many as the limit lets through; 40 or under, none. ?interp sets it itself (tests).
+   */
+  function capInterp(): void {
+    settings.fpsCap = Math.max(0, Math.min(1000, Number(settings.fpsCap) | 0));
+    if (o.parameters.interp !== undefined) return;
+    settings.interpolate = settings.fpsCap === 0 || settings.fpsCap > o.frameRate ? -1 : 0;
+  }
+  capInterp();
   const layout = () => {
     const w = Math.max(1, o.container.clientWidth), h = Math.max(1, o.container.clientHeight);
     // Flash drew at one pixel per CSS pixel and left scaled displays to the OS; so does this player,
@@ -144,7 +225,10 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
       // The game lays itself out for the stage size, but needs at least its own size (760 x 670).
       // On smaller screens (phones, small windows) the stage keeps that minimum in stage pixels, with
       // the screen's shape, and is scaled down to fit; at 760 x 670 and above nothing changes.
-      const fit = Math.min(1, w / o.width, h / o.height);
+      // (Inferno-only, QoL #227: an interface size over 100% scales the stage up the same way, by at most that much
+      // and only as far as the stage stays 760 x 670 or more: the game is drawn as vectors at the canvas's own
+      // resolution, so it stays sharp; pointer positions use the same scale)
+      const fit = Math.min(settings.uiScale, w / o.width, h / o.height);
       scale = fit;
       const sw = Math.round(w / fit), sh = Math.round(h / fit);
       stage.$width = sw; stage.$height = sh;
@@ -156,6 +240,10 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
       scale = stage.$scaleMode === "noBorder" ? Math.max(w / o.width, h / o.height) : Math.min(w / o.width, h / o.height);
       offX = (w - o.width * scale) / 2; offY = (h - o.height * scale) / 2;
     }
+    // (Inferno-only, QoL #223: for the yard's renderer, which draws a zoomed-in yard at the screen's own resolution:
+    // canvas pixels per stage pixel, the window in stage pixels, and whether drawing is to be kept light (a lowered
+    // resolution: Battery saver, Balanced, Fast, or dynamic resolution stepping down))
+    (stage as any).$ioView = { px: scale * dpr, x: -offX / scale, y: -offY / scale, w: w / scale, h: h / scale, saver: settings.renderScale < 1 || (settings.dynamic && adaptive.scale < 1) };
     if (stage.$scaleMode === "noScale" && (oldW !== stage.$width || oldH !== stage.$height)) {
       runtimeHooks.defer(() => stage.dispatchEvent(new Event(Event.RESIZE)));
     }
@@ -191,12 +279,15 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     stage.$displayState = "normal";
     runtimeHooks.defer(() => stage.dispatchEvent(new FullScreenEvent(FullScreenEvent.FULL_SCREEN, false, false, false, false)));
   };
-  stage.$fullScreenAvailable = !!fullscreenRequest(o.container);
+  // (Inferno-only, QoL #224: the page shell's target when it gives one (the whole page, so the game's own
+  // full-screen button does what the page's does, and the page's menu and settings stay on screen))
+  const fullscreenTarget = (): HTMLElement => runtimeHooks.fullScreenTarget() ?? o.container;
+  stage.$fullScreenAvailable = !!fullscreenRequest(fullscreenTarget());
   stageHooks.setDisplayState = (v: string) => {
     const full = v === "fullScreen" || v === "fullScreenInteractive";
     if (full) {
       if (!runtimeHooks.inUserGesture) throw Object.assign(new Error("Error #2152: Full screen mode is not allowed."), { name: "SecurityError", errorID: 2152 });
-      const request = fullscreenRequest(o.container);
+      const request = fullscreenRequest(fullscreenTarget());
       if (!request) { runtimeHooks.fullScreenUnavailable(); return; }
       if (!fullscreenElement()) {
         // The browser can still refuse (not allowed in an iframe, no user activation...): then the stage
@@ -270,6 +361,67 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     else if (t instanceof Sprite && t.$buttonMode && t.$useHandCursor) c = "pointer";
     else if (t instanceof TextField && (t.$type === "input" || t.$selectable)) c = "text";
     canvas.style.cursor = c;
+  };
+  // (Inferno-only, QoL #549 / #550: touch slop. A finger is wider than a pointer: a tap that lands just outside a
+  // small button (on the yard, on a window's background) presses the nearest button within SLOP CSS pixels, as if
+  // it had landed on it, and the mouse stays on that button while the finger stays near where it went down. So
+  // every small button has SLOP more pixels on each side for a finger (an 8 px one: 40). Only touches, and only
+  // when the game asks for it (stage.$ioTouch, set by IoPinchZoom.Install), which also says which buttons count for
+  // what was tapped (not the yard's buildings: a tap beside a building is a tap on the ground; nothing in an arcade
+  // game, whose taps are moves). The mouse is unchanged.)
+  const SLOP = 16;
+  /** Where a finger's press looks for a button: [radius in CSS pixels, directions]. */
+  const SLOP_RINGS: [number, number][] = [[5, 8], [10, 8], [16, 12]];
+  let slop: { cx: number; cy: number; dx: number; dy: number } | null = null;
+  const ioTouch = (): { slop?: (button: DisplayObject, tapped: DisplayObject) => boolean } | null => (stage as any).$ioTouch ?? null;
+  /** The button (or button-mode sprite) d is part of, or null. */
+  const buttonOf = (d: DisplayObject | null): InteractiveObject | null => {
+    for (let p = d; p && p !== stage; p = p.$parent) {
+      if (p instanceof SimpleButton || (p instanceof Sprite && p.$buttonMode)) return p as InteractiveObject;
+    }
+    return null;
+  };
+  /** A finger going down (player.mouseX/Y already where it is): on no button, the nearest one near it. */
+  const findSlop = (ev: PointerEvent) => {
+    slop = null;
+    const accept = ioTouch()?.slop;
+    if (typeof accept !== "function") return;
+    const t = pick(stage, player.mouseX, player.mouseY).target ?? stage;
+    if (buttonOf(t) || (t instanceof TextField && t.$type === "input")) return;
+    const x0 = player.mouseX, y0 = player.mouseY;
+    for (const [r, n] of SLOP_RINGS) {
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const dx = (Math.cos(a) * r) / scale, dy = (Math.sin(a) * r) / scale;
+        const c = pick(stage, x0 + dx, y0 + dy).target;
+        const b = c ? buttonOf(c) : null;
+        if (!b || (b instanceof SimpleButton && !b.$enabled)) continue;
+        let ok = false;
+        try { ok = accept(b, t) !== false; } catch { ok = false; }
+        if (!ok) continue;
+        slop = { cx: ev.clientX, cy: ev.clientY, dx, dy };
+        player.mouseX = x0 + dx; player.mouseY = y0 + dy;
+        return;
+      }
+    }
+  };
+  /** The finger of a press slop moved: the mouse stays as far off it while it stays near where it went down. */
+  const applySlop = (ev: PointerEvent) => {
+    if (!slop || ev.pointerType !== "touch") return;
+    if (Math.hypot(ev.clientX - slop.cx, ev.clientY - slop.cy) > SLOP) { slop = null; return; }
+    player.mouseX += slop.dx; player.mouseY += slop.dy;
+  };
+  // (Inferno-only, QoL #220: a tap's hover ends with it. A finger has no hover: what it pressed gets its
+  // MOUSE_OUT / ROLL_OUT once the press is over, so tips and highlights shown on MOUSE_OVER don't stay up. The
+  // mouse's position is kept: a building being placed still follows where the finger was.)
+  const clearOver = (ev: { ctrlKey: boolean; altKey: boolean; shiftKey: boolean }) => {
+    const old = over;
+    if (!old || !ioTouch()) return;
+    over = null;
+    if (old.stage) mouseEvent(MouseEvent.MOUSE_OUT, old, ev, null);
+    for (const d of ancestors(old)) if (d instanceof InteractiveObject && d.stage) mouseEvent(MouseEvent.ROLL_OUT, d, ev, null, 0, false);
+    if (old instanceof SimpleButton) old.$state = "up";
+    updateCursor();
   };
   // Touch input follows Multitouch.inputMode, as in Flash:
   //  NONE (default): the first finger is the mouse; a second finger turns the gesture into a pinch,
@@ -372,10 +524,15 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     }
     return false;
   };
-  canvas.addEventListener("pointercancel", (ev) => { touchUp(ev, true); if (!touches.size) pinch = null; });
+  canvas.addEventListener("pointercancel", (ev) => {
+    touchUp(ev, true);
+    if (!touches.size) pinch = null;
+    if (ev.pointerType === "touch" && ev.isPrimary) { slop = null; clearOver(noKeys); } // (QoL #549, #220)
+  });
   canvas.addEventListener("pointermove", (ev) => {
     if (touchMove(ev)) return;
     toStage(ev);
+    applySlop(ev); // (QoL #549)
     dragState.update();
     const t = updateOver(ev);
     mouseEvent(MouseEvent.MOUSE_MOVE, t, ev);
@@ -388,6 +545,8 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     canvas.setPointerCapture(ev.pointerId);
     resumeAudio();
     toStage(ev);
+    if (ev.pointerType === "touch") findSlop(ev); // (QoL #549)
+    else slop = null;
     buttonDown = true;
     const t = updateOver(ev);
     downTarget = t;
@@ -407,6 +566,7 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     inputBridge.keepFocus(); // still inside the tap: iOS lets focus (and the keyboard) be taken back
     if (touchUp(ev)) return;
     toStage(ev);
+    applySlop(ev); // (QoL #549)
     buttonDown = false;
     const t = updateOver(ev);
     runtimeHooks.inUserGesture = true;
@@ -421,6 +581,8 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
       }
     } finally { runtimeHooks.inUserGesture = false; }
     downTarget = null;
+    // (QoL #549, #220: a finger's press is over: no slop, and nothing stays hovered)
+    if (ev.pointerType === "touch") { slop = null; clearOver(ev); }
     updateCursor();
   });
   canvas.addEventListener("pointerleave", () => { runtimeHooks.defer(() => stage.dispatchEvent(new Event(Event.MOUSE_LEAVE))); });
@@ -460,8 +622,13 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
   const typingInField = () => stage.$focus instanceof TextField && stage.$focus.$type === "input";
   window.addEventListener("keydown", (ev) => {
     resumeAudio();
+    // Tab when no text field had the focus: the browser's own Tab is stopped even when the game moved the focus
+    // into a text field on this key (a form's Tab order: the browser's Tab would take the focus straight back
+    // out of the field). In a text field, the field itself stops it (flash/text).
+    const wasTyping = typingInField();
     keyEvent(KeyboardEvent.KEY_DOWN, ev);
-    if (!typingInField() && (ev.key === "Tab" || ev.key === "Backspace" || ev.key.startsWith("Arrow") || ev.key === " ")) ev.preventDefault();
+    if (ev.key === "Tab" && !wasTyping) ev.preventDefault();
+    else if (!typingInField() && (ev.key === "Tab" || ev.key === "Backspace" || ev.key.startsWith("Arrow") || ev.key === " ")) ev.preventDefault();
   });
   window.addEventListener("keyup", (ev) => keyEvent(KeyboardEvent.KEY_UP, ev));
   window.addEventListener("focus", () => broadcast("activate"));
@@ -480,7 +647,7 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
   let resync = 0;
   const collectPlaying = (c: DisplayObjectContainer) => {
     for (const ch of c.$children) {
-      if (ch instanceof MovieClip && ch.$p) activeClips.add(ch);
+      if (ch instanceof MovieClip && ch.$p && ch.$timeline && ch.$timeline.totalFrames > 1) activeClips.add(ch);
       if (ch instanceof DisplayObjectContainer && ch.$children.length) collectPlaying(ch);
     }
   };
@@ -501,6 +668,10 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     }
   };
   const render = () => {
+    renderInner();
+    if (player.debug.measureFlush) { const t = performance.now(); ctx.getImageData(0, 0, 1, 1); stats.flushMs += performance.now() - t; stats.flushes++; }
+  };
+  const renderInner = () => {
     const base: M6 = [scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr];
     if (stage.$color !== lastColor) { lastColor = stage.$color; fullNext = true; }
     const full = settings.fullRedraw || fullNext || ++sinceFull >= 120;
@@ -516,26 +687,54 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
       stats.drawnPx += canvas.width * canvas.height; stats.fullFrames++;
       fullNext = false; sinceFull = 0;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      drawAll(ctx, base);
+      // (off the canvas, or outside its mask: left out, as on a partial redraw)
+      setCullRects([[0, 0, canvas.width, canvas.height]]);
+      try { drawAll(ctx, base); } finally { setCullRects(null); }
       return;
     }
     if (!rects.length) return;
+    if (player.debug.lastRects && player.debug.lastRects.length < 2000) player.debug.lastRects.push(...rects.map((r) => r.map(Math.round)));
     for (const r of rects) stats.drawnPx += (r[2] - r[0]) * (r[3] - r[1]);
+    // (19 October: the rectangles inside a window (an occluder, DisplayObject.ioOccludes) apart from the others, each
+    // group through its own clip: inside a window nothing drawn before it is drawn (the yard, its monsters, the dimming
+    // over it); with them together, whatever met one rectangle outside a window was drawn in all of them, under the
+    // window too)
+    const inside = rects.filter((r) => occludedRect(r));
+    const groups = inside.length && inside.length < rects.length ? [rects.filter((r) => !occludedRect(r)), inside] : [rects];
+    try {
+      for (const rs of groups) drawGroup(rs, base);
+    } finally {
+      setCullRects(null);
+    }
+  };
+  /** Draws again the rectangles rs, through one clip of them all. */
+  const drawGroup = (rs: [number, number, number, number][], base: M6) => {
+    setCullRects(rs);
+    rearmDrawOcc();
+    // (19 October: the yard's picture first, each rectangle's piece through a clip of that rectangle alone, when
+    // nothing is under it; then the rest through the clip of them all (findPrefix in display/core))
+    const pre = rs.length > 1 ? findPrefix(stage) : null;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = cssColor(stage.$color);
+    if (pre) {
+      for (const r of rs) ctx.fillRect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+      try { drawPrefix(ctx, pre); } catch (e) { endPrefix(); throw e; }
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    }
     ctx.save();
     ctx.beginPath();
-    for (const r of rects) ctx.rect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
+    for (const r of rs) ctx.rect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
     ctx.clip();
-    for (const r of rects) ctx.fillRect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
-    setCullRects(rects);
+    if (!pre) for (const r of rs) ctx.fillRect(r[0], r[1], r[2] - r[0], r[3] - r[1]);
     try {
       drawAll(ctx, base);
     } finally {
-      setCullRects(null);
+      endPrefix();
       ctx.restore();
     }
   };
   /** Test hook: draws a full frame offscreen and counts pixels that differ from the screen (should be 0). */
-  const verifyRedraw = () => {
+  const verifyRedraw = (list = false) => {
     const off = document.createElement("canvas");
     off.width = canvas.width; off.height = canvas.height;
     const octx = context2d(off, { alpha: false });
@@ -544,18 +743,25 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     drawAll(octx, [scale * dpr, 0, 0, scale * dpr, offX * dpr, offY * dpr]);
     const a = ctx.getImageData(0, 0, canvas.width, canvas.height).data, b = octx.getImageData(0, 0, off.width, off.height).data;
     let diff = 0, x0 = Infinity, y0 = Infinity, x1 = -1, y1 = -1;
+    const px: number[][] = [];
     for (let i = 0; i < a.length; i += 4) {
       if (Math.abs(a[i] - b[i]) > 24 || Math.abs(a[i + 1] - b[i + 1]) > 24 || Math.abs(a[i + 2] - b[i + 2]) > 24) {
         diff++;
         const p = i / 4, x = p % canvas.width, y = (p / canvas.width) | 0;
         x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+        // (list: the pixels themselves, the screen's colour and the whole drawing's)
+        if (list && px.length < 40) px.push([x, y, (a[i] << 16) | (a[i + 1] << 8) | a[i + 2], (b[i] << 16) | (b[i + 1] << 8) | b[i + 2]]);
       }
     }
-    return diff ? { diff, box: [x0, y0, x1, y1] } : { diff: 0 };
+    return diff ? (list ? { diff, box: [x0, y0, x1, y1], px } : { diff, box: [x0, y0, x1, y1] }) : { diff: 0 };
   };
-  const stats = { frames: 0, scriptMs: 0, renderMs: 0, maxFrameMs: 0, late: 0, drawnPx: 0, fullFrames: 0 };
+  const stats = { frames: 0, scriptMs: 0, renderMs: 0, maxFrameMs: 0, late: 0, drawnPx: 0, fullFrames: 0,
+    /** (19 October, for tests) the screen's refreshes, and why one showed no drawing: over the limit, too early after a late
+     *  game frame, drawing too slow, the game's frame too long, frames caught up lately, no interpolation */
+    flushMs: 0, flushes: 0,
+    skips: { refreshes: 0, cap: 0, early: 0, cost: 0, frame: 0, caught: 0, noInterp: 0 } };
   // ------------------------------------------------------------ frame interpolation (see interp in display/core)
-  // The game's yard renderer finds the interpolation through the stage (Renderer.as, browser build only).
+  // The game's yard renderer finds the interpolation through the stage (Renderer.ts, browser build only).
   (stage as any).$ioInterp = interp;
   /** Time a drawing has been taking lately (ms): a made-up frame is left out when it would not fit. */
   let drawCost = 4;
@@ -564,21 +770,31 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
   let pausedUntil = 0, windowStart = 0, winShown = 0, winSkipped = 0;
   const setInterp = () => {
     const now = performance.now();
-    if (settings.interpolate > 0 && !pageHidden()) {
+    if (settings.interpolate !== 0 && !pageHidden()) {
       if (now - windowStart >= 1000) {
         const tried = winShown + winSkipped;
         if (tried >= 20 && winShown < tried * 0.1 && now >= pausedUntil) pausedUntil = now + 3000;
         windowStart = now; winShown = 0; winSkipped = 0;
       }
     }
-    const n = pageHidden() || now < pausedUntil ? 0 : settings.interpolate;
+    // (QoL #241: Auto interpolates only while the screen drives the frames; its real frame is drawn as far as it is late)
+    const auto = settings.interpolate < 0;
+    // (19 October: none while the game's own frames are heavy (a big battle: the yard's renderer draws every monster
+    // part of the way and back each frame, so interpolating costs the game's own time): more than 70% of a frame's time
+    // on average (player.debug.heavyShare; half was too soon: Hellgate Defense at 2x, 13 ms a frame, lost its 60 fps);
+    // back 2 s after they are lighter)
+    // (a slow average, about the last 30 frames: one long frame (a window opening, the yard loading) isn't a heavy game)
+    if (heavyAvg > (1000 / stage.$frameRate) * player.debug.heavyShare) heavyUntil = now + 2000;
+    const n = pageHidden() || now < pausedUntil || now < heavyUntil || (auto && driver !== "screen") ? 0 : auto ? 1 : settings.interpolate;
     interp.frames = n;
     interp.on = n > 0;
-    interp.first = n > 0 ? 1 / (n + 1) : 1;
+    interp.first = n > 0 ? (auto ? autoFirst : 1 / (n + 1)) : 1;
   };
   /** A made-up frame `a` of the way from the game's last frame but one to its last (1: exactly the last). */
   const invented = (a: number) => {
     const t1 = performance.now();
+    // (19 October: the game's last frame wasn't drawn (over the limit): the yard's own drawing it left out, first)
+    if (stage.$invalidated) { stage.$invalidated = false; broadcast("render"); }
     try { interp.hook?.(a, interp.tick); } catch (e) { console.error("interpolation", e); }
     interp.apply(a);
     try { render(); } finally { interp.restore(); }
@@ -588,7 +804,10 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     interp.stats.invented++;
     winShown++;
   };
-  const frame = () => {
+  /** (19 October) How long the last game frame took, with its drawing; when frames were last caught up (behind); the
+   *  game frames' time on average; until when interpolation is off for them being heavy. */
+  let lastFrameMs = 0, caughtUpAt = -1e9, frameAvg = 0, heavyUntil = 0, heavyAvg = 0;
+  const frame = (draw = true) => {
     const t0 = performance.now();
     setInterp();
     interp.begin();
@@ -600,22 +819,29 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     broadcast("enterFrame");
     broadcast("frameConstructed");
     broadcast("exitFrame");
-    if (stage.$invalidated) { stage.$invalidated = false; broadcast("render"); }
+    // (19 October: as in Flash, "render" (the yard's own drawing, MAP.render) only for a frame that is drawn: one left
+    // out (the game catching up its 40 ticks on a slow device or in a big battle, a hidden page) leaves it for the next,
+    // which draws everything that changed since. A battle drew the yard for every tick, shown or not)
+    if (stage.$invalidated && ((draw && !pageHidden()) || player.debug.renderAlways)) { stage.$invalidated = false; broadcast("render"); }
     const t1 = performance.now();
     if (pageHidden()) fullNext = true;
+    else if (!draw) { /* (18 October: over the frame rate limit: the game ran, the drawing waits for the next one) */ }
     else if (interp.on) {
       // the real frame, the first share of the way (the game's yard renderer drew its part so already)
       interp.apply(interp.first);
       try { render(); } finally { interp.restore(); }
       interp.stats.shown++;
     }
-    else { render(); if (settings.interpolate > 0) interp.stats.shown++; } // (paused: still a frame shown)
+    else { render(); interp.stats.shown++; } // (paused: still a frame shown; 18 October: every drawing counted, for the readout)
     const t2 = performance.now();
     if (interp.on) drawCost = drawCost * 0.8 + (t2 - t1) * 0.2;
     stats.frames++;
     stats.scriptMs += t1 - t0;
     stats.renderMs += t2 - t1;
     stats.maxFrameMs = Math.max(stats.maxFrameMs, t2 - t0);
+    lastFrameMs = t2 - t0;
+    frameAvg = frameAvg * 0.9 + (t2 - t0) * 0.1;
+    heavyAvg = heavyAvg * 0.95 + Math.min(t2 - t0, 60) * 0.05;
     if (t2 - t0 > 1000 / stage.$frameRate) stats.late++;
     adaptive.frames++;
     adaptive.script += t1 - t0;
@@ -668,14 +894,48 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
   // With frame interpolation the made-up frames go evenly between the real ones (the k-th at k / (n + 1) of
   // the interval); one that is late is left out for the next, and none is drawn when it would not be done
   // before the next real frame is due (the game's own frames come first).
+  // ---------------------------------------------------------- (Inferno-only, 18 October) the frame rate limit
+  // Drawings are spaced at least 1000 / fpsCap ms apart on average: the k-th is due at a steady schedule (nextShow,
+  // one limit's interval after the one before), and is drawn at the first chance (a game frame, a screen refresh)
+  // from `slack` before it; a schedule fallen far behind (a long frame, a hidden page) starts again from now. No
+  // limit: every chance. The game's frames run on their own schedule either way; one over the limit isn't drawn.
+  let nextShow = 0;
+  /** When the last drawing was made. */
+  let drawnAt = 0;
+  const mayShow = (now: number, slack: number) => {
+    if (!(settings.fpsCap > 0)) return true;
+    return now >= nextShow - slack;
+  };
+  const showed = (now: number) => {
+    drawnAt = now;
+    if (!(settings.fpsCap > 0)) return;
+    const ci = 1000 / settings.fpsCap;
+    nextShow += ci;
+    if (nextShow < now - ci * 2 || nextShow > now + ci * 2) nextShow = now + ci;
+  };
   let next = performance.now();
   let made = 0; // made-up frames shown since the last real one
   const loop = () => {
+    timerId = 0;
+    if (driver !== "timer") return;
     let now = performance.now();
+    // (QoL #241: Auto interpolation, the page visible, and the screen not found too slow lately: the screen takes over)
+    // (19 October: and the game's own frames not heavy: see screenLoop)
+    if (settings.interpolate < 0 && !pageHidden() && now >= slowScreenUntil && now >= heavyUntil && typeof requestAnimationFrame === "function") { useScreen(); return; }
     const interval = 1000 / stage.$frameRate;
     if (now >= next) {
       if (interp.on && made < interp.frames && interp.stats.real > 0) { interp.stats.skipped += interp.frames - made; winSkipped += interp.frames - made; } // (no time left for them)
-      frame();
+      // (18 October: a limit under the game's 40: some of its frames aren't drawn; and a frame run late, with
+      // another already due after it (a slow device, a long drawing), isn't drawn either: the game catches up its
+      // 40 a second instead of slowing down, only the drawings are fewer)
+      // (behind: two frames owed, or one when the last frame itself took most of its time (the device can't keep
+      // up); a timer only a frame late is ordinary, and its frame is drawn as before; and at least every 100 ms
+      // something is drawn, however far behind)
+      const owed = now >= next + interval * 2 || (now >= next + interval && lastFrameMs > interval * 0.8);
+      const behind = owed && now - next <= 250 && now - drawnAt < 100;
+      const draw = !behind && mayShow(now, 0);
+      frame(draw);
+      if (draw) showed(now);
       made = 0;
       next += interval;
       if (now - next > 250) next = now + interval;
@@ -683,7 +943,7 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
       const start = next - interval, step = interval / (interp.frames + 1);
       let k = Math.min(interp.frames, Math.floor((now - start) / step)); // the latest one due
       if (k > made) {
-        if (now + drawCost < next - 1) { invented(k >= interp.frames ? 1 : (k + 1) / (interp.frames + 1)); }
+        if (now + drawCost < next - 1 && mayShow(now, 0)) { invented(k >= interp.frames ? 1 : (k + 1) / (interp.frames + 1)); showed(now); }
         else { interp.stats.skipped += k - made; winSkipped += k - made; }
         made = k;
       }
@@ -691,11 +951,125 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     now = performance.now();
     let wake = next;
     if (interp.on && made < interp.frames) wake = Math.min(wake, next - interval + (made + 1) * (interval / (interp.frames + 1)));
-    later(loop, Math.max(0, wake - now));
+    timerId = later(loop, Math.max(0, wake - now));
+  };
+  // ---------------------------------------------------------- (Inferno-only, QoL #241) frames timed to the screen
+  // With "Auto" interpolation the browser's screen refreshes drive the loop (requestAnimationFrame) while the page is
+  // visible: a game frame still runs only when it is due on the same schedule as above (never early), at the first
+  // refresh after that; every refresh in between shows a made-up frame exactly as far between the game's last two as
+  // the time has come (the game shown one frame behind, smoothly at any refresh rate). A hidden page has no
+  // refreshes: the timers above take over (the game keeps running in the background, as before). A screen slower
+  // than the game (30 Hz, a browser saving power, drawing too slow to keep up) gives the timers back too, without
+  // made-up frames, for 30 s (then 60, 120...) before the screen is tried again. So does a page whose refreshes stop
+  // while it counts as visible (a window covered on some systems, an embedding frame scrolled away): a timer checks
+  // twice a second that they still come. Other settings: the timers, as before.
+  let driver: "timer" | "screen" = "timer";
+  let timerId = 0, rafId = 0, watchId = 0, watchDue = 0, screenSince = 0;
+  let realAt = 0, autoFirst = 1; // when the last game frame was due; how far its drawing was (set before frame())
+  let rafLast = 0, rafAvg = 0, rafCount = 0, slowScreenUntil = 0, slowScreenWait = 10_000;
+  /** (19 October) The last 30 refreshes' intervals counted, and the quarter quickest's longest (rafLow). */
+  const rafRing: number[] = new Array(30).fill(0);
+  let rafRingAt = 0;
+  const rafLow = () => { const a = rafRing.slice().sort((x, y) => x - y); return a[Math.floor(a.length / 4)]; };
+  /** (18 October) How long the last refresh's own work took: a refresh late because of it says nothing of the screen. */
+  let rafWork = 0;
+  // (18 October, the frame rate limit by default: tried again after 10 s, at most every 2 minutes)
+  const screenTooSlow = (now: number) => {
+    slowScreenUntil = now + slowScreenWait;
+    slowScreenWait = Math.min(120_000, slowScreenWait * 2);
+    useTimer();
+  };
+  const useTimer = () => {
+    driver = "timer";
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    if (watchId) { cancelTimer(watchId); watchId = 0; }
+    if (!timerId) timerId = later(loop, 0);
+  };
+  const watchScreen = () => {
+    watchId = 0;
+    if (driver !== "screen") return;
+    const now = performance.now();
+    // (only when this check itself is on time: a long frame (a yard loading) holds back everything, refreshes too)
+    if (!pageHidden() && now - watchDue < 200 && now - Math.max(rafLast, screenSince) > 400) { screenTooSlow(now); return; }
+    watchDue = now + 500;
+    watchId = later(watchScreen, 500);
+  };
+  const useScreen = () => {
+    driver = "screen";
+    if (timerId) { cancelTimer(timerId); timerId = 0; }
+    made = 0; rafLast = 0; rafAvg = 0; rafCount = 0; screenSince = performance.now();
+    if (!rafId) rafId = requestAnimationFrame(screenLoop);
+    if (!watchId) { watchDue = performance.now() + 500; watchId = later(watchScreen, 500); }
+  };
+  const pickDriver = () => {
+    const screen = settings.interpolate < 0 && !pageHidden() && typeof requestAnimationFrame === "function" && performance.now() >= slowScreenUntil;
+    if (screen && driver !== "screen") useScreen();
+    else if (!screen && driver !== "timer") useTimer();
+  };
+  const screenLoop = () => {
+    rafId = 0;
+    if (driver !== "screen") return;
+    if (settings.interpolate >= 0 || pageHidden()) { useTimer(); return; }
+    rafId = requestAnimationFrame(screenLoop);
+    const now = performance.now();
+    const interval = 1000 / stage.$frameRate;
+    // (18 October: a refresh that came late because the one before had a long game frame or drawing to do (a yard
+    // loading, a big battle) isn't the screen's slowness: not counted)
+    if (rafLast && now - rafLast < 250 && rafWork < interval * 0.5) {
+      rafAvg = rafCount ? rafAvg * 0.9 + (now - rafLast) * 0.1 : now - rafLast; rafCount++;
+      rafRing[rafRingAt] = now - rafLast; rafRingAt = (rafRingAt + 1) % rafRing.length;
+    }
+    rafLast = now;
+    // (19 October: the screen's own rate is told by its quicker refreshes (a quarter of the last 30 were at most this
+    // long), not their average: a yard loading, a window opening, the page's other work held some refreshes back, and
+    // the screen was found too slow for 10 s (then 20, 40...) after every such moment)
+    if (rafCount >= 30 && rafAvg > interval * 1.15 && rafLow() > interval * 1.15) { screenTooSlow(now); return; }
+    try { screenStep(now, interval); } finally { rafWork = performance.now() - now; }
+    // (19 October: the game's own frames heavy (a big battle: nothing is interpolated then, see setInterp): the timers
+    // take over until they are lighter. Driven by the refreshes, a game that can't keep up loses ticks and drawings
+    // both (its frames run back to back between refreshes, the browser's own drawing of the page in between: with 40
+    // monsters, about half the ticks and drawings of the timers); the timers pace them as with a 40 limit)
+    if (now < heavyUntil && driver === "screen") useTimer();
+  };
+  const screenStep = (now: number, interval: number) => {
+    const sk0 = stats.skips;
+    sk0.refreshes++;
+    if (now >= next) {
+      // (18 October: every game frame due runs, up to 4 a refresh, as the timers do: the game keeps its 40 a second
+      // whatever the screen's rate (slower refreshes, long drawings); only the last is drawn)
+      for (let ran = 0; ran < 3 && now >= next + interval; ran++) {
+        next += interval;
+        frame(false);
+        caughtUpAt = now;
+      }
+      realAt = next;
+      next += interval;
+      if (now - next > 250) { next = now + interval; realAt = now; }
+      autoFirst = Math.max(0, Math.min(1, (now - realAt) / interval));
+      // (18 October: the frame rate limit: a refresh counts from half a refresh before the drawing is due)
+      const draw = mayShow(now, (rafAvg || 16.7) / 2);
+      frame(draw);
+      if (draw) showed(now);
+    } else if (interp.on && interp.stats.real > 0) {
+      const a = (now - realAt) / interval;
+      const sk = stats.skips;
+      if (!mayShow(now, (rafAvg || 16.7) / 2)) { sk.cap++; /* (over the limit: this refresh shows the last drawing) */ }
+      // (18 October: timed to the screen, a game frame due meanwhile runs at the next refresh whatever (and catches
+      // up), so a made-up frame needs only to fit in a refresh, not before the game's next frame is due; 19 October:
+      // and only with time to spare: the game's last frame and a made-up one in under 80% of a frame's time, and no
+      // frame caught up in the last 300 ms. A busy battle (each made-up frame redraws every monster in the yard) is
+      // drawn at the game's own frames then, as with a 40 limit, and the game keeps its speed)
+      else if (a > autoFirst && a < 1 && drawCost < (rafAvg || 16.7) * 0.9 && lastFrameMs + drawCost < interval * 0.8 && now - caughtUpAt > 300) { invented(a); showed(now); }
+      else if (a < 1) {
+        interp.stats.skipped++; winSkipped++;
+        // (why, for tests: __player.stats.skips)
+        if (!(a > autoFirst)) sk.early++; else if (!(drawCost < (rafAvg || 16.7) * 0.9)) sk.cost++; else if (!(lastFrameMs + drawCost < interval * 0.8)) sk.frame++; else sk.caught++;
+      }
+    } else sk0.noInterp++;
   };
   loop();
   // Nothing is drawn while the page is hidden (the game still runs); the first frame back is drawn whole.
-  document.addEventListener("visibilitychange", () => { if (!pageHidden()) fullNext = true; });
+  document.addEventListener("visibilitychange", () => { if (!pageHidden()) fullNext = true; pickDriver(); });
   /** Where the text field being typed into is, in client (CSS) pixels, or null. */
   const focusedInputRect = (): { top: number; bottom: number } | null => {
     const f = stage.$focus;
@@ -706,7 +1080,10 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
   };
   /** Stage coordinates -> client (CSS) pixels, e.g. for tests that tap on game objects. */
   const stageToClient = (x: number, y: number) => { const r = canvas.getBoundingClientRect(); return { x: r.left + offX + x * scale, y: r.top + offY + y * scale }; };
-  const api = { stage, frame, render, info, stats, debug: player.debug, adaptive, verifyRedraw, broadcastLists, settings, applySettings, focusedInputRect, stageToClient, interp, textCache };
+  // (QoL #241: which loop drives the frames now, for tests: "timer" or "screen")
+  const timing = () => ({ driver, rafAvg, slowScreenUntil, frameAvg, heavyAvg, heavy: performance.now() < heavyUntil, drawCost });
+  // (18 October: the screen itself, for the Watch menu's pictures of the game: game/com/monsters/replays/IoWatch.ts)
+  const api = { stage, canvas, frame, render, info, stats, debug: player.debug, adaptive, verifyRedraw, broadcastLists, settings, applySettings, focusedInputRect, stageToClient, interp, textCache, timing };
   (window as any).__player = api;
   return api;
 }

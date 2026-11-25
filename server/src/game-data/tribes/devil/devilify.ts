@@ -25,7 +25,7 @@ const INFERNO_MAX_LEVEL: Record<number, number> = {
 
 /** Highest level of the overworld building, used to keep relative strength when remapping. */
 const OVERWORLD_MAX_LEVEL: Record<number, number> = {
-  // Measured from YARD_PROPS.as (length of each building's hp table).
+  // Measured from YARD_PROPS.ts (length of each building's hp table).
   14: 10, 15: 10, 17: 5, 20: 10, 21: 10, 22: 5, 23: 8, 25: 8, 115: 8, 117: 1, 118: 8,
 };
 

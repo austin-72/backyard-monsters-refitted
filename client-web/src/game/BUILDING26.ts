@@ -71,8 +71,12 @@ export class BUILDING26 extends BFOUNDATION {
 
     public override Description(): void {
         super.Description();
+        // (Inferno-only, QoL #363: an Academy at level N trains monsters to level N + 1: what the next level allows)
+        if (GLOBAL.INFERNO_ONLY && this._lvl.Get() > 0 && this._lvl.Get() < this.getEffectiveLevelMax()) {
+            this._upgradeDescription = KEYS.Get("io_acad_trains_to", { "v1": (this._lvl.Get() + 1) | 0, "v2": (this._lvl.Get() + 2) | 0 });
+        }
         if (this._upgrading != null && Boolean(GLOBAL.player.m_upgrades[this._upgrading].time)) {
-            this._specialDescription = KEYS.Get("building_academy_training", { "v1": CREATURELOCKER._creatures[this._upgrading].name, "v2": GLOBAL.ToTime((GLOBAL.player.m_upgrades[this._upgrading].time.Get() - GLOBAL.Timestamp()) | 0) });
+            this._specialDescription = KEYS.Get("building_academy_training", { "v1": GLOBAL.INFERNO_ONLY ? KEYS.Get(as3.str(CREATURELOCKER._creatures[this._upgrading].name)) : CREATURELOCKER._creatures[this._upgrading].name, "v2": GLOBAL.ToTime((GLOBAL.player.m_upgrades[this._upgrading].time.Get() - GLOBAL.Timestamp()) | 0) });
         }
     }
 

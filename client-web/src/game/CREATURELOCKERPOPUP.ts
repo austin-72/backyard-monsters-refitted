@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { Bitmap, BitmapData, DisplayObject, MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { BASE, CREATURELOCKER, CREATURELOCKERPOPUP_CLIP, CREATURES, Circ, CreatureLockerItem, GLOBAL, ImageCache, IoHfo, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, QUESTS, STORE, TweenLite, popup_monster } from "@game";
+import { BASE, CREATURELOCKER, CREATURELOCKERPOPUP_CLIP, CREATURES, Circ, CreatureLockerItem, GLOBAL, ImageCache, IoHfo, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, QUESTS, STORE, TweenLite, popup_monster, IoSocial, IoShop, IoSynergy } from "@game";
 
 export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
     static {
@@ -45,6 +45,14 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             CREATURELOCKER._page = CREATURELOCKER._creatures[CREATURELOCKER._unlocking].page | 0;
             this.ShowB(CREATURELOCKER._unlocking);
         } else {
+            // (Inferno-only, QoL #348: opened for the first time since the yard loaded, on the next monster to unlock,
+            // not on Spurtz, the first, unlocked from the start)
+            if (GLOBAL.INFERNO_ONLY && CREATURELOCKER._popupCreatureID == CREATURELOCKER.getFirstCreatureID()) {
+                let next: string = CREATURELOCKERPOPUP.ioNextToUnlock();
+                if (next) {
+                    CREATURELOCKER._popupCreatureID = next;
+                }
+            }
             _loc4_ = CREATURELOCKER._popupCreatureID;
             _loc5_ = CREATURELOCKER._page;
             CREATURELOCKER._page = CREATURELOCKER._creatures[CREATURELOCKER._popupCreatureID].page | 0;
@@ -58,6 +66,27 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
         this.goo_txt.htmlText = "<b>" + KEYS.Get("moni_att_cost") + "</b>";
         this.housing_txt.htmlText = "<b>" + KEYS.Get("mon_att_housing") + "</b>";
         this.time_txt.htmlText = "<b>" + KEYS.Get("mon_att_time") + "</b>";
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #351: damage per second where the hatching time was; every monster hatches in the same second here)
+            this.time_txt.htmlText = "<b>" + KEYS.Get("io_mon2_dps_short") + "</b>";
+            GLOBAL.ioFitText(this.time_txt, 8);
+        }
+    }
+
+    /** Inferno-only (QoL #348): the first monster not unlocked yet, by page and order; null when all are. */
+    public static ioNextToUnlock(): string {
+        let best: any = null;
+        let all: any = CREATURELOCKER.GetAppropriateCreatures();
+        for (let id in all) {
+            let c: any = CREATURELOCKER._creatures[id];
+            if (!c || c.blocked || (c.page | 0) < 1 || CREATURELOCKER._lockerData[id]) {
+                continue;
+            }
+            if (!best || (c.page | 0) < (best.c.page | 0) || ((c.page | 0) == (best.c.page | 0) && (c.order | 0) < (best.c.order | 0))) {
+                best = { "id": id, "c": c };
+            }
+        }
+        return best ? String(best.id) : null;
     }
 
     public PagePrevious(param1: MouseEvent): void {
@@ -127,6 +156,18 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
                 } else {
                     _loc7_ += "<br><font color=\"#333333\">" + KEYS.Get("mon_unlocked") + "</font>";
                 }
+            } else if (GLOBAL.INFERNO_ONLY && GLOBAL._bLocker) {
+                // (QoL #347: what it takes: "Lv 2 · 38,400 Sulfur", red where it's short; "Can start" when it can)
+                let need: int = _loc4_.level | 0;
+                let cost: number = Number(_loc4_.resource) || 0;
+                let lvlOk: boolean = GLOBAL._bLocker._lvl.Get() >= need;
+                let resOk: boolean = BASE._resources.r3.Get() >= cost;
+                let free: boolean = CREATURELOCKER._unlocking == null;
+                let line: string = "<font color=\"" + (lvlOk ? "#333333" : "#CC0000") + "\">" + KEYS.Get("io_cloc_row_level", { "v1": need }) + "</font> · <font color=\"" + (resOk ? "#333333" : "#CC0000") + "\">" + GLOBAL.ioShort(cost) + " " + KEYS.Get(as3.str(GLOBAL._resourceNames[2])) + "</font>";
+                if (lvlOk && resOk && free) {
+                    line = "<font color=\"#1E7A12\"><b>" + KEYS.Get("io_cloc_row_ready") + "</b></font> · " + GLOBAL.ioShort(cost) + " " + KEYS.Get(as3.str(GLOBAL._resourceNames[2]));
+                }
+                _loc7_ += "<br>" + line;
             } else {
                 _loc7_ += "<br><font color=\"#CC0000\">" + KEYS.Get("mon_locked") + "</font>";
             }
@@ -198,13 +239,30 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
         this.List();
         data = CREATURELOCKER._creatures[this._creatureID];
         this.tDescription.htmlText = "<b>" + KEYS.Get(as3.str(data.name)) + "</b><br>" + KEYS.Get(as3.str(data.description));
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #352: what it goes for, how it moves and its reach, under its name; drawn smaller when the
+            // description runs long)
+            // (QoL #353: and what 100 housing of it brings, to compare monsters of different sizes)
+            let ioPer100: string = CREATURELOCKER.ioPer100Line(this._creatureID);
+            this.tDescription.htmlText = "<b>" + KEYS.Get(as3.str(data.name)) + "</b><br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(this._creatureID) + "</font><br>" + (ioPer100 ? "<font color=\"#1E5A7A\">" + ioPer100 + "</font><br>" : "") + KEYS.Get(as3.str(data.description));
+            // (11 November: its synergy, or that a champion has none)
+            let ioSynergy: string = IoSynergy.describe(this._creatureID);
+            if (ioSynergy) {
+                this.tDescription.htmlText += "<br><font color=\"#0B6B58\">" + ioSynergy + "</font>";
+            }
+            GLOBAL.ioFitHeight(this.tDescription, 9);
+        }
         str = "";
-        if (CREATURELOCKER._unlocking != null) {
+        // (Inferno-only, QoL #346, 14 October: while another monster unlocks, this one's costs still show, with the
+        // line saying one is unlocking; every page said only "Unlocking...")
+        let ioOther: boolean = GLOBAL.INFERNO_ONLY && CREATURELOCKER._unlocking != null && CREATURELOCKER._unlocking != this._creatureID && !(CREATURELOCKER._lockerData[this._creatureID] && CREATURELOCKER._lockerData[this._creatureID].t == 2);
+        if (CREATURELOCKER._unlocking != null && !ioOther) {
             str = KEYS.Get("mon_infounlocking");
         } else if (Boolean(CREATURELOCKER._lockerData[this._creatureID]) && CREATURELOCKER._lockerData[this._creatureID].t == 2) {
             str = KEYS.Get(BASE.isInfernoMainYardOrOutpost ? "inf_mon_infounlocked" : "mon_infounlocked");
         } else {
-            str = KEYS.Get("mon_infotounlock", { "v1": GLOBAL.ToTime(data.time | 0) });
+            // (Inferno-only, 22 October: a fifth less with a Training Manual running: IoShop)
+            str = KEYS.Get("mon_infotounlock", { "v1": GLOBAL.ToTime((GLOBAL.INFERNO_ONLY ? IoShop.unlockTime(Number(data.time)) : data.time) | 0) });
             if (BASE._resources.r3.Get() < data.resource) {
                 str += "<font color=\"#CC0000\">";
             }
@@ -219,6 +277,9 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             if (GLOBAL._bLocker._lvl.Get() < data.level) {
                 str += "</font>";
             }
+        }
+        if (ioOther) {
+            str = "<font color=\"#8A5A00\">" + KEYS.Get("io_cloc_other_unlocking", { "v1": KEYS.Get(as3.str(CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name)) }) + "</font><br>" + str;
         }
         this.tCosts.htmlText = str;
         maxSpeed = 0;
@@ -252,7 +313,13 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
         TweenLite.to(this.bDamage.mcBar, 0.4, { "width": 100 / maxDamage * CREATURES.GetProperty(this._creatureID, "damage"), "ease": Circ.easeInOut, "delay": 0.1 });
         TweenLite.to(this.bResource.mcBar, 0.4, { "width": 100 / maxResource * CREATURES.GetProperty(this._creatureID, "cResource"), "ease": Circ.easeInOut, "delay": 0.15 });
         TweenLite.to(this.bStorage.mcBar, 0.4, { "width": 100 / maxStorage * CREATURES.GetProperty(this._creatureID, "cStorage"), "ease": Circ.easeInOut, "delay": 0.2 });
-        TweenLite.to(this.bTime.mcBar, 0.4, { "width": 100 / maxTime * CREATURES.GetProperty(this._creatureID, "cTime"), "ease": Circ.easeInOut, "delay": 0.25 });
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #351: the damage per second's bar, against the strongest of them)
+            let maxDps: number = CREATURELOCKER.ioMaxDps(CREATURELOCKER.GetAppropriateCreatures());
+            TweenLite.to(this.bTime.mcBar, 0.4, { "width": maxDps > 0 ? 100 / maxDps * Math.abs(CREATURELOCKER.ioDps(this._creatureID)) : 0, "ease": Circ.easeInOut, "delay": 0.25 });
+        } else {
+            TweenLite.to(this.bTime.mcBar, 0.4, { "width": 100 / maxTime * CREATURES.GetProperty(this._creatureID, "cTime"), "ease": Circ.easeInOut, "delay": 0.25 });
+        }
         this.tSpeed.htmlText = KEYS.Get("mon_statsspeed", { "v1": CREATURES.GetProperty(this._creatureID, "speed") });
         this.tHealth.htmlText = as3.str(CREATURES.GetProperty(this._creatureID, "health").toString());
         dam = CREATURES.GetProperty(this._creatureID, "damage") | 0;
@@ -264,6 +331,9 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
         this.tResource.htmlText = CREATURES.GetProperty(this._creatureID, "cResource") + " " + KEYS.Get(as3.str(GLOBAL._resourceNames[3]));
         this.tStorage.htmlText = KEYS.Get("mon_statsstorage", { "v1": CREATURES.GetProperty(this._creatureID, "cStorage") });
         this.tTime.htmlText = GLOBAL.ToTime(CREATURES.GetProperty(this._creatureID, "cTime") | 0, true);
+        if (GLOBAL.INFERNO_ONLY) {
+            this.tTime.htmlText = CREATURELOCKER.ioDpsText(this._creatureID);
+        }
         if (CREATURELOCKER._lockerData[this._creatureID]) {
             if (CREATURELOCKER._lockerData[this._creatureID].t == 2) {
                 this.mcButtons.gotoAndStop(1);
@@ -350,17 +420,18 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             this.Update();
             return;
         }
-        if (BASE._credits.Get() < this._instantUnlockCost) {
-            POPUPS.DisplayGetShiny();
-            return;
-        }
-        if (!GLOBAL.ioConfirmShiny(this._instantUnlockCost, "to unlock this monster now", (): void => {
-            this.InstantUnlock(e);
-        })) {
-            return;
-        }
+        // (Inferno-only, 14 October, QoL #285: the Strongbox level is checked before asking for Shiny, not after)
         if (GLOBAL._bLocker._lvl.Get() < CREATURELOCKER._creatures[this._creatureID].level) {
             GLOBAL.Message(KEYS.Get("mon_upgradelocker", { "v1": KEYS.Get(as3.str(GLOBAL._bLocker._buildingProps.name)), "v2": CREATURELOCKER._creatures[this._creatureID].level }));
+            return;
+        }
+        if (BASE._credits.Get() < this._instantUnlockCost) {
+            POPUPS.ioShinyNeed(this._instantUnlockCost);
+            return;
+        }
+        if (!GLOBAL.ioConfirmShiny(this._instantUnlockCost, KEYS.Get("io_t3k_for_unlock_now"), (): void => {
+            this.InstantUnlock(e);
+        })) {
             return;
         }
         if (CREATURELOCKER._unlocking && CREATURELOCKER._lockerData[CREATURELOCKER._unlocking] && CREATURELOCKER._lockerData[CREATURELOCKER._unlocking] == this._creatureID) {
@@ -400,17 +471,22 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
                 };
             };
             mc = new popup_monster();
-            mc.bSpeedup.SetupKey("btn_warnyourfriends");
-            if (!creature.stream[0]) {
-                mc.bSpeedup.visible = false;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #140: Hatch now and Share in chat, not "Warn your friends")
+                IoSocial.ioWarnUnlocked(mc, KEYS.Get(as3.str(creature.name)));
+            } else {
+                mc.bSpeedup.SetupKey("btn_warnyourfriends");
+                if (!creature.stream[0]) {
+                    mc.bSpeedup.visible = false;
+                }
+                _body = "";
+                if (creature.stream[1]) {
+                    _body = KEYS.Get(as3.str(creature.stream[1]));
+                }
+                mc.bSpeedup.addEventListener(MouseEvent.CLICK, StreamPost(KEYS.Get(as3.str(creature.stream[0])), _body, img));
+                mc.bSpeedup.Highlight = true;
+                mc.bAction.visible = false;
             }
-            _body = "";
-            if (creature.stream[1]) {
-                _body = KEYS.Get(as3.str(creature.stream[1]));
-            }
-            mc.bSpeedup.addEventListener(MouseEvent.CLICK, StreamPost(KEYS.Get(as3.str(creature.stream[0])), _body, img));
-            mc.bSpeedup.Highlight = true;
-            mc.bAction.visible = false;
             if (CREATURELOCKER._creatures) {
                 hatcheryName = !(!GLOBAL._bHatchery) ? String(GLOBAL._bHatchery._buildingProps.name) : String(GLOBAL._buildingProps[12].name);
                 mc.tText.htmlText = KEYS.Get("pop_unlock_complete", { "v1": KEYS.Get(as3.str(CREATURELOCKER._creatures[this._creatureID].name)), "v2": KEYS.Get(hatcheryName) });

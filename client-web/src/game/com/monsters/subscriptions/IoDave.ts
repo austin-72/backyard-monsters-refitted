@@ -1,0 +1,264 @@
+import * as as3 from "as3";
+import { ASObject, int } from "as3";
+import { IOErrorEvent } from "flash/events";
+import { getTimer } from "flash/utils";
+import { CASINO, GLOBAL, KEYS, URLLoaderApi } from "@game";
+
+/**
+ * Inferno-only (10 October): the D.A.V.E. Club's choices besides the ground (the server: services/yard/dave.ts).
+ *
+ *  - mine: the player's own (the flag io_dave): their chat name's colour, their workers' look, their champions'
+ *    looks, and what they may choose (the colours; the frozen looks once Hell Freezes Over's last wave is won)
+ *  - yard: the loaded yard's owner's looks (io_dave with the yard's load), which everyone looking at it sees
+ *
+ * Who a Korath or Drull belongs to: one on the yard's side (housed, defending: friendly) is the yard owner's; an
+ * attacker in the player's own attack is the player's; wild attackers have no looks.
+ *
+ * (16 October) "The player's own attack" is every kind of attack: on a player's yard, on a tribe's yard (wmattack)
+ * and a Gauntlet stage (wmattack too), and the Inferno modes of both; before, only the first wore its skins. A
+ * replay wears the looks it recorded (withRecorded), not the viewer's.
+ */
+export class IoDave extends ASObject {
+    private static _yard: any = null;
+
+    private static _mineRaw: string = null;
+
+    private static _mine: any = null;
+
+    /** (16 October) A replay's recorded look for the monster being made (withRecorded), or undefined. */
+    private static _recorded: string = undefined;
+
+    public $ctor(): void {
+        super.$ctor();
+    }
+
+    /** From the yard's load (BASE). */
+    public static setYard(data: any): void {
+        IoDave._yard = data && typeof data == "object" ? data : null;
+    }
+
+    public static get mine(): any {
+        let raw: string = GLOBAL._flags && GLOBAL._flags.io_dave ? String(GLOBAL._flags.io_dave) : "";
+        // (16 October) a load without them (an older server's attack load) keeps the ones the player had
+        if (!raw && IoDave._mine) {
+            return IoDave._mine;
+        }
+        if (raw != IoDave._mineRaw) {
+            IoDave._mineRaw = raw;
+            IoDave._mine = null;
+            try {
+                IoDave._mine = raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                IoDave._mine = null;
+            }
+        }
+        return IoDave._mine || {};
+    }
+
+    private static setMine(d: any): void {
+        if (GLOBAL._flags && d) {
+            GLOBAL._flags.io_dave = JSON.stringify(d);
+        }
+    }
+
+    /** The loaded yard's workers are the overworld's builders (their owner's choice). */
+    public static get overworldWorkers(): boolean {
+        return GLOBAL.INFERNO_ONLY && IoDave._yard != null && IoDave._yard.workerSkin == "overworld";
+    }
+
+    /** Is this Korath (IC9 / G4) or Drull (IC10 / G2) to be drawn frozen? */
+    public static frozen(id: string, friendly: boolean): boolean {
+        return IoDave.skin(id, friendly) == "frozen";
+    }
+
+    /**
+     * The look of a champion (14 October: Korath IC9 / G4, Drull IC10 / G2, Ashkarr IC24, Rimegrave IC25, the
+     * Basilisk IC32): "frozen", a Shiny skin (IoSkins), or null for its own.
+     */
+    public static skin(id: string, friendly: boolean): string {
+        if (!GLOBAL.INFERNO_ONLY) {
+            return null;
+        }
+        let key: string = id == "G4" ? "IC9" : (id == "G2" ? "IC10" : id);
+        if (key != "IC9" && key != "IC10" && key != "IC24" && key != "IC25" && key != "IC32") {
+            return null;
+        }
+        if (IoDave._recorded !== undefined) {
+            return IoDave._recorded;
+        }
+        let skins: any = null;
+        if (friendly) {
+            skins = IoDave._yard ? IoDave._yard.champSkins : null;
+        } else if (IoDave.attacking(GLOBAL.mode) || IoDave.attacking(GLOBAL._loadmode)) {
+            skins = IoDave.mine.champSkins;
+        }
+        return skins && skins[key] ? String(skins[key]) : null;
+    }
+
+    /** (16 October) Is this mode one of the player's attacks (a player's yard, a tribe's, a Gauntlet stage)? */
+    public static attacking(mode: string): boolean {
+        let M: any = GLOBAL.e_BASE_MODE;
+        return mode == M.ATTACK || mode == M.WMATTACK || mode == M.IATTACK || mode == M.IWMATTACK;
+    }
+
+    /** (16 October) make() with every champion made in it wearing `look` (a replay's recorded one; null: its own). */
+    public static withRecorded(look: string, make: Function): any {
+        IoDave._recorded = look ? String(look) : null;
+        try {
+            return make();
+        } finally {
+            IoDave._recorded = undefined;
+        }
+    }
+
+    /** A Shiny skin bought (and put on); onDone(error or null). */
+    public static buy(key: string, value: string, onDone: Function): void {
+        new URLLoaderApi().load(GLOBAL.serverUrl + "dave/buy", [["key", key], ["value", value]], (r: any): void => {
+            if (!r || r.error !== 0 && r.error !== "0") {
+                onDone(r && r.error ? String(r.error) : KEYS.Get("io_t3m_no_answer"));
+                return;
+            }
+            IoDave.setMine(r.dave);
+            if (r.dave) {
+                IoDave._yard = { "workerSkin": r.dave.workerSkin, "champSkins": r.dave.champSkins };
+            }
+            if (r.credits != null) {
+                CASINO.setCredits(r.credits | 0);
+            }
+            onDone(null);
+        }, (e: IOErrorEvent): void => {
+            onDone(KEYS.Get("io_t3m_no_answer2"));
+        });
+    }
+
+    /** Has the player bought this champion's skin? */
+    public static owns(champion: string, skin: string): boolean {
+        let o: any[] = IoDave.mine.ownedSkins;
+        return o != null && o.indexOf(champion + "." + skin) >= 0;
+    }
+
+    /** A choice made (the server keeps it); onDone(error or null). */
+    public static set(key: string, value: string, onDone: Function): void {
+        new URLLoaderApi().load(GLOBAL.serverUrl + "dave/set", [["key", key], ["value", value]], (r: any): void => {
+            if (!r || r.error !== 0 && r.error !== "0") {
+                onDone(r && r.error ? String(r.error) : KEYS.Get("io_t3m_no_answer"));
+                return;
+            }
+            IoDave.setMine(r.dave);
+            // (the player's own yard: its looks are theirs)
+            if (r.dave) {
+                IoDave._yard = { "workerSkin": r.dave.workerSkin, "champSkins": r.dave.champSkins };
+            }
+            onDone(null);
+        }, (e: IOErrorEvent): void => {
+            onDone(KEYS.Get("io_t3m_no_answer2"));
+        });
+    }
+
+    /** Friends who have joined through the player's invite link (they open the invite-only looks). */
+    public static get invites(): int {
+        return IoDave.mine.invites | 0;
+    }
+
+    /** Admins and moderators have every invite-only look without inviting. */
+    public static get inviteFree(): boolean {
+        return Boolean(IoDave.mine.inviteFree);
+    }
+
+    /** May the player have an invite-only look that needs `need` friends? */
+    public static unlocked(need: int): boolean {
+        return IoDave.inviteFree || IoDave.invites >= need;
+    }
+
+    /** "Invite 2 friends\n(1 so far)": a locked invite-only look's label. */
+    public static inviteLock(need: int): string {
+        return KEYS.Get(need == 1 ? "io_t3m_dv_invite_one" : "io_t3m_dv_invite_n", { "v1": need, "v2": IoDave.invites });
+    }
+
+    /** A name effect's spec (grad:, shine:, flow: and its colours), or null if this is not one. */
+    public static fxOf(look: string): any {
+        let m: any = look ? /^(grad|shine|flow):(#[0-9A-Fa-f]{6}(?:,#[0-9A-Fa-f]{6})+)$/.exec(look) : null;
+        if (!m) {
+            return null;
+        }
+        let stops: any[] = [];
+        for (let c of String(m[2]).split(",")) {
+            stops.push(parseInt(c.substr(1), 16));
+        }
+        return { "kind": String(m[1]), "stops": stops };
+    }
+
+    /** Does this look move (it has to be drawn again as time goes)? */
+    public static fxMoves(look: string): boolean {
+        let fx: any = IoDave.fxOf(look);
+        return fx != null && fx.kind != "grad";
+    }
+
+    private static blend(a: int, b: int, t: number): int {
+        let r: int = Math.round(((a >> 16) & 255) * (1 - t) + ((b >> 16) & 255) * t) | 0;
+        let g: int = Math.round(((a >> 8) & 255) * (1 - t) + ((b >> 8) & 255) * t) | 0;
+        let l: int = Math.round((a & 255) * (1 - t) + (b & 255) * t) | 0;
+        return (r << 16) | (g << 8) | l;
+    }
+
+    /** Along the stops at t (0 to 1). */
+    private static along(stops: any[], t: number): int {
+        let n: int = (stops.length - 1) | 0;
+        let x: number = Math.max(0, Math.min(1, t)) * n;
+        let i: int = Math.min(n - 1, Math.floor(x)) | 0;
+        return IoDave.blend(stops[i] | 0, stops[i + 1] | 0, x - i);
+    }
+
+    private static hex(c: int): string {
+        let s: string = (c & 0xFFFFFF).toString(16).toUpperCase();
+        while (s.length < 6) {
+            s = "0" + s;
+        }
+        return "#" + s;
+    }
+
+    /**
+     * Inferno-only (12 October): text in a name effect, as html (one colour per letter; the caller makes it bold).
+     *  - grad: shaded from the first colour to the last, letter by letter
+     *  - shine: shaded the same way, a bright amber light sweeping across it every 2.4 seconds
+     *  - flow: the colours flowing along it, round and round, every 3 seconds
+     * at time ms (getTimer() if not given), so a moving one is drawn again with a later time.
+     */
+    public static fxHtml(look: string, text: string, ms: number = -1): string {
+        let fx: any = IoDave.fxOf(look);
+        let out: string = "";
+        let chars: any[] = text.split("");
+        let n: int = Math.max(1, chars.length - 1) | 0;
+        let now: number = ms >= 0 ? ms : getTimer();
+        let sweep: number = (now % 2400) / 2400 * 1.8 - 0.4;
+        let flow: number = (now % 3000) / 3000;
+        for (let i: int = 0; i < chars.length; i++) {
+            let ch: string = String(chars[i]);
+            let esc: string = ch == "&" ? "&amp;" : (ch == "<" ? "&lt;" : (ch == ">" ? "&gt;" : (ch == "\"" ? "&quot;" : ch)));
+            if (!fx || ch == " ") {
+                out += esc;
+                continue;
+            }
+            let t: number = i / n;
+            let c: int = 0;
+            if (fx.kind == "flow") {
+                // (the stops wrap round: the last is the first again)
+                c = IoDave.along(fx.stops, (t * 0.5 + flow) % 1);
+            } else {
+                c = IoDave.along(fx.stops, t);
+                if (fx.kind == "shine") {
+                    let lightT: number = Math.max(0, 1 - Math.abs(t - sweep) / 0.16);
+                    c = IoDave.blend(c, 0xFFB52E, lightT * 0.8);
+                }
+            }
+            out += "<font color=\"" + IoDave.hex(c) + "\">" + esc + "</font>";
+        }
+        return out;
+    }
+
+    /** A colour's #hex, or null (black). */
+    public static colorHex(name: string): string {
+        let c: any = IoDave.mine.chatColors;
+        return c && name && c[name] ? String(c[name]) : null;
+    }
+}

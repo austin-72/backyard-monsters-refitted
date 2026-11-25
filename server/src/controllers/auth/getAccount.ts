@@ -2,6 +2,7 @@ import type { KoaController } from "../../utils/KoaController.js";
 import { User } from "../../database/models/user.model.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { getUsernameCooldown } from "../../services/user/renameUser.js";
+import { shinyLockAbove } from "./shinyLockSettings.js";
 
 /**
  * Controller to return the authenticated user's account details.
@@ -21,7 +22,8 @@ export const getAccount: KoaController = async (ctx) => {
     discord_verified: user.discord_verified,
     canChangeUsername: !cooldown,
     nextChangeAt: cooldown?.toISOString() ?? null,
-    settings: { shinyLocked: user.shiny_locked },
+    // (Inferno-only, QoL #197: the Shiny lock's amount, 0 when off: shinyLockSettings.ts)
+    settings: { shinyLocked: user.shiny_locked, shinyLockAbove: await shinyLockAbove(user.userid) },
   };
 
   ctx.status = Status.OK;

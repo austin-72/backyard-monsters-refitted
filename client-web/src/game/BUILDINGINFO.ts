@@ -2,9 +2,9 @@ import * as as3 from "as3";
 import { ASObject, Vector, int } from "as3";
 import { MovieClip } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
-import { Point, Rectangle } from "flash/geom";
+import { ColorTransform, Point, Rectangle } from "flash/geom";
 import { TextField, TextFieldAutoSize } from "flash/text";
-import { ACADEMY, ALLIANCEWINDOW, AllianceMessagePopup, BASE, BFOUNDATION, BRESOURCE, BRIMSTONEPIT, BTRAP, BUILDING13, BUILDING14, BUILDINGOPTIONS, BUY, Button_CLIP, CHAMPIONCAGE, CHAMPIONCHAMBER, CREATURELOCKER, CREATURES, CasinoWindow, GLOBAL, HATCHERY, HATCHERYCC, HOUSING, INFERNOPORTAL, InstanceManager, IoHfoIce, IoTrapRearm, IoWallUpgrade, KEYS, LOGIN, MAP, MAPROOM, MAPROOM_DESCENT, MONSTERBAITER, MONSTERBUNKER, MONSTERLAB, MUSHROOMS, MapRoom3ConfirmMigrationPopup, MapRoom3RelocatePopup, MapRoomManager, PLANNER, RADIO, SALESPECIALSPOPUP, SIGNS, STORE, SiegeFactory, SiegeLab, TUTORIAL, buildingInfoData } from "@game";
+import { ACADEMY, ALLIANCEWINDOW, AllianceMessagePopup, ArcadeWindow, BASE, BFOUNDATION, BRESOURCE, BRIMSTONEPIT, BTOWER, BTRAP, BUILDING13, BUILDING14, BUILDINGOPTIONS, BUY, Button_CLIP, CHAMPIONCAGE, CHAMPIONCHAMBER, CREATURELOCKER, CREATURES, CasinoWindow, DEVILSARCADE, GLOBAL, HATCHERY, HATCHERYCC, HOUSING, INFERNOPORTAL, InstanceManager, IoHfoIce, IoPhoneText, IoRelocate, IoTrapRearm, IoWallUpgrade, KEYS, LOGIN, MAP, MAPROOM, MAPROOM_DESCENT, MONSTERBAITER, MONSTERBUNKER, MONSTERLAB, MUSHROOMS, MapRoom3ConfirmMigrationPopup, MapRoom3RelocatePopup, MapRoomManager, PLANNER, RADIO, SALESPECIALSPOPUP, SIGNS, STORE, SiegeFactory, SiegeLab, TUTORIAL, buildingInfoData, IoSign, SOUNDS, IoShop, IoChampionStatue, IoCrucible, SOULCRUCIBLE } from "@game";
 
 export class BUILDINGINFO extends ASObject {
     public static _mc: MovieClip = null;
@@ -55,7 +55,8 @@ export class BUILDINGINFO extends ASObject {
             if (BUILDINGINFO._mc.tName.textWidth > 120) {
                 BUILDINGINFO._mc.tName.autoSize = TextFieldAutoSize.NONE;
                 BUILDINGINFO._mc.tName.width = 124;
-                GLOBAL.ioFitText(as3.cast(BUILDINGINFO._mc.tName, TextField), 8);
+                // (QoL #564: on a phone not under 9)
+                IoPhoneText.fit(as3.cast(BUILDINGINFO._mc.tName, TextField), 8);
             }
             // (by its drawn box: the library's text box starts 29 px right of the field's x)
             let ioNameBox: Rectangle = as3.cast(BUILDINGINFO._mc.tName.getBounds(BUILDINGINFO._mc), Rectangle);
@@ -67,6 +68,49 @@ export class BUILDINGINFO extends ASObject {
             BUILDINGINFO._mc.scaleX = BUILDINGINFO._mc.scaleY = 2;
         }
         BUILDINGINFO.Update();
+    }
+
+    /**
+     * Inferno-only (QoL #554): the panel on a phone (GLOBAL.ioOnPhone): 40 px rows (30 and 26 before; at a landscape
+     * phone's 0.58 they were 17 px, 2 px apart), and what can't be taken back (Stop building, Stop upgrade, Stop
+     * fortifying, Relocate) last, after a gap, in red: Speed up sat right above Stop upgrade.
+     */
+    public static get ioPhone(): boolean {
+        return GLOBAL.INFERNO_ONLY && GLOBAL.ioOnPhone;
+    }
+
+    /** The phone's row height. */
+    public static readonly IO_PHONE_ROW: int = 40;
+
+    /** The gap before the buttons that can't be taken back, on a phone. */
+    public static readonly IO_PHONE_GAP: int = 16;
+
+    /** The buttons that can't be taken back. */
+    public static readonly IO_DANGER: any[] = ["btn_stopbuild", "btn_stopupgrade", "btn_stopfortify", "io_btn_relocate"];
+
+    /** QoL #554: the dangerous ones moved last, the order kept otherwise. */
+    public static ioDangerLast(list: any[]): any[] {
+        let safe: any[] = [];
+        let danger: any[] = [];
+        for (let b of list) {
+            if (BUILDINGINFO.IO_DANGER.indexOf(String(b[0])) >= 0) {
+                danger.push(b);
+            } else {
+                safe.push(b);
+            }
+        }
+        return safe.concat(danger);
+    }
+
+    /** Seconds left of a building's own job (building, upgrading, fortifying or repairing); 0: none. */
+    public static ioJobLeft(b: BFOUNDATION): int {
+        if (!b) {
+            return 0;
+        }
+        if (b._repairing) {
+            return Math.max(0, b._repairTime | 0) | 0;
+        }
+        return (b._countdownBuild.Get() + b._countdownUpgrade.Get() + b._countdownFortify.Get()) | 0;
     }
 
     public static Update(): void {
@@ -100,7 +144,28 @@ export class BUILDINGINFO extends ASObject {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 if (BUILDINGINFO._building.health < BUILDINGINFO._building.maxHealth) {
                     _loc2_ = false;
-                    if (BUILDINGINFO._building._repairing == 0) {
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // (QoL #13: Repair all starts every repair, free, as the load and poor-defence popups' does;
+                        // it sold FIX for Shiny, and only once one building was repairing)
+                        let waiting: int = 0;
+                        for (let other of (_loc5_ ?? [])) {
+                            if (other.health < other.maxHealth && other._repairing == 0) {
+                                waiting++;
+                            }
+                        }
+                        if (BUILDINGINFO._building._repairing == 0) {
+                            _loc1_.push(["btn_repair", 30]);
+                        } else {
+                            _loc1_.push(["btn_speedup", 30, waiting == 0]);
+                        }
+                        if (waiting >= (BUILDINGINFO._building._repairing == 0 ? 2 : 1)) {
+                            _loc1_.push(["io_btn_repairall_free", 30, true]);
+                        } else if (_loc4_ >= 2) {
+                            // (20 October: as it used to be, every repair already under way: Repair All finishes
+                            // them all at once, the Store's Repair All Buildings, free when they're nearly done)
+                            _loc1_.push(["btn_repairall", 30, true]);
+                        }
+                    } else if (BUILDINGINFO._building._repairing == 0) {
                         _loc1_.push(["btn_repair", 30]);
                     } else {
                         _loc1_.push(["btn_speedup", 30, _loc4_ >= 2 ? false : true]);
@@ -177,6 +242,10 @@ export class BUILDINGINFO extends ASObject {
                             if (BUILDINGINFO._props.id == MAPROOM.TYPE && GLOBAL.alliancesEnabled) {
                                 _loc1_.push(["btn_alliances", 30, false]);
                             }
+                            // Inferno-only: Relocate, from the Map Room building only (10 October; it was in the map room)
+                            if (GLOBAL.INFERNO_ONLY && BUILDINGINFO._props.id == MAPROOM.TYPE && BASE.isMainYard && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                                _loc1_.push(["io_btn_relocate", 30, false]);
+                            }
                         } else if (BUILDINGINFO._props.id == 12) {
                             _loc1_.push(["btn_openstore", 30, true]);
                         } else if (BUILDINGINFO._props.id == 13) {
@@ -185,7 +254,8 @@ export class BUILDINGINFO extends ASObject {
                             } else {
                                 _loc1_.push([BASE.isInfernoMainYardOrOutpost ? "btn_viewincubator" : "btn_viewhatchery", 30, true]);
                             }
-                            if (!GLOBAL._hatcheryOverdrive && !_loc13_ && TUTORIAL._stage > 200) {
+                            // (Inferno-only, QoL #8: no Incubator Overdrive when hatching takes a second)
+                            if (!GLOBAL._hatcheryOverdrive && !_loc13_ && TUTORIAL._stage > 200 && !(GLOBAL.INFERNO_ONLY && GLOBAL.ioHatchSeconds <= 5)) {
                                 _loc1_.push(["btn_speedup", 30, true]);
                             }
                         } else if (HOUSING.isHousingBuilding(BUILDINGINFO._props.id | 0)) {
@@ -200,7 +270,7 @@ export class BUILDINGINFO extends ASObject {
                             _loc1_.push(["btn_openbunker", 30, true]);
                         } else if (BUILDINGINFO._props.id == 16) {
                             _loc1_.push(["btn_openhcc", 30, true]);
-                            if (!GLOBAL._hatcheryOverdrive && !_loc13_) {
+                            if (!GLOBAL._hatcheryOverdrive && !_loc13_ && !(GLOBAL.INFERNO_ONLY && GLOBAL.ioHatchSeconds <= 5)) {
                                 _loc1_.push(["btn_speedup", 30, true]);
                             }
                         } else if (BUILDINGINFO._props.id == 26) {
@@ -217,6 +287,12 @@ export class BUILDINGINFO extends ASObject {
                         } else if (BUILDINGINFO._props.id == BRIMSTONEPIT.ID && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                             // Inferno-only: the casino, from the player's own yard
                             _loc1_.push([BRIMSTONEPIT.OPEN_BUTTON, 30, true]);
+                        } else if (BUILDINGINFO._props.id == DEVILSARCADE.ID && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                            // Inferno-only: the arcade, from the player's own yard
+                            _loc1_.push([DEVILSARCADE.OPEN_BUTTON, 30, true]);
+                        } else if (BUILDINGINFO._props.id == SOULCRUCIBLE.ID && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                            // Inferno-only (11 November): the Soul Crucible, from the player's own yard
+                            _loc1_.push([SOULCRUCIBLE.OPEN_BUTTON, 30, true]);
                         } else if (BUILDINGINFO._props.id == 119) {
                             _loc1_.push(["btn_openchamber", 30, true]);
                         } else if (BUILDINGINFO._props.id == SiegeFactory.ID) {
@@ -230,6 +306,14 @@ export class BUILDINGINFO extends ASObject {
                     if (_loc2_ && BUILDINGINFO._props.type != "mushroom") {
                         if (BUILDINGINFO._props.type != "decoration" && BUILDINGINFO._props.id != MAPROOM.TYPE && !_loc3_) {
                             _loc1_.push(["btn_upgrade", 30]);
+                        }
+                        // Inferno-only: a sign's message written (the D.A.V.E. Club's Sign, 10 October)
+                        if (GLOBAL.INFERNO_ONLY && BUILDINGINFO._building instanceof IoSign) {
+                            _loc1_.push(["io_btn_signwrite", 30, 1]);
+                        }
+                        // Inferno-only (22 October): which champion the Champion Statues show (IoShop)
+                        if (GLOBAL.INFERNO_ONLY && IoChampionStatue.Is(BUILDINGINFO._props.id)) {
+                            _loc1_.push(["io_btn_statue", 30, 1]);
                         }
                         // Inferno-only: spent traps re-armed, all at once (IoTrapRearm, 3 October)
                         if (GLOBAL.INFERNO_ONLY && BUILDINGINFO._building instanceof BTRAP && IoTrapRearm.disarmed().length > 0) {
@@ -293,6 +377,27 @@ export class BUILDINGINFO extends ASObject {
                     _loc1_ = [[INFERNOPORTAL.ENTER_BUTTON, 30, true]];
                 }
             }
+            // (Inferno-only, QoL #14, 14 October: a job with the free time or less left is finished from here, Finish
+            // (Free); Speed up went to the full Store, then Close Enough)
+            if (GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && BUILDINGINFO._building) {
+                let ioLeft: int = BUILDINGINFO.ioJobLeft(BUILDINGINFO._building);
+                if (ioLeft > 0 && ioLeft <= GLOBAL.ioCloseEnough) {
+                    for (let ioB of _loc1_) {
+                        if (ioB[0] == "btn_speedup") {
+                            ioB[0] = "io_btn_finishfree";
+                        }
+                    }
+                }
+            }
+            // (Inferno-only, QoL #554: on a phone, Stop / Relocate last, after a gap)
+            let ioPhone: boolean = BUILDINGINFO.ioPhone;
+            let ioGapDone: boolean = false;
+            if (ioPhone) {
+                _loc1_ = BUILDINGINFO.ioDangerLast(_loc1_);
+                for (let ioRow of _loc1_) {
+                    ioRow[1] = BUILDINGINFO.IO_PHONE_ROW;
+                }
+            }
             if (BUILDINGINFO._buttonsMC) {
                 BUILDINGINFO._mc.removeChild(BUILDINGINFO._buttonsMC);
             }
@@ -301,13 +406,29 @@ export class BUILDINGINFO extends ASObject {
             while (_loc8_ < _loc1_.length) {
                 _loc14_ = new Button_CLIP();
                 BUILDINGINFO._buttonsMC.addChild(_loc14_);
+                let ioDanger: boolean = ioPhone && BUILDINGINFO.IO_DANGER.indexOf(String(_loc1_[_loc8_][0])) >= 0;
+                if (GLOBAL.INFERNO_ONLY) {
+                    _loc14_.name = "ioBld_" + _loc1_[_loc8_][0];
+                }
+                if (ioDanger && !ioGapDone && _loc8_ > 0) {
+                    _loc7_ = (_loc7_ + BUILDINGINFO.IO_PHONE_GAP) | 0;
+                }
+                if (ioDanger) {
+                    ioGapDone = true;
+                }
                 if (_loc1_[_loc8_][0] == "btn_move") {
                     _loc14_.SetupKey(as3.str(_loc1_[_loc8_][0]), false, 52, _loc1_[_loc8_][1] | 0);
                     _loc14_.x = 6;
                     _loc14_.y = _loc7_;
                     _loc7_ = (_loc7_ + (_loc14_.height + 2)) | 0;
                 } else if (_loc1_[_loc8_][0] == "btn_more") {
-                    _loc14_.SetupKey(as3.str(_loc1_[_loc8_][0]), false, 55, _loc1_[_loc8_][1] | 0);
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // (QoL #480: "Info", what it opens; the key stays btn_more for the click)
+                        _loc14_.labelKey = "btn_more";
+                        _loc14_.Setup(KEYS.Get("io_btn_info"), false, 55, _loc1_[_loc8_][1] | 0);
+                    } else {
+                        _loc14_.SetupKey(as3.str(_loc1_[_loc8_][0]), false, 55, _loc1_[_loc8_][1] | 0);
+                    }
                     _loc14_.x = 60;
                     _loc14_.y = _loc7_;
                 } else if (_loc1_[_loc8_][0] == "btn_bank") {
@@ -329,7 +450,10 @@ export class BUILDINGINFO extends ASObject {
                     _loc7_ = (_loc7_ + (_loc14_.height + 2)) | 0;
                 }
                 _loc15_ = _loc1_[_loc8_][0] == "btn_bank" ? 4 : 3;
-                if (_loc1_[_loc8_][2]) {
+                if (ioDanger) {
+                    // (QoL #554: red, as the kit's lasting choices are: IoCritterMenu)
+                    _loc14_.transform.colorTransform = new ColorTransform(1, 0.62, 0.55, 1, 40, 0, 0, 0);
+                } else if (_loc1_[_loc8_][2]) {
                     _loc14_.Highlight = true;
                 }
                 if (_loc1_[_loc8_][_loc15_]) {
@@ -377,6 +501,15 @@ export class BUILDINGINFO extends ASObject {
                     _loc9_ = KEYS.Get("ui_buildingfull");
                 }
             }
+            // (QoL #587/#590/#591: the event's ice says what it is: the tower it seals, and when the big patches go)
+            if (GLOBAL.INFERNO_ONLY && _loc9_ == "" && BUILDINGINFO._building instanceof IoHfoIce) {
+                _loc9_ = as3.cast(BUILDINGINFO._building, IoHfoIce).ioInfoText;
+            }
+            // (QoL #579: a tower with nothing else to say says what it does: its DPS, per shot × shots a second, and
+            // its range in cells)
+            if (GLOBAL.INFERNO_ONLY && _loc9_ == "" && BUILDINGINFO._building instanceof BTOWER) {
+                _loc9_ = BTOWER.ioInfoText(as3.cast(BUILDINGINFO._building, BTOWER));
+            }
             if (_loc9_ != "") {
                 if ((_loc11_ = (MAP._GROUND.x + BUILDINGINFO._mc.x) | 0) < 500) {
                     BUILDINGINFO._mc.gotoAndStop(2);
@@ -387,6 +520,8 @@ export class BUILDINGINFO extends ASObject {
                 }
                 _loc20_.autoSize = TextFieldAutoSize.CENTER;
                 _loc20_.htmlText = _loc9_;
+                // (QoL #564: the countdown on a phone not under 11)
+                IoPhoneText.floor(_loc20_, true);
                 if (_loc20_.height + 10 > _loc7_) {
                     _loc7_ = (_loc20_.height + 10) | 0;
                 }
@@ -497,6 +632,14 @@ export class BUILDINGINFO extends ASObject {
         if (param1.target.labelKey == "btn_repairall") {
             STORE.ShowB(3, 1, ["FIX"], true);
         }
+        if (param1.target.labelKey == "io_btn_repairall_free") {
+            for (let b of (InstanceManager.getInstancesByClass(BFOUNDATION) ?? [])) {
+                if (b.health < b.maxHealth && b._repairing == 0) {
+                    b.Repair();
+                }
+            }
+            SOUNDS.ioPlayFor("repair1", 0.25, 1800);
+        }
         if (param1.target.labelKey == "btn_help") {
             BUILDINGINFO._building.Help();
         }
@@ -521,6 +664,12 @@ export class BUILDINGINFO extends ASObject {
         if (param1.target.labelKey == BRIMSTONEPIT.OPEN_BUTTON) {
             CasinoWindow.Show();
         }
+        if (param1.target.labelKey == DEVILSARCADE.OPEN_BUTTON) {
+            ArcadeWindow.Show();
+        }
+        if (param1.target.labelKey == SOULCRUCIBLE.OPEN_BUTTON) {
+            IoCrucible.Show();
+        }
         if (param1.target.labelKey == SiegeLab.SIEGE_BUTTON) {
             SiegeLab.Show();
         }
@@ -543,6 +692,15 @@ export class BUILDINGINFO extends ASObject {
         if (param1.target.labelKey == "btn_fortify") {
             BUILDINGOPTIONS.Show(BUILDINGINFO._building, "fortify");
         }
+        if (param1.target.labelKey == "io_btn_relocate") {
+            IoRelocate.Ask();
+        }
+        if (param1.target.labelKey == "io_btn_signwrite") {
+            IoSign.Write(as3.as(BUILDINGINFO._building, IoSign));
+        }
+        if (param1.target.labelKey == "io_btn_statue") {
+            IoShop.chooseStatue();
+        }
         if (param1.target.labelKey == "io_btn_rearm") {
             IoTrapRearm.Show();
         }
@@ -551,7 +709,7 @@ export class BUILDINGINFO extends ASObject {
         }
         if (param1.target.labelKey == "btn_upgradeall") {
             if (BASE.isInfernoMainYardOrOutpost) {
-                STORE.ShowB(1, 0, ["BLK2I", "BLK3I"]);
+                STORE.ShowB(1, 0, ["BLK2I", "BLK3I", "BLK4I", "BLK5I"]);
             } else {
                 STORE.ShowB(1, 0, ["BLK2", "BLK3", "BLK4", "BLK5"]);
             }
@@ -578,6 +736,13 @@ export class BUILDINGINFO extends ASObject {
                 STORE.SpeedUp("SP4");
             } else if (BUILDINGINFO._props.type == "resource") {
                 STORE.ShowB(3, 1, ["POD"]);
+            }
+        }
+        if (param1.target.labelKey == "io_btn_finishfree") {
+            GLOBAL._selectedBuilding = BUILDINGINFO._building;
+            if (BUILDINGINFO.ioJobLeft(BUILDINGINFO._building) > 0) {
+                STORE.CalcCost("SP1");
+                STORE.BuyB("SP1");
             }
         }
         if (param1.target.labelKey == "io_btn_overdrive") {

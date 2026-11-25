@@ -14,6 +14,31 @@ import { Status } from "../enums/StatusCodes.js";
 const MAX_WAITING = 40;
 const queues = new Map<number, { tail: Promise<void>; waiting: number }>();
 
+/**
+ * And the whole Pit's requests, a few at a time (9 October, the user's: "Make gambling not slow the server down
+ * for other users"): however many players gamble at once, at most AT_ONCE of their requests use the database
+ * together (two in five of the pool's connections, DB_POOL_MAX, 20 by default: 8). The rest wait their turn here,
+ * in memory, first come first served, and the other requests of the game (yards loaded and saved, attacks, the map,
+ * chat) always find connections free. A player's turn comes quickly: a bet takes a few milliseconds.
+ */
+const AT_ONCE = Math.max(2, Math.floor((Number(process.env.DB_POOL_MAX) || 20) * 0.4));
+let running = 0;
+const turns: (() => void)[] = [];
+
+const takeTurn = (): Promise<void> => {
+  if (running < AT_ONCE) {
+    running++;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => turns.push(resolve));
+};
+
+const giveTurn = () => {
+  const next = turns.shift();
+  if (next) next();
+  else running--;
+};
+
 export const casinoOneAtATime = async (ctx: Context, next: Next) => {
   const userid: number | undefined = ctx.authUser?.userid;
   if (!userid) return next();
@@ -35,13 +60,21 @@ export const casinoOneAtATime = async (ctx: Context, next: Next) => {
   entry.tail = before.then(() => mine);
   try {
     await before;
-    await next();
+    await takeTurn();
+    try {
+      await next();
+    } finally {
+      giveTurn();
+    }
   } finally {
     release();
     entry.waiting--;
     if (entry.waiting === 0 && queues.get(userid) === entry) queues.delete(userid);
   }
 };
+
+/** (tests) the Pit's requests using the database now, and waiting for a turn */
+export const casinoTurns = () => ({ running, waiting: turns.length, atOnce: AT_ONCE });
 
 /** (tests) how many players have casino requests waiting or running */
 export const casinoQueueSize = () => queues.size;

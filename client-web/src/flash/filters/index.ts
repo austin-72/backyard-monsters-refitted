@@ -15,6 +15,13 @@ export abstract class BitmapFilter extends ASObject {
 }
 flashClass(BitmapFilter, "flash.filters.BitmapFilter");
 
+/**
+ * Inferno-only (QoL #242): the page's "Glow effects" switch (src/player/Shell.ts). noGlow: every GlowFilter draws
+ * the object as it is, without its glow (the costliest filter: a blur for each glowing monster in a battle, every
+ * frame). epoch changes with it: the layers already filtered (display/core renderWithEffects) are made again.
+ */
+export const filterSettings = { noGlow: false, epoch: 0 };
+
 export const BitmapFilterQuality: any = class BitmapFilterQuality {};
 flashClass(BitmapFilterQuality, "flash.filters.BitmapFilterQuality");
 export const BitmapFilterType: any = class BitmapFilterType {};
@@ -38,6 +45,22 @@ function layer(w: number, h: number, reuse?: HTMLCanvasElement | null): [HTMLCan
   c.width = w; c.height = h;
   return [c, context2d(c)];
 }
+/**
+ * (19 October) One canvas for a shadow blurred once (shadow), reused: never a result, never a source. It only grows
+ * (a canvas made again for every size was its own cost): w x h at its top left is emptied and used.
+ */
+let blurCanvas: HTMLCanvasElement | null = null;
+function blurScratch(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const c = blurCanvas ?? (blurCanvas = document.createElement("canvas"));
+  if (c.width < w || c.height < h) { c.width = Math.max(c.width, w); c.height = Math.max(c.height, h); }
+  const ctx = context2d(c);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1; ctx.globalCompositeOperation = "source-over"; ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+  ctx.clearRect(0, 0, w, h);
+  // (what is drawn is kept to w x h: a shadow reaching past it would be left there for the next, and drawn with it)
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.clip();
+  return [c, ctx];
+}
 /** Gaussian sigma matching Flash's `quality` passes of a box blur of width `blur`. */
 function sigma(blur: number, quality: number, scale: number): number {
   return Math.max(0, (blur * Math.sqrt(Math.max(1, quality)) * scale) / 3.4);
@@ -51,12 +74,25 @@ function shadow(src: HTMLCanvasElement, color: number, alpha: number, bx: number
   const s = sigma(Math.max(bx, by), quality, scale);
   const reps = Math.max(1, Math.min(8, Math.round(strength)));
   if (!inner) {
-    ctx.shadowColor = cssColor(color, Math.min(1, alpha * Math.min(1, strength)));
-    ctx.shadowBlur = s * 2;
-    ctx.shadowOffsetX = dx * scale + FAR;
-    ctx.shadowOffsetY = dy * scale;
-    for (let i = 0; i < reps; i++) ctx.drawImage(src, -FAR, 0);
-    ctx.shadowColor = "transparent";
+    if (reps > 1) {
+      // (19 October: the shadow blurred once and laid down strength times, not blurred again for each: the same pixels, a
+      // glow of strength 6 or 8 (the Pit's toasts and labels) was six or eight blurs of its whole layer)
+      const [one, octx] = blurScratch(w, h);
+      octx.shadowColor = cssColor(color, Math.min(1, alpha * Math.min(1, strength)));
+      octx.shadowBlur = s * 2;
+      octx.shadowOffsetX = dx * scale + FAR;
+      octx.shadowOffsetY = dy * scale;
+      octx.drawImage(src, -FAR, 0);
+      octx.restore();
+      for (let i = 0; i < reps; i++) ctx.drawImage(one, 0, 0, w, h, 0, 0, w, h);
+    } else {
+      ctx.shadowColor = cssColor(color, Math.min(1, alpha * Math.min(1, strength)));
+      ctx.shadowBlur = s * 2;
+      ctx.shadowOffsetX = dx * scale + FAR;
+      ctx.shadowOffsetY = dy * scale;
+      ctx.drawImage(src, -FAR, 0);
+      ctx.shadowColor = "transparent";
+    }
     if (knockout) { ctx.globalCompositeOperation = "destination-out"; ctx.drawImage(src, 0, 0); }
     else if (!hideObject) { ctx.globalCompositeOperation = "destination-over"; ctx.drawImage(src, 0, 0); ctx.globalCompositeOperation = "source-over"; ctx.drawImage(src, 0, 0); }
     return out;
@@ -68,11 +104,15 @@ function shadow(src: HTMLCanvasElement, color: number, alpha: number, bx: number
   ictx.globalCompositeOperation = "destination-out";
   ictx.drawImage(src, 0, 0);
   const [sh, sctx] = layer(w, h);
-  sctx.shadowColor = cssColor(color, Math.min(1, alpha));
-  sctx.shadowBlur = s * 2;
-  sctx.shadowOffsetX = dx * scale + FAR;
-  sctx.shadowOffsetY = dy * scale;
-  for (let i = 0; i < reps; i++) sctx.drawImage(inv, -FAR, 0);
+  // (the same: blurred once, laid down strength times)
+  const [one, octx] = blurScratch(w, h);
+  octx.shadowColor = cssColor(color, Math.min(1, alpha));
+  octx.shadowBlur = s * 2;
+  octx.shadowOffsetX = dx * scale + FAR;
+  octx.shadowOffsetY = dy * scale;
+  octx.drawImage(inv, -FAR, 0);
+  octx.restore();
+  for (let i = 0; i < reps; i++) sctx.drawImage(one, 0, 0, w, h, 0, 0, w, h);
   if (!knockout && !hideObject) ctx.drawImage(src, 0, 0);
   else { ctx.drawImage(src, 0, 0); ctx.globalCompositeOperation = "source-in"; ctx.fillStyle = "rgba(0,0,0,0)"; }
   ctx.globalCompositeOperation = "source-atop";
@@ -104,8 +144,14 @@ export class GlowFilter extends BitmapFilter {
     Object.assign(this, { color, alpha, blurX, blurY, strength, quality, inner, knockout });
   }
   clone(): GlowFilter { return new GlowFilter(this.color, this.alpha, this.blurX, this.blurY, this.strength, this.quality, this.inner, this.knockout); }
-  $padding(): number { return Math.max(this.blurX, this.blurY) * 1.5; }
+  $padding(): number { return filterSettings.noGlow ? 0 : Math.max(this.blurX, this.blurY) * 1.5; }
   $apply(src: HTMLCanvasElement, scale: number, reuse?: HTMLCanvasElement | null): HTMLCanvasElement {
+    // (QoL #242: glows switched off on the page: the object as it is; a knockout glow, which shows only the glow, shows nothing)
+    if (filterSettings.noGlow) {
+      if (!this.knockout) return src;
+      const [out] = layer(src.width, src.height, reuse !== src ? reuse : null);
+      return out;
+    }
     return shadow(src, this.color, this.alpha, this.blurX, this.blurY, this.quality, this.strength, 0, 0, this.inner, this.knockout, false, scale, reuse);
   }
 }

@@ -5,16 +5,18 @@ import { BaseType } from "../../enums/Base.js";
 import { postgres } from "../../server.js";
 import { casinoConfig } from "../../config/CasinoConfig.js";
 import { parseInput } from "../../schemas/parseInput.js";
-import { CasinoHistorySchema, MagmaDropSchema, RotateSeedSchema, RouletteSpinSchema, ScratchBuySchema, SlotsSpinSchema, FortuneSpinSchema, FavorSpinSchema, CasinoLiveSchema, BonePileStartSchema, BonePileRevealSchema, BonePileCashoutSchema, AscentBetSchema, AscentCashoutSchema, DerbyBetSchema } from "../../schemas/CasinoSchemas.js";
+import { CasinoHistorySchema, MagmaDropSchema, RotateSeedSchema, RouletteSpinSchema, ScratchBuySchema, SlotsSpinSchema, FortuneSpinSchema, FavorSpinSchema, CasinoLiveSchema, BonePileStartSchema, BonePileRevealSchema, BonePileCashoutSchema, BlackjackStartSchema, BlackjackActSchema, HiLoStartSchema, HiLoGuessSchema, HiLoCashoutSchema, DealStartSchema, DealOpenSchema, DealDecideSchema, AscentBetSchema, AscentCashoutSchema, DerbyBetSchema, DiceSitSchema, DiceStateSchema, DiceBetSchema, DiceBankSchema } from "../../schemas/CasinoSchemas.js";
 import { casinoErr, checkStake, pitState, requireCasino } from "../../services/casino/access.js";
-import { betHistory, favorReady, jackpotPool, liveBets, sqlAll, playInstant, readSeed, revealedSeeds, rotateSeed, settleJackpot } from "../../services/casino/wallet.js";
+import { betHistory, favorReady, feedJackpot, jackpotPool, liveBets, sqlAll, playInstant, readSeed, revealedSeeds, rotateSeed, settleJackpot } from "../../services/casino/wallet.js";
 import { playMagmaDrop } from "../../services/casino/games/magmaDrop.js";
 import { playScratch } from "../../services/casino/games/scratchers.js";
 import { playRoulette, rouletteTargets, rouletteWheel } from "../../services/casino/games/roulette.js";
 import { FORTUNE_LINES, playFortune, playSlots, type FortuneOutcome, type SlotsOutcome } from "../../services/casino/games/slots.js";
-import { ascentState, betAscent, cashoutAscent } from "../../services/casino/ascentRounds.js";
-import { betDerby, derbyState } from "../../services/casino/derbyRounds.js";
+import { ascentState, betAscent, cashoutAscent, takeBackAscent } from "../../services/casino/ascentRounds.js";
+import { betDerby, derbyState, takeBackDerby } from "../../services/casino/derbyRounds.js";
+import { bankDice, betDice, diceState, diceTables, leaveDice, sitDice, takeBackDice } from "../../services/casino/diceRounds.js";
 import { cashoutBonePile, openBonePile, revealBonePile, settleIdleBonePiles, startBonePile } from "../../services/casino/bonePileSessions.js";
+import { actBlackjack, cashoutHiLo, decideDeal, guessHiLo, openBlackjack, openDeal, openDealCoffin, openHiLo, settleIdleCardGames, startBlackjack, startDeal, startHiLo } from "../../services/casino/cardSessions.js";
 import { isShinyLocked, visibleCredits } from "../../services/user/shinyLock.js";
 
 /**
@@ -29,8 +31,11 @@ const balance = async (user: User): Promise<number> => {
 
 /** The shared games' rounds now, for the lobby's tiles ("Flying", "Next race in 3:12"). */
 const liveRounds = async () => {
+  // (each game's latest round from its index: the rounds table only grows, a round every few seconds, and the
+  // whole of it was gone through for this; 9 October)
   const rows = (await postgres.em.getConnection().execute(
-    `SELECT game, status, betting_opens_at, starts_at FROM bym.casino_round WHERE id IN (SELECT max(id) FROM bym.casino_round GROUP BY game)`, [], "all")) as
+    `SELECT r.game, r.status, r.betting_opens_at, r.starts_at FROM (VALUES ('ascent'), ('derby'), ('dice')) g(game)
+       CROSS JOIN LATERAL (SELECT game, status, betting_opens_at, starts_at FROM bym.casino_round WHERE game = g.game ORDER BY id DESC LIMIT 1) r`, [], "all")) as
     { game: string; status: string; betting_opens_at: Date; starts_at: Date }[];
   const now = Date.now();
   const live: Record<string, { phase: string; starts_at: number }> = {};
@@ -38,7 +43,7 @@ const liveRounds = async () => {
     const opens = new Date(r.betting_opens_at).getTime();
     live[r.game] = { phase: r.status === "running" ? "running" : r.status === "settled" || now < opens ? "between" : "betting", starts_at: new Date(r.starts_at).getTime() };
   }
-  return { ...live, server_ts: now };
+  return { ...live, dice_tables: diceTables(), server_ts: now };
 };
 
 /** casino/state: the lobby's picture of the Pit, the player's seeds and every game's rules. */
@@ -47,6 +52,7 @@ export const casinoState: KoaController = async (ctx) => {
   const pit = await pitState(user);
   // (a Bone Pile game of theirs left alone for a day is settled before it is shown)
   await settleIdleBonePiles(user.userid);
+  await settleIdleCardGames(user.userid);
   const seed = await readSeed(user.userid);
   const locked = isShinyLocked(user);
   ctx.status = Status.OK;
@@ -63,7 +69,12 @@ export const casinoState: KoaController = async (ctx) => {
       open: casinoConfig.unlockLevel[g.id] != null,
       unlocked: casinoConfig.unlockLevel[g.id] != null && pit.level >= casinoConfig.unlockLevel[g.id],
     })),
-    limits: { min_bet: casinoConfig.minBet, max_bet: casinoConfig.maxBet, max_multiplier: casinoConfig.maxMultiplier },
+    // (the largest bet as checkStake has it: no bigger than its biggest win can be paid; the bet field knows it; 9 October)
+    limits: {
+      min_bet: casinoConfig.minBet,
+      max_bet: Math.min(casinoConfig.maxBet > 0 ? casinoConfig.maxBet : Infinity, Math.floor(2_147_483_647 / Math.max(1, casinoConfig.maxMultiplier)), 1_000_000_000),
+      max_multiplier: casinoConfig.maxMultiplier,
+    },
     rules: {
       magmadrop: casinoConfig.magmaDrop,
       scratch: casinoConfig.scratch,
@@ -78,10 +89,16 @@ export const casinoState: KoaController = async (ctx) => {
         jackpot_max: casinoConfig.jackpotMax,
       },
       fortune: { lines: FORTUNE_LINES },
+      blackjack: { ...casinoConfig.blackjack },
+      hilo: { rtp: casinoConfig.hilo.rtp, max_skips: casinoConfig.hilo.maxSkips, max_multiplier: casinoConfig.maxMultiplier },
+      deal: { prizes: casinoConfig.deal.prizes, rounds: casinoConfig.deal.rounds, offers: casinoConfig.deal.offers },
     },
     jackpot: await jackpotPool(),
     favor: await favorState(user, pit.level),
     bonepile: await openBonePile(user.userid),
+    blackjack: await openBlackjack(user.userid),
+    hilo: await openHiLo(user.userid),
+    deal: await openDeal(user.userid),
     live: await liveRounds(),
     seed: { server_seed_hash: seed.server_seed_hash, client_seed: seed.client_seed, nonce: seed.nonce },
     credits: await balance(user),
@@ -103,8 +120,12 @@ export const casinoRotateSeed: KoaController = async (ctx) => {
 export const casinoHistory: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
   const { limit } = parseInput(CasinoHistorySchema, ctx.request.body ?? {});
+  // (QoL #392: `before`, the oldest bet the History tab has: the bets before it, its Older. Read here, the schema has
+  // only `limit`; anything but a whole number above 0 is none)
+  const rawBefore = Number((ctx.request.body as Record<string, unknown> | undefined)?.before);
+  const before = Number.isSafeInteger(rawBefore) && rawBefore > 0 ? rawBefore : 0;
   ctx.status = Status.OK;
-  ctx.body = { error: 0, bets: await betHistory(user.userid, limit ?? casinoConfig.historyLimit), revealed_seeds: await revealedSeeds(user.userid) };
+  ctx.body = { error: 0, bets: await betHistory(user.userid, limit ?? casinoConfig.historyLimit, before), revealed_seeds: await revealedSeeds(user.userid) };
 };
 
 /** casino/magmadrop/play: one ball. */
@@ -162,6 +183,16 @@ export const rouletteSpin: KoaController = async (ctx) => {
   ctx.body = { error: 0, ...r.outcome, bet: r.stake, payout: r.payout, nonce: r.nonce, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
 };
 
+/**
+ * The jackpot pool to show after a spin: a spin sent again shows the pool now; one that won it, the pool it left;
+ * any other adds its part (`feedJackpot`, after its bet is written, so spins do not wait their turn at the pool).
+ */
+const poolAfter = async (r: { replayed: boolean; outcome: { line?: string; pool: number } }, stake: number): Promise<number> => {
+  if (r.replayed) return jackpotPool();
+  if (r.outcome.line === "jackpot") return r.outcome.pool;
+  return feedJackpot(stake);
+};
+
 /** casino/slots/spin: one pull; a part of it goes into the jackpot pool, which three King Wormzer win. */
 export const slotsSpin: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
@@ -171,14 +202,14 @@ export const slotsSpin: KoaController = async (ctx) => {
   type Out = SlotsOutcome & { jackpot_won: number; jackpot_share: number; pool: number };
   const r = await playInstant<Out>(user, "slots", request_id, bet, (rng) => {
     const o = playSlots(casinoConfig.slots, rng);
-    return { multiplier: o.multiplier, outcome: { ...o, jackpot_won: 0, jackpot_share: 0, pool: 0 } };
+    return { multiplier: o.multiplier, outcome: { ...o, jackpot_won: 0, jackpot_share: 0, pool: 0 }, keep: o.line === "jackpot" };
   }, async (em, played, stake, userid) => {
     const j = await settleJackpot(em, stake, played.outcome.line === "jackpot", userid);
     return { bonus: j.bonus, outcome: { ...played.outcome, jackpot_won: j.bonus, jackpot_share: j.share, pool: j.pool } };
   });
   ctx.status = Status.OK;
-  // (a spin sent again: its own pool is old news, the pool now is shown)
-  const pool = r.replayed ? await jackpotPool() : r.outcome.pool;
+  // (a spin sent again: its own pool is old news, the pool now is shown; a spin that did not win it adds its part now)
+  const pool = await poolAfter(r, bet);
   ctx.body = { error: 0, ...r.outcome, pool, bet: r.stake, payout: r.payout, nonce: r.nonce, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
 };
 
@@ -194,13 +225,13 @@ export const fortuneSpin: KoaController = async (ctx) => {
   type Out = FortuneOutcome & { jackpot_won: number; jackpot_share: number; pool: number };
   const r = await playInstant<Out>(user, "fortune", request_id, bet, (rng) => {
     const o = playFortune(casinoConfig.slots, rng);
-    return { multiplier: o.multiplier, outcome: { ...o, jackpot_won: 0, jackpot_share: 0, pool: 0 } };
+    return { multiplier: o.multiplier, outcome: { ...o, jackpot_won: 0, jackpot_share: 0, pool: 0 }, keep: o.line === "jackpot" };
   }, async (em, played, stake, userid) => {
     const j = await settleJackpot(em, stake, played.outcome.line === "jackpot", userid, stake / FORTUNE_LINES.length);
     return { bonus: j.bonus, outcome: { ...played.outcome, jackpot_won: j.bonus, jackpot_share: j.share, pool: j.pool } };
   });
   ctx.status = Status.OK;
-  const pool = r.replayed ? await jackpotPool() : r.outcome.pool;
+  const pool = await poolAfter(r, bet);
   ctx.body = { error: 0, ...r.outcome, pool, bet: r.stake, payout: r.payout, nonce: r.nonce, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
 };
 
@@ -225,7 +256,7 @@ export const favorSpin: KoaController = async (ctx) => {
   type Out = SlotsOutcome & { jackpot_won: number; jackpot_share: number; pool: number; free_bet: number };
   const r = await playInstant<Out>(user, "favor", request_id, bet, (rng) => {
     const o = playSlots(casinoConfig.slots, rng);
-    return { multiplier: o.multiplier, outcome: { ...o, jackpot_won: 0, jackpot_share: 0, pool: 0, free_bet: bet } };
+    return { multiplier: o.multiplier, outcome: { ...o, jackpot_won: 0, jackpot_share: 0, pool: 0, free_bet: bet }, keep: o.line === "jackpot" };
   }, async (em, played, stake, userid) => {
     // today's, once (a request sent again is answered from the ledger before this)
     const day = await sqlAll(em,
@@ -237,7 +268,8 @@ export const favorSpin: KoaController = async (ctx) => {
     return { bonus: j.bonus, outcome: { ...played.outcome, jackpot_won: j.bonus, jackpot_share: j.share, pool: j.pool } };
   }, true);
   ctx.status = Status.OK;
-  const pool = r.replayed ? await jackpotPool() : r.outcome.pool;
+  // (a free spin adds nothing to the pool)
+  const pool = await poolAfter(r, 0);
   ctx.body = { error: 0, ...r.outcome, pool, bet: r.outcome.free_bet ?? bet, free: true, payout: r.payout, nonce: r.nonce, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
 };
 
@@ -278,6 +310,84 @@ export const bonePileCashout: KoaController = async (ctx) => {
   const r = await cashoutBonePile(user, session_id);
   ctx.status = Status.OK;
   ctx.body = { error: 0, ...r.view, payout: r.payout, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/blackjack/start: a hand dealt (the bet taken); a blackjack on either side settles it at once. */
+export const blackjackStart: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { request_id, bet } = parseInput(BlackjackStartSchema, ctx.request.body);
+  checkStake(bet);
+  await requireCasino(user, "blackjack");
+  const r = await startBlackjack(user, request_id, bet);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, payout: r.payout, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/blackjack/act: hit, stand, double or split. (A hand once dealt can be finished even if the Pit is not open.) */
+export const blackjackAct: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { session_id, action } = parseInput(BlackjackActSchema, ctx.request.body);
+  const r = await actBlackjack(user, session_id, action);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, payout: r.payout, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/hilo/start: a game started, its first card shown. */
+export const hiloStart: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { request_id, bet } = parseInput(HiLoStartSchema, ctx.request.body);
+  checkStake(bet);
+  await requireCasino(user, "hilo");
+  const r = await startHiLo(user, request_id, bet);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/hilo/guess: higher, lower or skip; the next card. */
+export const hiloGuess: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { session_id, guess } = parseInput(HiLoGuessSchema, ctx.request.body);
+  const r = await guessHiLo(user, session_id, guess);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, right: r.right, payout: r.payout, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/hilo/cashout: paid at the multiplier reached; the game's cards shown. */
+export const hiloCashout: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { session_id } = parseInput(HiLoCashoutSchema, ctx.request.body);
+  const r = await cashoutHiLo(user, session_id);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, payout: r.payout, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/deal/start: a game started, the player's coffin kept (the bet taken). */
+export const dealStart: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { request_id, bet, coffin } = parseInput(DealStartSchema, ctx.request.body);
+  checkStake(bet);
+  await requireCasino(user, "deal");
+  const r = await startDeal(user, request_id, bet, coffin);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, replayed: r.replayed, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/deal/open: a coffin opened (its prize shown); the round's last brings the Devil's offer. */
+export const dealOpen: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { session_id, coffin } = parseInput(DealOpenSchema, ctx.request.body);
+  const r = await openDealCoffin(user, session_id, coffin);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, coffin, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/deal/decide: deal, no deal; keep or swap. */
+export const dealDecide: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { session_id, choice } = parseInput(DealDecideSchema, ctx.request.body);
+  const r = await decideDeal(user, session_id, choice);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r.view, payout: r.payout, credits: visibleCredits(user, r.credits) };
 };
 
 /** casino/ascent/state: the round everyone is on (polled about once a second by the game). */
@@ -333,6 +443,83 @@ export const derbyBet: KoaController = async (ctx) => {
   checkStake(placed.reduce((a, b) => a + b.amount, 0));
   await requireCasino(user, "derby");
   const r = await betDerby(user, request_id, round_id, placed);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/dice/sit: a seat at a Devil's Dice table (the one asked for if it has room). */
+export const diceSit: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { table } = parseInput(DiceSitSchema, ctx.request.body ?? {});
+  await requireCasino(user, "dice");
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...sitDice(user, table ?? null), tables: diceTables() };
+};
+
+/** casino/dice/leave: up from the table. */
+export const diceLeave: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...leaveDice(user) };
+};
+
+/** casino/dice/state: the table and its round (polled by the game, which keeps the seat). */
+export const diceStateCtl: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { table } = parseInput(DiceStateSchema, ctx.request.body ?? {});
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...(await diceState(user, table)), credits: await balance(user) };
+};
+
+/** casino/dice/bet: a bet on the table's round open for bets, banked by hand or after `auto` throws. */
+export const diceBet: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { request_id, round_id, bet, auto } = parseInput(DiceBetSchema, ctx.request.body);
+  checkStake(bet);
+  const max = casinoConfig.dice.maxRolls;
+  if (auto != null && (auto < 1 || auto > max)) throw casinoErr(`Bank after 1 to ${max} throws.`);
+  await requireCasino(user, "dice");
+  const r = await betDice(user, request_id, round_id, bet, auto ?? null);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r, credits: visibleCredits(user, r.credits) };
+};
+
+/** casino/dice/bank: banked by hand, after the throws the server's clock says are done (or too late). */
+export const diceBank: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { round_id } = parseInput(DiceBankSchema, ctx.request.body);
+  const r = await bankDice(user, round_id);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r, credits: visibleCredits(user, r.credits) };
+};
+
+/**
+ * Inferno-only (QoL #504): casino/ascent/takeback, casino/derby/takeback, casino/dice/takeback { round_id }: the
+ * player's own bet (every slip, on the Derby) on a round that hasn't started taken back, its stake paid back once
+ * (services/casino/wallet.ts refundOpenBets). Too late, or no bet: { error }. Like a cash-out, it needs no Pit level
+ * (the bet was placed when the player had it).
+ */
+export const ascentTakeBack: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { round_id } = parseInput(AscentCashoutSchema, ctx.request.body);
+  const r = await takeBackAscent(user, round_id);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r, credits: visibleCredits(user, r.credits) };
+};
+
+export const derbyTakeBack: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  // (the same { round_id } as Devil's Dice's bank)
+  const { round_id } = parseInput(DiceBankSchema, ctx.request.body);
+  const r = await takeBackDerby(user, round_id);
+  ctx.status = Status.OK;
+  ctx.body = { error: 0, ...r, credits: visibleCredits(user, r.credits) };
+};
+
+export const diceTakeBack: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  const { round_id } = parseInput(DiceBankSchema, ctx.request.body);
+  const r = await takeBackDice(user, round_id);
   ctx.status = Status.OK;
   ctx.body = { error: 0, ...r, credits: visibleCredits(user, r.credits) };
 };

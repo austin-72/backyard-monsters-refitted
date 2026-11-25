@@ -234,7 +234,7 @@ export class WMIROUNDCOMPLETE extends ROUNDCOMPLETEPOPUP_CLIP {
                 _loc3_.Repair();
             }
         }
-        SOUNDS.Play("repair1", 0.25);
+        SOUNDS.ioPlayFor("repair1", 0.25, 1800);
         this.Hide();
     }
 

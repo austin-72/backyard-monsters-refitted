@@ -208,7 +208,7 @@ export class AutoBankManager extends ASObject {
         let _loc4_: int = 0;
         let _loc5_: SecNum = null;
         let _loc6_: any[] = null;
-        let _loc7_: SecNum = null;
+        let _loc7_: number = 1;
         let _loc8_: Vector<string> = null;
         let _loc9_: int = 0;
         let _loc10_: string = null;
@@ -223,15 +223,13 @@ export class AutoBankManager extends ASObject {
             }
             _loc5_ = new SecNum(0);
             _loc6_ = [new SecNum(0), new SecNum(0), new SecNum(0), new SecNum(0)];
-            if (GLOBAL._harvesterOverdrive >= GLOBAL.Timestamp() && Boolean(GLOBAL._harvesterOverdrivePower.Get())) {
-                _loc7_ = GLOBAL._harvesterOverdrivePower;
-            } else {
-                _loc7_ = new SecNum(1);
-            }
+            // (Inferno-only, 22 October: Production Overdrive or the alliance's Harvest Moon, the stronger)
+            _loc7_ = GLOBAL.ioHarvestMul();
             _loc4_ = 1;
             while (_loc4_ < AutoBankManager.k_MAX_RESOURCES) {
                 if (Boolean(_loc3_["r" + _loc4_]) && Boolean(_loc3_["r" + _loc4_].Get())) {
-                    _loc6_[_loc4_ - 1].Set(BASE.Fund(_loc4_, _loc3_["r" + _loc4_].Get() * _loc7_.Get() * param1 / 10, false, null, false, false));
+                    // (13 November: the Devil's Contract per resource: GLOBAL.ioHarvestMulFor)
+                    _loc6_[_loc4_ - 1].Set(BASE.Fund(_loc4_, _loc3_["r" + _loc4_].Get() * GLOBAL.ioHarvestMulFor(_loc4_) * param1 / 10, false, null, false, false));
                     _loc5_.Add(Number(_loc6_[_loc4_ - 1].Get()));
                 }
                 if (param1 > 10 || AutoBankManager.s_logCounter == 0) {

@@ -1,10 +1,12 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
+import { DisplayObject, MovieClip, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { Point } from "flash/geom";
+import { Point, Rectangle } from "flash/geom";
+import { SharedObject } from "flash/net";
 import { TextFieldAutoSize } from "flash/text";
 import { Dictionary, getTimer } from "flash/utils";
-import { ACHIEVEMENTS, ALLIANCES, AttackEvent, BASE, BFOUNDATION, BMUSHROOM, BUILDING14, BYMConfig, CHAMPIONCAGE, CREATURELOCKER, CREATURES, CREEPS, ChampionBase, DROPZONE, EnumYardType, GLOBAL, IAttackable, INFERNOPORTAL, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_EMERGENCE_POPUPS, InstanceManager, IoQuests, IoReplayRecorder, KEYS, Krallen, LOGGER, LOGIN, MAP, MAPROOM, MAPROOM_DESCENT, MapRoom3AttackFinishedPopup, MapRoomManager, MonsterBase, MonsterData, POPUPS, POWERUPS, ParticleDamageItem, ParticleLoot, ParticleText, ParticleVacuumLoot, Player, ResourceBombs, SOUNDS, SPECIALEVENT, STORE, ScrollSet, SecNum, SiegeWeapons, TRIBES, TUTORIAL, UI2, WMATTACK, WMBASE, YARD_PROPS, frame, popup_attack_log, popup_attackend, popup_damaged_ai, popup_defense, popup_taunt_friend } from "@game";
+import { IoBrag, IoTestMode, IoToast, IoTrapRearm, ACHIEVEMENTS, ALLIANCES, AttackEvent, BASE, BFOUNDATION, BMUSHROOM, BRESOURCE, BSTORAGE, BUILDING14, BYMChat, BYMConfig, IoGauntlet, IoMapUi, IoReplays, CHAMPIONCAGE, CREATURELOCKER, CREATURES, CREEPS, ChampionBase, DROPZONE, EnumYardType, GLOBAL, IAttackable, INFERNOPORTAL, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_EMERGENCE_POPUPS, InstanceManager, IoQuests, IoReplayRecorder, IoSiege, KEYS, Krallen, LOGGER, LOGIN, MAP, MAPROOM, MAPROOM_DESCENT, MapRoom3AttackFinishedPopup, MapRoomManager, MonsterBase, MonsterData, POPUPS, POWERUPS, ParticleDamageItem, ParticleLoot, ParticleText, ParticleVacuumLoot, Player, ResourceBombs, SOUNDS, SPECIALEVENT, STORE, ScrollSet, SecNum, SiegeWeapons, TRIBES, TUTORIAL, UI2, WMATTACK, WMBASE, YARD_PROPS, frame, popup_attack_log, popup_attackend, popup_damaged_ai, popup_defense, popup_taunt_friend } from "@game";
 
 export class ATTACK extends ASObject {
     public static USE_CUMULATIVE_FLINGER_CAPACITY: boolean; // const
@@ -77,20 +79,81 @@ export class ATTACK extends ASObject {
 
     public static _creaturesLoaded: SecNum;
 
+    /** Inferno-only quest book: the attacker's monsters lost this attack (CREEPS). */
+    public static ioLost: int;
+
     private static m_recentlyAttacked: Dictionary;
 
     private static m_lastAttackTime: int;
 
     public static _curCreaturesAvailable: any[];
 
+    // ---- Inferno-only (QoL #71): yards of the player's that keep their monsters at home in an attack from the map
+    /**
+     * The base ids (strings, as keys) of the player's yards that send no monsters: PopupAttackA counts the monsters
+     * without them and leaves them out of GLOBAL._attackerCellsInRange, so BASE's save takes nothing from them. Kept
+     * in this browser (per player) once loaded.
+     */
+    public static ioExcluded: any = null;
+
+    private static ioExcludedLoad(): any {
+        if (ATTACK.ioExcluded) {
+            return ATTACK.ioExcluded;
+        }
+        ATTACK.ioExcluded = {};
+        try {
+            let so: SharedObject = SharedObject.getLocal("bymr_data", "/");
+            let kept: any = so.data["ioAtkHome" + LOGIN._playerID];
+            if (kept && typeof kept == "object") {
+                for (let k in kept) {
+                    if (kept[k]) {
+                        ATTACK.ioExcluded[k] = true;
+                    }
+                }
+            }
+        } catch (e) {
+        }
+        return ATTACK.ioExcluded;
+    }
+
+    /** A yard (a MapRoomCell, or its base id) stays home: its monsters aren't sent. */
+    public static ioIsExcluded(cell: any): boolean {
+        if (!GLOBAL.INFERNO_ONLY || cell == null) {
+            return false;
+        }
+        let id: string = typeof cell == "object" ? String(cell.baseID != null ? cell.baseID : cell._baseID) : String(cell);
+        return Boolean(ATTACK.ioExcludedLoad()[id]);
+    }
+
+    /** Sets whether a yard (a MapRoomCell, or its base id) stays home, and keeps it. */
+    public static ioSetExcluded(cell: any, home: boolean): void {
+        if (cell == null) {
+            return;
+        }
+        let id: string = typeof cell == "object" ? String(cell.baseID != null ? cell.baseID : cell._baseID) : String(cell);
+        let set: any = ATTACK.ioExcludedLoad();
+        if (home) {
+            set[id] = true;
+        } else {
+            delete set[id];
+        }
+        try {
+            let so: SharedObject = SharedObject.getLocal("bymr_data", "/");
+            so.data["ioAtkHome" + LOGIN._playerID] = set;
+            so.flush();
+        } catch (e) {
+        }
+    }
+
     static {
-        as3.lazyStatics(this, { USE_CUMULATIVE_FLINGER_CAPACITY: false, _damageGrid: null, _loot: null, _hpLoot1: 0, _hpLoot2: 0, _hpLoot3: 0, _hpLoot4: 0, _log: null, _dropZone: null, _flingerCooldown: 0, _flingerCooling: 0, _flingerBucket: null, _bombSize: 0, _countdown: 0, _attackStart: 0, _sentOver: false, m_waitingForSaveToComplete: false, _flingValue: 0, _flingCount: 0, _logOpen: false, _shownLog: false, _acted: false, _healthOnStart: NaN, _healthOnComplete: NaN, _taunted: false, _tauntThreshold: NaN, _attackLog: null, _shownAIPopup: false, _shownFinal: false, _flungSpace: null, _deltaLoot: null, _hpDeltaLoot: null, _savedDeltaLoot: null, _creaturesFlung: null, _creaturesLoaded: null, m_recentlyAttacked: null, m_lastAttackTime: 0, _curCreaturesAvailable: null }, () => {
+        as3.lazyStatics(this, { USE_CUMULATIVE_FLINGER_CAPACITY: false, _damageGrid: null, _loot: null, _hpLoot1: 0, _hpLoot2: 0, _hpLoot3: 0, _hpLoot4: 0, _log: null, _dropZone: null, _flingerCooldown: 0, _flingerCooling: 0, _flingerBucket: null, _bombSize: 0, _countdown: 0, _attackStart: 0, _sentOver: false, m_waitingForSaveToComplete: false, _flingValue: 0, _flingCount: 0, _logOpen: false, _shownLog: false, _acted: false, _healthOnStart: NaN, _healthOnComplete: NaN, _taunted: false, _tauntThreshold: NaN, _attackLog: null, _shownAIPopup: false, _shownFinal: false, _flungSpace: null, _deltaLoot: null, _hpDeltaLoot: null, _savedDeltaLoot: null, _creaturesFlung: null, _creaturesLoaded: null, ioLost: 0, m_recentlyAttacked: null, m_lastAttackTime: 0, _curCreaturesAvailable: null }, () => {
             ATTACK.USE_CUMULATIVE_FLINGER_CAPACITY = true;
             ATTACK._taunted = false;
             ATTACK._tauntThreshold = 0.1;
             ATTACK._shownFinal = false;
             ATTACK._creaturesFlung = new SecNum(0);
             ATTACK._creaturesLoaded = new SecNum(0);
+            ATTACK.ioLost = 0;
         });
     }
 
@@ -137,6 +200,10 @@ export class ATTACK extends ASObject {
         ATTACK._creaturesLoaded.Set(0);
         ATTACK._flingerBucket = {};
         ATTACK._flingCount = 0;
+        ATTACK.ioLost = 0;
+        // (QoL #87: no replay known yet for this attack)
+        ATTACK.ioReplayKey = null;
+        ATTACK.ioWatchAfter = null;
         ATTACK._log = [];
         ATTACK._attackStart = GLOBAL.Timestamp();
         ATTACK._flungSpace = new SecNum(0);
@@ -308,7 +375,42 @@ export class ATTACK extends ASObject {
                 (as3.as(ATTACK._attackLog.mcFrame, frame)).Setup(false);
                 ATTACK._attackLog.title_txt.htmlText = "<b>" + KEYS.Get("attack_log_title") + "</b>";
                 GLOBAL._layerMessages.addChild(ATTACK._attackLog);
-                if (shouldShowTaunt && !ATTACK._taunted && MAPROOM._visitingFriend) {
+                // (Inferno-only, QoL #99: Brag in the Talk Trash's place, after a win on a player's yard: it posts the
+                // result to chat with the replay; Talk Trash, a Facebook post to a friend, is not offered)
+                let ioHallDown: boolean = false;
+                for (b of (townHallInstances ?? [])) {
+                    if (b.health == 0) {
+                        ioHallDown = true;
+                    }
+                }
+                let ioBrag: any = GLOBAL.INFERNO_ONLY ? ATTACK.ioBragNow(ioHallDown) : null;
+                if (ioBrag) {
+                    ATTACK._attackLog.bAction.SetupKey("io_brag_btn");
+                    ATTACK._attackLog.bAction.name = "ioBragLog";
+                    ATTACK._attackLog.bAction.Highlight = true;
+                    ATTACK._attackLog.bAction.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                        if (IoBrag.Post(IoBrag.BragText(ioBrag.name, ioBrag.damage, ioBrag.loot), ioBrag.token)) {
+                            ATTACK._attackLog.bAction.Enabled = false;
+                            ATTACK._attackLog.bAction.Highlight = false;
+                        }
+                    });
+                    if (MapRoomManager.instance.isInMapRoom2) {
+                        ATTACK._attackLog.b2.Setup(KEYS.Get("btn_next"));
+                    } else {
+                        ATTACK._attackLog.b2.SetupKey("btn_returnhome");
+                    }
+                    // (its own close: onActionDown knows "Next" only by its English label)
+                    ATTACK._attackLog.b2.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                        if (!ATTACK._logOpen) {
+                            return;
+                        }
+                        ATTACK._logOpen = false;
+                        if (ATTACK._attackLog.parent) {
+                            ATTACK._attackLog.parent.removeChild(ATTACK._attackLog);
+                        }
+                        ATTACK.EndB();
+                    });
+                } else if (shouldShowTaunt && !ATTACK._taunted && MAPROOM._visitingFriend && !GLOBAL.INFERNO_ONLY) {
                     ATTACK._attackLog.bAction.SetupKey("btn_talktrash");
                     ATTACK._attackLog.bAction.addEventListener(MouseEvent.CLICK, onActionDown);
                     ATTACK._attackLog.bAction.Highlight = true;
@@ -338,6 +440,10 @@ export class ATTACK extends ASObject {
                 ss.y = 115;
                 ss.Init(ATTACK._attackLog.shell, ATTACK._attackLog.maskMC, 0, ATTACK._attackLog.maskMC.y, 270);
                 ATTACK._attackLog.shell.mask = ATTACK._attackLog.maskMC;
+                // (Inferno-only, QoL #87: Watch replay and Share in chat, under the log)
+                if (GLOBAL.INFERNO_ONLY) {
+                    ATTACK.ioReplayBar(ATTACK._attackLog, true);
+                }
             } else {
                 ATTACK.EndB();
             }
@@ -411,6 +517,11 @@ export class ATTACK extends ASObject {
     }
 
     public static DropZone(param1: int, param2: int = 1): void {
+        // (Inferno-only: a catapult's or a siege weapon's circle isn't the Flinger's, whose size test mode changes)
+        if (GLOBAL.INFERNO_ONLY && !ATTACK._ioFromBucket && ATTACK._ioDropBase > 0) {
+            ATTACK._ioDropBase = 0;
+            IoTestMode.ioDropWidget(false);
+        }
         if (!ATTACK._dropZone) {
             ATTACK._dropZone = as3.as(MAP._BUILDINGBASES.addChild(new DROPZONE(param1, param2)), DROPZONE);
         } else {
@@ -475,9 +586,81 @@ export class ATTACK extends ASObject {
             MAP._BUILDINGBASES.removeChild(ATTACK._dropZone);
         }
         ATTACK._dropZone = null;
+        if (GLOBAL.INFERNO_ONLY && ATTACK._ioDropBase > 0) {
+            ATTACK._ioDropBase = 0;
+            IoTestMode.ioDropWidget(false);
+        }
+    }
+
+    // ---- Inferno-only admin test mode (21 October, the user's): the Flinger's drop circle, bigger or smaller.
+    // The game sizes it by the monsters loaded (a quarter of their room, at least 200); in test mode it can be
+    // made from a hundredth of that to six times it ([ and ], or the buttons under the TEST MODE line:
+    // IoTestMode.ioDropWidget). The monsters land spread over it as over the usual one (Spawn: within half of it).
+
+    /** The sizes the circle can be made, times the usual one. */
+    public static readonly IO_DROP_SCALES: number[] = [0.01, 0.02, 0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 2, 3, 4, 6];
+
+    /** IO_DROP_SCALES' 1x. */
+    private static readonly IO_DROP_USUAL: int = 7;
+
+    private static _ioDropStep: int = -1;
+
+    /** The circle's usual size for the monsters loaded now (BucketUpdate); 0: no Flinger circle up. */
+    private static _ioDropBase: int = 0;
+
+    private static _ioFromBucket: boolean = false;
+
+    /** Whether the circle up now is the Flinger's and test mode can change it. */
+    public static ioDropAdjustable(): boolean {
+        return GLOBAL.INFERNO_ONLY && GLOBAL.ioTestMode() && ATTACK._ioDropBase > 0 && !!ATTACK._dropZone;
+    }
+
+    /** Which of IO_DROP_SCALES the circle is (remembered on this computer). */
+    public static ioDropStepIndex(): int {
+        if (ATTACK._ioDropStep < 0) {
+            ATTACK._ioDropStep = ATTACK.IO_DROP_USUAL;
+            try {
+                // (the scale itself is kept, not its place in the list)
+                let kept: number = ATTACK.IO_DROP_SCALES.indexOf(Number((window as any).localStorage.getItem("io_dropscale2")));
+                if (kept >= 0) {
+                    ATTACK._ioDropStep = kept;
+                }
+            } catch (e) {
+            }
+        }
+        return ATTACK._ioDropStep;
+    }
+
+    /** Times the usual size, in test mode (1 otherwise). */
+    public static ioDropScale(): number {
+        return GLOBAL.INFERNO_ONLY && GLOBAL.ioTestMode() ? ATTACK.IO_DROP_SCALES[ATTACK.ioDropStepIndex()] : 1;
+    }
+
+    /** The Flinger circle's size: the usual one, times the test mode scale. */
+    public static ioDropSize(): int {
+        return Math.max(1, Math.round(ATTACK._ioDropBase * ATTACK.ioDropScale())) | 0;
+    }
+
+    /** The circle a step bigger (1) or smaller (-1), or (0) back to the usual size; the circle up now with it. */
+    public static ioDropStep(step: int): void {
+        if (!GLOBAL.INFERNO_ONLY || !GLOBAL.ioTestMode()) {
+            return;
+        }
+        let i: int = ATTACK.ioDropStepIndex();
+        i = step == 0 ? ATTACK.IO_DROP_USUAL : Math.max(0, Math.min(ATTACK.IO_DROP_SCALES.length - 1, i + step)) | 0;
+        ATTACK._ioDropStep = i;
+        try {
+            (window as any).localStorage.setItem("io_dropscale2", String(ATTACK.IO_DROP_SCALES[i]));
+        } catch (e) {
+        }
+        if (ATTACK.ioDropAdjustable()) {
+            ATTACK._dropZone.Update(ATTACK.ioDropSize(), ATTACK._dropZone._dropTarget);
+        }
+        IoTestMode.ioDropWidget(ATTACK.ioDropAdjustable());
     }
 
     public static Spawn(param1: Point, param2: int): void {
+        IoSiege.flung();
         let _loc3_: number = NaN;
         let _loc4_: int = 0;
         let _loc5_: Point = null;
@@ -490,6 +673,15 @@ export class ATTACK extends ASObject {
         let _loc13_: int = 0;
         let _loc14_: MonsterBase = null;
         let _loc6_: any[] = [];
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #79: this load, to load again with R or Reload last)
+            ATTACK.ioLastLoad = {};
+            for (let ioId in ATTACK._flingerBucket) {
+                if (ioId.substr(0, 1) != "G" && ATTACK._flingerBucket[ioId].Get() > 0) {
+                    ATTACK.ioLastLoad[ioId] = ATTACK._flingerBucket[ioId].Get() | 0;
+                }
+            }
+        }
         for (_loc8_ in ATTACK._flingerBucket) {
             if (ATTACK._flingerBucket[_loc8_].Get() > 0) {
                 _loc9_ = false;
@@ -515,7 +707,8 @@ export class ATTACK extends ASObject {
                         _loc3_ = Math.random() * 360 * 0.0174532925;
                         _loc4_ = (Math.random() * param2 / 2) | 0;
                         _loc5_ = param1.add(new Point(Math.sin(_loc3_) * _loc4_, Math.cos(_loc3_) * _loc4_));
-                        (_loc14_ = CREEPS.Spawn(_loc8_, MAP._BUILDINGTOPS, "bounce", _loc5_, Math.random() * 360))._hitLimit = int.MAX_VALUE;
+                        // (Inferno-only Siege, the Devil's Arcade: the army's monsters at the army's level)
+                        (_loc14_ = CREEPS.Spawn(_loc8_, MAP._BUILDINGTOPS, "bounce", _loc5_, Math.random() * 360, 1, false, false, IoSiege.level(_loc8_)))._hitLimit = int.MAX_VALUE;
                         if (!MapRoomManager.instance.isInMapRoom2or3) {
                             GLOBAL.attackingPlayer.monsterListByID(_loc8_).add(-1);
                         } else if (MapRoomManager.instance.isInMapRoom3) {
@@ -532,6 +725,7 @@ export class ATTACK extends ASObject {
                 }
             }
         }
+        let ioFlung: int = ATTACK._creaturesLoaded.Get() | 0;
         ATTACK._creaturesFlung.Add(ATTACK._creaturesLoaded.Get());
         ATTACK._creaturesLoaded.Set(0);
         if (_loc6_.length == 1 && _loc6_[0][0] == 1) {
@@ -540,8 +734,11 @@ export class ATTACK extends ASObject {
             ATTACK.Log("fling" + ATTACK._flingCount, "<font color=\"#0000FF\">" + KEYS.Get("attack_log_flungin_pl", { "v1": GLOBAL.Array2String(_loc6_) }) + "</font>");
         }
         // Inferno-only quest book: an attack's first fling
-        if (GLOBAL.INFERNO_ONLY && ATTACK._flingCount == 0) {
+        if (GLOBAL.INFERNO_ONLY && ATTACK._flingCount == 0 && !IoSiege.attacking) {
             IoQuests.event("fling");
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            IoQuests.flung(ioFlung, ATTACK._flingCount == 0);
         }
         ++ATTACK._flingCount;
         ATTACK._flingerBucket = {};
@@ -551,6 +748,103 @@ export class ATTACK extends ASObject {
             BASE.Save();
         }
         ATTACK.RemoveDropZone();
+    }
+
+    /** Inferno-only (QoL #79): the monsters of the last fling, {id: how many}. */
+    public static ioLastLoad: any = null;
+
+    /** Inferno-only (QoL #78): as many of one kind as the Flinger takes (and the yard has). How many went in. */
+    public static ioFill(id: string): int {
+        let n: int = 0;
+        let before: int = ATTACK._creaturesLoaded ? ATTACK._creaturesLoaded.Get() | 0 : 0;
+        for (let i: int = 0; i < 1000; i++) {
+            ATTACK.BucketAdd(id);
+            let now: int = ATTACK._creaturesLoaded.Get() | 0;
+            if (now == before) {
+                break;
+            }
+            before = now;
+            n++;
+            if (id.substr(0, 1) == "G") {
+                break;
+            }
+        }
+        return n;
+    }
+
+    /** Inferno-only (QoL #84): monsters still to fling (in the bar and the Flinger) and those on the field. */
+    public static ioMonstersLeft(): int {
+        let n: int = 0;
+        for (let id in ATTACK._curCreaturesAvailable) {
+            n = (n + (ATTACK._curCreaturesAvailable[id] | 0)) | 0;
+        }
+        for (let held of as3.values(ATTACK._flingerBucket)) {
+            n = (n + (held.Get() | 0)) | 0;
+        }
+        return (n + (CREEPS._creepCount | 0)) | 0;
+    }
+
+    /**
+     * Inferno-only (15 October, the user's: an "All" button by each monster in the attack bar): can one more of this
+     * kind go in the Flinger now (some left to send, and room for it), by the same rule BucketAdd uses.
+     */
+    public static ioCanAdd(id: string): boolean {
+        if (!id || id.substr(0, 1) == "G" || !((ATTACK._curCreaturesAvailable[id] | 0) > 0) || !GLOBAL._attackersFlinger) {
+            return false;
+        }
+        let room: int = GLOBAL._buildingProps[4].capacity[GLOBAL._attackersFlinger - 1] | 0;
+        if (MAPROOM_DESCENT.InDescent) {
+            room = YARD_PROPS._yardProps[4].capacity[GLOBAL._attackersFlinger - 1] | 0;
+        }
+        if (POWERUPS.CheckPowers(POWERUPS.ALLIANCE_DECLAREWAR, "OFFENSE")) {
+            room = (room + Math.floor(room * 0.25)) | 0;
+        }
+        if (GLOBAL.ioTestMode()) {
+            room = 99999999;
+        }
+        if (MapRoomManager.instance.isInMapRoom3 && ATTACK.USE_CUMULATIVE_FLINGER_CAPACITY) {
+            room = (room - ATTACK._flungSpace.Get()) | 0;
+        }
+        for (let k in ATTACK._flingerBucket) {
+            if (k.substr(0, 1) != "G") {
+                room = (room - CREATURES.GetProperty(k, "bucket") * ATTACK._flingerBucket[k].Get()) | 0;
+            }
+        }
+        return room >= Number(CREATURES.GetProperty(id, "bucket"));
+    }
+
+    /** Inferno-only (QoL #78): the Flinger emptied of one kind. */
+    public static ioEmpty(id: string): int {
+        let n: int = 0;
+        while (n < 10000 && ATTACK.BucketRemove(id)) {
+            n++;
+        }
+        return n;
+    }
+
+    /** Inferno-only (QoL #79): the Flinger loaded as it was for the last fling (as far as the monsters left go). */
+    public static ioReloadLast(): boolean {
+        if (!ATTACK.ioLastLoad || GLOBAL.mode != GLOBAL.e_BASE_MODE.ATTACK && GLOBAL.mode != GLOBAL.e_BASE_MODE.WMATTACK) {
+            return false;
+        }
+        let any: boolean = false;
+        for (let id in ATTACK.ioLastLoad) {
+            let want: int = ATTACK.ioLastLoad[id] | 0;
+            let have: int = ATTACK._flingerBucket[id] ? ATTACK._flingerBucket[id].Get() | 0 : 0;
+            while (have < want) {
+                let before: int = ATTACK._creaturesLoaded.Get() | 0;
+                ATTACK.BucketAdd(id);
+                if ((ATTACK._creaturesLoaded.Get() | 0) == before) {
+                    break;
+                }
+                have++;
+                any = true;
+            }
+        }
+        if (any) {
+            ATTACK.BucketUpdate();
+        }
+        return any;
     }
 
     public static BucketAdd(param1: string): boolean {
@@ -639,7 +933,12 @@ export class ATTACK extends ASObject {
             if (_loc1_ < 200) {
                 _loc1_ = 200;
             }
-            ATTACK.DropZone(_loc1_, 1);
+            // (Inferno-only admin test mode, 21 October: the circle made bigger or smaller, ioDropStep)
+            ATTACK._ioDropBase = _loc1_;
+            ATTACK._ioFromBucket = true;
+            ATTACK.DropZone(ATTACK.ioDropSize(), 1);
+            ATTACK._ioFromBucket = false;
+            IoTestMode.ioDropWidget(ATTACK.ioDropAdjustable());
         }
         UI2.Update();
     }
@@ -823,7 +1122,13 @@ export class ATTACK extends ASObject {
         ATTACK.m_waitingForSaveToComplete = false;
         // Inferno-only: the attack is over: its replay's recording ends here (one more sample: how it ended)
         if (GLOBAL.INFERNO_ONLY && IoReplayRecorder.recording) {
+            // (QoL #87: its key kept, for the result's Watch replay and Share in chat)
+            ATTACK.ioReplayKey = IoReplayRecorder.key;
             IoReplayRecorder.stop(true);
+        }
+        if (GLOBAL.INFERNO_ONLY && BASE._loadedBaseID) {
+            // (QoL #65: what was scouted of this yard before the attack is out of date now)
+            delete ATTACK.ioScouted[String(Number(BASE._loadedBaseID))];
         }
         ATTACK.BucketClear();
         if (!ATTACK._sentOver) {
@@ -940,17 +1245,42 @@ export class ATTACK extends ASObject {
         }
         // Inferno-only quest book: a win, and on whom
         if (GLOBAL.INFERNO_ONLY) {
+            let ioStanding: boolean = false;
+            for (_loc7_ of (_loc6_ ?? [])) {
+                if (_loc7_ instanceof BMUSHROOM === false && _loc7_._class != "wall" && _loc7_._class != "trap" && _loc7_._class != "enemy" && _loc7_._class != "decoration" && _loc7_._class != "cage" && _loc7_.health > 0) {
+                    ioStanding = true;
+                    break;
+                }
+            }
+            IoQuests.attackReport(_loc1_, !ioStanding, ATTACK.ioLost, Number(ATTACK._loot.r1.Get() + ATTACK._loot.r2.Get() + ATTACK._loot.r3.Get() + ATTACK._loot.r4.Get()), ResourceBombs.launchedBomb);
             IoQuests.attackEnded(_loc1_);
+            // (QoL #623: the result's sting: a fanfare for a win, a crash otherwise)
+            SOUNDS.Play(_loc1_ ? "levelup" : "destroy2", 0.6);
         }
         GLOBAL.eventDispatcher.dispatchEvent(new AttackEvent(AttackEvent.ATTACK_OVER, _loc1_, BASE._wmID, ATTACK._loot));
+        // (Inferno-only, QoL #87: Watch replay pressed on the attack log: home, then the replay once the yard is up)
+        let ioWatch: string = GLOBAL.INFERNO_ONLY ? ATTACK.ioWatchAfter : null;
+        ATTACK.ioWatchAfter = null;
+        if (ioWatch) {
+            IoReplays.ioOpenLink(ioWatch);
+        }
         if (MapRoomManager.instance.isInMapRoom2 && BASE.isOutpostMapRoom2Only || (GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.IWMATTACK)) {
             (_loc10_ = new popup_attackend(_loc1_)).mcFrame.Setup(false);
+            // (Inferno-only, QoL #87: a player's outpost attacked: Watch replay and Share in chat, under the result)
+            // (QoL #99: and Brag, after a win on an outpost or a tribe yard: with the replay, or the yard's map token)
+            if (GLOBAL.INFERNO_ONLY) {
+                ATTACK.ioReplayBar(_loc10_, false, ATTACK.ioBragNow(_loc1_));
+            }
             POPUPS.Push(_loc10_);
             if (MapRoomManager.instance.isInMapRoom2 && !GLOBAL.m_mapRoomFunctional) {
                 GLOBAL.Message(KEYS.Get("map_msg_damaged"));
             }
         } else if (MapRoomManager.instance.isInMapRoom2) {
-            GLOBAL.ShowMap();
+            if (ioWatch) {
+                BASE.LoadBase(null, 0, 0, GLOBAL.e_BASE_MODE.BUILD, false, EnumYardType.MAIN_YARD);
+            } else {
+                GLOBAL.ShowMap();
+            }
         } else if (GLOBAL._loadmode == GLOBAL.mode) {
             BASE.LoadBase(null, 0, 0, GLOBAL.e_BASE_MODE.BUILD, false, EnumYardType.MAIN_YARD);
         } else if (MAPROOM_DESCENT.InDescent) {
@@ -969,6 +1299,10 @@ export class ATTACK extends ASObject {
         tribe = null;
         wildMonsters = param1;
         attackersName = param2;
+        // (Inferno-only, QoL #621: a defence ends with a sting: held off)
+        if (GLOBAL.INFERNO_ONLY) {
+            SOUNDS.Play("levelup", 0.6);
+        }
         Post = (): void => {
             if (wildMonsters) {
                 GLOBAL.CallJS("sendFeed", ["defense-wild", KEYS.Get("ai_gooddefense_streamtitle", { "v1": tribe.name }), KEYS.Get("ai_gooddefense", { "v1": tribe.name }), tribe.streampostpic]);
@@ -990,6 +1324,12 @@ export class ATTACK extends ASObject {
         tribe = TRIBES.TribeForBaseID(WMATTACK._attackersBaseID);
         if (wildMonsters) {
             popupMC.tText.htmlText = "<b>" + KEYS.Get("ai_gooddefense", { "v1": tribe.name }) + "</b>";
+            // (Inferno-only, QoL #100: the raid's report)
+            if (GLOBAL.INFERNO_ONLY && WMATTACK.ioRaidReport) {
+                popupMC.tText.htmlText += "<br><font size=\"11\">" + WMATTACK.ioRaidReport + "</font>";
+                GLOBAL.ioFitHeight(popupMC.tText);
+                ATTACK.ioOfferRearm();
+            }
         } else {
             popupMC.tText.htmlText = "<b>" + KEYS.Get("attack_gooddefense", { "v1": attackersName }) + "</b>";
         }
@@ -1004,6 +1344,15 @@ export class ATTACK extends ASObject {
         }
     }
 
+    /** (Inferno-only, QoL #100) traps set off in the raid: Re-arm All offered (IoTrapRearm), after the report */
+    private static ioOfferRearm(): void {
+        if (WMATTACK.ioTrapsFired > 0 && IoTrapRearm.disarmed().length > 0) {
+            IoToast.Show(KEYS.Get("io_raid_rearm", { "v1": IoTrapRearm.disarmed().length }), 10000, KEYS.Get("io_btn_rearm"), (): void => {
+                IoTrapRearm.Show();
+            });
+        }
+    }
+
     public static PoorDefense(): void {
         let mc: popup_damaged_ai = null;
         let RepairAll: Function = null;
@@ -1011,6 +1360,10 @@ export class ATTACK extends ASObject {
         mc = null;
         RepairAll = null;
         RepairNow = null;
+        // (Inferno-only, QoL #621: broke through)
+        if (GLOBAL.INFERNO_ONLY && !INFERNO_EMERGENCE_EVENT.isAttackActive) {
+            SOUNDS.Play("destroytownhall", 0.6);
+        }
         if (INFERNO_EMERGENCE_EVENT.isAttackActive) {
             INFERNO_EMERGENCE_POPUPS.ShowStagePassed(INFERNOPORTAL.building._lvl.Get() | 0);
             return;
@@ -1026,7 +1379,7 @@ export class ATTACK extends ASObject {
                         _loc3_.Repair();
                     }
                 }
-                SOUNDS.Play("repair1", 0.25);
+                SOUNDS.ioPlayFor("repair1", 0.25, 1800);
                 POPUPS.Next();
             };
             RepairNow = (param1: MouseEvent = null): void => {
@@ -1047,6 +1400,12 @@ export class ATTACK extends ASObject {
             mc.tA.htmlText = "<b>" + KEYS.Get("ai_poordefense_ta") + "</b>";
             mc.tB.htmlText = "<b>" + KEYS.Get("ai_poordefense_tb") + "</b>";
             mc.tC.htmlText = KEYS.Get("ai_poordefense_tc");
+            // (Inferno-only, QoL #100: the raid's report: what was lost, traps set off, what was taken)
+            if (GLOBAL.INFERNO_ONLY && WMATTACK.ioRaidReport) {
+                mc.tC.htmlText = KEYS.Get("ai_poordefense_tc") + "<br><br><b>" + WMATTACK.ioRaidReport + "</b>";
+                GLOBAL.ioFitHeight(mc.tC);
+                ATTACK.ioOfferRearm();
+            }
             mc.bAction.SetupKey("ai_repairdamage_btn");
             mc.bAction.addEventListener(MouseEvent.CLICK, RepairAll);
             mc.bAction2.SetupKey("pop_damaged_repairnow_btn");
@@ -1054,6 +1413,354 @@ export class ATTACK extends ASObject {
             mc.bAction2.Highlight = true;
             POPUPS.Push(mc, null, null, "shotgun", "military.png");
         }
+    }
+
+    // ---- Inferno-only (QoL #65, #83): what a yard would give up, worked out by the loot code's own rules
+    /** QoL #65: the estimates made while scouting a yard (view mode), by base id: { at, loot: [r1, r2, r3, r4] }. */
+    public static ioScouted: any = {};
+
+    /** QoL #87: the replay key of the attack that just ended (for its result's Watch replay and Share in chat). */
+    public static ioReplayKey: string = null;
+
+    /** QoL #87: Watch replay pressed on the attack log: EndB goes home (not to the map), then the replay plays. */
+    private static ioWatchAfter: string = null;
+
+    /**
+     * QoL #65: what destroying a storage of `type` (a Silo 6, the Under Hall 14, an outpost's hall 112) takes of the
+     * `has` the yard holds of resource `r`, as BSTORAGE.Destroyed counts it: a share, up to a cap (a tribe's yard,
+     * `wild`, has its own), half of it for the fourth resource. (IoVisitUi's building card can use it too.)
+     */
+    public static ioStorageLoot(type: int, r: int, has: number, wild: boolean): number {
+        let pct: number = type == 14 ? 0.1 : (type == 112 ? 0.05 : 0.04);
+        let v: number = Math.floor(Math.max(0, has) * pct);
+        if (type == 6) {
+            v = Math.min(v, 4000000);
+            if (wild) {
+                v = Math.min(v, GLOBAL.ioLootCapSilo > 0 ? GLOBAL.ioLootCapSilo : 500000);
+            }
+        }
+        if (type == 14) {
+            v = Math.min(v, 10000000);
+            if (wild) {
+                v = Math.min(v, GLOBAL.ioLootCapHall > 0 ? GLOBAL.ioLootCapHall : 2000000);
+            }
+        }
+        if (type == 112) {
+            v = Math.min(v, 10000000);
+        }
+        if (r == 4 && !MapRoomManager.instance.isInMapRoom3) {
+            v = Math.ceil(v * 0.5);
+        }
+        return Math.max(0, v);
+    }
+
+    /** QoL #65: the yard is a tribe's on the map (BSTORAGE's test: its own loot caps, half of what a hit takes). */
+    public static ioWildYard(): boolean {
+        let m: string = GLOBAL.mode;
+        let modes: any = GLOBAL.e_BASE_MODE;
+        if (MapRoomManager.instance.isInMapRoom2 && GLOBAL._currentCell && GLOBAL._currentCell.baseType == EnumYardType.OUTPOST) {
+            return true;
+        }
+        // (looked at from somewhere else than the map: no map cell, but a tribe's yard is viewed in its own mode)
+        return !GLOBAL._currentCell && (m == modes.WMVIEW || m == modes.IWMVIEW);
+    }
+
+    /**
+     * QoL #65 and #83: about how much of each resource the yard on screen would still give up if every storage and
+     * harvester were destroyed: [r1, r2, r3, r4], or null when its resources are not known. By the loot code's rules:
+     * a storage's hits take as much as their damage (its health in all) from the resources it has, at random (here:
+     * evenly), 90% of it to the attacker (half at a tribe's yard, a fifth of that in a tribe attack: BSTORAGE.Loot),
+     * then its fall takes a share of what is left (ioStorageLoot); a harvester gives up all it holds (BRESOURCE.Loot);
+     * and a player under level 20 gets their bonus (ATTACK.Loot).
+     */
+    public static ioLootEstimate(): any[] {
+        if (!BASE._resources) {
+            return null;
+        }
+        let has: number[] = [0, 0, 0, 0, 0];
+        for (let r: int = 1; r < 5; r++) {
+            let v: any = BASE._resources["r" + r];
+            has[r] = Math.max(0, Number(v && typeof v.Get == "function" ? v.Get() : v) || 0);
+        }
+        let m: string = GLOBAL.mode;
+        let modes: any = GLOBAL.e_BASE_MODE;
+        let wild: boolean = ATTACK.ioWildYard();
+        let fifth: boolean = m == modes.WMATTACK || m == modes.WMVIEW;
+        let share: number = wild ? 0.5 : 0.9;
+        let out: number[] = [0, 0, 0, 0, 0];
+        for (let s of (InstanceManager.getInstancesByClass(BSTORAGE) ?? [])) {
+            let b: BFOUNDATION = as3.as(s, BFOUNDATION);
+            if (!b || b._destroyed || !(b.health > 0)) {
+                continue;
+            }
+            let left: number = Math.floor(b.health);
+            let kinds: int[] = [];
+            for (let r: int = 1; r < 5; r++) {
+                if (has[r] >= 1) {
+                    kinds.push(r);
+                }
+            }
+            let rounds: int = 0;
+            while (left >= 1 && kinds.length > 0 && rounds < 6) {
+                rounds++;
+                let each: number = left / kinds.length;
+                let still: int[] = [];
+                for (let r of kinds) {
+                    let take: number = Math.min(each, has[r]);
+                    has[r] -= take;
+                    left -= take;
+                    let got: number = Math.floor(take * share);
+                    if (fifth) {
+                        got = Math.floor(got / 5);
+                    }
+                    out[r] += got;
+                    if (has[r] >= 1) {
+                        still.push(r);
+                    }
+                }
+                kinds = still;
+            }
+            for (let r: int = 1; r < 5; r++) {
+                let v: number = ATTACK.ioStorageLoot(b._type, r, has[r], wild);
+                has[r] = Math.max(0, has[r] - v);
+                out[r] += v;
+            }
+        }
+        for (let h of (InstanceManager.getInstancesByClass(BRESOURCE) ?? [])) {
+            let b: BRESOURCE = as3.as(h, BRESOURCE);
+            if (!b || b._destroyed || !(b.health > 0) || b._type < 1 || b._type > 4 || !b._stored) {
+                continue;
+            }
+            out[b._type] += Math.max(0, Math.floor(Number(b._stored.Get())));
+        }
+        let bonus: number = LOGIN._playerLevel < 20 ? Math.max(0, (20 - LOGIN._playerLevel) * 0.03) : 0;
+        let result: any[] = [];
+        for (let r: int = 1; r < 5; r++) {
+            result.push(Math.floor(out[r] + out[r] * bonus));
+        }
+        return result;
+    }
+
+    /** QoL #65: a scouted yard's estimate, kept for the map's enemy popup. */
+    public static ioNoteScouted(loot: any[]): void {
+        if (!loot || !BASE._loadedBaseID) {
+            return;
+        }
+        ATTACK.ioScouted[String(Number(BASE._loadedBaseID))] = { "at": GLOBAL.Timestamp(), "loot": loot };
+    }
+
+    /** QoL #65: the estimate last made scouting the yard with this base id, or null. */
+    public static ioScoutedFor(baseID: number): any {
+        let seen: any = baseID ? ATTACK.ioScouted[String(Number(baseID))] : null;
+        return seen && seen.loot ? seen : null;
+    }
+
+    /** QoL #65: "Bone 1.2M · Coal 800K · ..." (the resources there are). */
+    public static ioLootLine(loot: any[]): string {
+        let parts: any[] = [];
+        for (let i: int = 0; i < 4; i++) {
+            if (loot && Number(loot[i]) > 0) {
+                parts.push(KEYS.Get(as3.str(GLOBAL._resourceNames[i])) + " " + GLOBAL.ioShort(Number(loot[i])));
+            }
+        }
+        return parts.length ? parts.join("  ·  ") : KEYS.Get("io_bat2_loot_none");
+    }
+
+    // ---- Inferno-only (QoL #87): the attack's replay, from its result
+    /** The replay of the attack that just ended, if it had one (a player's yard; not a practice attack). */
+    public static ioReplayKeyNow(): string {
+        if (ATTACK.ioReplayKey) {
+            return ATTACK.ioReplayKey;
+        }
+        let r: any = BASE.loadObject ? BASE.loadObject.io_replay : null;
+        return r && r.key ? String(r.key) : null;
+    }
+
+    /** Who attacked whom and the damage, for the chat's pill (IoReplays.Token); null: the server is asked. */
+    private static ioReplayMeta(): any {
+        if (!LOGIN._playerName || !BASE._ownerName) {
+            return null;
+        }
+        let damage: int = BASE._percentDamaged > 0 ? BASE._percentDamaged | 0 : Math.round(ATTACK.CalculateBaseDamagePercent()) | 0;
+        return { "attacker": String(LOGIN._playerName), "defender": String(BASE._ownerName), "damage": Math.max(0, Math.min(100, damage)) };
+    }
+
+    /**
+     * Inferno-only (QoL #99): what Brag posts after the attack that just ended, { name, damage, loot, token }, or null
+     * when there is nothing to brag about: not won (`won`: the hall fell, or the yard was taken down) and under
+     * IoBrag.MIN_DAMAGE; no yard name; neither a replay nor the yard's map cell; the Gauntlet, a Siege, the Descent or
+     * a test-mode attack. The token: the replay's ([replay:KEY|me|them|87]), else the yard's on the map.
+     */
+    public static ioBragNow(won: boolean): any {
+        if (!GLOBAL.INFERNO_ONLY || IoGauntlet.inAttack() || IoSiege.inAttack() || GLOBAL.ioTestMode() || INFERNO_DESCENT_POPUPS.isInDescent()) {
+            // (not MAPROOM_DESCENT.InDescent: in the Inferno it only says the stock Descent was never finished)
+            return null;
+        }
+        let name: string = BASE._ownerName ? String(BASE._ownerName) : "";
+        if (!name) {
+            return null;
+        }
+        let damage: int = BASE._percentDamaged > 0 ? BASE._percentDamaged | 0 : Math.round(ATTACK.CalculateBaseDamagePercent()) | 0;
+        damage = Math.max(0, Math.min(100, damage)) | 0;
+        if (damage <= 0 || !won && damage < IoBrag.MIN_DAMAGE) {
+            return null;
+        }
+        let key: string = ATTACK.ioReplayKeyNow();
+        let cell: any = GLOBAL._currentCell;
+        let token: string = key ? IoBrag.ReplayToken(key, LOGIN._playerName, name, damage) : (cell && MapRoomManager.instance.isInMapRoom2 ? IoBrag.MapToken(Number(cell.cellX), Number(cell.cellY)) : null);
+        if (!token) {
+            return null;
+        }
+        let loot: number = ATTACK._loot ? Number(ATTACK._loot.r1.Get() + ATTACK._loot.r2.Get() + ATTACK._loot.r3.Get() + ATTACK._loot.r4.Get()) : 0;
+        return { "name": name, "damage": damage, "loot": loot, "token": token };
+    }
+
+    /**
+     * Watch replay and Share in chat, on a strip under a result popup (`log`: the attack log of a main yard;
+     * otherwise popup_attackend, an outpost's). Only after an attack on a player's yard that was recorded.
+     * (QoL #99) `brag` (ioBragNow): Brag beside them, or alone on the strip after a win on a tribe yard (no replay).
+     */
+    private static ioReplayBar(popup: MovieClip, log: boolean, brag: any = null): void {
+        let key: string = ATTACK.ioReplayKeyNow();
+        let m: string = GLOBAL.mode;
+        if (!popup || !key && !brag || (m != GLOBAL.e_BASE_MODE.ATTACK && m != GLOBAL.e_BASE_MODE.IATTACK && m != GLOBAL.e_BASE_MODE.WMATTACK) /* (QoL #96) */ || IoGauntlet.inAttack() || IoSiege.inAttack() || GLOBAL.ioTestMode()) {
+            return;
+        }
+        let bar: Sprite = new Sprite();
+        bar.name = "ioBat2ReplayBar";
+        // (QoL #99: three buttons a little narrower)
+        let count: int = ((key ? 2 : 0) + (brag ? 1 : 0)) | 0;
+        const BW: int = count > 2 ? 124 : 156;
+        const BH: int = 26;
+        const GAP: int = 8;
+        const PAD: int = 6;
+        let x: int = PAD;
+        if (key) {
+            let watch: MovieClip = IoMapUi.button(KEYS.Get("io_bat2_watch"), BW, BH, (e: MouseEvent): void => {
+                ATTACK.ioWatchClick(popup, log, key);
+            }, "gold", 11);
+            watch.name = "ioBat2Watch";
+            watch.x = x;
+            watch.y = PAD;
+            bar.addChild(watch);
+            let share: MovieClip = null;
+            share = IoMapUi.button(KEYS.Get("io_bat2_share"), BW, BH, (e: MouseEvent): void => {
+                ATTACK.ioShareChooser(popup, bar, key);
+            }, "grey", 11);
+            share.name = "ioBat2Share";
+            share.x = x + BW + GAP;
+            share.y = PAD;
+            bar.addChild(share);
+            x = (x + (BW + GAP) * 2) | 0;
+        }
+        if (brag) {
+            let bragBtn: any = null;
+            bragBtn = IoMapUi.button(KEYS.Get("io_brag_btn"), BW, BH, (e: MouseEvent): void => {
+                if (IoBrag.Post(IoBrag.BragText(brag.name, brag.damage, brag.loot), brag.token) && bragBtn.setEnabled) {
+                    bragBtn.setEnabled(false);
+                }
+            }, key ? "grey" : "gold", 11);
+            bragBtn.name = "ioBragEnd";
+            bragBtn.x = x;
+            bragBtn.y = PAD;
+            bar.addChild(bragBtn);
+        }
+        let w: int = (PAD * 2 + BW * count + GAP * (count - 1)) | 0;
+        let h: int = (PAD * 2 + BH) | 0;
+        IoMapUi.glass(bar.graphics, w, h, 9);
+        let fr: DisplayObject = popup.mcFrame ? as3.as(popup.mcFrame, DisplayObject) : null;
+        let r: Rectangle = (fr ? fr : popup).getBounds(popup);
+        bar.x = Math.round(r.x + (r.width - w) / 2);
+        bar.y = Math.round(r.bottom + 6);
+        // (23 October, the user's: "the popup has buttons under it, fit them in the box and change the box shape if
+        // needed": in the frame's foot, the frame made taller (and wider, for three) to hold it: frame.ioResize)
+        let fit: any = fr;
+        if (GLOBAL.INFERNO_ONLY && fit && fit.ioResize) {
+            let fw: number = Math.max(r.width, w + 48);
+            let fx: number = r.x + r.width / 2 - fw / 2;
+            bar.x = Math.round(r.x + r.width / 2 - w / 2);
+            // (under what is in the frame: the result's own buttons, the log's Return Home)
+            let foot: number = r.bottom - 14;
+            for (let i: int = 0; i < popup.numChildren; i++) {
+                let c: DisplayObject = popup.getChildAt(i);
+                if (c == fr || !c.visible || c.width >= r.width - 4 || c.height >= r.height - 4) {
+                    continue;
+                }
+                let cr: Rectangle = c.getBounds(popup);
+                if (cr.bottom > foot - 8 && cr.top < r.bottom) {
+                    foot = Math.max(foot, cr.bottom + 8);
+                }
+            }
+            bar.y = Math.round(foot);
+            fit.ioResize(fw, bar.y + h + 22 - r.y, Math.round(fx), NaN);
+        } else if (log && GLOBAL._SCREEN && bar.y + h > GLOBAL._SCREEN.bottom - 4) {
+            // (the log is drawn where it stands on the screen: over the frame when there is no room under it)
+            bar.y = Math.round(r.y - h - 6);
+        }
+        popup.addChild(bar);
+    }
+
+    private static ioWatchClick(popup: MovieClip, log: boolean, key: string): void {
+        if (BASE._saving || BASE._saveCounterA != BASE._saveCounterB) {
+            GLOBAL.Message(KEYS.Get("io_bat2_wait_save"));
+            return;
+        }
+        if (log) {
+            if (!ATTACK._logOpen) {
+                return;
+            }
+            ATTACK._logOpen = false;
+            if (popup.parent) {
+                popup.parent.removeChild(popup);
+            }
+            ATTACK.ioWatchAfter = key;
+            ATTACK.EndB();
+            return;
+        }
+        // (an outpost's result: home, and the replay once the yard is up: IoReplays' own wait for a ?replay= link)
+        IoReplays.ioOpenLink(key);
+        BASE.LoadBase(null, 0, 0, GLOBAL.e_BASE_MODE.BUILD, false, EnumYardType.MAIN_YARD);
+        POPUPS.Next();
+    }
+
+    /** Global or Alliance, over the strip; a second press puts it away. */
+    private static ioShareChooser(popup: MovieClip, bar: Sprite, key: string): void {
+        let old: DisplayObject = popup.getChildByName("ioBat2ShareChooser");
+        if (old) {
+            popup.removeChild(old);
+            return;
+        }
+        let c: Sprite = null;
+        c = new Sprite();
+        c.name = "ioBat2ShareChooser";
+        const BW: int = 156;
+        const PAD: int = 6;
+        let pick: Function = (mode: string): void => {
+            if (c.parent) {
+                c.parent.removeChild(c);
+            }
+            IoReplays.Share(key, mode, ATTACK.ioReplayMeta());
+        };
+        let g: MovieClip = IoMapUi.button(KEYS.Get("al_replay_global"), BW, 26, (e: MouseEvent): void => {
+            pick(BYMChat.IO_GLOBAL);
+        }, "gold", 11);
+        g.name = "ioBat2ShareGlobal";
+        g.x = PAD;
+        g.y = PAD;
+        c.addChild(g);
+        let a: any = IoMapUi.button(KEYS.Get("al_replay_alliance"), BW, 26, (e: MouseEvent): void => {
+            pick(BYMChat.IO_ALLIANCE);
+        }, "grey", 11);
+        a.name = "ioBat2ShareAlliance";
+        a.x = PAD + BW + 8;
+        a.y = PAD;
+        a.setEnabled(ALLIANCES._allianceID > 0);
+        c.addChild(a);
+        let w: int = (PAD * 2 + BW * 2 + 8) | 0;
+        IoMapUi.glass(c.graphics, w, 38, 9);
+        c.x = bar.x;
+        c.y = bar.y + bar.height + 4;
+        popup.addChild(c);
     }
 
     protected static CalculateBaseDamagePercent(param1: uint = 100): number {

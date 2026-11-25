@@ -3,7 +3,7 @@ import { int } from "as3";
 import { Bitmap, BitmapData, Loader } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
 import { URLRequest } from "flash/net";
-import { BASE, EnumYardType, GLOBAL, ImageCache, IoMapUi, KEYS, MapRoomCell, PopupInfoViewOnly_CLIP, TRIBES, com_monsters_maproom_advanced_MapRoom as MapRoom, frame } from "@game";
+import { BASE, EnumYardType, GLOBAL, ImageCache, IoMapUi, IoQuests, KEYS, MapRoomCell, PopupInfoViewOnly_CLIP, TRIBES, com_monsters_maproom_advanced_MapRoom as MapRoom, frame } from "@game";
 
 export class PopupInfoViewOnly extends PopupInfoViewOnly_CLIP {
     static {
@@ -170,6 +170,10 @@ export class PopupInfoViewOnly extends PopupInfoViewOnly_CLIP {
             GLOBAL._attackerCellsInRange = MapRoom._mc.GetCellsInRange(this._cell.X, this._cell.Y, 10);
         }
         GLOBAL._currentCell = this._cell;
+        // Inferno-only quest book: a yard looked at from the map
+        if (GLOBAL.INFERNO_ONLY) {
+            IoQuests.viewed(this._cell.X, this._cell.Y);
+        }
         if (this._cell._base == 1) {
             BASE.LoadBase(null, 0, this._cell._baseID, "wmview", false, EnumYardType.MAIN_YARD);
         } else {

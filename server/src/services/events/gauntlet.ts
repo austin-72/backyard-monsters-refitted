@@ -1,3 +1,4 @@
+import { alreadyWritten } from "../base/freshTotals.js";
 import { Save } from "../../database/models/save.model.js";
 import { noteMilestone } from "../../chat/chatBroadcasts.js";
 import type { User } from "../../database/models/user.model.js";
@@ -12,6 +13,7 @@ import { getCurrentDateTime } from "../../utils/getCurrentDateTime.js";
 import { updateResources } from "../base/updateResources.js";
 import { logger } from "../../utils/logger.js";
 import { questBest } from "../quests/questProgress.js";
+import { raiseTrophies, readTrophies } from "./trophies.js";
 
 /**
  * Moloch's Gauntlet: a monthly event, a ladder of Moloch yards attacked from the main yard (not the map).
@@ -73,6 +75,8 @@ export interface GauntletResult {
   /** Admin test mode: what it would have paid (nothing is). */
   test?: boolean;
   attemptsLeft?: number;
+  /** Inferno-only (QoL #88): how much of the yard the attack destroyed, % (shown in the result). */
+  damage?: number;
   at: number;
 }
 
@@ -88,6 +92,8 @@ export interface GauntletState {
   stages: Record<string, GauntletStage>;
   last?: GauntletResult | null;
   fight?: GauntletFight | null;
+  /** A catapult was fired in one of this month's Gauntlet attacks (10 October: the "no catapults" trophy). */
+  catapult?: boolean;
   /** Admin test mode's ladder. */
   test?: GauntletState | null;
 }
@@ -376,6 +382,8 @@ const claimReward = async (em: Em, userid: number, month: string, stage: number)
  */
 const mirrorReward = (mainSave: Save | undefined | null, reward: Reward | null | undefined) => {
   if (!mainSave || !reward) return;
+  // (18 October: a save's fresh flush leaves this out of its own change: services/base/freshTotals.ts)
+  alreadyWritten(mainSave, { credits: reward.shiny, resources: { r1: reward.r1, r2: reward.r2, r3: reward.r3, r4: reward.r4 } });
   mainSave.credits = (mainSave.credits ?? 0) + reward.shiny;
   mainSave.resources = updateResources({ r1: reward.r1, r2: reward.r2, r3: reward.r3, r4: reward.r4 }, (mainSave.resources ?? {}) as never) as never;
 };
@@ -398,26 +406,26 @@ const finish = async (em: Em, userid: number, state: GauntletState, stage: numbe
       // Admin test mode: what it would pay, shown; nothing is paid or claimed.
       const would = s.lost || s.paid ? null : stageReward(stage);
       if (would) s.paid = true;
-      state.last = { stage, result: "won", reward: would ?? undefined, lost: Boolean(s.lost), already: false, test: true, at };
-      return { heal, reward: null };
+      state.last = { stage, result: "won", reward: would ?? undefined, lost: Boolean(s.lost), already: false, test: true, damage, at };
+      return { heal, reward: null, beaten: 0 };
     }
     reward = s.lost ? null : await claimReward(em, userid, state.month, stage);
-    // Inferno-only quest book: the furthest gate beaten
-    void questBest(userid, "gauntlet_best", stage);
-    state.last = { stage, result: "won", reward: reward ?? undefined, lost: Boolean(s.lost), already: !s.lost && !reward, at };
+    state.last = { stage, result: "won", reward: reward ?? undefined, lost: Boolean(s.lost), already: !s.lost && !reward, damage, at };
     logger.info(
       `Gauntlet: stage ${stage} beaten by player #${userid} (${state.month})${reward ? `, paid ${reward.shiny} shiny` : s.lost ? " (reward lost)" : " (paid already)"}`
     );
     if (firstWin && stage === config().stages) noteMilestone(userid, "#name conquered Moloch's Gauntlet this month!");
+    // Inferno-only (10 October): the Gauntlet's trophies, for good (services/events/trophies.ts)
+    if (stage === config().stages) await raiseTrophies(userid, state.catapult ? { gauntlet: 1 } : { gauntlet: 1, gauntlet_nocat: 1 }, em);
   } else if (s.a >= config().attempts) {
     s.lost = true;
     s.a = 0;
     heal = true;
-    state.last = { stage, result: "healed", lost: true, attemptsLeft: config().attempts, at, ...(test && { test: true }) };
+    state.last = { stage, result: "healed", lost: true, attemptsLeft: config().attempts, damage, at, ...(test && { test: true }) };
   } else {
-    state.last = { stage, result: "failed", lost: Boolean(s.lost), attemptsLeft: config().attempts - s.a, at, ...(test && { test: true }) };
+    state.last = { stage, result: "failed", lost: Boolean(s.lost), attemptsLeft: config().attempts - s.a, damage, at, ...(test && { test: true }) };
   }
-  return { heal, reward };
+  return { heal, reward, beaten: !test && damage >= config().winPercent ? stage : 0 };
 };
 
 /** The yard of a stage as stored: its damage, and a heal written straight to it. */
@@ -519,11 +527,14 @@ export const gauntletStatus = async (user: User, testMode = false) => {
       };
     }),
     last: state.last ?? null,
+    /** A catapult was fired in the Gauntlet this month (no "no catapults" trophy for this month's run). */
+    catapult: Boolean(state.catapult),
+    trophies: await readTrophies(user.userid),
   };
 };
 
 const closedErr = () =>
-  new ClientSafeError({ message: "Moloch's Gauntlet is closed. It opens again on the 1st of the month.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
+  new ClientSafeError({ message: "Moloch's Gauntlet is closed. It opens again on the 1st of the month, at midnight UTC.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
 const wrongStageErr = () =>
   new ClientSafeError({ message: "That yard of the Gauntlet is not the one to fight now. Open the Gauntlet again to see where you are.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
 const attackEndedErr = () =>
@@ -604,6 +615,9 @@ const toInt = (value: unknown) => {
  * beaten and paid (once), or one attempt gone. Returns `heal`: the last failed attempt, the caller heals
  * the yard after writing the save.
  */
+/** (18 October) The least time from a Gauntlet attack's start to a win (monsters flung, walked in, a yard wrecked). */
+const GAUNTLET_MIN_WIN_SECONDS = 15;
+
 export const gauntletSaveCheck = async (user: User, yard: Save, body: Record<string, unknown>, over: boolean, testMode = false) => {
   const parsed = parseGauntletBaseId(yard.baseid);
   if (!parsed || parsed.userid !== user.userid) throw notYoursErr();
@@ -625,7 +639,15 @@ export const gauntletSaveCheck = async (user: User, yard: Save, body: Record<str
       currentStage(state) === stage;
     if (!live) return { refused: true, heal: false, reward: null };
     if (!over) return { refused: false, heal: false, reward: null };
-    return { refused: false, ...(await finish(em, user.userid, state, stage, damage, testMode)) };
+    // (18 October, SUSPECTED-BUGS.md: one save with over=1 and damage=100 straight after the attack loaded beat the
+    // stage) a stage isn't beaten sooner than an attack can do it: a win reported sooner counts as a failed attempt
+    const took = getCurrentDateTime() - fight!.at;
+    let counted = damage;
+    if (!testMode && damage >= config().winPercent && took < GAUNTLET_MIN_WIN_SECONDS) {
+      logger.warn(`Gauntlet: player #${user.userid} reported stage ${stage} won ${took} s after the attack began (at least ${GAUNTLET_MIN_WIN_SECONDS} s): counted as not beaten`);
+      counted = Math.max(0, config().winPercent - 1);
+    }
+    return { refused: false, ...(await finish(em, user.userid, state, stage, counted, testMode)) };
   }, testMode);
 
   if (outcome.refused) {
@@ -633,8 +655,27 @@ export const gauntletSaveCheck = async (user: User, yard: Save, body: Record<str
     throw attackEndedErr();
   }
   mirrorReward(user.save, outcome.reward);
+  // Inferno-only quest book: the furthest gate beaten (18 October, SUSPECTED-BUGS.md: counted once the stage's
+  // transaction has gone through, not beside it: a payment rolled back had still raised it)
+  const beaten = (outcome as { beaten?: number }).beaten ?? 0;
+  if (beaten > 0) void questBest(user.userid, "gauntlet_best", beaten);
   return { heal: outcome.heal };
 };
+
+/**
+ * A catapult was fired in a Gauntlet attack (gauntlet/catapult, sent by the game at its first shot of an attack):
+ * this month's ladder no longer wins the "no catapults" trophy. Only while one of the player's Gauntlet attacks
+ * is running.
+ */
+export const gauntletCatapult = async (user: User, testMode = false) =>
+  withState(
+    user.userid,
+    async (state) => {
+      if (state.fight && getCurrentDateTime() - state.fight.at <= GAUNTLET_ATTACK_WINDOW) state.catapult = true;
+      return { catapult: Boolean(state.catapult) };
+    },
+    testMode
+  );
 
 // ---------------------------------------------------------------------------------------------
 // Admin panel
@@ -665,6 +706,9 @@ export const resetGauntlet = async (user: User) =>
     state.stages = {};
     state.last = null;
     state.fight = null;
+    // (18 October, SUSPECTED-BUGS.md: the "no catapults" mark stayed, so an honest run again that month couldn't win
+    // the trophy)
+    state.catapult = false;
   });
 
 /** Admin test mode switched on or off: its test ladder and yards go (the real ladder stays as it was). */

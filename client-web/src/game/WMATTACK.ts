@@ -1,10 +1,11 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
-import { Bitmap, BitmapData } from "flash/display";
-import { MouseEvent } from "flash/events";
-import { Point } from "flash/geom";
+import { Bitmap, BitmapData, Shape, Sprite } from "flash/display";
+import { Event, IOErrorEvent, MouseEvent } from "flash/events";
+import { Point, Rectangle } from "flash/geom";
+import { TextField } from "flash/text";
 import { getTimer } from "flash/utils";
-import { AIATTACKPOPUP, AOEDamageOnAttackOncePerTarget, ATTACK, BASE, BFOUNDATION, BTOWER, BTRAP, BUILDING27, CREATURELOCKER, CREEPS, CUSTOMATTACKS, Enrage, GLOBAL, GRID, HATCHERY, HATCHERYCC, INFERNO_EMERGENCE_EVENT, INFERNO_EMERGENCE_PROCESS, IPROCESS, ImageCache, InstanceManager, IoAttackLogs, IoChangelog, IoLeaderboards, IoOutpostsPopup, IoQuests, IoTestMode, KEYS, LOGGER, MAP, MONSTERBAITER, MapRoomManager, MonsterBase, PATHING, PLANNER, POPUPS, PROCESS3, PROCESS4, PROCESS5, PROCESS7, PROCESS_INFERNO1, QUESTS, Rndm, SOUNDS, SPECIALEVENT, SPRITES, STORE, Solution, TRIBES, TUTORIAL, Targeting, TemporaryComponent, UI2, WMBASE, WaveObj, frame, popup_attacksettings } from "@game";
+import { IoMapUi, IoTrapRearm, AIATTACKPOPUP, AOEDamageOnAttackOncePerTarget, ArcadeWindow, ATTACK, BASE, BFOUNDATION, BTOWER, BTRAP, BUILDING27, CasinoWindow, CREATURELOCKER, CREEPS, CUSTOMATTACKS, Enrage, frame, GLOBAL, GRID, HATCHERY, HATCHERYCC, ImageCache, INFERNO_EMERGENCE_EVENT, INFERNO_EMERGENCE_PROCESS, InstanceManager, IoAttackLogs, IoChangelog, IoLeaderboards, IoOutpostsPopup, IoQuestBook, IoQuests, IoReplayRecorder, IoTd, IoTestMode, IoTilt, IoWhosOnline, IPROCESS, KEYS, LOGGER, MAP, MapRoomManager, MONSTERBAITER, MonsterBase, PATHING, PLANNER, popup_attacksettings, POPUPS, PROCESS3, PROCESS4, PROCESS5, PROCESS7, PROCESS_INFERNO1, QUESTS, Rndm, Solution, SOUNDS, SPECIALEVENT, SPRITES, STORE, Targeting, TemporaryComponent, TRIBES, TUTORIAL, UI2, URLLoaderApi, WaveObj, WMBASE } from "@game";
 
 export class WMATTACK extends ASObject {
     public static _history: any = null;
@@ -140,6 +141,9 @@ export class WMATTACK extends ASObject {
 
     private static readonly IO_LOGIN_GRACE_MS: int = 60000;
 
+    /** Seconds a raid that came due while the player was away waits once they are home (QoL #599). */
+    private static readonly IO_RETURN_DELAY: int = 120;
+
     public $ctor(): void {
         super.$ctor();
     }
@@ -230,6 +234,14 @@ export class WMATTACK extends ASObject {
                     // Only the main yard is attacked: an attack waiting in an outpost's save is dropped.
                     WMATTACK._queued = null;
                     delete WMATTACK._history.queued;
+                }
+                // (QoL #599, 14 October: a raid that came due while the player was away, in an outpost, the Gauntlet or
+                // someone's yard, landed the moment they came home, with no fresh warning (the minute's grace is only
+                // at login). Once a raid: two minutes from now, and warned again.)
+                if (WMATTACK._queued != null && WMATTACK._queued.attack && !WMATTACK._queued.ioPushed && Number(WMATTACK._queued.attackTime) < GLOBAL.Timestamp() + WMATTACK.IO_RETURN_DELAY) {
+                    WMATTACK._queued.attackTime = GLOBAL.Timestamp() + WMATTACK.IO_RETURN_DELAY;
+                    WMATTACK._queued.warned = 0;
+                    WMATTACK._queued.ioPushed = 1;
                 }
             }
         } else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.VIEW || GLOBAL.mode == GLOBAL.e_BASE_MODE.HELP) {
@@ -344,7 +356,7 @@ export class WMATTACK extends ASObject {
                 }
             }
             if (WMATTACK._queued != null && !WMATTACK._inProgress && WMATTACK.ioSettled()) {
-                if (!GLOBAL._catchup && !WMATTACK.warningPopup && !WMATTACK._trojan && WMATTACK._queued.warned == 0 && !WMATTACK.baseIsRepairing && BASE._isSanctuary <= GLOBAL.Timestamp() && WMATTACK._enabled && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent() && !PLANNER.isOpen()) {
+                if (!GLOBAL._catchup && !WMATTACK.warningPopup && !WMATTACK._trojan && WMATTACK._queued.warned == 0 && !WMATTACK.baseIsRepairing && BASE._isSanctuary <= GLOBAL.Timestamp() && WMATTACK._enabled && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent() && !PLANNER.isOpen() && !WMATTACK.ioQuiet()) {
                     WMATTACK.ShowWarning();
                 }
                 if (!GLOBAL._catchup && !WMATTACK._trojan && WMATTACK._queued.warned == 1 && !UI2._wildMonsterBar && !WMATTACK._inProgress && !WMATTACK.baseIsRepairing && BASE._isSanctuary <= GLOBAL.Timestamp() && WMATTACK._enabled && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent()) {
@@ -356,15 +368,31 @@ export class WMATTACK extends ASObject {
                         UI2.Hide("wmbar");
                     }
                 }
-                if (!WMATTACK.baseIsRepairing && WMATTACK._queued.attackTime <= GLOBAL.Timestamp() && WMATTACK._enabled && !PLANNER.isOpen() && BASE._isSanctuary <= GLOBAL.Timestamp()) {
+                if (!WMATTACK.baseIsRepairing && WMATTACK._queued.attackTime <= GLOBAL.Timestamp() && WMATTACK._enabled && !PLANNER.isOpen() && !WMATTACK.ioQuiet() && BASE._isSanctuary <= GLOBAL.Timestamp()) {
                     if (!WMATTACK._inProgress && !CUSTOMATTACKS._started && !WMATTACK.baseIsRepairing) {
                         WMATTACK.LaunchQueuedAttack();
                     }
                 } else if (Boolean(UI2._wildMonsterBar) && !WMATTACK.baseIsRepairing) {
-                    UI2._wildMonsterBar.eta_txt.htmlText = KEYS.Get("ai_eta", { "v1": GLOBAL.ToTime((WMATTACK._queued.attackTime - GLOBAL.Timestamp()) | 0) });
+                    let ioLeft: int = (WMATTACK._queued.attackTime - GLOBAL.Timestamp()) | 0;
+                    let ioEta: string = KEYS.Get("ai_eta", { "v1": GLOBAL.ToTime(ioLeft) });
+                    if (GLOBAL.INFERNO_ONLY && ioLeft <= 30 && ioLeft >= 0) {
+                        // (QoL #620: the last half minute pulses, and the last five seconds tick)
+                        if (ioLeft % 2 == 0) {
+                            ioEta = "<font color=\"#FF6A3A\">" + ioEta + "</font>";
+                        }
+                        if (ioLeft <= 5 && ioLeft != WMATTACK._ioTicked) {
+                            WMATTACK._ioTicked = ioLeft;
+                            SOUNDS.Play("clock1", 0.5);
+                        }
+                    }
+                    UI2._wildMonsterBar.eta_txt.htmlText = ioEta;
+                    // (Inferno-only, QoL #101: which side they come from, while it counts down)
+                    if (GLOBAL.INFERNO_ONLY) {
+                        WMATTACK.ioRaidArrow();
+                    }
                 }
             } else if (!WMATTACK._inProgress) {
-                if (!GLOBAL._catchup && WMATTACK.ioAttackDue() && !WMATTACK.baseIsRepairing && !WMATTACK._processing && !WMATTACK._trojan && BASE._isSanctuary <= GLOBAL.Timestamp() && WMATTACK._enabled && !PLANNER.isOpen() && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent()) {
+                if (!GLOBAL._catchup && WMATTACK.ioAttackDue() && !WMATTACK.baseIsRepairing && !WMATTACK._processing && !WMATTACK._trojan && BASE._isSanctuary <= GLOBAL.Timestamp() && WMATTACK._enabled && !PLANNER.isOpen() && !WMATTACK.ioQuiet() && !activeEvent.EventActive() && !INFERNO_EMERGENCE_EVENT.ShouldRunEvent()) {
                     WMATTACK._processing = true;
                     WMATTACK.Trigger();
                 }
@@ -386,8 +414,170 @@ export class WMATTACK extends ASObject {
         }
     }
 
+    /**
+     * Inferno-only (14 October, QoL #444): a tribe raid waits (its warning and its launch) while the Brimstone Pit,
+     * the Devil's Arcade, the Quest Book or a Hellgate run is open, as it already did for the Yard Planner. The
+     * warning used to sit behind those windows, and some of them stayed open over the fight.
+     */
+    public static ioQuiet(): boolean {
+        return GLOBAL.INFERNO_ONLY && (CasinoWindow.isOpen || ArcadeWindow.isOpen || IoQuestBook.isOpen || IoTd.on);
+    }
+
+    // ---- Inferno-only (QoL #101): the raid's side, during its countdown
+    private static _ioArrow: Sprite = null;
+
+    /** The arrow showing now (tests), or null. */
+    public static get ioArrow(): Sprite {
+        return WMATTACK._ioArrow;
+    }
+
+    /**
+     * Where the raid will land, in the yard's terms (MAP._BUILDINGTOPS): SpawnA's spot for it, 900 out at the planned
+     * angle (a swarm's groups spread along an arc from there: the middle of it), or null with no raid planned.
+     */
+    public static ioRaidPoint(): Point {
+        let q: any = WMATTACK._queued;
+        if (!q || !q.attack) {
+            return null;
+        }
+        let deg: number = Number(q.degrees) || 0;
+        let swarm: boolean = (q.type != undefined ? q.type | 0 : WMATTACK._type) == WMATTACK.TYPE_SWARM;
+        let sum: number = 0;
+        let n: int = 0;
+        for (let id in q.attack) {
+            let count: int = q.attack[id] | 0;
+            if (count <= 0) {
+                continue;
+            }
+            if (swarm) {
+                let d: number = deg;
+                for (let i: int = 0; i < count; i += 3) {
+                    d += 8;
+                    sum += d;
+                    n++;
+                }
+            } else {
+                sum += deg;
+                n++;
+            }
+        }
+        let at: number = (n > 0 ? sum / n : deg) * 0.0174532925;
+        return GRID.ToISO(Math.cos(at) * 900, Math.sin(at) * 900, 0);
+    }
+
+    /** An arrow at the screen's edge towards where the raid lands (on that spot itself when it is on the screen). */
+    private static ioRaidArrow(): void {
+        if (WMATTACK._ioArrow || !GLOBAL._layerUI || !WMATTACK._queued || !MAP._BUILDINGTOPS) {
+            return;
+        }
+        let a: Sprite = new Sprite();
+        a.name = "ioBat2RaidArrow";
+        a.mouseEnabled = false;
+        a.mouseChildren = false;
+        let head: Shape = new Shape();
+        head.name = "ioBat2RaidArrowHead";
+        let g: any = head.graphics;
+        // (pointing right: rotated to the raid; the tip at the middle)
+        g.lineStyle(2, 0x3A0A00, 1);
+        g.beginFill(0xFF5A1E, 1);
+        g.moveTo(0, 0);
+        g.lineTo(-30, -17);
+        g.lineTo(-22, 0);
+        g.lineTo(-30, 17);
+        g.lineTo(0, 0);
+        g.endFill();
+        a.addChild(head);
+        let t: TextField = IoMapUi.label(KEYS.Get("io_bat2_raid_side"), 11, IoMapUi.LIGHT, true, 160, "center");
+        t.name = "ioBat2RaidArrowText";
+        let box: Sprite = new Sprite();
+        box.name = "ioBat2RaidArrowLabel";
+        t.width = Math.ceil(t.textWidth) + 12;
+        IoMapUi.glass(box.graphics, t.width, 20, 7);
+        t.y = 1;
+        box.addChild(t);
+        a.addChild(box);
+        a.addEventListener(Event.ENTER_FRAME, WMATTACK.ioArrowFrame);
+        GLOBAL._layerUI.addChild(a);
+        WMATTACK._ioArrow = a;
+        WMATTACK.ioArrowFrame(null);
+    }
+
+    private static ioHideArrow(): void {
+        let a: Sprite = WMATTACK._ioArrow;
+        WMATTACK._ioArrow = null;
+        if (a) {
+            a.removeEventListener(Event.ENTER_FRAME, WMATTACK.ioArrowFrame);
+            if (a.parent) {
+                a.parent.removeChild(a);
+            }
+        }
+    }
+
+    private static ioArrowFrame(e: Event): void {
+        let a: Sprite = WMATTACK._ioArrow;
+        if (!a) {
+            return;
+        }
+        let p: Point = WMATTACK.ioRaidPoint();
+        if (!p || WMATTACK._inProgress || !UI2._wildMonsterBar || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !MAP._BUILDINGTOPS || !MAP._BUILDINGTOPS.stage || !GLOBAL._SCREEN || !a.parent) {
+            WMATTACK.ioHideArrow();
+            return;
+        }
+        let at: Point = a.parent.globalToLocal(MAP._BUILDINGTOPS.localToGlobal(p));
+        let mid: Point = a.parent.globalToLocal(MAP._BUILDINGTOPS.localToGlobal(GRID.ToISO(0, 0, 0)));
+        let s: Rectangle = GLOBAL._SCREEN;
+        // (clear of the top bar and the bottom one)
+        let left: number = s.x + 36;
+        let right: number = s.x + s.width - 36;
+        let top: number = s.y + 90;
+        let bottom: number = (GLOBAL._SCREENHUD ? GLOBAL._SCREENHUD.y : s.y + s.height) - 36;
+        let cx: number = (left + right) / 2;
+        let cy: number = (top + bottom) / 2;
+        let angle: number = 0;
+        if (at.x >= left && at.x <= right && at.y >= top && at.y <= bottom) {
+            // on the screen: on the spot, pointing the way they will go (to the yard's middle)
+            angle = Math.atan2(mid.y - at.y, mid.x - at.x);
+            a.x = at.x;
+            a.y = at.y;
+        } else {
+            // off it: where the line from the screen's middle to the spot leaves the screen, pointing out to it
+            let dx: number = at.x - cx;
+            let dy: number = at.y - cy;
+            let k: number = 1;
+            if (dx != 0) {
+                k = Math.min(k, ((dx > 0 ? right : left) - cx) / dx);
+            }
+            if (dy != 0) {
+                k = Math.min(k, ((dy > 0 ? bottom : top) - cy) / dy);
+            }
+            angle = Math.atan2(dy, dx);
+            a.x = cx + dx * k;
+            a.y = cy + dy * k;
+        }
+        let head: Shape = as3.as(a.getChildByName("ioBat2RaidArrowHead"), Shape);
+        let box: Sprite = as3.as(a.getChildByName("ioBat2RaidArrowLabel"), Sprite);
+        if (head) {
+            head.rotation = angle * 57.2957795;
+            head.alpha = 0.7 + 0.3 * Math.sin(getTimer() / 160);
+        }
+        if (box) {
+            // (behind the arrow's tail)
+            box.x = Math.round(-Math.cos(angle) * 52 - box.width / 2);
+            box.y = Math.round(-Math.sin(angle) * 40 - 10);
+        }
+    }
+
+    /** The last second the countdown ticked for (QoL #620). */
+    private static _ioTicked: int = -1;
+
     public static ShowWarning(): void {
         if (!WMATTACK.warningPopup) {
+            // (QoL #620, 14 October: the raid's warning and its start make a sound; only the music changed, so with
+            // music off there was no cue at all)
+            if (GLOBAL.INFERNO_ONLY) {
+                SOUNDS.Play("wmbhorn", 0.7);
+                WMATTACK._ioTicked = -1;
+            }
             WMATTACK.warningPopup = new AIATTACKPOPUP(WMATTACK._queued.type | 0);
             GLOBAL._layerWindows.addChild(WMATTACK.warningPopup);
             WMATTACK.PreloadAttackers();
@@ -608,6 +798,9 @@ export class WMATTACK extends ASObject {
         }
         WMATTACK._ioSpawnLevel = WMATTACK._queued && WMATTACK._queued.level ? WMATTACK._queued.level | 0 : 0;
         PATHING.ResetCosts();
+        if (GLOBAL.INFERNO_ONLY) {
+            SOUNDS.Play("warcry1", 0.8);
+        }
         WMATTACK.SendAttack(WMATTACK._queued.attack, Number(WMATTACK._queued.degrees), WMATTACK._queued.distances);
     }
 
@@ -657,6 +850,10 @@ export class WMATTACK extends ASObject {
         }
         if (_loc14_.length > 0 && _loc14_[0].length > 0) {
             MAP.FocusTo(_loc14_[0][0].x | 0, _loc14_[0][0].y | 0, 1);
+        }
+        // (Inferno-only, QoL #96: a wild raid on the player's own yard is recorded for its replay, as an attack is)
+        if (GLOBAL.INFERNO_ONLY) {
+            WMATTACK.ioRecordRaid();
         }
     }
 
@@ -847,7 +1044,17 @@ export class WMATTACK extends ASObject {
         IoLeaderboards.CloseOpen();
         IoAttackLogs.CloseOpen();
         IoChangelog.CloseOpen();
+        IoWhosOnline.CloseOpen();
         WMATTACK._inProgress = true;
+        IoQuests.wildLost = false;
+        // (Inferno-only, QoL #100: what the yard had, for the report at the end)
+        if (GLOBAL.INFERNO_ONLY && BASE._resources) {
+            WMATTACK._ioStart = { "r": [BASE._resources.r1.Get(), BASE._resources.r2.Get(), BASE._resources.r3.Get(), BASE._resources.r4.Get()], "traps": IoTrapRearm.disarmed().length };
+        }
+        // (Inferno-only, 14 October: Moloch coming, a nod)
+        if (WMATTACK._ioPlan && WMATTACK._ioPlan.tribe == "moloch") {
+            IoTilt.nod(IoTilt.MEDIUM, NaN, NaN, false, 400);
+        }
         ATTACK.Setup();
         BASE._blockSave = true;
         UI2.Hide("top");
@@ -877,6 +1084,10 @@ export class WMATTACK extends ASObject {
         let _loc2_: BFOUNDATION = null;
         let _loc3_: int = 0;
         let _loc4_: int = 0;
+        // (Inferno-only, QoL #96/#92: the raid's replay ends here, before the repairs, with what it wrecked and took)
+        if (GLOBAL.INFERNO_ONLY) {
+            WMATTACK.ioRaidRecorded();
+        }
         WMATTACK._inProgress = false;
         UI2.Show("top");
         UI2.Show("bottom");
@@ -933,6 +1144,10 @@ export class WMATTACK extends ASObject {
             // Inferno-only quest book: a wild monster attack held off
             if (GLOBAL.INFERNO_ONLY) {
                 IoQuests.event("wild_defended");
+                // (and not one building lost)
+                if (!IoQuests.wildLost) {
+                    IoQuests.event("wild_flawless");
+                }
             }
         }
         CUSTOMATTACKS._started = false;
@@ -988,11 +1203,124 @@ export class WMATTACK extends ASObject {
         MONSTERBAITER._attacking = 0;
     }
 
+    /** (Inferno-only, QoL #100) the yard's resources and disarmed traps when the raid began */
+    private static _ioStart: any = null;
+
+    /**
+     * Inferno-only (QoL #100): the raid's report, one line: buildings and walls lost, traps set off, what was taken.
+     * Null when nothing was lost. Read by ATTACK.WellDefended / PoorDefense.
+     */
+    public static ioRaidReport: string = null;
+
+    public static ioTrapsFired: int = 0;
+
+    // ---- Inferno-only (QoL #96, 15 October): the raid's replay, and (QoL #92) its row under "Attacks on me"
+    /** The last ask for a raid's replay (an answer to an older one is let go). */
+    private static _ioRaidAsk: int = 0;
+
+    /**
+     * A wild raid on the player's own yard has begun (SendAttack): the server is asked for its replay (replays/raid:
+     * its row and its attack log), and once the key comes the raid is recorded (IoReplayRecorder) if it is still on,
+     * in the same yard. A key come too late is let go at once (IoReplayRecorder.ioDrop). Not in admin test mode
+     * (a practice raid, as a practice attack isn't recorded either).
+     */
+    public static ioRecordRaid(): void {
+        if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isInfernoMainYardOrOutpost || GLOBAL.ioTestMode() || !BASE._baseID || IoReplayRecorder.recording) {
+            return;
+        }
+        let ask: int = ++WMATTACK._ioRaidAsk;
+        let baseid: string = String(BASE._baseID);
+        new URLLoaderApi().load(GLOBAL.serverUrl + "replays/raid", [["baseid", baseid], ["t", WMATTACK._attackersBaseID | 0]], (r: any): void => {
+            if (!r || (r.error !== 0 && r.error !== "0") || !r.key) {
+                LOGGER.Log("log", "Raid replay not started: " + (r && r.error ? String(r.error) : "no answer"));
+                return;
+            }
+            let key: string = String(r.key);
+            if (ask != WMATTACK._ioRaidAsk || !WMATTACK._inProgress || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || String(BASE._baseID) != baseid || BASE._loading || IoReplayRecorder.recording) {
+                IoReplayRecorder.ioDrop(key);
+                return;
+            }
+            IoReplayRecorder.setLimits(r.limits);
+            IoReplayRecorder.begin(key, true);
+        }, (e: IOErrorEvent): void => {});
+    }
+
+    /**
+     * The raid is over (CleanUp, before the repairs): its replay's last part, with the buildings it wrecked (walls,
+     * traps and decorations aside, as the raid's report counts them) and what it took (the yard's resources since it
+     * began: _ioStart), for its attack log.
+     */
+    private static ioRaidRecorded(): void {
+        if (!IoReplayRecorder.raid) {
+            return;
+        }
+        let destroyed: int = 0;
+        for (let b of (InstanceManager.getInstancesByClass(BFOUNDATION) ?? [])) {
+            if (b.health <= 0 && b._id > 0 && b._class != "wall" && b._class != "trap" && b._class != "decoration") {
+                destroyed++;
+            }
+        }
+        let loot: any[] = [0, 0, 0, 0];
+        let start: any = WMATTACK._ioStart;
+        if (start && start.r && BASE._resources) {
+            let now: any[] = [BASE._resources.r1.Get(), BASE._resources.r2.Get(), BASE._resources.r3.Get(), BASE._resources.r4.Get()];
+            for (let i: int = 0; i < 4; i++) {
+                loot[i] = Math.max(0, Math.floor(Number(start.r[i]) - Number(now[i])));
+            }
+        }
+        IoReplayRecorder.ioRaidEnd({ "destroyed": destroyed, "loot": loot });
+    }
+
+    private static ioReport(): void {
+        WMATTACK.ioRaidReport = null;
+        WMATTACK.ioTrapsFired = 0;
+        let start: any = WMATTACK._ioStart;
+        WMATTACK._ioStart = null;
+        if (!start) {
+            return;
+        }
+        let lost: int = 0;
+        let walls: int = 0;
+        for (let b of (InstanceManager.getInstancesByClass(BFOUNDATION) ?? [])) {
+            if (b.health > 0 || b._id <= 0) {
+                continue;
+            }
+            if (b._class == "wall") {
+                walls++;
+            } else if (b._class != "trap" && b._class != "decoration") {
+                lost++;
+            }
+        }
+        let fired: int = Math.max(0, IoTrapRearm.disarmed().length - (start.traps | 0)) | 0;
+        WMATTACK.ioTrapsFired = fired;
+        let taken: string[] = [];
+        let now: any[] = [BASE._resources.r1.Get(), BASE._resources.r2.Get(), BASE._resources.r3.Get(), BASE._resources.r4.Get()];
+        for (let i: int = 0; i < 4; i++) {
+            let d: number = Number(start.r[i]) - Number(now[i]);
+            if (d >= 1) {
+                taken.push(GLOBAL.ioShort(d) + " " + KEYS.Get(as3.str(GLOBAL._resourceNames[i])));
+            }
+        }
+        let parts: string[] = [];
+        parts.push(KEYS.Get("io_raid_lost", { "v1": lost }));
+        if (walls > 0) {
+            parts.push(KEYS.Get("io_raid_walls", { "v1": walls }));
+        }
+        if (fired > 0) {
+            parts.push(KEYS.Get("io_raid_traps", { "v1": fired }));
+        }
+        parts.push(taken.length ? KEYS.Get("io_raid_taken", { "v1": taken.join(", ") }) : KEYS.Get("io_raid_nothing_taken"));
+        WMATTACK.ioRaidReport = parts.join("  ·  ");
+    }
+
     public static End(): void {
         let _loc2_: int = 0;
         let _loc3_: int = 0;
         let _loc4_: BFOUNDATION = null;
         WMATTACK.Tick();
+        if (GLOBAL.INFERNO_ONLY) {
+            WMATTACK.ioReport();
+        }
         if (BASE.isInfernoMainYardOrOutpost) {
             SOUNDS.PlayMusic("musicibuild");
         } else {
@@ -1130,7 +1458,7 @@ export class WMATTACK extends ASObject {
     }
 
     /**
-     * Admin test mode (com/monsters/admin/IoTestMode.as): a wild attack now, on the yard on screen, whatever
+     * Admin test mode (com/monsters/admin/IoTestMode.ts): a wild attack now, on the yard on screen, whatever
      * the one-a-day limit, the first minute after logging in and the player's level. tribe: legionnaire,
      * kozu, abunakki, dreadnaut or moloch; band: the level band's attack (0-4). `custom` ({id: count}, at
      * `customLevel`) sends those monsters instead, in the tribe's formation. Returns "" or why not.

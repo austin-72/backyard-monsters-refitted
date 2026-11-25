@@ -4,7 +4,7 @@ import { User } from "../../database/models/user.model.js";
 import type { KoaController } from "../../utils/KoaController.js";
 import { devConfig } from "../../config/GameConfig.js";
 import { SendMessageSchema } from "./zod/SendMessageSchema.js";
-import { postgres } from "../../server.js";
+import { postgres, redis } from "../../server.js";
 import { Message } from "../../database/models/message.model.js";
 import { getCurrentDateTime } from "../../utils/getCurrentDateTime.js";
 import { findOrCreateThread } from "../../services/mail/findOrCreateThread.js";
@@ -29,6 +29,10 @@ import { questBump } from "../../services/quests/questProgress.js";
  * @returns {Promise<void>} - A promise that resolves when the controller is complete.
  * @throws {Error} - Throws an error if the request body is missing required fields or if logging fails.
  */
+/** (18 October) Letters a player may send in a while (Inferno-only). */
+const MAIL_PER_WINDOW = 30;
+const MAIL_WINDOW_S = 10 * 60;
+
 export const sendMessage: KoaController = async (ctx) => {
   try {
     const { userid, blockedUsers }: User = ctx.authUser;
@@ -44,11 +48,30 @@ export const sendMessage: KoaController = async (ctx) => {
       return;
     }
 
-    // Profanity filter
-    const { Filter } = await import("bad-words");
-    const filter = new Filter();
-    const filteredSubject = filter.clean(message.subject);
-    const filteredMessage = filter.clean(message.message);
+    // (18 October, SUSPECTED-BUGS.md: a player muted or banned in chat could still send any number of letters to
+    // anyone) Inferno-only: no mail while muted or chat-banned (as the alliance board's pins), and at most
+    // MAIL_PER_WINDOW letters in MAIL_WINDOW_S seconds.
+    if (infernoOnlyConfig.enabled && !isRelocation) {
+      const mutedUntil = Number((await redis.get(`chat:mute:${userid}`).catch(() => null)) ?? 0);
+      const banned = (await redis.get(`chat:banned:${userid}`).catch(() => null)) === "1";
+      if (banned || mutedUntil > Date.now()) {
+        ctx.status = Status.OK;
+        ctx.body = { error: 1, message: "You can't send mail while you're muted or banned in chat." };
+        return;
+      }
+      const rateKey = `mail:rate:${userid}`;
+      const sent = Number(await redis.send("INCR", [rateKey]).catch(() => 0));
+      if (sent === 1) await redis.send("EXPIRE", [rateKey, String(MAIL_WINDOW_S)]).catch(() => 0);
+      if (sent > MAIL_PER_WINDOW) {
+        ctx.status = Status.OK;
+        ctx.body = { error: 1, message: "You've sent a lot of mail just now. Wait a few minutes, then try again." };
+        return;
+      }
+    }
+
+    // (Inferno-only, 7 October, the user's call: no word filter on what players write to each other.)
+    const filteredSubject = message.subject;
+    const filteredMessage = message.message;
 
     const { threadid, targetid } = message;
     const thread = await findOrCreateThread(threadid, targetid, userid);

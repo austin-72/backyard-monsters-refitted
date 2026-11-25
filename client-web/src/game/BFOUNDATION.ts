@@ -1,15 +1,15 @@
 import * as as3 from "as3";
 import { Class, Vector, int, uint } from "as3";
-import { Bitmap, BitmapData, BlendMode, DisplayObject, Graphics, IBitmapDrawable, MovieClip, Sprite } from "flash/display";
+import { Bitmap, BitmapData, BlendMode, DisplayObject, Graphics, IBitmapDrawable, MovieClip, Sprite, ioSetFoot } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { BitmapFilter, ColorMatrixFilter, GlowFilter } from "flash/filters";
 import { Matrix, Point, Rectangle } from "flash/geom";
-import { Dictionary } from "flash/utils";
-import { ATTACK, BASE, BMUSHROOM, BTOTEM, BTRAP, BUILDINGOPTIONS, BUILDINGS, BWALL, BYMConfig, BYMDevConfig, BuildingAssetContainer, BuildingEvent, BuildingOverlay, CModifiableProperty, Console, EnumYardType, Fire, GLOBAL, GRID, GameObject, HOUSING, ICoreBuilding, ITargetable, ImageCache, ImageCallbackHelper, InstanceManager, InventoryManager, KEYS, LOGGER, LOGIN, MAP, MONSTERBUNKER, MapRoomManager, MonsterBase, MovieClipUtils, PATHING, PLANNER, POPUPS, QUESTS, QUEUE, RasterData, ResourcePackages, SOUNDS, STORE, SecNum, Smoke, TUTORIAL, UI2, UPDATES, boneCrusherHit, building100hit, building101hit, building102hit, building103hit, building104hit, building105hit, building106hit, building10hit, building110hit, building111hit, building112hit, building113hit, building114hit, building115hit, building116hit, building117hit, building118hit, building119hit, building11hit, building120hit, building121hit, building122hit, building123hit, building124hit, building125hit, building126hit, building12hit, building131hit, building135hit, building13hit, building14hit, building15hit, building16hit, building17hit, building18hit, building19hit, building1hit, building20hit, building21hit, building22hit, building23hit, building24hit, building25hit, building26hit, building27hit, building2hit, building3hit, building4hit, building51hit, building53hit, building54hit, building55hit, building56hit, building57hit, building5hit, building63hit, building64hit, building65hit, building66hit, building68hit, building6hit, building71hit, building72hit, building73hit, building7hit, building86hit, building87hit, building88hit, building89hit, building8hit, building90hit, building96hit, building97hit, building98hit, building99hit, building9hit, buildingFootprint100x100, buildingFootprint130x130, buildingFootprint160x160, buildingFootprint190x160, buildingFootprint20x20, buildingFootprint30x30, buildingFootprint40x40, buildingFootprint70x70, buildingFootprint80x80, buildingFootprint90x90, buildingcubehit, buildingflaghit, buildingflowershit, buildinggnomehit, buildingheadhit, cannonTowerHit, coalProducerHit, hatcheryHit, housingBunkerHit, infernoAcademyHit, infernoPortalHit, magmaProducerHit, magmaTowerHit, monsterLockerHit, popup_biggulp, popup_helpme, print, quakeTowerHit, siloHit, sniperTowerHit, sulpherProducerHit, townHallHit, wallHit } from "@game";
+import { Dictionary, getTimer } from "flash/utils";
+import { AllianceArmamentBuff, ATTACK, BASE, BMUSHROOM, BTOTEM, BTRAP, BUILDINGINFO, BUILDINGOPTIONS, BUILDINGS, BWALL, BYMConfig, BYMDevConfig, BuildingAssetContainer, BuildingEvent, BuildingOverlay, CModifiableProperty, Console, EnumYardType, Fire, GLOBAL, GRID, GameObject, HOUSING, ICoreBuilding, ITargetable, ImageCache, ImageCallbackHelper, InstanceManager, InventoryManager, IoLighting, IoPinchZoom, IoPlaceMany, IoQuests, IoTd, IoToast, KEYS, LOGGER, LOGIN, MAP, MONSTERBUNKER, MapRoomManager, MonsterBase, MovieClipUtils, PATHING, PLANNER, POPUPS, QUESTS, QUEUE, RasterData, ResourcePackages, SOUNDS, STORE, SecNum, Smoke, TUTORIAL, UI2, UPDATES, boneCrusherHit, building100hit, building101hit, building102hit, building103hit, building104hit, building105hit, building106hit, building10hit, building110hit, building111hit, building112hit, building113hit, building114hit, building115hit, building116hit, building117hit, building118hit, building119hit, building11hit, building120hit, building121hit, building122hit, building123hit, building124hit, building125hit, building126hit, building12hit, building131hit, building135hit, building13hit, building14hit, building15hit, building16hit, building17hit, building18hit, building19hit, building1hit, building20hit, building21hit, building22hit, building23hit, building24hit, building25hit, building26hit, building27hit, building2hit, building3hit, building4hit, building51hit, building53hit, building54hit, building55hit, building56hit, building57hit, building5hit, building63hit, building64hit, building65hit, building66hit, building68hit, building6hit, building71hit, building72hit, building73hit, building7hit, building86hit, building87hit, building88hit, building89hit, building8hit, building90hit, building96hit, building97hit, building98hit, building99hit, building9hit, buildingFootprint100x100, buildingFootprint130x130, buildingFootprint160x160, buildingFootprint190x160, buildingFootprint20x20, buildingFootprint30x30, buildingFootprint40x40, buildingFootprint70x70, buildingFootprint80x80, buildingFootprint90x90, buildingcubehit, buildingflaghit, buildingflowershit, buildinggnomehit, buildingheadhit, cannonTowerHit, coalProducerHit, hatcheryHit, housingBunkerHit, infernoAcademyHit, infernoPortalHit, magmaProducerHit, magmaTowerHit, monsterLockerHit, popup_biggulp, popup_helpme, print, quakeTowerHit, siloHit, sniperTowerHit, sulpherProducerHit, townHallHit, wallHit, IoTilt, IoAllianceBanner, POWERUPS, IoChampionStatue, IoShop } from "@game";
 
 export class BFOUNDATION extends GameObject {
     static {
-        as3.fields(this, { _mcBase: null, _mcFootprint: null, _mcHit: null, topContainer: null, animContainer: null, _fortBackContainer: null, _fortFrontContainer: null, _spriteAlert: null, _mcAlert: null, _position: null, _oldPosition: null, _stopMoveCount: 0, _moving: false, _mouseOffset: null, _footprint: null, _blockers: null, _gridCost: null, _clickTimer: 0, _prefab: 0, _buildInstant: false, _buildInstantCost: null, _fortification: null, _nullPoint: null, _animLoaded: false, _animBMD: null, _animRect: null, _animContainerBMD: null, _animTick: 0, _animFrames: 0, anim2Container: null, _anim2BMD: null, _anim2ContainerBMD: null, _anim2Rect: null, _anim2Frames: 0, _anim2Tick: 0, _anim2Loaded: false, anim3Container: null, _anim3BMD: null, _anim3ContainerBMD: null, _anim3Rect: null, _anim3Frames: 0, _anim3Tick: 0, _anim3Loaded: false, _animRandomStart: true, _countdownBuild: null, _countdownUpgrade: null, _countdownRebuild: null, _countdownProduce: null, _countdownFortify: null, _stored: null, _lvl: null, _threadid: 0, _subject: null, _senderid: 0, _senderName: null, _senderPic: null, _hpCountdownRebuild: 0, _hpCountdownProduce: 0, _hpStored: 0, _hpLvl: 0, _repairing: 0, _repairTime: 0, _productionStage: null, _looted: false, _hasWorker: false, _hasResources: false, _counter: NaN, _type: 0, _attackgroup: 0, _class: null, _id: 0, _energy: 0, _fired: false, _creatures: null, _buildingTitle: null, _buildingInstructions: null, _buildingStats: null, _buildingDescription: null, _upgradeDescription: null, _recycleDescription: null, _specialDescription: null, _repairDescription: null, _blockRecycle: false, _upgradeCosts: null, _recycleCosts: null, _buildingProps: null, _resource: NaN, _range: 0, _rate: 0, _splash: 0, _speed: 0, _producing: 0, _constructed: false, _placing: false, _oldY: 0, _upgrading: null, _origin: null, _shake: 0, _picking: false, _monsterQueue: null, _inProduction: null, _taken: null, _spoutPoint: null, _spoutHeight: 0, _canFunction: false, _helpList: null, _destroyed: false, _renderState: null, _oldRenderState: null, _lastLoadedState: null, _renderLevel: 0, _renderFortLevel: 0, _treat: 0, _expireTime: 0, imageData: null, _lastBarIndex: -1, _overlayOffset: null, _rasterData: null, _rasterPt: null, _offsets: null, _sources: null, _debugRasterData: null, m_bmd: null, m_shadowBMD: null, m_footprintBMD: null, m_hitBMD: null, m_bmHit: null, m_hitOffsetIndex: 0, _imageCallbackHelpers: null, _recycled: false, damageProperty: null, _mouseClicked: false, _ioFollowKey: null, _ioHit: null, _ioHover: false, _ioGlow: null, _ioGlowBMD: null, _ioGlowPt: null, _ioGlowOff: null });
+        as3.fields(this, { _mcBase: null, _mcFootprint: null, _mcHit: null, topContainer: null, animContainer: null, _fortBackContainer: null, _fortFrontContainer: null, _spriteAlert: null, _mcAlert: null, _position: null, _oldPosition: null, _stopMoveCount: 0, _moving: false, _mouseOffset: null, _footprint: null, _blockers: null, _gridCost: null, _clickTimer: 0, _prefab: 0, _buildInstant: false, _buildInstantCost: null, _fortification: null, _nullPoint: null, _animLoaded: false, _animBMD: null, _animRect: null, _animContainerBMD: null, _animTick: 0, _animFrames: 0, anim2Container: null, _anim2BMD: null, _anim2ContainerBMD: null, _anim2Rect: null, _anim2Frames: 0, _anim2Tick: 0, _anim2Loaded: false, anim3Container: null, _anim3BMD: null, _anim3ContainerBMD: null, _anim3Rect: null, _anim3Frames: 0, _anim3Tick: 0, _anim3Loaded: false, _animRandomStart: true, _countdownBuild: null, _countdownUpgrade: null, _countdownRebuild: null, _countdownProduce: null, _countdownFortify: null, _stored: null, _lvl: null, _threadid: 0, _subject: null, _senderid: 0, _senderName: null, _senderPic: null, _hpCountdownRebuild: 0, _hpCountdownProduce: 0, _hpStored: 0, _hpLvl: 0, _repairing: 0, _repairTime: 0, _productionStage: null, _looted: false, _hasWorker: false, _hasResources: false, _counter: NaN, _type: 0, _attackgroup: 0, _class: null, _id: 0, _energy: 0, _fired: false, _creatures: null, _buildingTitle: null, _buildingInstructions: null, _buildingStats: null, _buildingDescription: null, _upgradeDescription: null, _recycleDescription: null, _specialDescription: null, _repairDescription: null, _blockRecycle: false, _upgradeCosts: null, _recycleCosts: null, _buildingProps: null, _resource: NaN, _range: 0, _rate: 0, _splash: 0, _speed: 0, _producing: 0, _constructed: false, _placing: false, _oldY: 0, _upgrading: null, _origin: null, _shake: 0, _picking: false, _monsterQueue: null, _inProduction: null, _taken: null, _spoutPoint: null, _spoutHeight: 0, _canFunction: false, _helpList: null, _destroyed: false, _renderState: null, _oldRenderState: null, _lastLoadedState: null, _renderLevel: 0, _renderFortLevel: 0, _treat: 0, _expireTime: 0, imageData: null, _lastBarIndex: -1, _overlayOffset: null, _rasterData: null, _rasterPt: null, _offsets: null, _sources: null, _debugRasterData: null, m_bmd: null, m_shadowBMD: null, m_footprintBMD: null, m_hitBMD: null, m_bmHit: null, m_hitOffsetIndex: 0, _imageCallbackHelpers: null, _recycled: false, damageProperty: null, _mouseClicked: false, _ioFollowKey: null, _ioPutDown: false, _ioHit: null, _ioHover: false, _ioTargeted: false, _ioGlow: null, _ioGlowBMD: null, _ioGlowPt: null, _ioGlowOff: null, _ioTouchPress: false, _ioCarry: false, _ioPinned: false, _ioGrabX: 0, _ioGrabY: 0 });
     }
 
     public static readonly TICK_LIMIT: int = 1209600;
@@ -51,6 +51,8 @@ export class BFOUNDATION extends GameObject {
     /** Hit clip -> its building, so the clips can be kept in drawing order (MAP.SortDepth). */
     private static s_ioHitOwner: Dictionary = new Dictionary(true);
 
+    /** Inferno-only (QoL #19): the "inactive while upgrading" caution was given this session. */
+    public static _ioWarnedInactive: boolean = false;
     /** The building under the mouse (one at a time) and its glow (a picture of it, glowing, under it). */
     public static s_ioHovered: BFOUNDATION = null;
 
@@ -191,6 +193,14 @@ export class BFOUNDATION extends GameObject {
     private _mouseClicked: boolean;
     /** Where the building held by the pointer was last drawn, with the view (FollowMouseB). */
     private _ioFollowKey: string;
+    /**
+     * Placing a building runs on the ground's MOUSE_UP. If anything in it throws, Flash stops
+     * delivering that MOUSE_UP to the other listeners, so MAP.Release never runs: the building keeps
+     * following the mouse and the yard drags with it until the game is restarted (it happened).
+     * Whatever fails, the placement is now abandoned cleanly, and what failed is reported.
+     */
+    /** Put down by the last Place (for IoPlaceMany: the next of a run into the hand). */
+    private _ioPutDown: boolean;
     // ---------------------------------------------------------------------------------------------
     // Inferno-only: clicking buildings, and the white glow round the one under the mouse
     // ---------------------------------------------------------------------------------------------
@@ -205,6 +215,8 @@ export class BFOUNDATION extends GameObject {
      */
     private _ioHit: Sprite;
     private _ioHover: boolean;
+    /** Inferno-only (26 October): in an attack, under a resource bomb's or siege weapon's ring (DROPZONE): the same glow. */
+    private _ioTargeted: boolean;
     private _ioGlow: RasterData;
     private _ioGlowBMD: BitmapData;
     private _ioGlowPt: Point;
@@ -344,7 +356,7 @@ export class BFOUNDATION extends GameObject {
             Console.warning("BFOUNDATION::getBuildingSaveData(TownHall missing upon save)");
         }
         BASE._percentDamaged = (100 - 100 / BFOUNDATION.s_totalBuildingMaxHP * BFOUNDATION.s_totalBuildingHP) | 0;
-        // Comment: This gives an out-of-range index error. The md5.as class is malformed
+        // Comment: This gives an out-of-range index error. The md5.ts class is malformed
         // saveData[2] = md5(hashString);
         as3.vset(saveData, 2, hashString);
         return saveData;
@@ -738,7 +750,13 @@ export class BFOUNDATION extends GameObject {
         if (this._renderState == null || state !== this._renderState || this._lvl.Get() != this._renderLevel) {
             this._renderLevel = this._lvl.Get() | 0;
             let effectiveLevel: int = this.getEffectiveLevel();
-            imageDataA = GLOBAL._buildingProps[this._type - 1].imageData;
+            imageDataA = GLOBAL._buildingProps[this._type - 1] ? GLOBAL._buildingProps[this._type - 1].imageData : null;
+            // (Inferno-only, 22 October: a kind with no pictures of its own here (the invasion totems 122-126, drawn by
+            // BTOTEM, put down as a plain decoration): nothing drawn, instead of an error every game step)
+            if (!imageDataA) {
+                this._renderState = state;
+                return;
+            }
             if (effectiveLevel == 0) {
                 imageDataB = imageDataA[1];
                 imageLevel = 1;
@@ -758,6 +776,16 @@ export class BFOUNDATION extends GameObject {
             }
             this._oldRenderState = this._renderState;
             this._renderState = state;
+            // (Inferno-only, 22 November: a level with other pictures of itself, "ioVariants" (the level 5 wall's magma),
+            // one picked by the building's id, so a line of them doesn't repeat; its own group of pictures)
+            let ioVariant: int = 0;
+            if (imageDataB && imageDataA.ioVariants && imageDataA.ioVariants[imageLevel]) {
+                let ioMore: any[] = imageDataA.ioVariants[imageLevel] as any[];
+                ioVariant = ((this._id | 0) % (ioMore.length + 1) + ioMore.length + 1) % (ioMore.length + 1) | 0;
+                if (ioVariant > 0) {
+                    imageDataB = ioMore[ioVariant - 1];
+                }
+            }
             if (imageDataB) {
                 loadImages = [];
                 // (a building drawn with no top, only an anim strip, like the Inferno's Cinder Coil and
@@ -792,7 +820,9 @@ export class BFOUNDATION extends GameObject {
                     case EnumYardType.FORTIFICATION:
                         imageGroupYardType = EnumYardType.OUTPOST | 0;
                 }
-                ImageCache.GetImageGroupWithCallBack(imageGroupYardType + "b" + this._type + "-" + imageLevel + state, loadImages, as3.bind(this, this.ImageCallback), true, 2, state);
+                // (Inferno-only, 16 October: an Alliance Banner's pictures are its owner's shield's: a group of their own,
+                // or the first yard's banner's group would stand for every yard's: IoAllianceBanner)
+                ImageCache.GetImageGroupWithCallBack(imageGroupYardType + "b" + this._type + "-" + imageLevel + (ioVariant > 0 ? "v" + ioVariant : "") + state + IoAllianceBanner.groupTag(this._type) + IoChampionStatue.groupTag(this._type), loadImages, as3.bind(this, this.ImageCallback), true, 2, state);
             }
         }
         if (this._fortification.Get() != this._renderFortLevel) {
@@ -840,6 +870,9 @@ export class BFOUNDATION extends GameObject {
                                     as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FORTFRONT).x = this._mc.x + as3.vget(this._offsets, BFOUNDATION._RASTERDATA_FORTFRONT).x - MAP.instance.offset.x;
                                     as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FORTFRONT).y = this._mc.y + as3.vget(this._offsets, BFOUNDATION._RASTERDATA_FORTFRONT).y - MAP.instance.offset.y;
                                     as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FORTFRONT) || as3.vset(this._rasterData, BFOUNDATION._RASTERDATA_FORTFRONT, new RasterData(as3.cast(_loc5_, IBitmapDrawable), as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FORTFRONT), int.MAX_VALUE));
+                                    // (Inferno-only, 12 November: the new level's picture. Only a first ring was ever given one, so a building calcified
+                                    // further in the same session kept its level 1 ring, drawn at the new level's place; as the top picture is swapped)
+                                    as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FORTFRONT).data = as3.cast(_loc5_, IBitmapDrawable);
                                 }
                             } else if (Boolean(fortImageDataB["back"]) && fortImageDataA.baseurl + fortImageDataB["back"][0] == _loc4_) {
                                 if (!BYMConfig.instance.RENDERER_ON) {
@@ -853,6 +886,9 @@ export class BFOUNDATION extends GameObject {
                                     as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FORTBACK).x = this._mc.x + as3.vget(this._offsets, BFOUNDATION._RASTERDATA_FORTBACK).x - MAP.instance.offset.x;
                                     as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FORTBACK).y = this._mc.y + as3.vget(this._offsets, BFOUNDATION._RASTERDATA_FORTBACK).y - MAP.instance.offset.y;
                                     as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FORTBACK) || as3.vset(this._rasterData, BFOUNDATION._RASTERDATA_FORTBACK, new RasterData(as3.cast(_loc5_, IBitmapDrawable), as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FORTBACK), int.MAX_VALUE));
+                                    // (Inferno-only, 12 November: the new level's picture. Only a first ring was ever given one, so a building calcified
+                                    // further in the same session kept its level 1 ring, drawn at the new level's place; as the top picture is swapped)
+                                    as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FORTBACK).data = as3.cast(_loc5_, IBitmapDrawable);
                                 }
                             }
                         }
@@ -1070,14 +1106,17 @@ export class BFOUNDATION extends GameObject {
                 as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_ANIM2).clear();
                 as3.vset(this._rasterData, BFOUNDATION._RASTERDATA_ANIM2, null);
             }
-            if (!this._anim3Loaded && as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_ANIM3) instanceof RasterData) {
+            // (Inferno-only, 16 October: a damaged or destroyed state counts its anim3 as "loaded" (it waits for none),
+            // so a third layer the last state had (the Under Hall 6's core) stayed drawn over the wreck: gone when this
+            // state has none)
+            if ((!this._anim3Loaded || GLOBAL.INFERNO_ONLY && !imageDataB[BFOUNDATION._IMAGE_NAMES[BFOUNDATION._RASTERDATA_ANIM3] + state]) && as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_ANIM3) instanceof RasterData) {
                 as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_ANIM3).clear();
                 as3.vset(this._rasterData, BFOUNDATION._RASTERDATA_ANIM3, null);
             }
         }
         this.AnimFrame();
         this.ioBuildHit(ioParts);
-        if (this._ioHover) {
+        if (this._ioHover || this._ioTargeted) {
             this.ioShowGlow();
         }
     }
@@ -1137,6 +1176,8 @@ export class BFOUNDATION extends GameObject {
                     this.m_footprintBMD.draw(as3.cast(this._mcFootprint, IBitmapDrawable), new Matrix(1, 0, 0, 1, this._mcFootprint.width * 0.5, 0));
                 }
                 as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FOOTPRINT) || as3.vset(this._rasterData, BFOUNDATION._RASTERDATA_FOOTPRINT, new RasterData(as3.cast(this.m_footprintBMD, IBitmapDrawable), as3.vget(this._rasterPt, BFOUNDATION._RASTERDATA_FOOTPRINT), MAP.DEPTH_SHADOW + 1));
+                // (Inferno-only, 14 October: it lies on the ground, squashed with it on a tilted yard: IoTilt)
+                as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FOOTPRINT)._ioFlat = true;
                 if (param2) {
                     as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_FOOTPRINT).data = as3.cast(this.m_footprintBMD, IBitmapDrawable);
                 }
@@ -1243,6 +1284,14 @@ export class BFOUNDATION extends GameObject {
             this._mcHit.x = this._mc.x + as3.vget(this._offsets, this.m_hitOffsetIndex).x;
             this._mcHit.y = this._mc.y + as3.vget(this._offsets, this.m_hitOffsetIndex).y;
         }
+        // Inferno-only (14 October): where it stands, for a tilted yard (IoTilt): its footprint's middle
+        let ioFoot: number = this._mc ? this._mc.y + this.ioFootMid() : 0;
+        if (this._mcHit) {
+            ioSetFoot(this._mcHit, ioFoot);
+        }
+        if (this._mc) {
+            ioSetFoot(this._mc, ioFoot);
+        }
         if (this._mc) {
             _loc6_ = this._mc.height * 0.5;
             if (this._middle) {
@@ -1255,6 +1304,9 @@ export class BFOUNDATION extends GameObject {
                 _loc4_ = as3.vget(this._rasterData, _loc10_);
                 _loc5_ = as3.vget(this._rasterPt, _loc10_);
                 if (Boolean(_loc4_) && Boolean(_loc5_)) {
+                    // (tilted: the footprint lies on the ground, the rest stands on the footprint's middle)
+                    _loc4_._ioFlat = _loc10_ === BFOUNDATION._RASTERDATA_FOOTPRINT;
+                    _loc4_._ioFoot = ioFoot - _loc1_.y;
                     this.m_baseDepth = _loc10_ - 1;
                     _loc4_.depth = _loc10_ === BFOUNDATION._RASTERDATA_FORTBACK ? _loc7_ - 1 : _loc7_ + _loc10_ - 1;
                     _loc5_.x = this._mc.x + as3.vget(this._offsets, _loc10_).x - _loc1_.x;
@@ -1274,6 +1326,7 @@ export class BFOUNDATION extends GameObject {
                 this._ioGlowPt.x = this._mc.x + this._ioGlowOff.x - _loc1_.x;
                 this._ioGlowPt.y = this._mc.y + this._ioGlowOff.y - _loc1_.y;
                 this._ioGlow.depth = _loc7_ - 1.5;
+                this._ioGlow._ioFoot = ioFoot - _loc1_.y;
                 this._ioGlow.visible = this._mc.visible;
             }
             _loc4_ = as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_SHADOW);
@@ -1286,11 +1339,30 @@ export class BFOUNDATION extends GameObject {
                     _loc3_.y = _loc5_.y;
                     _loc3_.width = _loc4_.rect.width;
                     _loc3_.height = _loc4_.rect.height;
-                    _loc4_.visible = Boolean(_loc2_(_loc3_) && this._mcBase.visible);
+                    // (Inferno-only, 20 October: left hidden while the yard's lighting casts the building's shadow itself
+                    // (IoLighting): shown again every animation frame, it was hidden again every tick)
+                    _loc4_.visible = Boolean(_loc2_(_loc3_) && this._mcBase.visible) && !IoLighting.paintedHidden;
                 }
             }
         }
         super.updateRasterData();
+    }
+
+    /**
+     * Inferno-only (14 October, the user's): a nod of the yard (IoTilt.nod) for something that happened to this
+     * building, centred on it; only in a yard being played (not while it loads or catches up).
+     */
+    public ioNod(deg: number): void {
+        if (BASE._loading || GLOBAL._catchup || !this._mc) {
+            return;
+        }
+        IoTilt.nod(deg, this._mc.x, this._mc.y + this.ioFootMid());
+    }
+
+    /** Inferno-only (14 October): how far below its point its footprint's middle is (iso: a quarter of its sides). */
+    public ioFootMid(): number {
+        let f: Rectangle = this._footprint && this._footprint.length ? as3.as(this._footprint[0], Rectangle) : null;
+        return f ? (f.width + f.height) / 4 : 0;
     }
 
     protected redrawShadowData(): void {
@@ -1314,7 +1386,7 @@ export class BFOUNDATION extends GameObject {
             as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_SHADOW).data = as3.cast(_loc3_, IBitmapDrawable);
         }
         if (!this._moving) {
-            as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_SHADOW).visible = this._mcBase.visible;
+            as3.vget(this._rasterData, BFOUNDATION._RASTERDATA_SHADOW).visible = this._mcBase.visible && !IoLighting.paintedHidden;
         }
     }
 
@@ -1368,6 +1440,11 @@ export class BFOUNDATION extends GameObject {
             }
         }
         if (_loc2_) {
+            // (Inferno-only, 26 October, the user's: the hover outline of an animated building stayed the frame it
+            // was hovered on: it is drawn again from the frame now)
+            if (this._ioGlowBMD && (this._ioHover || this._ioTargeted)) {
+                this.ioShowGlow(true);
+            }
             this.updateRasterData();
         }
     }
@@ -1386,11 +1463,370 @@ export class BFOUNDATION extends GameObject {
         MAP._GROUND.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.Place));
         this._mc.addEventListener(MouseEvent.MOUSE_DOWN, MAP.Click);
         this.Render(BFOUNDATION.k_STATE_DEFAULT);
+        // (Inferno-only, QoL #547: a finger places it above itself, then with ✓ and ✕)
+        if (GLOBAL.INFERNO_ONLY) {
+            this._ioTouchPress = false;
+            this._ioCarry = false;
+            this._ioPinned = false;
+            if (GLOBAL._ROOT && GLOBAL._ROOT.stage) {
+                GLOBAL._ROOT.stage.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ioPlacePress), true, int.MAX_VALUE - 1);
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Inferno-only (QoL #547): placing a new building with a finger
+    // ---------------------------------------------------------------------------------------------
+    /**
+     * With a finger the building sat under it (the finger hid the footprint and whether it was red), and the lift put
+     * it down there, or put it back unbought when the spot was taken. Now, for a finger's press (a mouse is as it
+     * was): the building goes above the finger (its footprint's foot IO_LIFT stage pixels over it) and follows it;
+     * the lift leaves it there, with ✓ (put it down) and ✕ (put it back) under it. A press on it (or just round it)
+     * carries it again from where it is; a press elsewhere drags the yard, and a tap elsewhere brings it there. ✓ on
+     * a taken spot says so and keeps it in hand.
+     */
+    /** The press now is a finger's on the yard (decided when it goes down, ioPlacePress). */
+    private _ioTouchPress: boolean;
+
+    /** The finger carries it. */
+    private _ioCarry: boolean;
+
+    /** Left by the finger, ✓ and ✕ under it. */
+    public _ioPinned: boolean;
+
+    /** Where it is from the finger, in the ground's pixels, while carried. */
+    private _ioGrabX: number;
+
+    private _ioGrabY: number;
+
+    /** How far above the finger the footprint's foot is, in stage pixels. */
+    public static readonly IO_LIFT: int = 56;
+
+    /** ✓ and ✕ (in GLOBAL._layerUI), and the building they are for. */
+    private static _ioChecks: Sprite = null;
+
+    private static _ioChecksFor: BFOUNDATION = null;
+
+    /** The ground's scale on the stage (zoomed out, or IoPinchZoom's lens). */
+    private static ioGroundScale(): number {
+        if (!MAP._GROUND || !MAP._GROUND.stage) {
+            return 1;
+        }
+        let a: Point = MAP._GROUND.localToGlobal(new Point(0, 0));
+        let b: Point = MAP._GROUND.localToGlobal(new Point(0, 100));
+        let k: number = (b.y - a.y) / 100;
+        return k > 0.01 ? k : 1;
+    }
+
+    private static ioOnGround(d: any): boolean {
+        for (let o: any = d; o; o = o.parent) {
+            if (o === MAP._GROUND) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Is the yard's point (x, y) on this building or just round it (its footprint and its picture)? */
+    private ioNearFinger(x: number, y: number): boolean {
+        let footH: number = Math.max(20, this._mouseOffset.y * 2);
+        let halfW: number = this._mcFootprint ? Math.max(20, this._mcFootprint.width / 2) : footH;
+        let pad: number = 28 / BFOUNDATION.ioGroundScale();
+        return Math.abs(x - this._mc.x) <= halfW + pad && y >= this._mc.y - footH * 1.5 - pad && y <= this._mc.y + footH + pad;
+    }
+
+    /**
+     * A press anywhere (the stage's capture phase, before the yard's own): a finger's on the yard decides here. Its
+     * lift on the yard goes to ioGroundUp, not to Place (whose overrides count a tower before it is down, BTOWER):
+     * Place listens again for the next press of a mouse.
+     */
+    private ioPlacePress(param1: MouseEvent): void {
+        if (GLOBAL._newBuilding !== this || !this._mc || !MAP._GROUND) {
+            this.ioPlaceTouchOff();
+            return;
+        }
+        this._ioTouchPress = IoPinchZoom.fingerDown && BFOUNDATION.ioOnGround(param1 ? param1.target : null);
+        if (!this._ioTouchPress) {
+            this.ioPlaceListen(true);
+            // (QoL #47: a wall's press on the yard may start a line of walls, dragged)
+            if (BFOUNDATION.ioOnGround(param1 ? param1.target : null)) {
+                IoPlaceMany.linePress(this, param1);
+            }
+            return;
+        }
+        this.ioPlaceListen(false);
+        let gx: number = MAP._GROUND.mouseX;
+        let gy: number = MAP._GROUND.mouseY;
+        if (!this._ioPinned || this.ioNearFinger(gx, gy)) {
+            this._ioCarry = true;
+            if (this._ioPinned) {
+                // (carried from where it is)
+                this._ioGrabX = this._mc.x - gx;
+                this._ioGrabY = this._mc.y - gy;
+            } else {
+                this.ioLiftGrab();
+            }
+            this._ioPinned = false;
+            BFOUNDATION.ioChecksHide();
+        } else {
+            this._ioCarry = false;
+        }
+    }
+
+    /** Above the finger: the footprint's foot IO_LIFT stage pixels over it. */
+    private ioLiftGrab(): void {
+        this._ioGrabX = 0;
+        this._ioGrabY = -Math.max(20, this._mouseOffset.y * 2) - BFOUNDATION.IO_LIFT / BFOUNDATION.ioGroundScale();
+    }
+
+    /** Place (a mouse's) or ioGroundUp (a finger's) takes the next lift on the yard. */
+    private ioPlaceListen(mouse: boolean): void {
+        if (!MAP._GROUND) {
+            return;
+        }
+        if (mouse) {
+            MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ioGroundUp));
+            if (GLOBAL._newBuilding === this) {
+                MAP._GROUND.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.Place));
+            }
+        } else {
+            MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.Place));
+            MAP._GROUND.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ioGroundUp));
+        }
+    }
+
+    /** A finger's lift on the yard. */
+    private ioGroundUp(param1: MouseEvent = null): void {
+        if (GLOBAL._newBuilding !== this || !this._mc) {
+            this.ioPlaceTouchOff();
+            return;
+        }
+        this.ioPlaceLift();
+        this.ioPlaceListen(true);
+    }
+
+    /** A finger's lift on the yard: left there, or brought there by a tap; never put down by it. */
+    private ioPlaceLift(): void {
+        this._ioTouchPress = false;
+        if (this._ioCarry) {
+            this._ioCarry = false;
+            this._ioPinned = true;
+        } else if (!MAP._dragged) {
+            // (a tap away from it: brought there, above the finger)
+            this.ioLiftGrab();
+            this.ioMoveTo(MAP._GROUND.mouseX + this._ioGrabX, MAP._GROUND.mouseY + this._ioGrabY);
+            this._ioPinned = true;
+        }
+        if (this._ioPinned) {
+            BFOUNDATION.ioChecksShow(this);
+        }
+    }
+
+    /** Put at the yard's point (snapped as the mouse's way), its footprint red or not. */
+    private ioMoveTo(x: number, y: number): void {
+        let ioX: int = (((x / 10) | 0) * 10) | 0;
+        let ioY: int = (((y / 5) | 0) * 5) | 0;
+        if (this._mc.x == ioX && this._mc.y == ioY) {
+            return;
+        }
+        let frame: int = this._mcFootprint.currentFrame;
+        this._mc.x = ioX;
+        this._mc.y = ioY;
+        let blocked: string = BASE.BuildBlockers(this, this._class == "decoration");
+        this._mcBase.x = this._mc.x;
+        this._mcBase.y = this._mc.y;
+        this.updateRasterData();
+        this._mcFootprint.x = this._mc.x;
+        this._mcFootprint.y = this._mc.y;
+        this._mcFootprint.gotoAndStop(blocked != "" ? 2 : 1);
+        this.showFootprint(false, frame !== this._mcFootprint.currentFrame);
+        this._ioFollowKey = null;
+        if (!BYMConfig.instance.RENDERER_ON) {
+            MAP.SortDepth();
+        }
+    }
+
+    /**
+     * Inferno-only (QoL #47): the building in hand moved to the yard's point (x, y) (on the snap steps) and put down
+     * there as a click does (Place: paid, built), if the spot is free. True when it went down.
+     */
+    public ioLinePut(x: number, y: number): boolean {
+        if (GLOBAL._newBuilding !== this || !this._mc || !MAP._GROUND) {
+            return false;
+        }
+        this.ioMoveTo(x, y);
+        if (BASE.BuildBlockers(this, this._class == "decoration") != "") {
+            return false;
+        }
+        MAP._dragged = false;
+        this.Place(null);
+        return GLOBAL._newBuilding !== this && this._mc.parent != null;
+    }
+
+    /** ✓: put down here, unless the spot is taken (said; it stays in hand). */
+    public ioConfirm(): void {
+        if (GLOBAL._newBuilding !== this || !this._mc) {
+            BFOUNDATION.ioChecksHide();
+            return;
+        }
+        if (BASE.BuildBlockers(this, this._class == "decoration") != "") {
+            if (!IoTd.keepHeld(this)) {
+                SOUNDS.Play("error1");
+                IoToast.Show(KEYS.Get("io_move_blocked"), 3000);
+            }
+            return;
+        }
+        BFOUNDATION.ioChecksHide();
+        this._ioPinned = false;
+        this._ioCarry = false;
+        this._ioTouchPress = false;
+        MAP._dragged = false;
+        this.Place(null);
+    }
+
+    /** ✕: put back, not bought. */
+    public ioCancelPlace(): void {
+        BFOUNDATION.ioChecksHide();
+        if (GLOBAL._newBuilding === this) {
+            SOUNDS.Play("close");
+            this.Cancel();
+        }
+    }
+
+    /** No longer in hand: the finger's listener and the ✓ / ✕ go. */
+    private ioPlaceTouchOff(): void {
+        this._ioTouchPress = false;
+        this._ioCarry = false;
+        this._ioPinned = false;
+        if (GLOBAL._ROOT && GLOBAL._ROOT.stage) {
+            GLOBAL._ROOT.stage.removeEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ioPlacePress), true);
+        }
+        if (MAP._GROUND) {
+            MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ioGroundUp));
+        }
+        if (BFOUNDATION._ioChecksFor === this) {
+            BFOUNDATION.ioChecksHide();
+        }
+    }
+
+    /** ✓ and ✕ under `b` (a round button each, drawn: the game's fonts have neither sign). */
+    private static ioChecksShow(b: BFOUNDATION): void {
+        if (!GLOBAL._layerUI) {
+            return;
+        }
+        if (!BFOUNDATION._ioChecks) {
+            let box: Sprite = new Sprite();
+            box.name = "ioPlaceChecks";
+            box.addChild(BFOUNDATION.ioCheckButton("ioPlaceCancel", false));
+            box.addChild(BFOUNDATION.ioCheckButton("ioPlaceOk", true));
+            box.addEventListener(Event.ENTER_FRAME, BFOUNDATION.ioChecksFrame);
+            BFOUNDATION._ioChecks = box;
+        }
+        BFOUNDATION._ioChecksFor = b;
+        GLOBAL._layerUI.addChild(BFOUNDATION._ioChecks);
+        BFOUNDATION.ioChecksFrame();
+    }
+
+    private static ioChecksHide(): void {
+        BFOUNDATION._ioChecksFor = null;
+        if (BFOUNDATION._ioChecks && BFOUNDATION._ioChecks.parent) {
+            BFOUNDATION._ioChecks.parent.removeChild(BFOUNDATION._ioChecks);
+        }
+    }
+
+    /** Each frame: under the footprint (the yard may scroll), inside the screen; gone once it isn't in hand. */
+    private static ioChecksFrame(param1: Event = null): void {
+        let b: BFOUNDATION = BFOUNDATION._ioChecksFor;
+        let box: Sprite = BFOUNDATION._ioChecks;
+        if (!box || !box.parent) {
+            return;
+        }
+        if (!b || GLOBAL._newBuilding !== b || !b._ioPinned || !b._mc || !MAP._GROUND || !MAP._GROUND.stage || !box.stage) {
+            BFOUNDATION.ioChecksHide();
+            return;
+        }
+        let foot: Point = MAP._GROUND.localToGlobal(new Point(b._mc.x, b._mc.y + Math.max(20, b._mouseOffset.y * 2)));
+        let w: number = box.stage.stageWidth;
+        let h: number = box.stage.stageHeight;
+        let gx: number = Math.max(70, Math.min(w - 70, foot.x));
+        let gy: number = Math.max(40, Math.min(h - 40, foot.y + 40));
+        let at: Point = box.parent.globalToLocal(new Point(gx, gy));
+        box.x = Math.round(at.x);
+        box.y = Math.round(at.y);
+    }
+
+    /** A round button, 52 stage pixels: ✓ green on the right, ✕ red on the left. */
+    private static ioCheckButton(name: string, ok: boolean): Sprite {
+        let r: int = 26;
+        let b: Sprite = new Sprite();
+        b.name = name;
+        let g: Graphics = b.graphics;
+        g.lineStyle(3, 0xFFF2D0, 1);
+        g.beginFill(ok ? 0x2E8B2E : 0xB0261A, 1);
+        g.drawCircle(0, 0, r);
+        g.endFill();
+        g.lineStyle(6, 0xFFFFFF, 1);
+        if (ok) {
+            g.moveTo(-11, 1);
+            g.lineTo(-3, 10);
+            g.lineTo(12, -9);
+        } else {
+            g.moveTo(-9, -9);
+            g.lineTo(9, 9);
+            g.moveTo(9, -9);
+            g.lineTo(-9, 9);
+        }
+        b.filters = [new GlowFilter(0x000000, 0.6, 6, 6, 2, 2)];
+        b.x = ok ? 40 : -40;
+        b.buttonMode = true;
+        b.useHandCursor = true;
+        b.mouseChildren = false;
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            e.stopPropagation();
+            let owner: BFOUNDATION = BFOUNDATION._ioChecksFor;
+            if (!owner) {
+                BFOUNDATION.ioChecksHide();
+                return;
+            }
+            if (ok) {
+                owner.ioConfirm();
+            } else {
+                owner.ioCancelPlace();
+            }
+        });
+        return b;
     }
 
     public FollowMouseB(param1: Event = null): void {
         let ioX: int = ((((MAP._GROUND.mouseX - this._mouseOffset.x) / 10) | 0) * 10) | 0;
         let ioY: int = ((((MAP._GROUND.mouseY - this._mouseOffset.y) / 5) | 0) * 5) | 0;
+        // (Inferno-only, QoL #547: a finger's: carried above it, or left where the finger let go)
+        if (GLOBAL.INFERNO_ONLY && (this._ioCarry || this._ioPinned)) {
+            if (this._ioCarry && !IoPinchZoom.fingerDown) {
+                // (let go off the yard, on the HUD: left there too)
+                this._ioCarry = false;
+                this._ioTouchPress = false;
+                this._ioPinned = true;
+                this.ioPlaceListen(true);
+                BFOUNDATION.ioChecksShow(this);
+            }
+            if (!this._ioCarry) {
+                // (left: it stays; drawn again only when the view moves)
+                let ioStill: string = this._mc.x + "," + this._mc.y + "," + MAP._GROUND.x + "," + MAP._GROUND.y + "," + MAP._GROUND.scaleX;
+                if (ioStill != this._ioFollowKey) {
+                    this._ioFollowKey = ioStill;
+                    this.updateRasterData();
+                    this.showFootprint(false, false);
+                }
+                return;
+            }
+            // (the finger moves it, not the yard)
+            if (MAP._dragging) {
+                MAP.Release(null);
+            }
+            ioX = ((((MAP._GROUND.mouseX + this._ioGrabX) / 10) | 0) * 10) | 0;
+            ioY = ((((MAP._GROUND.mouseY + this._ioGrabY) / 5) | 0) * 5) | 0;
+        }
         // Every frame, whether or not it moved: the overlap check, the building's layers and its
         // footprint were all worked out again. Now only when it lands on another snap step or the
         // view moves (scrolled or zoomed while held).
@@ -1424,8 +1860,16 @@ export class BFOUNDATION extends GameObject {
     }
 
     public Cancel(): void {
+        // (Inferno-only: blocks bought several at a time; putting one back stops the run)
+        if (GLOBAL._newBuilding === this) {
+            IoPlaceMany.stop();
+        }
         if (GLOBAL._newBuilding === this) {
             this.clear();
+            // (Hellgate Defense: the tower from the shop wasn't put down)
+            if (GLOBAL.ioTdMode()) {
+                IoTd.placing = 0;
+            }
         }
         GLOBAL._newBuilding = null;
         if (this._mc) {
@@ -1433,6 +1877,10 @@ export class BFOUNDATION extends GameObject {
             this._mc.removeEventListener(MouseEvent.MOUSE_DOWN, MAP.Click);
         }
         MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.Place));
+        // (QoL #547)
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioPlaceTouchOff();
+        }
         if (this._mcBase.parent) {
             this._mcBase.parent.removeChild(this._mcBase);
         }
@@ -1467,15 +1915,18 @@ export class BFOUNDATION extends GameObject {
         }
     }
 
-    /**
-     * Placing a building runs on the ground's MOUSE_UP. If anything in it throws, Flash stops
-     * delivering that MOUSE_UP to the other listeners, so MAP.Release never runs: the building keeps
-     * following the mouse and the yard drags with it until the game is restarted (it happened).
-     * Whatever fails, the placement is now abandoned cleanly, and what failed is reported.
-     */
     public Place(param1: MouseEvent = null): void {
+        // (Inferno-only, QoL #47: the lift that ends a dragged line of walls puts nothing more down)
+        if (GLOBAL.INFERNO_ONLY && IoPlaceMany.lineSwallows(param1)) {
+            return;
+        }
         try {
+            this._ioPutDown = false;
             this.ioPlaceInner(param1);
+            if (this._ioPutDown) {
+                this._ioPutDown = false;
+                IoPlaceMany.placed(this);
+            }
         } catch (e) {
             LOGGER.Log("err", "Place failed for building type " + this._type + (BASE.isOutpost ? " (outpost)" : "") + ": " + e + " | " + e.getStackTrace());
             try {
@@ -1502,6 +1953,15 @@ export class BFOUNDATION extends GameObject {
         this.Description();
         if (!MAP._dragged) {
             if (BASE.BuildBlockers(this, this._class == "decoration") != "") {
+                // (one of a run of blocks: kept in the hand for a free spot, not put back)
+                if (IoPlaceMany.holding(this._type)) {
+                    return;
+                }
+                // Inferno-only (Hellgate Defense): a tower that can't go here stays in the hand, and says why (it was
+                // put back without a word: "unable to place new towers anywhere", 11 October)
+                if (IoTd.keepHeld(this)) {
+                    return;
+                }
                 this.Cancel();
                 return;
             }
@@ -1514,6 +1974,10 @@ export class BFOUNDATION extends GameObject {
             this._mc.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.FollowMouseB));
             MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.Place));
             this._mc.removeEventListener(MouseEvent.MOUSE_DOWN, MAP.Click);
+            // (QoL #547: down: the finger's listener and the ✓ / ✕ go)
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioPlaceTouchOff();
+            }
             if (BASE.CanBuild(this._type, this._buildInstant).error) {
                 this.Cancel();
                 GLOBAL._newBuilding = null;
@@ -1527,7 +1991,7 @@ export class BFOUNDATION extends GameObject {
                 }
                 if (BASE._credits.Get() < this._buildInstantCost.Get()) {
                     this.Cancel();
-                    POPUPS.DisplayGetShiny();
+                    POPUPS.ioShinyNeed(this._buildInstantCost.Get());
                     return;
                 }
             }
@@ -1535,13 +1999,23 @@ export class BFOUNDATION extends GameObject {
             this._hasWorker = false;
             ++BASE._buildingCount;
             this._id = BASE._buildingCount;
+            this._ioPutDown = true;
+            // (a nod: bigger buildings a little more)
+            this.ioNod(IoTilt.LIGHT * (0.8 + Math.min(1, (this._buildingProps.size | 0) / 130) * 0.6));
             tmpBuildTime = this._buildingProps.costs[0].time.Get() | 0;
             if (STORE._storeData.BST) {
                 tmpBuildTime = (tmpBuildTime - tmpBuildTime * 0.2) | 0;
+            } else if (GLOBAL.INFERNO_ONLY && POWERUPS.ioActive(POWERUPS.ALLIANCE_BUILDERSGUILD)) {
+                // (22 October: the alliance's Builders' Guild, 15% off; Sharper Tools' 20% when that is bought instead)
+                tmpBuildTime = (tmpBuildTime * POWERUPS.BUILDERS_GUILD_MUL) | 0;
             }
             this._countdownBuild.Set(tmpBuildTime);
             this.setHealth(Number(this._buildingProps.hp[0]));
             this.maxHealthProperty.value = this.health;
+            // (Inferno-only, 26 October: the alliance's Armament on a building put down while it runs)
+            if (GLOBAL.INFERNO_ONLY) {
+                AllianceArmamentBuff.ioCover(this);
+            }
             this.PlaceB();
             if (this._mc.contains(this._mcHit)) {
                 this._mc.removeChild(this._mcHit);
@@ -1564,12 +2038,23 @@ export class BFOUNDATION extends GameObject {
                     BASE.Charge(4, Number(this._buildingProps.costs[0].r4.Get()), false, isInfernoBuilding);
                     if (STORE._storeItems["BUILDING" + this._type]) {
                         BASE.Purchase("BUILDING" + this._type, 1, "building");
+                        // (Inferno-only, 22 October: a Champion Statue placed with one kept for it: the server takes that)
+                        if (GLOBAL.INFERNO_ONLY && IoChampionStatue.Is(this._type)) {
+                            IoShop.placedStatue();
+                        }
                     }
                     if (GLOBAL.ioFreeBuild()) {
                         // Admin test mode (and the Designer): built at once.
                         this.Constructed();
+                        // (Hellgate Defense: a tower from the shop is paid for in the run's gold)
+                        if (GLOBAL.ioTdMode()) {
+                            IoTd.placed(this);
+                        }
                     } else if (GLOBAL.INFERNO_ONLY && this._buildingProps.type == "decoration" && this._buildingProps.costs[0].time.Get() == 0) {
                         // Inferno-only: a decoration is up the moment it's placed (no worker, no countdown)
+                        this.Constructed();
+                    } else if (GLOBAL.INFERNO_ONLY && IoPlaceMany.many(this._type) && InventoryManager.buildingStorageCount(this._type) == 0) {
+                        // Inferno-only (7 October, the user's): a block or a trap is built the moment it's placed, no worker
                         this.Constructed();
                     } else if (this._buildingProps.costs[0].time.Get() != 0 && InventoryManager.buildingStorageCount(this._type) == 0) {
                         QUEUE.Add("building" + this._id, this);
@@ -1837,6 +2322,14 @@ export class BFOUNDATION extends GameObject {
         let _loc4_: int = 0;
         if (!this._destroyed) {
             this._destroyed = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                IoQuests.buildingDown(this);
+                // (the Under Hall falling: a heavy nod, the ground shaking)
+                if (this === GLOBAL.townHall && !BASE._loading && !GLOBAL._catchup && GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+                    this.ioNod(IoTilt.HEAVY);
+                    BASE.Shake(28);
+                }
+            }
             ATTACK.Damage(this._mc.x, this._mc.y, this._buildingProps.hp[this._lvl.Get() - 1] | 0);
             if (this._repairing == 1) {
                 this._repairing = 0;
@@ -1847,7 +2340,7 @@ export class BFOUNDATION extends GameObject {
                 ATTACK.Log("b" + this._id, "<font color=\"#FF0000\">" + KEYS.Get("attack_log_downed_buildcancel", { "v1": this._lvl.Get(), "v2": KEYS.Get(as3.str(this._buildingProps.name)) }) + "</font>");
             } else if (this._countdownUpgrade.Get()) {
                 ATTACK.Damage(this._mc.x, this._mc.y, this._buildingProps.hp[this._lvl.Get()] | 0);
-                _loc2_ = (this._buildingProps.costs[this._lvl.Get()].time.Get() * GLOBAL._buildTime) | 0;
+                _loc2_ = (this._buildingProps.costs[this._lvl.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0;
                 _loc3_ = ((_loc2_ - this._countdownUpgrade.Get()) * 0.5) | 0;
                 if (_loc3_ > 60 * 60 * 8) {
                     _loc3_ = (60 * 60 * 8) | 0;
@@ -2017,7 +2510,7 @@ export class BFOUNDATION extends GameObject {
         if (!QUEUE.CanDo().error) {
             _loc1_ = BASE.CanFortify(this);
             if (!_loc1_.error) {
-                if (((this._buildingProps.fortify_costs[this._fortification.Get()].time.Get() * GLOBAL._buildTime) | 0) > 3600) {
+                if (((this._buildingProps.fortify_costs[this._fortification.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0) > 3600) {
                     UPDATES.Create(["BF", this._id]);
                 }
                 this.FortifyB();
@@ -2053,7 +2546,7 @@ export class BFOUNDATION extends GameObject {
                 if (_loc2_.r4.Get() > 0) {
                     BASE.Charge(4, Number(_loc2_.r4.Get()));
                 }
-                _loc3_ = (this._buildingProps.fortify_costs[this._fortification.Get()].time.Get() * GLOBAL._buildTime) | 0;
+                _loc3_ = (this._buildingProps.fortify_costs[this._fortification.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0;
                 this._countdownFortify.Set(_loc3_);
                 this._hasResources = false;
                 this._hasWorker = false;
@@ -2096,16 +2589,16 @@ export class BFOUNDATION extends GameObject {
             this._countdownFortify.Set(0);
             _loc1_ = this.FortifyCost();
             if (_loc1_.r1.Get() > 0) {
-                BASE.Fund(1, _loc1_.r1.Get() | 0);
+                BASE.Fund(1, _loc1_.r1.Get() | 0, GLOBAL.INFERNO_ONLY);
             }
             if (_loc1_.r2.Get() > 0) {
-                BASE.Fund(2, _loc1_.r2.Get() | 0);
+                BASE.Fund(2, _loc1_.r2.Get() | 0, GLOBAL.INFERNO_ONLY);
             }
             if (_loc1_.r3.Get() > 0) {
-                BASE.Fund(3, _loc1_.r3.Get() | 0);
+                BASE.Fund(3, _loc1_.r3.Get() | 0, GLOBAL.INFERNO_ONLY);
             }
             if (_loc1_.r4.Get() > 0) {
-                BASE.Fund(4, _loc1_.r4.Get() | 0);
+                BASE.Fund(4, _loc1_.r4.Get() | 0, GLOBAL.INFERNO_ONLY);
             }
             BASE.Save();
         }
@@ -2116,7 +2609,7 @@ export class BFOUNDATION extends GameObject {
         if (!QUEUE.CanDo().error) {
             _loc1_ = BASE.CanUpgrade(this);
             if (!_loc1_.error) {
-                if (((this._buildingProps.costs[this._lvl.Get()].time.Get() * GLOBAL._buildTime) | 0) > 3600) {
+                if (((this._buildingProps.costs[this._lvl.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0) > 3600) {
                     UPDATES.Create(["BU", this._id]);
                 }
                 this.UpgradeB();
@@ -2156,10 +2649,11 @@ export class BFOUNDATION extends GameObject {
                 if (o.r4.Get() > 0) {
                     BASE.Charge(4, Number(o.r4.Get()), false, isInfernoBuilding);
                 }
-                tmpUpgradeTime = (this._buildingProps.costs[this._lvl.Get()].time.Get() * GLOBAL._buildTime) | 0;
+                tmpUpgradeTime = (this._buildingProps.costs[this._lvl.Get()].time.Get() * GLOBAL.ioBuildTime()) | 0;
                 this._countdownUpgrade.Set(tmpUpgradeTime);
                 if (this._type != 14 && this._countdownUpgrade.Get() > 60 * 60 * 2 && TUTORIAL._stage > 200) {
-                    if (!GLOBAL._promptedInvite && BASE._credits.Get() < 40 && GLOBAL._canInvite && GLOBAL._friendCount == 0) {
+                    // (Inferno-only, QoL #303: not here; its button opened a Facebook dialog that's long gone)
+                    if (!GLOBAL.INFERNO_ONLY && !GLOBAL._promptedInvite && BASE._credits.Get() < 40 && GLOBAL._canInvite && GLOBAL._friendCount == 0) {
                         GetFriends = (): void => {
                             if (BYMDevConfig.instance.USE_CLIENT_WITH_CALLBACK) {
                                 GLOBAL.CallJSWithClient("cc.showFeedDialog", "callbackgift", ["invite"]);
@@ -2190,7 +2684,9 @@ export class BFOUNDATION extends GameObject {
                     this._countdownUpgrade.Set(0);
                     this.Upgraded();
                     this.Update();
-                } else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class == "tower") {
+                } else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class == "tower" && !(GLOBAL.INFERNO_ONLY && BFOUNDATION._ioWarnedInactive)) {
+                    // (Inferno-only, QoL #19: said once a session; it came after every tower upgrade)
+                    BFOUNDATION._ioWarnedInactive = true;
                     GLOBAL._selectedBuilding = this;
                     GLOBAL.Message(KEYS.Get("msg_inactiveupgrade"), KEYS.Get("btn_speedup"), STORE.SpeedUp, ["SP4"]);
                 }
@@ -2256,7 +2752,21 @@ export class BFOUNDATION extends GameObject {
     }
 
     public UpgradeCancel(): void {
-        GLOBAL.Message(KEYS.Get("msg_upgradecancelconfirm"), KEYS.Get("msg_stopupgrading_btn"), as3.bind(this, this.UpgradeCancelB));
+        // (QoL #486, #487: the one danger confirmation, naming the building)
+        // (QoL #349: and what comes back: the upgrade's whole cost; the time spent on it is what's lost)
+        let back: string = "";
+        if (GLOBAL.INFERNO_ONLY) {
+            let cost: any = this.UpgradeCost();
+            let parts: any[] = [];
+            for (let n: int = 1; n <= 4; n++) {
+                let v: number = cost && cost["r" + n] ? cost["r" + n].Get() : 0;
+                if (v > 0) {
+                    parts.push(GLOBAL.FormatNumber(v) + " " + KEYS.Get(String(GLOBAL._resourceNames[n - 1])));
+                }
+            }
+            back = (parts.length ? KEYS.Get("io_danger_refund", { "v1": parts.join(", ") }) : KEYS.Get("io_danger_norefund")) + " " + KEYS.Get("io_cancel_time_lost");
+        }
+        GLOBAL.ioDanger(this.ioDangerTitle("io_danger_cancel") + (GLOBAL.INFERNO_ONLY ? "" : KEYS.Get("msg_upgradecancelconfirm")) + back, KEYS.Get("msg_stopupgrading_btn"), as3.bind(this, this.UpgradeCancelB));
     }
 
     public UpgradeCancelB(param1: MouseEvent = null): void {
@@ -2273,16 +2783,16 @@ export class BFOUNDATION extends GameObject {
             _loc1_ = this.UpgradeCost();
             _loc2_ = BASE.isInfernoBuilding(this._type >>> 0);
             if (_loc1_.r1.Get()) {
-                BASE.Fund(1, _loc1_.r1.Get() | 0, false, null, _loc2_);
+                BASE.Fund(1, _loc1_.r1.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc2_);
             }
             if (_loc1_.r2.Get()) {
-                BASE.Fund(2, _loc1_.r2.Get() | 0, false, null, _loc2_);
+                BASE.Fund(2, _loc1_.r2.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc2_);
             }
             if (_loc1_.r3.Get()) {
-                BASE.Fund(3, _loc1_.r3.Get() | 0, false, null, _loc2_);
+                BASE.Fund(3, _loc1_.r3.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc2_);
             }
             if (_loc1_.r4.Get()) {
-                BASE.Fund(4, _loc1_.r4.Get() | 0, false, null, _loc2_);
+                BASE.Fund(4, _loc1_.r4.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc2_);
             }
             BASE.Save();
         }
@@ -2291,6 +2801,18 @@ export class BFOUNDATION extends GameObject {
     public Upgraded(): void {
         let c: any = null;
         let a: int = 0;
+        // (Inferno-only: a nod; the Under Hall's bigger, and the ground shakes a little)
+        if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !BASE._loading && !GLOBAL._catchup) {
+            if (this === GLOBAL.townHall) {
+                this.ioNod(IoTilt.MEDIUM);
+                BASE.Shake(14);
+            } else {
+                this.ioNod(IoTilt.LIGHT);
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                BFOUNDATION.ioDoneSound();
+            }
+        }
         try {
             if (Math.max(this._countdownUpgrade.Get(), 0)) {
             }
@@ -2360,6 +2882,32 @@ export class BFOUNDATION extends GameObject {
         LOGGER.Stat([65, this._type, this._fortification.Get()]);
     }
 
+    /** Inferno-only (QoL #487): "<b>Recycle Bone Harvester (level 4)?</b>" over a danger confirmation's text. */
+    public ioDangerTitle(key: string): string {
+        if (!GLOBAL.INFERNO_ONLY) {
+            return "";
+        }
+        let name: string = KEYS.Get(as3.str(this._buildingProps ? this._buildingProps.name : ""));
+        let lvl: int = this._lvl ? this._lvl.Get() | 0 : 0;
+        return "<b>" + KEYS.Get(key, { "v1": name + (lvl > 0 ? " " + KEYS.Get("io_danger_level", { "v1": lvl }) : "") }) + "</b><br><br>";
+    }
+
+    /** Inferno-only (QoL #487): what a recycle (or a stop) gives back: "You get back: 12,000 Bone, 8,000 Coal." */
+    public ioRefundLine(): string {
+        if (!GLOBAL.INFERNO_ONLY) {
+            return "";
+        }
+        let cost: any = this.RecycleCost();
+        let parts: any[] = [];
+        for (let n: int = 1; n <= 4; n++) {
+            let v: number = cost["r" + n] ? cost["r" + n].Get() : 0;
+            if (v > 0) {
+                parts.push(GLOBAL.FormatNumber(v) + " " + KEYS.Get(String(GLOBAL._resourceNames[n - 1])));
+            }
+        }
+        return "<br><br>" + (parts.length ? KEYS.Get("io_danger_refund", { "v1": parts.join(", ") }) : KEYS.Get("io_danger_norefund"));
+    }
+
     public Recycle(): void {
         let _loc1_: string = null;
         if (this._countdownBuild.Get() > 0) {
@@ -2367,12 +2915,12 @@ export class BFOUNDATION extends GameObject {
                 if (BASE.isOutpostOrInfernoOutpost && !GLOBAL.outpostRecycling) {
                     GLOBAL.Message(KEYS.Get("msg_stopconstructionoutpostbuilding"));
                 } else {
-                    GLOBAL.Message(KEYS.Get("msg_stopconstructionconfirm"), KEYS.Get("msg_destroybuilding_btn"), as3.bind(this, this.RecycleB));
+                    GLOBAL.ioDanger(this.ioDangerTitle("io_danger_stop") + KEYS.Get("msg_stopconstructionconfirm") + this.ioRefundLine(), KEYS.Get("msg_destroybuilding_btn"), as3.bind(this, this.RecycleB));
                 }
             }
         } else if (this._class == "taunt" || this._class == "gift") {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
-                GLOBAL.Message(KEYS.Get("msg_recycleconfirm"), KEYS.Get("msg_recyclebuilding_btn"), as3.bind(this, this.RecycleC));
+                GLOBAL.ioDanger(this.ioDangerTitle("io_danger_recycle") + KEYS.Get("msg_recycleconfirm"), KEYS.Get("msg_recyclebuilding_btn"), as3.bind(this, this.RecycleC));
             }
         } else if (this._class == "decoration") {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
@@ -2381,7 +2929,7 @@ export class BFOUNDATION extends GameObject {
         } else if (!this._blockRecycle) {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
                 _loc1_ = !(!GLOBAL._buildingProps[this._type - 1]["recycleconfirmationoverride"]) ? String(GLOBAL._buildingProps[this._type - 1]["recycleconfirmationoverride"]) : "msg_recycleconfirm";
-                GLOBAL.Message(KEYS.Get(_loc1_), KEYS.Get("msg_recyclebuilding_btn"), as3.bind(this, this.RecycleB));
+                GLOBAL.ioDanger(this.ioDangerTitle("io_danger_recycle") + KEYS.Get(_loc1_) + this.ioRefundLine(), KEYS.Get("msg_recyclebuilding_btn"), as3.bind(this, this.RecycleB));
             }
         } else if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
             if (BASE.isOutpostOrInfernoOutpost) {
@@ -2400,19 +2948,23 @@ export class BFOUNDATION extends GameObject {
         if (this._class != "decoration" && !this._blockRecycle) {
             if (!this._recycled) {
                 this._recycled = true;
+                // Inferno-only quest book: a built building recycled (not one still being built)
+                if (GLOBAL.INFERNO_ONLY && this._countdownBuild.Get() <= 0) {
+                    IoQuests.event("recycle");
+                }
                 _loc2_ = this.RecycleCost();
                 _loc3_ = BASE.isInfernoBuilding(this._type >>> 0);
                 if (_loc2_.r1.Get()) {
-                    BASE.Fund(1, _loc2_.r1.Get() | 0, false, null, _loc3_);
+                    BASE.Fund(1, _loc2_.r1.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc3_);
                 }
                 if (_loc2_.r2.Get()) {
-                    BASE.Fund(2, _loc2_.r2.Get() | 0, false, null, _loc3_);
+                    BASE.Fund(2, _loc2_.r2.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc3_);
                 }
                 if (_loc2_.r3.Get()) {
-                    BASE.Fund(3, _loc2_.r3.Get() | 0, false, null, _loc3_);
+                    BASE.Fund(3, _loc2_.r3.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc3_);
                 }
                 if (_loc2_.r4.Get()) {
-                    BASE.Fund(4, _loc2_.r4.Get() | 0, false, null, _loc3_);
+                    BASE.Fund(4, _loc2_.r4.Get() | 0, GLOBAL.INFERNO_ONLY, null, _loc3_);
                 }
                 this.RecycleC();
                 LOGGER.Stat([40, this._type, this._lvl.Get()]);
@@ -2423,6 +2975,9 @@ export class BFOUNDATION extends GameObject {
     }
 
     public RecycleC(): void {
+        if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+            this.ioNod(IoTilt.LIGHT);
+        }
         this.GridCost(false);
         try {
             if (MAP._BUILDINGFOOTPRINTS.contains(this._mcBase)) {
@@ -2559,7 +3114,136 @@ export class BFOUNDATION extends GameObject {
             if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && UI2._showBottom) {
                 this._clickTimer = 0;
             }
+            // (QoL #45: held down, it is picked up, as with its Move button)
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioHoldBegin();
+            }
         }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Inferno-only (QoL #45): press and hold a building to move it
+    // ---------------------------------------------------------------------------------------------
+    /**
+     * A building held down for IO_HOLD_MS without the pointer moving (mouse or finger) is picked up, as its Move
+     * button does (StartMove), wherever its Move button would show. Moved, then let go: put down there (or kept in
+     * hand on a spot it can't go, said: StopMove). Let go where it was picked up: it stays in hand, as after Move,
+     * for a click where it goes. A quick click still opens its menu; a drag still moves the yard.
+     */
+    public static readonly IO_HOLD_MS: int = 400;
+
+    /** How far (stage pixels) the pointer may wander while held down, and after it is picked up for "not moved". */
+    private static readonly IO_HOLD_SLOP: int = 10;
+
+    /** The building pressed (waiting for the hold), when, and where the pointer was (stage). */
+    private static _ioHoldB: BFOUNDATION = null;
+
+    private static _ioHoldAt: int = 0;
+
+    private static _ioHoldX: number = 0;
+
+    private static _ioHoldY: number = 0;
+
+    private static _ioHoldStage: any = null;
+
+    /** The building just picked up by a hold, until the press ends. */
+    private static _ioLiftB: BFOUNDATION = null;
+
+    /** Could its Move button be pressed now (BUILDINGINFO.Update's rule for btn_move)? */
+    public static ioCanHoldMove(b: BFOUNDATION): boolean {
+        if (!GLOBAL.INFERNO_ONLY || !b || !b._mc || !b._mcHit || !MAP._GROUND || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || GLOBAL.ioTdMode() || PLANNER._open) {
+            return false;
+        }
+        if (TUTORIAL._stage < 200 || b._moving || b._placing || GLOBAL._newBuilding || (GLOBAL._selectedBuilding && GLOBAL._selectedBuilding._moving)) {
+            return false;
+        }
+        if (b.health < b.maxHealth || b._countdownBuild.Get() + b._countdownUpgrade.Get() + b._countdownFortify.Get() > 0 || !b._buildingProps || b._buildingProps.type == "mushroom") {
+            return false;
+        }
+        return !b.isImmobile || Boolean(GLOBAL._aiDesignMode);
+    }
+
+    private ioHoldBegin(): void {
+        BFOUNDATION.ioHoldEnd();
+        let st: any = MAP._GROUND ? MAP._GROUND.stage : null;
+        if (!st || !BFOUNDATION.ioCanHoldMove(this)) {
+            return;
+        }
+        BFOUNDATION._ioHoldB = this;
+        BFOUNDATION._ioHoldAt = getTimer();
+        BFOUNDATION._ioHoldX = st.mouseX;
+        BFOUNDATION._ioHoldY = st.mouseY;
+        BFOUNDATION._ioHoldStage = st;
+        st.addEventListener(Event.ENTER_FRAME, BFOUNDATION.ioHoldFrame);
+        st.addEventListener(MouseEvent.MOUSE_UP, BFOUNDATION.ioHoldEnd, true, int.MAX_VALUE);
+    }
+
+    /** The press ended (or turned into a drag): no hold. */
+    private static ioHoldEnd(param1: Event = null): void {
+        let st: any = BFOUNDATION._ioHoldStage;
+        if (st) {
+            st.removeEventListener(Event.ENTER_FRAME, BFOUNDATION.ioHoldFrame);
+            st.removeEventListener(MouseEvent.MOUSE_UP, BFOUNDATION.ioHoldEnd, true);
+        }
+        BFOUNDATION._ioHoldStage = null;
+        BFOUNDATION._ioHoldB = null;
+    }
+
+    private static ioHoldFrame(param1: Event = null): void {
+        let b: BFOUNDATION = BFOUNDATION._ioHoldB;
+        let st: any = BFOUNDATION._ioHoldStage;
+        if (!b || !st || !b._mouseClicked || !BFOUNDATION.ioCanHoldMove(b) || MAP._dragged || (UI2._scrollMap && !MAP._dragging)) {
+            // (let go, a drag of the yard, a second finger (IoPinchZoom lets the drag go), or no longer movable)
+            BFOUNDATION.ioHoldEnd();
+            return;
+        }
+        if (Math.abs(st.mouseX - BFOUNDATION._ioHoldX) > BFOUNDATION.IO_HOLD_SLOP || Math.abs(st.mouseY - BFOUNDATION._ioHoldY) > BFOUNDATION.IO_HOLD_SLOP) {
+            BFOUNDATION.ioHoldEnd();
+            return;
+        }
+        if (getTimer() - BFOUNDATION._ioHoldAt < BFOUNDATION.IO_HOLD_MS) {
+            return;
+        }
+        BFOUNDATION.ioHoldEnd();
+        // (the yard stops following the pointer: the building does)
+        MAP.Release(null);
+        MAP._dragged = false;
+        SOUNDS.Play("click1");
+        b.StartMove();
+        if (!b._moving) {
+            return;
+        }
+        // (its menu, if it was open, goes, as after the Move button)
+        BUILDINGINFO.Hide();
+        BFOUNDATION._ioLiftB = b;
+        BFOUNDATION._ioHoldX = st.mouseX;
+        BFOUNDATION._ioHoldY = st.mouseY;
+        BFOUNDATION._ioHoldStage = null;
+        // (before StopMove, which the ground's MOUSE_UP calls)
+        st.addEventListener(MouseEvent.MOUSE_UP, BFOUNDATION.ioHoldLift, true, int.MAX_VALUE);
+        BFOUNDATION._ioLiftStage = st;
+    }
+
+    private static _ioLiftStage: any = null;
+
+    /** The press that picked it up ends: moved, it is put down there (StopMove); not moved, it stays in hand. */
+    private static ioHoldLift(param1: Event = null): void {
+        if (BFOUNDATION._ioLiftStage) {
+            BFOUNDATION._ioLiftStage.removeEventListener(MouseEvent.MOUSE_UP, BFOUNDATION.ioHoldLift, true);
+        }
+        let st: any = BFOUNDATION._ioLiftStage;
+        let b: BFOUNDATION = BFOUNDATION._ioLiftB;
+        BFOUNDATION._ioLiftStage = null;
+        BFOUNDATION._ioLiftB = null;
+        if (!b || !b._moving || !st) {
+            return;
+        }
+        let moved: boolean = Math.abs(st.mouseX - BFOUNDATION._ioHoldX) > BFOUNDATION.IO_HOLD_SLOP || Math.abs(st.mouseY - BFOUNDATION._ioHoldY) > BFOUNDATION.IO_HOLD_SLOP;
+        if (!moved) {
+            // (StopMove then only arms the next click, as after the Move button)
+            b._mouseClicked = false;
+        }
+        MAP._dragged = false;
     }
 
     public Mouseup(param1: MouseEvent): void {
@@ -2597,9 +3281,37 @@ export class BFOUNDATION extends GameObject {
         }
     }
 
+    /** Inferno-only (QoL #36): Esc while moving: back where it was. */
+    public ioCancelMove(): void {
+        if (!this._moving || !this._oldPosition) {
+            return;
+        }
+        MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.StopMove));
+        this._mouseClicked = false;
+        this._mc.x = this._oldPosition.x;
+        this._mc.y = this._oldPosition.y;
+        this._mcBase.x = this._mc.x;
+        this._mcBase.y = this._mc.y;
+        this._mcFootprint.x = this._mc.x;
+        this._mcFootprint.y = this._mc.y;
+        this._mc.mouseEnabled = true;
+        this.StopMoveB();
+    }
+
     public StopMove(param1: MouseEvent): void {
         if (this._mouseClicked) {
             this._mouseClicked = false;
+            // (Inferno-only, QoL #42: on a spot it can't go, the building stays in hand, said; it went back where it
+            // was, and Move had to be clicked again. Esc puts it back.)
+            if (!MAP._dragged && GLOBAL.INFERNO_ONLY && this._moving && BASE.BuildBlockers(this, this._class == "decoration") != "") {
+                SOUNDS.Play("error1");
+                let self: BFOUNDATION = this;
+                IoToast.Show(KEYS.Get("io_move_blocked"), 4000, KEYS.Get("io_move_putback"), (): void => {
+                    self.ioCancelMove();
+                });
+                this._mouseClicked = true;
+                return;
+            }
             if (!MAP._dragged) {
                 MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.StopMove));
                 this._mc.mouseEnabled = true;
@@ -2623,6 +3335,7 @@ export class BFOUNDATION extends GameObject {
                     SOUNDS.Play("error1");
                 } else {
                     SOUNDS.Play("buildingplace");
+                    this.ioNod(IoTilt.VERY_LIGHT);
                 }
                 this._position = new Point(this._mc.x, this._mc.y);
                 this._mc.mouseEnabled = false;
@@ -2646,6 +3359,14 @@ export class BFOUNDATION extends GameObject {
     }
 
     public Click(param1: MouseEvent = null): void {
+        // Inferno-only (Hellgate Defense): in the arena a click on a tower opens its panel; nothing else in
+        // it can be picked (no moving, recycling or upgrading the game's way)
+        if (GLOBAL.ioTdMode()) {
+            if (!MAP._dragged) {
+                IoTd.clicked(this);
+            }
+            return;
+        }
         if (Boolean(GLOBAL._openBase) || TUTORIAL._stage >= 2 && TUTORIAL._stage != 90) {
             this.Description();
             if (!MAP._dragged) {
@@ -2699,7 +3420,27 @@ export class BFOUNDATION extends GameObject {
         return param1 >>> 0;
     }
 
+    /** (Inferno-only, QoL #628) when the last "done" sound played (getTimer), so several at once make one */
+    private static _ioDoneAt: number = -10000;
+
+    /** QoL #628: a short sound when a build or upgrade finishes in the yard being played (one per 2 s at most). */
+    public static ioDoneSound(): void {
+        if (getTimer() - BFOUNDATION._ioDoneAt < 2000) {
+            return;
+        }
+        BFOUNDATION._ioDoneAt = getTimer();
+        SOUNDS.Play("iquestshow", GLOBAL.INFERNO_ONLY ? 1 : 0.6);
+    }
+
     public Constructed(): void {
+        // (Inferno-only: a nod when it is finished in the yard being played; a decoration's goes with its placing)
+        if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._class != "decoration") {
+            this.ioNod(IoTilt.LIGHT);
+            // (QoL #628: and a short sound when it finishes while you play, not when the yard loads)
+            if (GLOBAL.INFERNO_ONLY && !this._constructed && !BASE._loading && !GLOBAL._catchup) {
+                BFOUNDATION.ioDoneSound();
+            }
+        }
         if (BASE.isOutpostOrInfernoOutpost && !GLOBAL.outpostRecycling) {
             this._blockRecycle = true;
         }
@@ -2953,6 +3694,13 @@ export class BFOUNDATION extends GameObject {
         }
         if (this._type == 17) {
             this._gridCost[1][1] = 100 + this._lvl.Get() * 25;
+            // (Inferno-only, 20 October: monsters walk twice as far round a wall before they choose to break it. The
+            // extra a path pays for going through a wall, its middle plus the edge (20) on each side, is doubled.
+            // 22 November: levels 4 and 5 only have more health; to the monsters' paths they cost as level 3.)
+            if (GLOBAL.INFERNO_ONLY) {
+                let ioLvl: int = Math.min(3, this._lvl.Get()) | 0;
+                this._gridCost[1][1] = (2 * (100 + ioLvl * 25) + 40) | 0;
+            }
         }
         this.PlaceB();
         if (this._countdownBuild.Get() > 0) {
@@ -3561,13 +4309,37 @@ export class BFOUNDATION extends GameObject {
             return;
         }
         this._ioHover = false;
-        this.ioHideGlow();
+        if (!this._ioTargeted) {
+            this.ioHideGlow();
+        }
+    }
+
+    /**
+     * Inferno-only (26 October, the user's: "When attacking, the highlight around buildings when you mouseover is
+     * incorrect and should match the main base"): a building under a resource bomb's or siege weapon's ring was tinted
+     * (its top picture only, its animation and fortification left as they were); now it has the yard's hover outline.
+     */
+    public ioTarget(on: boolean): void {
+        if (on == this._ioTargeted) {
+            return;
+        }
+        this._ioTargeted = on;
+        if (on) {
+            if (!this._ioGlow && !(this._mc && this._mc.filters.length && this._mc.filters[0] instanceof GlowFilter)) {
+                this.ioShowGlow();
+            }
+        } else if (!this._ioHover) {
+            this.ioHideGlow();
+        }
     }
 
     /** A picture of the building as it is now (every part), glowing white round its edge only. */
-    private ioShowGlow(): void {
-        this.ioHideGlow();
+    private ioShowGlow(again: boolean = false): void {
+        if (!again) {
+            this.ioHideGlow();
+        }
         if (!this._mc || this.m_isCleared) {
+            this.ioHideGlow();
             return;
         }
         if (!BYMConfig.instance.RENDERER_ON) {
@@ -3597,11 +4369,33 @@ export class BFOUNDATION extends GameObject {
             }
         }
         if (minX == Infinity || maxX - minX > 2048 || maxY - minY > 2048) {
+            this.ioHideGlow();
             return;
         }
         minX -= BFOUNDATION.IO_GLOW_PAD;
         minY -= BFOUNDATION.IO_GLOW_PAD;
-        this._ioGlowBMD = new BitmapData((maxX - minX + BFOUNDATION.IO_GLOW_PAD) | 0, (maxY - minY + BFOUNDATION.IO_GLOW_PAD) | 0, true, 0);
+        let gw: int = (maxX - minX + BFOUNDATION.IO_GLOW_PAD) | 0;
+        let gh: int = (maxY - minY + BFOUNDATION.IO_GLOW_PAD) | 0;
+        if (again && this._ioGlowBMD && this._ioGlow && this._ioGlowOff) {
+            if (this._ioGlowBMD.width != gw || this._ioGlowBMD.height != gh || this._ioGlowOff.x != (minX | 0) || this._ioGlowOff.y != (minY | 0)) {
+                // (the parts moved or grew: made again)
+                this.ioShowGlow(false);
+                return;
+            }
+            // the same picture, its pixels from the frames now (the renderer sees it changed and filters it again)
+            this._ioGlowBMD.fillRect(this._ioGlowBMD.rect, 0);
+            for (const $value of as3.values(parts)) {
+                i = $value >>> 0;
+                rd = as3.as(as3.vget(this._rasterData, i), RasterData);
+                d = rd ? as3.as(rd.data, BitmapData) : null;
+                if (d && as3.vget(this._offsets, i)) {
+                    this._ioGlowBMD.copyPixels(d, d.rect, new Point((as3.vget(this._offsets, i).x - minX) | 0, (as3.vget(this._offsets, i).y - minY) | 0), null, null, true);
+                }
+            }
+            return;
+        }
+        this.ioHideGlow();
+        this._ioGlowBMD = new BitmapData(gw, gh, true, 0);
         for (const $value of as3.values(parts)) {
             i = $value >>> 0;
             rd = as3.as(as3.vget(this._rasterData, i), RasterData);
@@ -3675,6 +4469,18 @@ export class BFOUNDATION extends GameObject {
         this._mcBase.y = param2;
         this._mcFootprint.x = param1;
         this._mcFootprint.y = param2;
+        // Inferno-only (7 October, the user's: a Hellgate tower moved with the Yard Planner still fired from where
+        // it was): the move is finished here. StartMove then StopMove(null) never finished it (StopMove's first
+        // call only notes a click), so the building stayed "moving": _position, where towers aim and shoot from,
+        // kept its old place, its grid cost was not put back, and saves were left blocked. (The planner's Apply
+        // uses ioPlaceAt instead: BASE.applyTemplate.)
+        if (GLOBAL.INFERNO_ONLY) {
+            this._position = new Point(this._mc.x, this._mc.y);
+            this.GridCost(true);
+            this.updateRasterData();
+            BFOUNDATION.redrawAllShadowData();
+            return;
+        }
         this.StartMove();
         this.StopMove(null);
         this.updateRasterData();
@@ -3682,6 +4488,31 @@ export class BFOUNDATION extends GameObject {
     }
 
     protected onMove(): void {
+    }
+
+    /**
+     * Inferno-only: put down at (x, y) by the Yard Planner's Apply (BASE.applyTemplate), which takes every moving
+     * building off the grid first and puts them back after, so one moving onto another's old place keeps its
+     * cells. Its place (_position: where a tower aims and shoots from) follows.
+     */
+    public ioPlaceAt(param1: int, param2: int): void {
+        this.x = param1;
+        this.y = param2;
+        this._mcBase.x = param1;
+        this._mcBase.y = param2;
+        this._mcFootprint.x = param1;
+        this._mcFootprint.y = param2;
+        this._position = new Point(this._mc.x, this._mc.y);
+        this.updateRasterData();
+    }
+
+    /**
+     * Inferno-only (8 October, from the base game's pull request #296): moved by the Yard Planner's Apply, once
+     * every building is down and the grid's costs are up to date. A drag ends in StopMoveB, which a planner move
+     * never goes through: housing (its monsters wander round it) and the champion cage (its guardian) catch up
+     * here.
+     */
+    public ioPlannerMoved(): void {
     }
 
     public get name(): string {

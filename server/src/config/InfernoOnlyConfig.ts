@@ -36,6 +36,17 @@ export const infernoOnlyConfig = {
   attackViolationBanAfter: 0,
 
   /**
+   * The cheat detector (services/anticheat; 9 October, the user's: "automatic cheat detection but with absolutely no
+   * false positives"). Each rule is something the game itself can never send, checked with room to spare; a finding
+   * goes to the admin panel's Reports tab with its proof. Nobody is banned automatically.
+   *  - enabled: the checks run (off: nothing is checked or reported).
+   *  - refuse: a request that no fair game can send and that would gain something (resources out of nowhere, a
+   *    negative price, a save into a yard the player never attacked...) is also refused, or the part of it that
+   *    can't be right is left out. Off: reported only, taken as before.
+   */
+  anticheat: { enabled: true, refuse: true },
+
+  /**
    * Referrals: the Invite Friends button shows the player's link, https://<server>/play.swf?ref=<code>.
    * A friend who starts the game from it and registers earns both players this much shiny, paid when
    * the friend's yard is created. Nothing is paid between accounts made on the same IP address.
@@ -64,6 +75,12 @@ export const infernoOnlyConfig = {
     weekShiny: 100,
     streakDays: 14,
     streakShiny: 200,
+    /** (QoL #126) Each completed stretch of this many days in a row earns a streak saver (at most 1 held), which forgives one missed day. */
+    saverEveryDays: 14,
+    /** (QoL #126) Buying a streak back on the day it broke: this much Shiny per day of the streak, between min and max. */
+    buyBackShinyPerDay: 5,
+    buyBackShinyMin: 25,
+    buyBackShinyMax: 250,
   },
 
   referral: {
@@ -75,31 +92,51 @@ export const infernoOnlyConfig = {
   },
 
   /**
+   * Search engines and link previews (middleware/seo.ts). siteUrl: the site's one address, as search engines
+   * should list it (the front page's canonical link, its share image, robots.txt's sitemap); every other address
+   * the server answers on points there. Empty: referral.inviteUrl, else the address the page was asked for.
+   */
+  seo: {
+    siteUrl: "https://inferno.maproom2.com/",
+  },
+
+  /**
+   * (QoL #202) This server's own community links, for the login page ("Taking a while? ... on Discord") and the
+   * game's help links. Empty: not shown (the stock links pointed at the upstream project's Discord).
+   */
+  community: {
+    discordUrl: "",
+    statusUrl: "",
+  },
+
+  /**
    * The popup shown once per login, in place of the stock game's "unlock a monster / build a
-   * catapult" nags. Line breaks are kept. An empty body shows nothing.
+   * catapult" nags. Line breaks are kept. An empty body shows nothing (as now).
    */
   welcome: {
     title: "Welcome to hell.",
-    body: "What's hell without your friends?\n\nHit <b>Invite Friends</b> and send them your link. When they join, you both get 250 shiny.",
+    // (empty since 10 October: no invite popup at login; the top bar's Invite button stays)
+    body: "",
     /** The picture beside the text, from public/assets/popups (the popup has a frame for one). */
     image: "invite-friends.png",
   },
 
   /**
-   * Version control. The server reads the build stamp of the client it serves
-   * (public/client/bymr-stable.swf) and asks older clients to restart, so normally there is nothing
-   * to set. This is the floor for servers that hand out the SWF as a file instead of publishing it:
-   * a stamp like 202609211830 (see client/scripts/IOBuild.as), or 0 for no floor.
+   * Version control. The server reads the build stamp of the game it publishes (public/web/version.json)
+   * and asks older clients to restart, so normally there is nothing to set. This is a floor on top of
+   * that: a stamp like 202609211830 (see client-web/src/game/IOBuild.ts), or 0 for no floor.
    */
   minClientBuild: 0,
 
   /**
    * Pictures the game loads from public/assets are cached by browsers and by any CDN in front of the
-   * server (an hour or more), so a replaced picture can keep showing the old one. The game adds
-   * ?v=<assetVersion> to every such request: raise this number after replacing pictures and every
-   * player gets the new ones on their next load. Server restart only. 0 = no version.
+   * server, so a replaced picture could keep showing the old one. Since 23 October nothing needs setting:
+   * the server versions each picture by its content (services/assetMap.ts) and the game asks for that.
+   * This number is only for a game from before then, still running (it asks with ?v=<assetVersion>,
+   * kept an hour now): raised once, to 10, as the store's and power-ups' new art had kept the old
+   * address. 0 = no version.
    */
-  assetVersion: 9,
+  assetVersion: 10,
 
   /**
    * Shadows under buildings in the yard. Players pick it up at their next load.
@@ -115,7 +152,7 @@ export const infernoOnlyConfig = {
 
   /**
    * The yard is drawn again only where something changed (moved, animated, appeared), not whole every
-   * frame (client Renderer.as; the browser build only, Flash always draws whole). false = the old way,
+   * frame (client Renderer.ts; the browser build only, Flash always draws whole). false = the old way,
    * whole every frame: a way back without a new client, should it ever draw something wrong.
    */
   yardPartialRedraw: true,
@@ -126,6 +163,27 @@ export const infernoOnlyConfig = {
    * within that time (a strip each frame, so no frame costs much more). 0 turns it off.
    */
   redrawSweepMs: 1000,
+
+  /**
+   * (18 October, the user's) Attacks while the player is online: a player's main yard can be attacked while they play,
+   * and they watch it happen. When an attack starts on one of their yards (the main yard or an outpost), their game
+   * is told (attackwatch/status) and shows the attack as it goes, from its recording (replays/live), over the yard as
+   * it was when the attack began: nothing in the yard can be done meanwhile (its saves are refused), only the Map
+   * Room opened. `false`: the stock rule, a main yard can't be attacked while its player is online, and nothing is
+   * watched.
+   *
+   * (20 October) The Watch menu's pictures of a player's game (services/live/liveStream.ts): `streamKBps`, the most
+   * the server sends of them each second, every watcher together (kilobytes; 0: no limit): past it, the games being
+   * watched are slowed to fit (fewer pictures a second, never broken ones), so the pictures never take a server's
+   * whole connection. `watcherAhead`, how many pictures a watcher can have on the way before they say they got the
+   * first: a watcher on a slow connection gets fewer pictures instead of a queue of them building up on the way (which
+   * a tunnel in front of the server hides from it).
+   */
+  liveAttacks: {
+    enabled: true,
+    streamKBps: 1000,
+    watcherAhead: 2,
+  },
 
   /**
    * Wild tribe attacks on the player's main yard (never outposts; the game plans and runs them while the
@@ -216,9 +274,105 @@ export const infernoOnlyConfig = {
     pb3: { radius: 350, seconds: 55, costs: { r1: 5_000_000, r2: 5_000_000 }, catapultLevel: 4 },
 
     pu0: { radius: 150, speed: 1.2, invuln: 0, armor: 40, speedlength: 15, costs: { r3: 100_000 }, catapultLevel: 1 },
-    pu1: { radius: 200, speed: 1.4, invuln: 4, armor: 55, speedlength: 25, costs: { r3: 500_000 }, catapultLevel: 2 },
-    pu2: { radius: 300, speed: 1.8, invuln: 8, armor: 70, speedlength: 40, costs: { r3: 5_000_000 }, catapultLevel: 3 },
-    pu3: { radius: 500, speed: 2, invuln: 12, armor: 85, speedlength: 55, costs: { r3: 10_000_000 }, catapultLevel: 4 },
+    // (21 November, the user's: invulnerable 0 / 2 / 4 / 6 s, armour from 40 / 55 / 65 / 80% fading over 15 / 23 / 37 / 44 s)
+    pu1: { radius: 200, speed: 1.4, invuln: 2, armor: 55, speedlength: 25, costs: { r3: 500_000 }, catapultLevel: 2 },
+    pu2: { radius: 300, speed: 1.8, invuln: 4, armor: 65, speedlength: 41, costs: { r3: 5_000_000 }, catapultLevel: 3 },
+    pu3: { radius: 500, speed: 2, invuln: 6, armor: 80, speedlength: 50, costs: { r3: 10_000_000 }, catapultLevel: 4 },
+  },
+
+  /**
+   * Monster synergies (11 November; the game's IoSynergy.ts). Two kinds of monster that fight side by side give
+   * each other a small boost. For a monster M of kind `a` (or `b`), with O the housing of its own kind within
+   * `radius` of it and P the housing of the partner kind within it:
+   *   strength = min(1, P / (ratio x O)), rounded down to 1/quantize; M gets its amount x strength.
+   * Housing, not heads, so one cheap partner cannot switch a whole army on. One synergy a monster (its
+   * strongest; a tie: the pairing listed first). Checked every `stepEvery` game steps (80 a second), kept `linger`
+   * steps after the partner is gone or out of reach.
+   *
+   *   pairs    a, b: monster ids. aDamage / bDamage: more damage (0.12 = +12%); aArmor / bArmor: armour
+   *            (0.10 = a tenth of each hit taken off). One effect each way. radius: this pairing's own.
+   *   caps     the most any pairing may give; the game also has its own ceiling (15% each), whatever is here.
+   *   sides    attacker: a player's monsters attacking a player; playerDefender: a player's yard and bunker
+   *            monsters; pveAttacker: a player's monsters against tribes, Moloch, the Gauntlet and the Depths;
+   *            ai: the tribes' and Moloch's own monsters, and wild raiders (their yards were balanced without
+   *            synergies on 30 September: leave off unless they are balanced again); events: Hell Freezes Over,
+   *            the FMI waves, Hellgate Defense.
+   *
+   * NO BOOSTS FOR CHAMPIONS (the owner's rule): the game drops any pairing that names Korath, Drull, Ashkarr,
+   * the Rimegrave or the Basilisk, and never counts a champion, whatever is written here. Rezghul's raised dead
+   * and Clinkerjaw's hatchlings are never counted either.
+   *
+   * A boost is a modifier on the living monster: the monster tables (game-data/stats/monsterStats.ts, checked by
+   * validateAttack) are not touched. Sent with every base load (flag io_synergy): server restart only.
+   * `enabled: false` switches all of it off.
+   */
+  synergy: {
+    enabled: true,
+    radius: 250,
+    ratio: 0.5,
+    stepEvery: 40,
+    linger: 80,
+    quantize: 4,
+    caps: { damage: 0.15, armor: 0.15 },
+    sides: { attacker: true, playerDefender: true, pveAttacker: true, ai: false, events: false },
+    pairs: [
+      // Spark and Shield: Spurtz + Zagnoid
+      { id: "spark", a: "IC1", b: "IC2", aDamage: 0.12, bDamage: 0.12 },
+      // Bait and Bang: Fusebug + Zagnoid (the blast hits several things: 8%)
+      { id: "bait", a: "IC15", b: "IC2", aDamage: 0.08, bArmor: 0.1 },
+      // Breach and Plunder: Malphus + Valgos
+      { id: "breach", a: "IC3", b: "IC4", aDamage: 0.12, bArmor: 0.1 },
+      // Slag and Shadow: Flickerfiend + Clinkerjaw
+      { id: "slag", a: "IC14", b: "IC12", aDamage: 0.12, bArmor: 0.1 },
+      // Siege Line: Sabnox + Grokus (Sabnox fires from 240, so its tank stands that far off)
+      { id: "siege", a: "IC7", b: "IC6", aDamage: 0.12, bArmor: 0.1, radius: 300 },
+      // Hunt and Feed: Balthazar + Emberghoul (armour for her, so her lifesteal does not grow)
+      { id: "hunt", a: "IC5", b: "IC20", aDamage: 0.08, bArmor: 0.1 },
+      // Grave Tide: King Wormzer + Rezghul
+      { id: "grave", a: "IC8", b: "C19", aDamage: 0.12, bArmor: 0.1 },
+    ] as { id: string; a: string; b: string; aDamage?: number; aArmor?: number; bDamage?: number; bArmor?: number; radius?: number }[],
+  },
+
+  /**
+   * The Devil's Contract (13 November, the user's; services/devil/devilContract.ts, the game's IoDevil.ts). At most
+   * once every `offerHours` after the last offer was answered, the player's main yard is offered three contracts
+   * (the server picks them) to sign one of, or refuse all three. Each has a boon and a price, both from signing,
+   * each for its own hours. Contracts don't stack: an offer never holds a contract that touches anything (`areas`)
+   * a contract still in force touches, nor one still in force. Signed is signed: no contract can be broken.
+   *
+   *   boon / price   hours (from signing), and what it does, as multipliers (1 = no change):
+   *     production   { r1..r4 }: what harvesters make (r1 bone, r2 coal, r3 sulfur, r4 magma), main yard and outposts
+   *     storage      the main yard's storage cap
+   *     burnOver     (Hoarder's Seal's price, when its boon ends) resources over this share of the normal cap burn
+   *     costs        everything bought with resources (buildings, upgrades, calcification, research, monsters,
+   *                  kits, takeovers...)
+   *     speedups     Shiny to finish something early
+   *     workers      more workers (each stays until its job is done)
+   *     monsterDamage, monsterHurt (damage taken), monsterSpeed, monsterHealth: the player's monsters when they
+   *                  attack (never champions)
+   *     housing      monster housing; monsterCost: making monsters
+   *     towerDamage, towerRange; trapDamage, trapRearm: the player's yards' towers and traps, against anyone
+   *     kitCost      outpost kits; kitNoProtection: an outpost a kit is built on gets no damage protection
+   *
+   * Sent with every base load (flag io_devil): a server restart retunes it, no new build. `enabled: false` stops
+   * new offers and every effect at once.
+   */
+  devil: {
+    enabled: true,
+    offerHours: 23,
+    offerSize: 3,
+    contracts: {
+      furnace: { areas: ["production"], boon: { hours: 24, production: { r1: 1.4, r2: 1.4 } }, price: { hours: 72, production: { r3: 0, r4: 0 } } },
+      hoarder: { areas: ["storage"], boon: { hours: 48, storage: 1.25 }, price: { hours: 48, burnOver: 0.9 } },
+      merchant: { areas: ["costs", "kits", "monsterCost", "speedups"], boon: { hours: 24, costs: 0.75 }, price: { hours: 24, speedups: 1.25 } },
+      shift: { areas: ["workers", "production"], boon: { hours: 24, workers: 1 }, price: { hours: 24, production: { r1: 0, r2: 0, r3: 0, r4: 0 } } },
+      bloodlust: { areas: ["monsterDamage", "monsterHurt"], boon: { hours: 24, monsterDamage: 1.1 }, price: { hours: 24, monsterHurt: 1.15 } },
+      horde: { areas: ["monsterSpeed", "monsterHealth"], boon: { hours: 24, monsterSpeed: 1.15 }, price: { hours: 24, monsterHealth: 0.8 } },
+      ranks: { areas: ["housing", "monsterCost"], boon: { hours: 24, housing: 1.25 }, price: { hours: 24, monsterCost: 1.5 } },
+      bastion: { areas: ["towers"], boon: { hours: 24, towerDamage: 1.2 }, price: { hours: 24, towerRange: 0.75 } },
+      traps: { areas: ["traps"], boon: { hours: 48, trapDamage: 2 }, price: { hours: 48, trapRearm: 50 } },
+      kitbinder: { areas: ["kits"], boon: { hours: 24, kitCost: 0.95 }, price: { hours: 24, kitNoProtection: 1 } },
+    } as Record<string, { areas: string[]; boon: Record<string, any>; price: Record<string, any> }>,
   },
 
   /**
@@ -240,11 +394,20 @@ export const infernoOnlyConfig = {
 
   /**
    * Rezghul in the Inferno: unlocked in the Strongbox (page 4, after King Wormzer, for 1.5 times his
-   * unlock cost and time; set in the client, CREATURELOCKER.as), hatched for a flat magma cost.
+   * unlock cost and time; set in the client, CREATURELOCKER.ts), hatched for a flat magma cost.
    * Also used by the server's attack validation, which checks monster stats in production, so the
    * client and server always agree on the cost.
    */
   rezghul: { enabled: true, magmaCost: 500_000 },
+
+  /**
+   * The Wild Monster Invasions (the base game's WMI 1, the totem's waves, and WMI 2): off (9 October, the user's:
+   * "Remove Wild Monster Invasion 1/2 popups and events. Keep the framework in tact as we will rework it to be inferno
+   * styled in the future"). Off, the game shows no invasion popup, countdown or next-wave bar, sends no waves and
+   * doesn't ask for the event's dates; the server's flags say no invasion is on (invasionpop -1). All the code stays:
+   * `enabled: true` brings the base game's invasions back as they were.
+   */
+  invasions: { enabled: false },
 
   /**
    * Decorations are buildable in the main yard and in outposts, using the overworld set.
@@ -301,6 +464,13 @@ export const infernoOnlyConfig = {
   workers: 5,
 
   /**
+   * A worker clicked in the main yard can be sacrificed to Moloch (10 October; the game's IoWorkerFun, the server's
+   * services/workers/sacrifice.ts): gone for good, for this much Shiny. Only an idle worker, never the last one;
+   * the yard has one worker less from then on (it can't be hired back). 0 turns it off.
+   */
+  workerSacrificeShiny: 500,
+
+  /**
    * How wild monster tribes are laid out on the world map. See services/maproom/v2/tribeTerritories.ts.
    * Everything is derived from the world uuid, so a world always regenerates identically.
    * Changing any value re-rolls every tribe cell: wipe persisted tribe saves when you do.
@@ -353,6 +523,86 @@ export const infernoOnlyConfig = {
   },
 
   /**
+   * The Frozen Monster Invasions (10 October; services/events/fmi.ts, the game's com/monsters/events/fmi): every
+   * month from the `startDay` for `days` days (UTC), 32 waves of Hell Freezes Over's ice cretins and the Inferno's
+   * champions, the months taking turns (Invasion 1 in `firstMonth`, then 2, 1, ...). Only for players who have won
+   * Hell Freezes Over's last wave. Its button shows from `showDaysBefore` days before it starts.
+   */
+  fmi: {
+    enabled: true,
+    startDay: 15,
+    days: 7,
+    waves: 32,
+    firstMonth: "2026-10",
+    showDaysBefore: 7,
+  },
+
+  /**
+   * Trick or Treat, the Inferno's Halloween (20 October; services/events/trickOrTreat.ts, the game's
+   * com/monsters/events/tot): from `startsAt` to `endsAt` (UTC instants: 30 October 00:00 to 3 November 00:00, Chicago
+   * time), one door for each wild tribe, knocked on once: an even chance of `shiny` Shiny, or `horde` level-`hordeLevel`
+   * `monster`s (Zagnoids) round the player's yard, a real raid; every one of them killed pays the `shiny` after all (not
+   * sooner than `trickMinSeconds`; a fight not ended in `fightMinutes` is lost). Its button shows from `showDaysBefore`
+   * days before. Once it's over, everyone who knocked gets `pumpkins` of decoration `pumpkinBuilding` (the
+   * Mini-Pumpkin) in storage, the first time they're home within `pumpkinDays` days.
+   */
+  trickOrTreat: {
+    enabled: true,
+    startsAt: "2026-10-30T05:00:00Z",
+    endsAt: "2026-11-03T06:00:00Z",
+    showDaysBefore: 3,
+    shiny: 25,
+    horde: 1000,
+    hordeLevel: 6,
+    monster: "IC2",
+    trickMinSeconds: 45,
+    fightMinutes: 45,
+    pumpkins: 6,
+    pumpkinBuilding: 111,
+    pumpkinDays: 30,
+  },
+  /**
+   * The yard's lighting, for everyone (20 October; the game's com/monsters/rendering/IoLighting, sent as io_lighting):
+   * `look` is the light (`az`: its direction, degrees from the art's own light toward the evening side; `el`: its
+   * height in degrees) and the Lighting panel's other settings (IoLighting.SETTINGS: strength, bright, tintAmt,
+   * warmth, shading, vignette; the shadows' `shadow` opacity, intensity (below 0 brighter, above darker), length,
+   * soft (px), shHue, shBuild, shWalk). `spooky` is the spooky yard's Halloween calendar: on from its first point to
+   * its last, each a day and time ("MM-DD HH:MM", every year) in `timeZone`, with how many webs (`webs`: 1 = 100%)
+   * and how gloomy (`gloom`), straight from one point to the next; `webAlpha` the webs' opacity. Admins can try other
+   * looks on the Admin menu's Lighting, in their own game only. Server restart only.
+   */
+  yardLighting: {
+    enabled: true,
+    look: {
+      az: 60,
+      el: 53,
+      strength: 0,
+      bright: 1,
+      tintAmt: 1,
+      warmth: 0.05,
+      shading: 0.3,
+      vignette: 0,
+      shadow: 1,
+      intensity: -0.75,
+      length: 1,
+      soft: 1,
+      shHue: 0,
+      shBuild: 1,
+      shWalk: 1,
+    },
+    spooky: {
+      enabled: true,
+      timeZone: "America/Chicago",
+      webAlpha: 0.2,
+      points: [
+        { at: "10-20 00:00", webs: 0.25, gloom: 0.2 },
+        { at: "10-31 00:00", webs: 1, gloom: 0.5 },
+        { at: "11-01 00:00", webs: 1, gloom: 0.5 },
+        { at: "11-03 00:00", webs: 0, gloom: 0 },
+      ],
+    },
+  },
+  /**
    * Moloch's Gauntlet (services/events/gauntlet.ts): a monthly event, played from the main yard, not the map.
    * Open for the first `days` days of each month (UTC; the admin panel can open or close it early). A ladder of
    * `stages` Moloch yards (the Inferno's descent yards, weakest first), the same for every player; each one is
@@ -360,10 +610,13 @@ export const infernoOnlyConfig = {
    * `attempts` attempts without beating it, it is fully healed and its reward is lost for good this month
    * (it can still be beaten, to go on). Rewards for each yard beaten: `stageShiny` shiny, and resources
    * growing evenly to `finalResources` at the last stage, which also pays `finalShiny`. No loot from the yards.
-   * Progress starts again each month. Server restart only.
+   * Progress starts again each month. Its button (while it is closed) shows from `showDaysBefore` days before it
+   * opens; conquering it wins a trophy for good, and a second one when no catapult was fired in it that month
+   * (10 October: services/events/trophies.ts). Server restart only.
    */
   gauntlet: {
     enabled: true,
+    showDaysBefore: 7,
     days: 7,
     stages: 13,
     winPercent: 90,
@@ -423,7 +676,11 @@ export const infernoOnlyConfig = {
   prices: {
     /** Improved Packing Skills, each of the 10 steps. */
     packing: 25,
-    /** Damage protection: 24 hours / 3 days / 7 days. */
+    /**
+     * Damage protection's prices: 24 hours (day), 7 days (threeDays) and 28 days (week). The lengths are storeItems'
+     * PRO1-3 `du`, which players are shown and get; the keys' names are older than those lengths (QoL #309, checked
+     * 14 October: this said 3 and 7 days).
+     */
     protection: { day: 48, threeDays: 108, week: 168 },
     /** Housing Expansion and Tower Overdrive (24 hours each). */
     housingExpansion: 125,
@@ -435,6 +692,30 @@ export const infernoOnlyConfig = {
     takeoverOutpost: 100,
     /** Alliance power-ups, per hour bought. */
     powerupHour: 5,
+    /**
+     * (22 October, the user's) The Store's Extras (services/shop/ioShop.ts): bought for yourself or, gift-wrapped, for
+     * an alliance member at the same price. Harvest Drone, Training Manual and Academy Scholarship last 7 days, Raid
+     * Insurance 24 hours (one raid), Outpost Guard 12 hours (one outpost), Pet Treats 24 hours; Short Hop swaps the
+     * main yard with one of the player's outposts up to 10 cells away (23 October); Golden Coat and Name Tag are for
+     * one pet; the Champion Statue is a decoration.
+     */
+    shop: {
+      harvestDrone: 120,
+      trainingManual: 150,
+      academyScholarship: 150,
+      raidInsurance: 60,
+      shortHop: 75,
+      outpostGuard: 30,
+      goldenCoat: 400,
+      petTreats: 10,
+      nameTag: 25,
+      championStatue: 750,
+      // (22 October, later: the user's picks #35, #47, #50 from Round 2, in the Store's Construction, Speed-Ups and
+      // Combat tabs)
+      apprentice: 100,
+      repairCrew: 90,
+      scoutReport: 10,
+    },
     /** Buying an outpost kit outright, kit 1 to 6 (Ember to Apocalypse). */
     kits: [50, 100, 200, 400, 700, 1000],
     /** Upgrade all walls: per wall, wood to stone; stone to iron. A wall still on wood pays both to reach iron. */

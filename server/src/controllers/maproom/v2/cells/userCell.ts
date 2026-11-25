@@ -10,6 +10,7 @@ import { infernoOnlyConfig } from "../../../../config/InfernoOnlyConfig.js";
 import { pendingInviteThread } from "../../../../services/maproom/v2/relocateInvites.js";
 import { isAttackActive } from "../../../../services/base/isAttackActive.js";
 import { isUnder, underworldOn } from "../../../../services/maproom/v2/underworld.js";
+import { liveAttacksOn } from "../../../../services/replays/liveAttacks.js";
 
 export type UserCellFields =
   | "*"
@@ -57,7 +58,8 @@ export const userCell = async (ctx: Context, cell: Cell, cellOwners: Map<number,
   const isUnderAttack = homeCell && isAttackActive(cellSave);
 
   let locked = cellSave.locked;
-  if (online || isUnderAttack) locked = 1;
+  // (18 October: with live attacks on, a player online can be attacked: services/replays/liveAttacks.ts)
+  if ((online && !liveAttacksOn()) || isUnderAttack) locked = 1;
   if (mine) locked = 0;
 
   const points = cellOwner.save.points;
@@ -95,6 +97,8 @@ export const userCell = async (ctx: Context, cell: Cell, cellOwners: Map<number,
     n: cellOwner.username,
     fr: 0,
     p: isProtected ? 1 : 0,
+    // (QoL #63: until when, so the map can say how long is left)
+    ...(isProtected ? { pu: cellSave.protected } : {}),
     r: cellSave.resources,
     // Counts, always: the map gives a player their own monsters to attack with, and a yard that was
     // raided stores its survivors with their health (see defenderHealth.ts).

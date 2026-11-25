@@ -1,5 +1,9 @@
 import { User } from "../../database/models/user.model.js";
 import { loadFailureErr } from "../../errors/errors.js";
+import { ClientSafeError } from "../../middleware/clientSafeError.js";
+import { Status } from "../../enums/StatusCodes.js";
+import { isAdmin } from "../admin/admin.js";
+import { logger } from "../../utils/logger.js";
 import { logAttackViolation } from "../base/reportManager.js";
 import { monsterStats, mr3MonsterStats } from "../../game-data/stats/monsterStats.js";
 import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
@@ -13,6 +17,27 @@ import type { AttackData } from "../../schemas/AttackSchema.js";
 import { type ChampionProps, championStats } from "../../game-data/stats/championStats.js";
 import { MapRoomVersion } from "../../enums/MapRoom.js";
 import { Env } from "../../enums/Env.js";
+
+/**
+ * Inferno-only (21 October): stats that differ, for an admin. The game and the server each have the monsters' tables;
+ * when a change to them reaches the game (publish-web: a file copy) but not the server (in Docker its source is copied
+ * into the image: `docker compose up --build -d`), every attack with that monster is refused, test mode's above all
+ * (every monster in the army). An admin is told so, and isn't reported for tampering (nor banned, with
+ * attackViolationBanAfter set). Anyone else: refused and reported, as before.
+ */
+const refuseStats = async (user: User, message: string, detail: string) => {
+  if (isAdmin(user)) {
+    logger.warn(`Attack refused for admin '${user.username}' (ID ${user.userid}): ${message} (the server out of date?)`);
+    throw new ClientSafeError({
+      message: `The server's monster stats don't match the game's (${detail}). If the game or the server was just updated, the server is probably out of date: rebuild it (in the server folder: docker compose up --build -d).`,
+      status: Status.NOT_FOUND,
+      data: {},
+      isClientFriendly: true,
+    });
+  }
+  await logAttackViolation(user, message);
+  throw loadFailureErr();
+};
 
 // TODO:
 // Validate monster count from flinger
@@ -49,13 +74,15 @@ export const validateAttack = async (user: User, attackData: AttackData, mapVers
     for (const monster of attackData.monsters) {
       const { id, stats } = monster;
 
-      if (!monsterStats[id]) {
+      // (Inferno-only, 22 October: a monster the server doesn't know, or not in Map Room 3's table there (that read
+      // an undefined table: a 500): refused like a stat that differs, so an admin on an out-of-date server is told so)
+      const expectedProps = monsterStats[id] ? (isInMaproom3 ? mr3MonsterStats[id]?.props : monsterStats[id].props) : undefined;
+      if (!expectedProps) {
         const message = `Invalid monster ID: ${id}. Client modified.`;
-        await logAttackViolation(user, message);
-        throw loadFailureErr();
+        await refuseStats(user, message, `${id}: not in the server's monster table${isInMaproom3 ? " for Map Room 3" : ""}`);
+        continue; // (not reached: refuseStats throws)
       }
 
-      const expectedProps = isInMaproom3 ? mr3MonsterStats[id]?.props : monsterStats[id].props;
       const monsterPropsKeys = Object.keys(expectedProps) as Array<keyof typeof expectedProps>;
 
       for (const key of monsterPropsKeys) {
@@ -64,8 +91,7 @@ export const validateAttack = async (user: User, attackData: AttackData, mapVers
 
         if (!isMonsterStatsEqual(received, expected)) {
           const message = `${id}'s stat '${key}' was modified. Received: ${stats[key]} but expected ${expected}`;
-          await logAttackViolation(user, message);
-          throw loadFailureErr();
+          await refuseStats(user, message, `${id} ${String(key)}: the game has ${stats[key]}, the server ${expected}`);
         }
       }
     }
@@ -77,8 +103,7 @@ export const validateAttack = async (user: User, attackData: AttackData, mapVers
 
       if (!championStats[type]) {
         const message = `Invalid champion type: ${type}. Client modified.`;
-        await logAttackViolation(user, message);
-        throw loadFailureErr();
+        await refuseStats(user, message, `champion ${type}: not in the server's champion table`);
       }
 
       const championProps: ChampionProps = championStats[type].props;
@@ -90,8 +115,7 @@ export const validateAttack = async (user: User, attackData: AttackData, mapVers
 
         if (!isChampionStatsEqual(received, expected)) {
           const message = `${type}'s stat '${key}' was modified. Received: ${stats[key]} but expected ${championProps[key]}`;
-          await logAttackViolation(user, message);
-          throw loadFailureErr();
+          await refuseStats(user, message, `${type} ${String(key)}: the game has ${stats[key]}, the server ${championProps[key]}`);
         }
       }
     }

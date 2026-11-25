@@ -14,7 +14,7 @@ import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, AllianceTabBase, Button_C
  */
 export class IoBoardTab extends AllianceTabBase {
     static {
-        as3.fields(this, { _pane: null, _pins: null, _canEdit: false, _max: 50, _days: 30, _myWorld: "", _count: null });
+        as3.fields(this, { _pane: null, _pins: null, _canEdit: false, _canKeep: false, _max: 50, _days: 30, _myWorld: "", _count: null });
     }
 
     private static readonly PAD: int = 12;
@@ -23,6 +23,7 @@ export class IoBoardTab extends AllianceTabBase {
     private _pane: IoScrollPane;
     private _pins: any[];
     private _canEdit: boolean;
+    private _canKeep: boolean;
     private _max: int;
     private _days: int;
     private _myWorld: string;
@@ -67,10 +68,13 @@ export class IoBoardTab extends AllianceTabBase {
             }
             this._pins = as3.as(response.pins, Array) || [];
             this._canEdit = response.can_edit == true;
+            this._canKeep = response.can_keep == true;
             this._max = response.max | 0 || 50;
             this._days = response.days | 0 || 30;
             this._myWorld = response.my_world ? String(response.my_world) : "";
             this._draw(null);
+            // (QoL #179: the chat's pin banner follows what was put up, moved, kept or removed)
+            IoAllianceUi.pinBanner(this._pins);
             if (ALLIANCES.ioUnreadPins() > 0) {
                 ALLIANCES.ioClearUnreadPins();
                 ALLIANCEWINDOW.RefreshTabLabels();
@@ -140,7 +144,8 @@ export class IoBoardTab extends AllianceTabBase {
         if (Number(pin.updated) > Number(pin.created) + 30) {
             meta += "  ·  " + KEYS.Get("io_alliance_pin_edited", { "v1": IoAllianceUi.ago(Number(pin.updated)) });
         }
-        meta += "  ·  " + KEYS.Get("io_alliance_pin_expires", { "v1": IoAllianceUi.span(Math.max(0, (pin.expires | 0) - GLOBAL.Timestamp()) | 0) });
+        // (QoL #177: a pin the leader kept doesn't go)
+        meta += "  ·  " + (pin.kept == true ? KEYS.Get("io_al2_pin_kept") : KEYS.Get("io_alliance_pin_expires", { "v1": IoAllianceUi.span(Math.max(0, (pin.expires | 0) - GLOBAL.Timestamp()) | 0) }));
         IoAllianceUi.addText(c, meta, 14, 32, 10, AllianceConstants.IO_MUTED, false, (w - 28 - controlsW) | 0);
         let y: int = 52;
         if (pin.body) {
@@ -195,12 +200,43 @@ export class IoBoardTab extends AllianceTabBase {
                 c.addChild(btn);
                 bx += 58;
             }
+            // (Inferno-only, QoL #177: under Edit and Remove: Renew, another 30 days (the leader and officers), and
+            // Keep, for good (the leader); clear of the meta line, which stops short of the buttons)
+            let kept: boolean = pin.kept == true;
+            let renew: MovieClip = IoAllianceUi.button(KEYS.Get("io_al2_pin_renew"), 54, 20, (e: MouseEvent): void => {
+                this._life(pin, "renew");
+            }, "grey", 10);
+            renew.x = (w - controlsW + 2 * 58) | 0;
+            renew.y = 31;
+            renew.name = "ioAlPinRenew";
+            if (kept) {
+                Object(renew).setEnabled(false);
+            }
+            c.addChild(renew);
+            if (this._canKeep) {
+                let keep: MovieClip = IoAllianceUi.button(KEYS.Get(kept ? "io_al2_pin_unkeep" : "io_al2_pin_keep"), 54, 20, (e: MouseEvent): void => {
+                    this._life(pin, kept ? "unkeep" : "keep");
+                }, kept ? "gold" : "grey", 10);
+                keep.x = (w - controlsW + 3 * 58) | 0;
+                keep.y = 31;
+                keep.name = "ioAlPinKeep";
+                c.addChild(keep);
+            }
         }
         return c;
     }
 
     private _move(pin: any, dir: string): void {
         ALLIANCES.ioMovePin(pin.id | 0, dir, (response: any): void => {
+            if (!IoAllianceUi.failed(response) && this.stage != null) {
+                this.load();
+            }
+        });
+    }
+
+    /** (QoL #177) "keep", "unkeep" or "renew", then the board again. */
+    private _life(pin: any, action: string): void {
+        ALLIANCES.ioPinLife(pin.id | 0, action, (response: any): void => {
             if (!IoAllianceUi.failed(response) && this.stage != null) {
                 this.load();
             }

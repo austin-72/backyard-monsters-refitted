@@ -303,6 +303,20 @@ export class CHAMPIONCAGE extends BFOUNDATION {
         }
     }
 
+    /** (Inferno-only, #296: its guardian goes back to where the Yard Planner put it) */
+    public override ioPlannerMoved(): void {
+        this.ioGuardiansHome();
+    }
+
+    private ioGuardiansHome(): void {
+        for (let guardian of (CREATURES._guardianList ?? [])) {
+            if (guardian) {
+                guardian._targetCenter = GRID.FromISO(this._mc.x, this._mc.y);
+                guardian.changeModeCage();
+            }
+        }
+    }
+
     public override StopMoveB(): void {
         super.StopMoveB();
         let _loc1_: int = 0;
@@ -435,7 +449,7 @@ export class CHAMPIONCAGE extends BFOUNDATION {
                     _loc16_ = (_loc16_ * 2) | 0;
                 }
                 if (BASE._credits.Get() < _loc16_) {
-                    POPUPS.DisplayGetShiny();
+                    POPUPS.ioShinyNeed(_loc16_);
                     return;
                 }
                 if (!GLOBAL.ioConfirmShiny(_loc16_, "to feed your champion now", (): void => {
@@ -516,7 +530,7 @@ export class CHAMPIONCAGE extends BFOUNDATION {
             }
         } else if (param3) {
             if (BASE._credits.Get() < CHAMPIONCAGE.GetGuardianProperty(param1, param2, "feedShiny")) {
-                POPUPS.DisplayGetShiny();
+                POPUPS.ioShinyNeed(CHAMPIONCAGE.GetGuardianProperty(param1, param2, "feedShiny"));
                 return;
             }
             if (!GLOBAL.ioConfirmShiny(CHAMPIONCAGE.GetGuardianProperty(param1, param2, "feedShiny") | 0, "to feed your champion now", (): void => {

@@ -26,7 +26,7 @@ const MAX_LOOT_PER_RESOURCE = 10_000_000;
  * @param {LootTarget} save - The save holding the defender's pool.
  * @param {ResourceType} [resourceType = SaveKeys.RESOURCES] - Which pool to draw from.
  */
-export const defenderLootHandler = (reported: Resources, save: LootTarget, resourceType: ResourceType = SaveKeys.RESOURCES) => {
+export const defenderLootHandler = (reported: Resources, save: LootTarget, resourceType: ResourceType = SaveKeys.RESOURCES, credited?: Record<string, unknown> | null) => {
   const resources = save[resourceType] ?? {};
 
   for (const key of RESOURCE_KEYS) {
@@ -34,7 +34,10 @@ export const defenderLootHandler = (reported: Resources, save: LootTarget, resou
 
     if (!Number.isFinite(delta) || delta >= 0) continue;
 
-    const loss = Math.min(-delta, MAX_LOOT_PER_RESOURCE);
+    // (18 October, SUSPECTED-BUGS.md: any loss the attacker's save said, 10,000,000 a resource a save, whatever was
+    // looted) no more than this save's loot credited to the attacker, when the caller gives it
+    const most = credited !== undefined ? Math.max(0, Number(credited?.[key]) || 0) : MAX_LOOT_PER_RESOURCE;
+    const loss = Math.min(-delta, MAX_LOOT_PER_RESOURCE, most);
     const rawStored = Number(resources[key]);
     
     const stored = Number.isFinite(rawStored) ? rawStored : 0;

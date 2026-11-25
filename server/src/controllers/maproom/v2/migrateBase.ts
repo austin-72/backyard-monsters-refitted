@@ -1,4 +1,5 @@
 import type { KoaController } from "../../../utils/KoaController.js";
+import { checkPrice } from "../../../services/anticheat/requestChecks.js";
 import { User } from "../../../database/models/user.model.js";
 import { postgres } from "../../../server.js";
 import { WorldMapCell } from "../../../database/models/worldmapcell.model.js";
@@ -17,12 +18,19 @@ import { permissionErr, relocateOutpostErr, shinyLockedErr, notEnoughShinyErr, u
 import { isUnder } from "../../../services/maproom/v2/underworld.js";
 import { MigrateBaseSchema } from "../../../schemas/MigrateBaseSchema.js";
 import { isShinyLocked } from "../../../services/user/shinyLock.js";
+import { mainYardUnderAttack, withMoveLock } from "../../../services/maproom/v2/moveGuard.js";
+import { ClientSafeError } from "../../../middleware/clientSafeError.js";
+import { isTestMode } from "../../../services/admin/testMode.js";
+import { isAttackActive } from "../../../services/base/isAttackActive.js";
 
 /**
  * Cooldown period for base migration.
  * @constant {number}
  */
 const COOLDOWN_PERIOD = 24 * 60 * 60;
+
+/** Inferno-only: moving the main yard onto an outpost with resources: this much of each (PopupRelocateMe). */
+const MOVE_RESOURCES = 30_000_000;
 
 /**
  * Handles user base migration.
@@ -38,12 +46,25 @@ const COOLDOWN_PERIOD = 24 * 60 * 60;
  * @throws Will throw an error if the base type is invalid, no homebase is found or if it catches an exception.
  */
 export const migrateBase: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  // (13 October) one move at a time, and none while the main yard is attacked (services/maproom/v2/moveGuard.ts)
+  const refuse = (message: string) => new ClientSafeError({ message, status: Status.CONFLICT, data: {}, isClientFriendly: true });
+  await withMoveLock(user.userid, refuse, async () => {
+    await postgres.em.populate(user, ["save"]);
+    if (user.save && mainYardUnderAttack(user.save)) throw refuse("Your yard is being attacked. Move when the attack is over.");
+    await migrateBaseLocked(ctx);
+  });
+};
+
+const migrateBaseLocked: KoaController = async (ctx) => {
   const { baseid, resources, shiny, type } = MigrateBaseSchema.parse(ctx.request.body);
 
   const currentUser: User = ctx.authUser;
   const shinyLocked = isShinyLocked(currentUser);
 
   if (shiny && shinyLocked) throw shinyLockedErr();
+  // (Inferno-only: a negative price would add resources: services/anticheat)
+  if (!(await checkPrice(currentUser, "migrate", resources, shiny))) throw permissionErr();
 
   await postgres.em.populate(currentUser, ["save"]);
 
@@ -64,6 +85,16 @@ export const migrateBase: KoaController = async (ctx) => {
   // User is relocating due to their empire being overrun.
   if (type === BaseType.RANDOM) {
     if (userSave.outposts.length > 0) throw relocateOutpostErr();
+    // (18 October, SUSPECTED-BUGS.md: free and unchecked, as often as liked) only when the game offers it: no
+    // outposts, no alliance, the main yard 90% or more destroyed (BASE: PopupLostMainBase); not in admin test mode;
+    // and then the usual wait before the next move
+    if (infernoOnlyConfig.enabled) {
+      const refuse = (message: string) => new ClientSafeError({ message, status: Status.CONFLICT, data: {}, isClientFriendly: true });
+      if (await isTestMode(currentUser)) throw refuse("Switch admin test mode off before relocating.");
+      if (currentUser.alliance_id) throw refuse("A free move is only for a yard that's been overrun with no alliance to help.");
+      if ((Number(userSave.damage) || 0) < 90) throw refuse("A free move is only for a yard that's been overrun (90% or more destroyed).");
+      userSave.cantmovetill = currentTime + COOLDOWN_PERIOD;
+    }
 
     // Inferno-only: bookmarks are places on a map, so they only go when the new home is on another
     // map. leaveWorld clears them; put them back if the relocation landed in the same world.
@@ -112,6 +143,9 @@ export const migrateBase: KoaController = async (ctx) => {
 
   // Inferno-only: not into the underworld.
   if (infernoOnlyConfig.enabled && isUnder(outpostCell.x, outpostCell.y)) throw underworldRelocateErr();
+  // (18 October, SUSPECTED-BUGS.md) not onto an outpost being attacked: the attack's saves would write into the yard
+  if (infernoOnlyConfig.enabled && isAttackActive(outpostCell.save))
+    throw new ClientSafeError({ message: "That outpost is being attacked right now. Move once the attack is over.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
 
   if (!homeCell) throw new Error("Invalid home cell");
 
@@ -141,13 +175,29 @@ export const migrateBase: KoaController = async (ctx) => {
     delete userSave.buildingresources[`b${outpostBaseId}`];
   }
 
-  // Shiny can't go below 0 (the database refuses it, which failed the whole request with a 500).
-  if (shiny) {
-    if (!(shiny > 0) || (userSave.credits ?? 0) < shiny) throw notEnoughShinyErr();
-    userSave.credits -= shiny;
+  // (18 October, SUSPECTED-BUGS.md: the price was taken as sent, so no price or 1 of each moved the yard.)
+  // Inferno-only: the server's own price, as the game shows it (PopupRelocateMe): prices.moveOutpost Shiny, or
+  // MOVE_RESOURCES of each resource, which the player must have.
+  if (infernoOnlyConfig.enabled) {
+    if (Number(shiny) > 0) {
+      const price = Math.max(1, Number(infernoOnlyConfig.prices?.moveOutpost ?? 1500));
+      if ((userSave.credits ?? 0) < price) throw notEnoughShinyErr();
+      userSave.credits -= price;
+    } else {
+      const have = (userSave.resources ?? {}) as Record<string, unknown>;
+      if (["r1", "r2", "r3", "r4"].some((k) => (Number(have[k]) || 0) < MOVE_RESOURCES))
+        throw new ClientSafeError({ message: "You don't have the resources to move here.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
+      userSave.resources = updateResources({ r1: MOVE_RESOURCES, r2: MOVE_RESOURCES, r3: MOVE_RESOURCES, r4: MOVE_RESOURCES }, userSave.resources ?? {}, Operation.SUBTRACT);
+    }
+  } else {
+    // Shiny can't go below 0 (the database refuses it, which failed the whole request with a 500).
+    if (shiny) {
+      if (!(shiny > 0) || (userSave.credits ?? 0) < shiny) throw notEnoughShinyErr();
+      userSave.credits -= shiny;
+    }
+    if (resources)
+      userSave.resources = updateResources(resources, userSave.resources ?? {}, Operation.SUBTRACT);
   }
-  if (resources)
-    userSave.resources = updateResources(resources, userSave.resources ?? {}, Operation.SUBTRACT);
 
   await postgres.em.transactional(async (em) => {
     em.persist([homeCell, userSave]);

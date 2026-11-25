@@ -3,6 +3,7 @@ import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import type { KoaController } from "../../utils/KoaController.js";
 import { plannerSave } from "./plannerSave.js";
+import { keepPreviousLayout } from "./plannerPrevious.js";
 
 /**
  * Clears a layout slot of the yard being planned. The client has always called this ("Clear slot"),
@@ -14,6 +15,9 @@ export const deleteTemplate: KoaController = async (ctx) => {
   const save = await plannerSave(user, body.baseid);
   const slotid = Number(body.slotid);
 
+  // (QoL #492: a deleted slot keeps what it had for 7 days too, for Restore)
+  const gone = (save.savetemplate ?? []).find((template) => Number(template.slotid) === slotid);
+  if (gone && Number.isInteger(slotid) && slotid >= 0 && slotid <= 9) await keepPreviousLayout(String(save.baseid ?? ""), slotid, gone);
   const templates = (save.savetemplate ?? []).filter((template) => Number(template.slotid) !== slotid);
   save.savetemplate = templates;
   await postgres.em.flush();

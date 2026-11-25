@@ -6,7 +6,7 @@ import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { calculateEmpirePoints } from "../base/calculateEmpirePoints.js";
 import { calculateBaseLevel } from "../base/calculateBaseLevel.js";
-import { getLastSeen } from "../maproom/getLastSeen.js";
+import { getLastSeenVisible as getLastSeen } from "../maproom/getLastSeen.js";
 
 export interface AllianceDetails {
   online: number;
@@ -34,6 +34,8 @@ export interface AllianceMember {
   outposts?: number;
   empire?: number;
   last_seen?: number;
+  /** Inferno-only (QoL #175): when they joined the alliance (Unix seconds), when it is known. */
+  joined?: number;
 }
 
 export type LoadedMember = Loaded<User, never, (typeof ALLIANCE_MEMBER_FIELDS)[number]>;

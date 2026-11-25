@@ -3,7 +3,7 @@ import { Vector, int } from "as3";
 import { Bitmap, BitmapData, DisplayObject, IBitmapDrawable } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { ATTACK, AdditionPropertyModifier, BASE, BFOUNDATION, BTOWER, BUILDING22, BYMConfig, Bounce, CModifiableProperty, CREATURELOCKER, CREATURES, Component, CreepSkinManager, Decoy, EFFECTS, GIBLETS, GLOBAL, GRID, HOUSING, HOUSINGBUNKER, IAttackable, IAttackingComponent, ITargetable, KEYS, LOGGER, MAP, MONSTERBUNKER, MapRoomManager, MonsterBase, PATHING, RasterData, SOUNDS, SPECIALEVENT, SPRITES, SiegeWeapon, SiegeWeapons, Sine, TUTORIAL, Targeting, TweenLite } from "@game";
+import { ATTACK, AdditionPropertyModifier, BASE, BFOUNDATION, BTOWER, BUILDING22, BYMConfig, Bounce, CModifiableProperty, CREATURELOCKER, CREATURES, Component, CreepSkinManager, Decoy, EFFECTS, GIBLETS, GLOBAL, GRID, HOUSING, HOUSINGBUNKER, IAttackable, IAttackingComponent, ITargetable, KEYS, LOGGER, MAP, MONSTERBUNKER, MapRoomManager, MonsterBase, PATHING, RasterData, SOUNDS, SPECIALEVENT, SPRITES, SiegeWeapon, SiegeWeapons, Sine, TUTORIAL, Targeting, TweenLite, IoTilt, IoTargets } from "@game";
 
 export class CreepBase extends MonsterBase {
     static {
@@ -30,6 +30,8 @@ export class CreepBase extends MonsterBase {
     protected _healerGiveUpTimer: int;
     protected m_bInfernoCreep: boolean;
     protected m_altitudeMax: int;
+    /** Inferno-only (22 October): Balthazar's height in flight, a third of the 40 he flew at. */
+    public static readonly IO_BALTHAZAR_ALTITUDE: int = 13;
     protected m_altitudeMin: int;
     private m_cellNode: string;
     private m_cellX: int;
@@ -127,7 +129,14 @@ export class CreepBase extends MonsterBase {
             }
         }
         this.applyInfernoVenom();
-        if (this._creatureID == "IC5") {
+        if (this._creatureID == "IC5" && GLOBAL.INFERNO_ONLY) {
+            // (Inferno-only, 22 October, the user's: "Make balthazar fly closer to the ground, 1/3rd his current height":
+            // 40 and 35 a third)
+            this.m_altitudeMax = CreepBase.IO_BALTHAZAR_ALTITUDE;
+            // (26 October: below his bob's lowest (13 less 1.6), so he counts as in the air all the while he flies: at 12
+            // he dropped under it as he bobbed, and on his way to the Juicer he stopped there for good)
+            this.m_altitudeMin = CreepBase.IO_BALTHAZAR_ALTITUDE - 3;
+        } else if (this._creatureID == "IC5") {
             this.m_altitudeMax = 40;
             this.m_altitudeMin = 35;
         } else {
@@ -143,6 +152,10 @@ export class CreepBase extends MonsterBase {
             }
             PATHING.GetPath(this._tmpPoint, new Rectangle(_loc13_.x, _loc13_.y, 10, 10), as3.bind(this, this.setWaypoints), true);
         } else if (this._behaviour == MonsterBase.k_sBHVR_BOUNCE) {
+            // (Inferno-only, 14 October: a very light nod as they land; a wave's monsters, one nod)
+            if (GLOBAL._render && this._movement != "fly" && GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
+                IoTilt.nod(IoTilt.VERY_LIGHT, this._tmpPoint.x, this._tmpPoint.y, false, this.m_bInfernoCreep ? 420 : 300);
+            }
             if (GLOBAL._render && this._movement != "fly") {
                 if (!this.m_bInfernoCreep) {
                     this._graphicMC.y -= 90;
@@ -220,9 +233,12 @@ export class CreepBase extends MonsterBase {
         }
         if (this._movement === "fly" && this.health > 0 && this._behaviour !== MonsterBase.k_sBHVR_PEN) {
             if (this._behaviour !== MonsterBase.k_sBHVR_JUICE && this._behaviour !== MonsterBase.k_sBHVR_FEED || this._altitude >= this.m_altitudeMin) {
-                _loc2_ = Math.sin(this._frameNumber / 50) * 5;
+                // (Inferno-only, 22 October: Balthazar's bob a third too, as low as he flies now)
+                _loc2_ = Math.sin(this._frameNumber / 50) * (this._creatureID == "IC5" && GLOBAL.INFERNO_ONLY ? 5 * CreepBase.IO_BALTHAZAR_ALTITUDE / 40 : 5);
                 this._altitude = (this.m_altitudeMax - _loc2_) | 0;
-                this._graphicMC.y = -this._altitude - 36 + _loc2_;
+                // (Inferno-only, 26 October: placed by the bob itself, not its whole-pixel height: the height's rounding
+                // stepped the picture a pixel against the bob, up and back, as it rose and fell)
+                this._graphicMC.y = GLOBAL.INFERNO_ONLY ? -(this.m_altitudeMax - _loc2_) - 36 + _loc2_ : -this._altitude - 36 + _loc2_;
             }
         }
         if (this._homeBunker && (this._behaviour !== MonsterBase.k_sBHVR_DEFEND && this._behaviour !== MonsterBase.k_sBHVR_BUNKER && this._behaviour !== MonsterBase.k_sBHVR_JUICE && this._behaviour !== MonsterBase.k_sBHVR_PEN && this._behaviour !== MonsterBase.k_sBHVR_DECOY && this._behaviour !== MonsterBase.k_sBHVR_HOUSING)) {
@@ -246,7 +262,7 @@ export class CreepBase extends MonsterBase {
                         if (this._movement == "fly") {
                             TweenLite.to(this._graphicMC, 1.2, { "y": this._graphicMC.y + this._altitude, "ease": Sine.easeOut, "onComplete": as3.bind(this, this.flyerLanded) });
                         }
-                        this._waypoints[0] = HOUSING.PointInHouse(this._targetCenter);
+                        this.ioPenPoint(true);
                     }
                 } else if (this.tickBHousing()) {
                     return true;
@@ -258,8 +274,7 @@ export class CreepBase extends MonsterBase {
                         return true;
                     }
                     if (this._frameNumber > 240 && ((Math.random() * 200) | 0) == 1 && GLOBAL._fps > 25) {
-                        this._targetPosition = HOUSING.PointInHouse(this._targetCenter);
-                        this._hasPath = true;
+                        this.ioPenPoint(false);
                     }
                     break;
                 }
@@ -300,14 +315,14 @@ export class CreepBase extends MonsterBase {
                 }
                 break;
         }
-        if (this._enraged == 0 && this.graphic.filters.length > 0) {
+        if (this._enraged == 0 && this.graphic.$filters.length > 0) {
             this.updateBuffs();
         }
         // CreepCellMove is a no-op while the cell and node are unchanged since its last call,
         // so skip it and avoid building the cell key string every tick.
-        let cell: Point = GRID.FromISO(this._tmpPoint.x, this._tmpPoint.y);
-        let cellX: int = (cell.x / Targeting._CELLSIZE) | 0;
-        let cellY: int = (cell.y / Targeting._CELLSIZE) | 0;
+        // (21 October: GRID.FromISO's sums, without a new Point every step)
+        let cellX: int = (Math.ceil(this._tmpPoint.x * 0.5 + this._tmpPoint.y) / Targeting._CELLSIZE) | 0;
+        let cellY: int = (Math.ceil(this._tmpPoint.y - this._tmpPoint.x * 0.5) / Targeting._CELLSIZE) | 0;
         if (this.m_cellNode === null || this.node !== this.m_cellNode || cellX != this.m_cellX || cellY != this.m_cellY) {
             this.newNode = Targeting.CreepCellMove(this._tmpPoint, this._id, this, this.node);
             if (this.newNode) {
@@ -326,7 +341,9 @@ export class CreepBase extends MonsterBase {
         this._behaviour = MonsterBase.k_sBHVR_JUICE;
         this.changeMode();
         this._targetBuilding = GLOBAL._bJuicer;
-        if (this._movement == "fly" && this._altitude < 60) {
+        // (Inferno-only, 26 October: taking off only from below its height in the air (60 for most; Balthazar's 10), as
+        // the rest of the way waits for)
+        if (this._movement == "fly" && this._altitude < (GLOBAL.INFERNO_ONLY ? this.m_altitudeMin : 60)) {
             TweenLite.to(this._graphicMC, 2, { "y": this._graphicMC.y - (this.m_altitudeMax - this._altitude), "ease": Sine.easeIn, "onComplete": as3.bind(this, this.flyerTakeOff) });
         }
         PATHING.GetPath(this._tmpPoint, new Rectangle(this._targetBuilding._mc.x, this._targetBuilding._mc.y, 80, 80), as3.bind(this, this.setWaypoints), true);
@@ -484,7 +501,8 @@ export class CreepBase extends MonsterBase {
                 }
                 this._waypoints = [GRID.ToISO(_loc9_.x, _loc9_.y, 0)];
                 this._targetPosition = as3.cast(this._waypoints[0], Point);
-            } else if (this._movement == "fly") {
+            } else if (this._movement == "fly" && !this.ioWalledFlyer()) {
+                // (Inferno-only, 22 October: a flyer stopped by walls (Balthazar) walks round them to a decoy too, below)
                 this._hasTarget = true;
                 this._hasPath = true;
                 _loc1_ = this._tmpPoint.subtract(this._targetCenter);
@@ -794,7 +812,7 @@ export class CreepBase extends MonsterBase {
             if (!this._targetCreep) {
                 if (this._behaviour === MonsterBase.k_sBHVR_HUNT && (CREATURES._creatureCount > 0 || CREATURES._hasLivingGuardian) && this._frameNumber % 150 == 0) {
                     this.findTarget(this._targetGroup);
-                } else if (this._targetBuilding == null || this._targetBuilding.health <= 0 || this._targetGroup == 3 && this._targetBuilding._looted || this._targetBuilding._class == "tower" && !MONSTERBUNKER.isBunkerBuilding(this._targetBuilding._type) && (as3.as(this._targetBuilding, BTOWER)).isJard) {
+                } else if (this._targetBuilding == null || this._targetBuilding.health <= 0 || this._targetGroup == 3 && this._targetBuilding._looted || this._targetBuilding._class == "tower" && !MONSTERBUNKER.isBunkerBuilding(this._targetBuilding._type) && (this._targetBuilding instanceof BTOWER ? this._targetBuilding : as3.as(this._targetBuilding, BTOWER)).isJard) {
                     this.loseTarget();
                     this.findTarget(this._targetGroup);
                 }
@@ -811,6 +829,11 @@ export class CreepBase extends MonsterBase {
                     }
                 }
             }
+        }
+        // (Inferno-only, 21 November: the Emberghoul, first hurt, leaves a building in a defense's reach for one out of it)
+        if (GLOBAL.INFERNO_ONLY && this._hasTarget && !this._targetCreep && this._targetBuilding && this._behaviour == MonsterBase.k_sBHVR_ATTACK && IoTargets.hurtRetarget(this)) {
+            this.loseTarget();
+            this.findTarget(this._targetGroup);
         }
         if (!this._looking && !this._attacking && this._frameNumber % (GLOBAL._catchup ? 300 : 150) == 0) {
             this.findTarget(this._targetGroup);
@@ -830,6 +853,10 @@ export class CreepBase extends MonsterBase {
                     }
                     if (this._targetGroup == 4 && this._targetBuilding._class == "tower") {
                         _loc5_ *= 2;
+                    }
+                    // (Inferno-only, 21 November: Valgos's hits on storage and Grokus's on defenses, half: IoTargets)
+                    if (GLOBAL.INFERNO_ONLY) {
+                        _loc5_ *= IoTargets.damageMul(this, this._targetBuilding);
                     }
                 }
                 if (this._behaviour == MonsterBase.k_sBHVR_ATTACK || this._behaviour == MonsterBase.k_sBHVR_HUNT) {
@@ -861,7 +888,8 @@ export class CreepBase extends MonsterBase {
                             ATTACK.Damage(this._tmpPoint.x, this._tmpPoint.y - 5, _loc4_, this._mc.visible);
                         }
                     }
-                    this.attacked(as3.cast(!(!this._targetCreep) ? this._targetCreep : this._targetBuilding, IAttackable), _loc4_, _loc3_);
+                    // (Inferno-only, 21 October: a monster or a building, attackable both: not asked again with every hit)
+                    this.attacked(!(!this._targetCreep) ? this._targetCreep : this._targetBuilding, _loc4_, _loc3_);
                     if (!this._targetCreep) {
                         ++this._hits;
                     }
@@ -878,13 +906,13 @@ export class CreepBase extends MonsterBase {
                     }
                     if (this.m_bInfernoCreep) {
                         _loc6_ = "ihit" + ((1 + Math.random() * 7) | 0);
-                        SOUNDS.Play(_loc6_, 0.1 + Math.random() * 0.1);
+                        SOUNDS.ioPlayAt(_loc6_, 0.1 + Math.random() * 0.1, this.x, this.y);
                     } else if ((Number(this._creatureID.substr(1)) | 0) < 5) {
-                        SOUNDS.Play("hit" + ((1 + Math.random() * 3) | 0), 0.1 + Math.random() * 0.1);
+                        SOUNDS.ioPlayAt("hit" + ((1 + Math.random() * 3) | 0), 0.1 + Math.random() * 0.1, this.x, this.y);
                     } else if ((Number(this._creatureID.substr(1)) | 0) < 10) {
-                        SOUNDS.Play("hit" + ((3 + Math.random() * 2) | 0), 0.1 + Math.random() * 0.1);
+                        SOUNDS.ioPlayAt("hit" + ((3 + Math.random() * 2) | 0), 0.1 + Math.random() * 0.1, this.x, this.y);
                     } else {
-                        SOUNDS.Play("hit" + ((4 + Math.random() * 1) | 0), 0.1 + Math.random() * 0.1);
+                        SOUNDS.ioPlayAt("hit" + ((4 + Math.random() * 1) | 0), 0.1 + Math.random() * 0.1, this.x, this.y);
                     }
                 }
             } else {
@@ -925,9 +953,9 @@ export class CreepBase extends MonsterBase {
         let l: int = 0;
         if (this.health <= 0) {
             if (this._creatureID == "C12") {
-                SOUNDS.Play("monsterlanddave");
+                SOUNDS.ioPlayAt("monsterlanddave", 0.8, this.x, this.y);
             } else {
-                SOUNDS.Play("monsterland" + (1 + ((Math.random() * 3) | 0)));
+                SOUNDS.ioPlayAt("monsterland" + (1 + ((Math.random() * 3) | 0)), 0.8, this.x, this.y);
             }
             if (this._homeBunker) {
                 if (Boolean(this._homeBunker._monsters) && !this._defenderRemoved) {
@@ -991,7 +1019,7 @@ export class CreepBase extends MonsterBase {
                 this._waypoints = [];
                 this._atTarget = true;
                 if (this.m_bInfernoCreep) {
-                    SOUNDS.Play("imonster" + ((1 + Math.random() * 4) | 0));
+                    SOUNDS.ioPlayAt("imonster" + ((1 + Math.random() * 4) | 0), 0.8, this.x, this.y);
                 }
             } else if (!this._attacking && this._frameNumber % 150 == 0) {
                 this.findDefenseTargets();
@@ -1210,9 +1238,9 @@ export class CreepBase extends MonsterBase {
         let _loc1_: number = 1;
         if (this.health <= 0) {
             if (this._creatureID == "C12") {
-                SOUNDS.Play("monsterlanddave");
+                SOUNDS.ioPlayAt("monsterlanddave", 0.8, this.x, this.y);
             } else {
-                SOUNDS.Play("monsterland" + (1 + ((Math.random() * 3) | 0)));
+                SOUNDS.ioPlayAt("monsterland" + (1 + ((Math.random() * 3) | 0)), 0.8, this.x, this.y);
             }
             return true;
         }
@@ -1270,10 +1298,32 @@ export class CreepBase extends MonsterBase {
             return true;
         }
         if (this._frameNumber > 240 && ((Math.random() * 200) | 0) == 1 && GLOBAL._fps > 25) {
-            this._targetPosition = HOUSING.PointInHouse(this._targetCenter);
-            this._hasPath = true;
+            this.ioPenPoint(false);
         }
         return false;
+    }
+
+    /**
+     * A point to walk to in the pen (the first waypoint going in, or the next pace inside it). (16 October, bug report
+     * #91) a monster whose pen point was gone stopped the game: the yard's pen is its pen now, and with none it stays.
+     */
+    private ioPenPoint(first: boolean): void {
+        if (this._targetCenter == null && GLOBAL.INFERNO_ONLY) {
+            this._targetCenter = HOUSING.ioHouseCenter();
+            if (this._targetCenter == null) {
+                return;
+            }
+        }
+        let p: Point = HOUSING.PointInHouse(this._targetCenter);
+        if (p == null) {
+            return;
+        }
+        if (first) {
+            this._waypoints[0] = p;
+        } else {
+            this._targetPosition = p;
+            this._hasPath = true;
+        }
     }
 
     public tickBHousing(): boolean {
@@ -1282,7 +1332,7 @@ export class CreepBase extends MonsterBase {
             if (this._movement == "fly") {
                 TweenLite.to(this._graphicMC, 1.2, { "y": this._graphicMC.y + this._altitude, "ease": Sine.easeOut, "onComplete": as3.bind(this, this.flyerLanded) });
             }
-            this._waypoints[0] = HOUSING.PointInHouse(this._targetCenter);
+            this.ioPenPoint(true);
         }
         return false;
     }
@@ -1349,6 +1399,9 @@ export class CreepBase extends MonsterBase {
         let targetDistanceSquared: number = NaN;
         let building: BFOUNDATION = null;
         let growled: boolean = false;
+        // (Inferno-only, 21 October: the distances worked out without a new Point each: the same numbers)
+        let ddx: number = 0;
+        let ddy: number = 0;
         this._speed = this.moveSpeed * 0.5;
         if (this._behaviour == MonsterBase.k_sBHVR_PEN) {
             this._speed *= 0.5;
@@ -1359,7 +1412,9 @@ export class CreepBase extends MonsterBase {
         if (this._behaviour == MonsterBase.k_sBHVR_DEFEND) {
             this._speed *= 1.5;
         }
-        if (this._behaviour == MonsterBase.k_sBHVR_JUICE && this._movement == "fly" && this._altitude < 25) {
+        // (a flyer sent to the Juicer waits until it has taken off. Inferno-only, 26 October, the user's: Balthazar,
+        // flying at 13, never reached the 25 this waited for, and hung where he was for good: his own height in the air)
+        if (this._behaviour == MonsterBase.k_sBHVR_JUICE && this._movement == "fly" && this._altitude < (GLOBAL.INFERNO_ONLY ? Math.min(25, this.m_altitudeMin) : 25)) {
             this._speed = 0;
         }
         if (this._attacking) {
@@ -1374,7 +1429,7 @@ export class CreepBase extends MonsterBase {
         }
         if (this._behaviour != MonsterBase.k_sBHVR_JUICE && this._behaviour != MonsterBase.k_sBHVR_RETREAT && this._behaviour != MonsterBase.k_sBHVR_HOUSING && this._behaviour != MonsterBase.k_sBHVR_BUNKER && this._behaviour != MonsterBase.k_sBHVR_PEN && !this._atTarget && (this._targetCreep && this.canShootCreep() || this.canShootBuilding())) {
             this._atTarget = true;
-            SOUNDS.Play("imonster" + ((1 + Math.random() * 4) | 0));
+            SOUNDS.ioPlayAt("imonster" + ((1 + Math.random() * 4) | 0), 0.8, this.x, this.y);
             if (this._targetCreep) {
                 this._xd = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
                 this._yd = this._targetCreep._tmpPoint.y - this._tmpPoint.y;
@@ -1385,15 +1440,17 @@ export class CreepBase extends MonsterBase {
                 this._targetPosition = this._targetBuilding._position;
             }
         } else if (this._waypoints.length > 0) {
-            distancePoint = this._targetPosition.subtract(this._tmpPoint);
-            distanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+            ddx = this._targetPosition.x - this._tmpPoint.x;
+            ddy = this._targetPosition.y - this._tmpPoint.y;
+            distanceSquared = ddx * ddx + ddy * ddy;
             if (distanceSquared <= 100) {
                 while (this._waypoints.length > 0 && distanceSquared <= 100) {
                     this._waypoints.splice(0, 1);
                     if (this._waypoints[0]) {
-                        this._targetPosition = as3.cast(this._waypoints[0], Point);
-                        distancePoint = this._targetPosition.subtract(this._tmpPoint);
-                        distanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+                        this._targetPosition = (this._waypoints[0] instanceof Point ? this._waypoints[0] : as3.cast(this._waypoints[0], Point));
+                        ddx = this._targetPosition.x - this._tmpPoint.x;
+                        ddy = this._targetPosition.y - this._tmpPoint.y;
+                        distanceSquared = ddx * ddx + ddy * ddy;
                         if (this._movement == "jump" && !this._jumping) {
                             building = PATHING.GetBuildingFromISO(this._targetPosition);
                             if (building) {
@@ -1411,15 +1468,16 @@ export class CreepBase extends MonsterBase {
                         }
                     } else if (this._behaviour == MonsterBase.k_sBHVR_DEFEND) {
                         if (this._targetCreep) {
-                            distancePoint = this._targetCreep._tmpPoint.subtract(this._tmpPoint);
-                            targetDistanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+                            ddx = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
+                            ddy = this._targetCreep._tmpPoint.y - this._tmpPoint.y;
+                            targetDistanceSquared = ddx * ddx + ddy * ddy;
                             if (targetDistanceSquared < this.DEFENSE_RANGE_SQUARED || this.canShootCreep()) {
                                 this._waypoints = [];
                                 this._atTarget = true;
                                 this._targetCreep._targetCreep = this;
                                 if (this.m_bInfernoCreep && !growled) {
                                     growled = true;
-                                    SOUNDS.Play("imonster" + ((1 + Math.random() * 4) | 0));
+                                    SOUNDS.ioPlayAt("imonster" + ((1 + Math.random() * 4) | 0), 0.8, this.x, this.y);
                                 }
                                 if (this._targetCreep.canShootCreep() || targetDistanceSquared < 2500 || this._targetCreep._creatureID == "C14") {
                                     this._targetCreep._atTarget = true;
@@ -1440,8 +1498,9 @@ export class CreepBase extends MonsterBase {
                                 return;
                             }
                             if (this._targetCreep) {
-                                distancePoint = this._targetCreep._tmpPoint.subtract(this._tmpPoint);
-                                targetDistanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+                                ddx = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
+                                ddy = this._targetCreep._tmpPoint.y - this._tmpPoint.y;
+                                targetDistanceSquared = ddx * ddx + ddy * ddy;
                                 if (this.canShootCreep() || targetDistanceSquared < 2500 || this._creatureID == "C14") {
                                     this._atTarget = true;
                                 } else {
@@ -1450,7 +1509,7 @@ export class CreepBase extends MonsterBase {
                                 }
                                 if (this.m_bInfernoCreep && this._atTarget && !growled) {
                                     growled = true;
-                                    SOUNDS.Play("imonster" + ((1 + Math.random() * 4) | 0));
+                                    SOUNDS.ioPlayAt("imonster" + ((1 + Math.random() * 4) | 0), 0.8, this.x, this.y);
                                 }
                             } else {
                                 this._atTarget = true;
@@ -1458,8 +1517,9 @@ export class CreepBase extends MonsterBase {
                             return;
                         }
                         if (this._targetCreep) {
-                            distancePoint = this._targetCreep._tmpPoint.subtract(this._tmpPoint);
-                            targetDistanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+                            ddx = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
+                            ddy = this._targetCreep._tmpPoint.y - this._tmpPoint.y;
+                            targetDistanceSquared = ddx * ddx + ddy * ddy;
                             if (targetDistanceSquared < this.range * this.range) {
                                 this._atTarget = true;
                                 return;
@@ -1468,15 +1528,16 @@ export class CreepBase extends MonsterBase {
                     }
                 }
                 if (this._targetCreep) {
-                    distancePoint = this._targetCreep._tmpPoint.subtract(this._tmpPoint);
-                    targetDistanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+                    ddx = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
+                    ddy = this._targetCreep._tmpPoint.y - this._tmpPoint.y;
+                    targetDistanceSquared = ddx * ddx + ddy * ddy;
                 }
                 if (this._behaviour == MonsterBase.k_sBHVR_DEFEND && Boolean(this._targetCreep)) {
                     if (targetDistanceSquared < this.DEFENSE_RANGE_SQUARED || this.canShootCreep()) {
                         this._atTarget = true;
                         if (this.m_bInfernoCreep && !growled) {
                             growled = true;
-                            SOUNDS.Play("imonster" + ((1 + Math.random() * 4) | 0));
+                            SOUNDS.ioPlayAt("imonster" + ((1 + Math.random() * 4) | 0), 0.8, this.x, this.y);
                         }
                         this._waypoints = [];
                         if (!this._targetCreep._explode) {
@@ -1522,13 +1583,13 @@ export class CreepBase extends MonsterBase {
                     }
                     if (this.m_bInfernoCreep && this._atTarget && !growled) {
                         growled = true;
-                        SOUNDS.Play("imonster" + ((1 + Math.random() * 4) | 0));
+                        SOUNDS.ioPlayAt("imonster" + ((1 + Math.random() * 4) | 0), 0.8, this.x, this.y);
                     }
                     return;
                 }
             }
             if (this._waypoints.length > 0 && !this._atTarget) {
-                this._targetPosition = as3.cast(this._waypoints[0], Point);
+                this._targetPosition = (this._waypoints[0] instanceof Point ? this._waypoints[0] : as3.cast(this._waypoints[0], Point));
             }
             if (this._behaviour == MonsterBase.k_sBHVR_ATTACK && Boolean(this._targetCreep)) {
                 this._xd = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
@@ -1545,8 +1606,9 @@ export class CreepBase extends MonsterBase {
                 this._xd = this._targetPosition.x - this._tmpPoint.x;
                 this._yd = this._targetPosition.y - this._tmpPoint.y;
             }
-            this._tmpPoint.x += Math.cos(Math.atan2(this._yd, this._xd)) * this._speed;
-            this._tmpPoint.y += Math.sin(Math.atan2(this._yd, this._xd)) * this._speed;
+            // (Inferno-only, 21 October: a step of _speed along the heading, by its length rather than its angle: the
+            // same step, without an atan2, a cos and a sin for every monster every step)
+            this.ioStep();
         } else if (this._hasPath) {
             if (this._targetCreep) {
                 this._xd = this._targetCreep._tmpPoint.x - this._tmpPoint.x;
@@ -1558,16 +1620,33 @@ export class CreepBase extends MonsterBase {
                 this._xd = this._targetPosition.x - this._tmpPoint.x;
                 this._yd = this._targetPosition.y - this._tmpPoint.y;
             }
-            distancePoint = this._targetPosition.subtract(this._tmpPoint);
-            distanceSquared = distancePoint.x * distancePoint.x + distancePoint.y * distancePoint.y;
+            ddx = this._targetPosition.x - this._tmpPoint.x;
+            ddy = this._targetPosition.y - this._tmpPoint.y;
+            distanceSquared = ddx * ddx + ddy * ddy;
             if (!this._atTarget) {
                 if (distanceSquared > 25) {
-                    this._tmpPoint.x += Math.cos(Math.atan2(this._yd, this._xd)) * this._speed;
-                    this._tmpPoint.y += Math.sin(Math.atan2(this._yd, this._xd)) * this._speed;
+                    this.ioStep();
                 } else {
                     this._atTarget = true;
                 }
             }
+        }
+    }
+
+    /** Inferno-only (21 October): _speed along (_xd, _yd), as cos/sin of its atan2 gave it (no heading: along x). */
+    private ioStep(): void {
+        let xd: number = this._xd;
+        let yd: number = this._yd;
+        let len: number = Math.sqrt(xd * xd + yd * yd);
+        if (len > 0 && len < Infinity) {
+            this._tmpPoint.x += xd / len * this._speed;
+            this._tmpPoint.y += yd / len * this._speed;
+        } else if (len === 0) {
+            this._tmpPoint.x += this._speed;
+        } else {
+            let heading: number = Math.atan2(yd, xd);
+            this._tmpPoint.x += Math.cos(heading) * this._speed;
+            this._tmpPoint.y += Math.sin(heading) * this._speed;
         }
     }
 

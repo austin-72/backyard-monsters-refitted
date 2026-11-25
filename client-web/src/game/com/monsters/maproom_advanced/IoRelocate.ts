@@ -1,6 +1,7 @@
+import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { IOErrorEvent } from "flash/events";
-import { GAME, GLOBAL, KEYS, PLEASEWAIT, URLLoaderApi } from "@game";
+import { GAME, GLOBAL, IoTextPrompt, KEYS, PLEASEWAIT, URLLoaderApi } from "@game";
 
 /**
  * Inferno-only: Relocate, from the map room's sidebar (MapRoomPopup). Warns first: the main yard is
@@ -15,9 +16,38 @@ export class IoRelocate extends ASObject {
         if (IoRelocate._busy) {
             return;
         }
-        let outposts: int = GLOBAL._mapOutpost ? GLOBAL._mapOutpost.length | 0 : 0;
-        let lost: string = outposts == 0 ? "" : (outposts == 1 ? "your outpost returns" : "all " + outposts + " of your outposts return") + " to the wild tribes";
-        GLOBAL.Message("<b>Relocate your yard?</b><br><br>" + "Your main yard will be moved to a new place on the map, the way a new player is placed.<br><br>" + "<b>Everything you have out there is lost:</b> your Bone, Coal, Sulfur and Magma go to 0" + (lost ? ", and " + lost : "") + ".<br><br>This can't be undone.", "Relocate", IoRelocate.Go);
+        // (QoL #493, 14 October: the monsters housed in the outposts are named too, from the server's count, and
+        // the player types RELOCATE to confirm)
+        IoRelocate._busy = true;
+        PLEASEWAIT.Show(KEYS.Get("msg_loading"));
+        new URLLoaderApi().load(GLOBAL._mapURL + "myoutposts", [], (response: any): void => {
+            PLEASEWAIT.Hide();
+            IoRelocate._busy = false;
+            let list: any[] = response && !response.error ? as3.as(response.outposts, Array) || [] : null;
+            IoRelocate.AskWith(list);
+        }, (e: IOErrorEvent): void => {
+            PLEASEWAIT.Hide();
+            IoRelocate._busy = false;
+            IoRelocate.AskWith(null);
+        });
+    }
+
+    private static AskWith(list: any[]): void {
+        let outposts: int = list ? list.length | 0 : GLOBAL._mapOutpost ? GLOBAL._mapOutpost.length | 0 : 0;
+        let housed: int = 0;
+        for (let o of as3.values(list || [])) {
+            housed += o.monsters | 0;
+        }
+        let lost: string = outposts == 0 ? "" : KEYS.Get(outposts == 1 ? "io_t3m_rl_lost_one" : "io_t3m_rl_lost_n", { "v1": outposts }) + (housed > 0 ? KEYS.Get("io_t3m_rl_housed_" + (housed == 1 ? "one" : "n") + (outposts == 1 ? "_it" : "_them"), { "v1": GLOBAL.FormatNumber(housed) }) : "");
+        GLOBAL.ioDanger(KEYS.Get("io_t3m_rl_body", { "v1": lost ? KEYS.Get("io_t3m_rl_and", { "v1": lost }) : "" }), KEYS.Get("io_t3m_rl_btn"), (): void => {
+            IoTextPrompt.Show(KEYS.Get("io_t3m_rl_title"), KEYS.Get("io_t3m_rl_type"), "", 12, KEYS.Get("io_t3m_rl_btn"), (typed: string): void => {
+                if (String(typed).replace(/^\s+|\s+$/g, "").toUpperCase() != "RELOCATE") {
+                    GLOBAL.Message(KEYS.Get("io_t3m_rl_not_moved"));
+                    return;
+                }
+                IoRelocate.Go();
+            });
+        }, null, KEYS.Get("io_danger_stay"));
     }
 
     private static Go(): void {
@@ -36,19 +66,23 @@ export class IoRelocate extends ASObject {
             GLOBAL.Message(String(data.error));
             return;
         }
-        let where: string = data.coords && data.coords.length == 2 ? " to " + (data.coords[0] | 0) + ", " + (data.coords[1] | 0) : "";
+        let where: string = data.coords && data.coords.length == 2 ? KEYS.Get("io_t3m_rl_to", { "v1": data.coords[0] | 0, "v2": data.coords[1] | 0 }) : "";
         // Stopped until it starts again from the new place: nothing more is saved from the old one.
         GLOBAL.Halt();
-        GLOBAL.Message("<b>Your yard has been relocated" + where + ".</b><br><br>The game starts again from there now.", "OK", IoRelocate.Reload);
+        GLOBAL.Message(KEYS.Get("io_t3m_rl_done", { "v1": where }), KEYS.Get("btn_ok"), IoRelocate.Reload);
     }
 
     private static Reload(): void {
         GAME.ioReload(true);
     }
 
+    /**
+     * No answer (QoL #449): the server may well have moved the yard before the line dropped, so "try again" invited
+     * a second relocation, and the old yard kept saving over the new one meanwhile. The game stops and reloads to see.
+     */
     private static Failed(e: IOErrorEvent): void {
-        IoRelocate._busy = false;
         PLEASEWAIT.Hide();
-        GLOBAL.Message("The relocation could not be sent. Please try again.");
+        GLOBAL.Halt();
+        GLOBAL.Message(KEYS.Get("io_t3m_rl_no_answer"), KEYS.Get("io_t3m_rl_reload"), IoRelocate.Reload);
     }
 }

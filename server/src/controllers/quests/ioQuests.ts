@@ -4,7 +4,7 @@ import { Status } from "../../enums/StatusCodes.js";
 import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { permissionErr } from "../../errors/errors.js";
 import { visibleCredits } from "../../services/user/shinyLock.js";
-import { questClaim, questClientEvent, questStatus } from "../../services/quests/questProgress.js";
+import { questClaim, questClientEvent, questReroll, questStatus } from "../../services/quests/questProgress.js";
 import { logger } from "../../utils/logger.js";
 
 /**
@@ -55,6 +55,31 @@ export const questClaimController: KoaController = async (ctx) => {
   } catch (err) {
     if ((err as { quest?: boolean }).quest) {
       ctx.body = { error: (err as Error).message };
+      return;
+    }
+    throw err;
+  }
+};
+
+/**
+ * Inferno-only (QoL #119, 15 October): POST /quests/reroll { id: "d_wins" }: today's one free reroll of a daily quest
+ * not done yet. Answers { error: 0, from, to, book } or { error: "message" }.
+ */
+export const questRerollController: KoaController = async (ctx) => {
+  requireInferno();
+  const user: User = ctx.authUser;
+  const id = String(params(ctx).id ?? "").trim().replace(/^daily:/, "");
+  ctx.status = Status.OK;
+  if (!/^d_[a-z0-9_]{1,30}$/.test(id)) {
+    ctx.body = { error: "That isn't one of today's daily quests.", code: "notdaily" };
+    return;
+  }
+  try {
+    const swapped = await questReroll(user, id);
+    ctx.body = { error: 0, from: swapped.from, to: swapped.to, book: await questStatus(user) };
+  } catch (err) {
+    if ((err as { quest?: boolean }).quest) {
+      ctx.body = { error: (err as Error).message, code: (err as { code?: string }).code ?? "" };
       return;
     }
     throw err;

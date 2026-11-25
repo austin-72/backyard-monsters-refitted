@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { BitmapData, BlendMode, IBitmapDrawable, Sprite } from "flash/display";
 import { Point, Rectangle } from "flash/geom";
-import { BFOUNDATION, BMUSHROOM, BYMConfig, IoHfo, IoHfoArt, MAP, RasterData } from "@game";
+import { BFOUNDATION, BMUSHROOM, BYMConfig, GLOBAL, IoHfo, IoHfoArt, KEYS, MAP, RasterData } from "@game";
 
 /**
  * Hell Freezes Over: ice in the player's main yard that a worker is sent to (IoHfo), built as one of the yard's
@@ -126,7 +126,55 @@ export class IoHfoIce extends BMUSHROOM {
 
     /** The name the building info shows. */
     public get nameKey(): string {
+        if (this.kind == IoHfoIce.BIG && IoHfoIce.ioTried(this.ioServerId)) {
+            // (QoL #585: a patch already tried says so)
+            return "io_hfo_ice_big_tried";
+        }
+        if (GLOBAL.INFERNO_ONLY && this.kind == IoHfoIce.TOWER && this.tower) {
+            // (QoL #587: the tower it seals, by name. A ready text: KEYS.Get gives back what isn't a key.)
+            return KEYS.Get("io_hfo2_ice_tower_name", { "v1": IoHfoIce.towerName(this.tower) });
+        }
         return this.kind == IoHfoIce.SMALL ? "#bi_icepatch#" : (this.kind == IoHfoIce.BIG ? "#bi_icepatch_big#" : "hfo_tower_frozen");
+    }
+
+    /** A building's name, as its info shows it. */
+    private static towerName(b: BFOUNDATION): string {
+        let props: any = GLOBAL._buildingProps ? GLOBAL._buildingProps[b._type - 1] : null;
+        if (!props) {
+            return "";
+        }
+        let lvl: int = b._lvl ? b._lvl.Get() | 0 : 0;
+        if (props.names && props.names.length > 1 && lvl > 0) {
+            return KEYS.Get(String(props.names[Math.min(props.names.length, lvl) - 1]));
+        }
+        return KEYS.Get(String(props.name));
+    }
+
+    /**
+     * Inferno-only (QoL #587, #590, #591): the line beside the ice's buttons (BUILDINGINFO.Update): the big patches
+     * go when the curse breaks; a sealed tower is named, and still defends.
+     */
+    public get ioInfoText(): string {
+        if (this.kind == IoHfoIce.BIG) {
+            return KEYS.Get(IoHfoIce.ioTried(this.ioServerId) ? "io_hfo2_ice_big_info_tried" : "io_hfo2_ice_big_info");
+        }
+        if (this.kind == IoHfoIce.TOWER && this.tower) {
+            let text: string = KEYS.Get("io_hfo2_ice_tower_info", { "v1": IoHfoIce.towerName(this.tower) });
+            // (QoL #588: a tower being built, upgraded or fortified: how long until its ice can be broken)
+            let busy: int = IoHfo.ioBusyFor(this.tower);
+            if (busy > 0) {
+                text += "<br>" + KEYS.Get("io_ev3_ice_tower_busy", { "v1": GLOBAL.ioDuration(busy) });
+            }
+            return text;
+        }
+        return "";
+    }
+
+    /** Has a worker tried this big patch already (the server's `big.tried`)? */
+    public static ioTried(serverId: int): boolean {
+        let f: any = IoHfo.flag();
+        let tried: any[] = f && f.big ? as3.as(f.big.tried, Array) : null;
+        return tried != null && tried.indexOf(serverId) >= 0;
     }
 
     /** The worker shakes the ice a while, then it is the event's to settle (IoHfo.workerDone). */

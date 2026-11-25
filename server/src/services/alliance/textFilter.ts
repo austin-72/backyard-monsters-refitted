@@ -1,18 +1,15 @@
-import { Filter as BadWords } from "bad-words";
-
 import { ALLIANCE_NAME_MAX_LENGTH, ALLIANCE_NAME_MIN_LENGTH } from "../../config/AllianceConfig.js";
 import {
-  allianceDescriptionBannedErr,
   allianceNameBannedErr,
   allianceNameTooLongErr,
   allianceNameTooShortErr,
 } from "../../errors/errors.js";
 
-const filter = new BadWords();
 const LEADING_CHARACTER = /^[\p{L}\p{N}]/u;
 
 /**
- * Rejects an alliance name that is too short, too long, opens with a symbol, or is profane.
+ * Rejects an alliance name that is too short, too long, or opens with a symbol.
+ * (Inferno-only, 7 October, the user's call: no word filter on what players write to each other.)
  *
  * Checked here rather than in the Zod schema because a failed parse surfaces as
  * a generic support error, while each of these needs a message the player can
@@ -25,15 +22,16 @@ export const assertNameAllowed = (name: string) => {
   if (name.length < ALLIANCE_NAME_MIN_LENGTH) throw allianceNameTooShortErr();
   if (name.length > ALLIANCE_NAME_MAX_LENGTH) throw allianceNameTooLongErr();
   
-  if (!LEADING_CHARACTER.test(name) || filter.isProfane(name)) throw allianceNameBannedErr();
+  if (!LEADING_CHARACTER.test(name)) throw allianceNameBannedErr();
+  // (18 October, SUSPECTED-BUGS.md: a name with markup restyled the invite dialogs other players open, and the kick
+  // letter's subject) no angle brackets or control characters
+  if (/[\u0000-\u001f\u007f<>]/.test(name)) throw allianceNameBannedErr();
 };
 
 /**
- * Rejects an alliance description containing a banned word.
+ * An alliance description: any words allowed. (Inferno-only, 7 October, the user's call: no word filter on what players write to each other.)
+ * Kept so its callers stay as they are.
  *
- * @param {string} description - The proposed alliance description.
- * @throws {ClientSafeError} When the description contains a banned word.
+ * @param {string} _description - The proposed alliance description.
  */
-export const assertDescriptionAllowed = (description: string) => {
-  if (filter.isProfane(description)) throw allianceDescriptionBannedErr();
-};
+export const assertDescriptionAllowed = (_description: string) => {};

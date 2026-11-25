@@ -5,7 +5,7 @@ import { MouseEvent } from "flash/events";
 import { BASE, GLOBAL, KEYS, NEXTWAVEBAR_CLIP, SPECIALEVENT_WM1, TUTORIAL, UI_BOTTOM, bubblepopupDownBuff } from "@game";
 
 /*
- * This is the original UI_NEXTWAVE.as class for Wild Monster Invasion 1.
+ * This is the original UI_NEXTWAVE.ts class for Wild Monster Invasion 1.
  * The original developers rewrote this class when Wild Monster Invasion 2 was released
  * instead of creating a new class.
  *
@@ -23,6 +23,10 @@ export class UI_NEXTWAVE_WM1 extends NEXTWAVEBAR_CLIP {
     }
 
     public static ShouldDisplay(): boolean {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return false;
+        }
         if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
             return false;
         }

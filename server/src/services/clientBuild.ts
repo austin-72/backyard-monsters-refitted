@@ -8,17 +8,19 @@ import { logger } from "../utils/logger.js";
 /**
  * Version control for the game client (inferno-only).
  *
- * Every release build carries a stamp, the date and time it was built (client/scripts/IOBuild.as,
- * written by stamp-build.cmd). The server reads the stamp straight out of the SWF it serves
- * (public/client/bymr-stable.swf), so "the current version" is simply whatever was published:
- * nothing to configure, nothing to keep in step. A client older than that is told to restart,
- * at /init when it starts and through the io_build flag when it was already running.
+ * Every release build carries a stamp, the date and time it was built (client-web/src/game/IOBuild.ts, written by
+ * stamp-build). The server reads the stamp of the game it publishes, the browser build's public/web/version.json
+ * (and, while it is still there, the last Flash client published, public/client/bymr-stable.swf: the newer of the
+ * two counts), so "the current version" is simply whatever was published: nothing to configure, nothing to keep
+ * in step. A client older than that is told to restart, at /init when it starts and through the io_build flag
+ * when it was already running. (The Flash client is no longer built: once a browser build newer than it is
+ * published, it is told to update like any old client.)
  *
- * With no client published (players were given a SWF file instead), infernoOnlyConfig.minClientBuild
- * is the floor; 0 turns the check off.
+ * With no client published, infernoOnlyConfig.minClientBuild is the floor; 0 turns the check off.
  */
 
 const PUBLISHED_CLIENT = path.resolve("public/client/bymr-stable.swf");
+const PUBLISHED_WEB = path.resolve("public/web/version.json");
 const MARKER = /IOBUILD:(\d{8,14}):/;
 
 let cachedKey = "";
@@ -38,32 +40,45 @@ const readStamp = (file: string): number => {
   return match ? Number(match[1]) : 0;
 };
 
-/** The build stamp of the published client; 0 when there is none, or it carries no stamp. */
-export const getPublishedBuild = (): number => {
+/** The stamp in a published file, cached until the file changes; 0 when there is none, or it carries no stamp. */
+const stampCache = new Map<string, { key: string; build: number }>();
+const publishedStamp = (file: string, read: (file: string) => number, what: string): number => {
   let key: string;
   try {
-    const info = statSync(PUBLISHED_CLIENT);
+    const info = statSync(file);
     key = `${info.size}-${info.mtimeMs}`;
   } catch {
-    cachedKey = "";
+    stampCache.delete(file);
     return 0;
   }
-
-  if (key === cachedKey) return cachedBuild;
-
+  const cached = stampCache.get(file);
+  if (cached?.key === key) return cached.build;
+  let build = 0;
   try {
-    cachedBuild = readStamp(PUBLISHED_CLIENT);
-    logger.info(
-      cachedBuild
-        ? `Published client build: ${cachedBuild}. Older clients will be asked to restart.`
-        : "The published client carries no build stamp: clients are not version checked against it."
-    );
+    build = read(file);
+    logger.info(build ? `Published ${what} build: ${build}.` : `The published ${what} carries no build stamp.`);
   } catch (error) {
-    cachedBuild = 0;
-    logger.error(`Could not read the published client's build stamp: ${error}`);
+    logger.error(`Could not read the published ${what}'s build stamp: ${error}`);
   }
+  stampCache.set(file, { key, build });
+  return build;
+};
 
-  cachedKey = key;
+const readWebStamp = (file: string): number => {
+  const v = JSON.parse(readFileSync(file, "utf8")) as { build?: unknown };
+  const build = Number(v.build);
+  return Number.isFinite(build) && build > 0 ? build : 0;
+};
+
+/** The build stamp of the published client (the newer of the browser build and the last Flash one); 0 when none. */
+export const getPublishedBuild = (): number => {
+  const build = Math.max(publishedStamp(PUBLISHED_WEB, readWebStamp, "browser client"), publishedStamp(PUBLISHED_CLIENT, readStamp, "Flash client"));
+  const key = String(build);
+  if (key !== cachedKey) {
+    cachedKey = key;
+    cachedBuild = build;
+    if (build) logger.info(`Current client build: ${build}. Older clients will be asked to restart.`);
+  }
   return cachedBuild;
 };
 

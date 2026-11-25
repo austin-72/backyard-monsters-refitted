@@ -20,6 +20,11 @@ const infernoOnly = () => infernoOnlyConfig.enabled;
  * A tribe or Moloch row can also carry the monsters in the yard's Compounds (`monsters`: {id: how many}) and
  * their levels (`academy`: {id: {level}}), migration 20261001_AddDesignDefenders; null: the stock yard's.
  *
+ * QoL #412: the last HISTORY_KEPT saved versions of each layout are kept in the same table, as rows of kind
+ * "hist-tribe", "hist-moloch" or "hist-kit" with the key "<layout key>@<when it was kept, ms>" (kits: the kit's
+ * buildings as a yard's, kitToYard). Each keeps the version's own updated_by / updated_at (when it was saved).
+ * Nothing but the Designer reads them (designHistory); the yard generators only ever ask for "tribe" / "moloch".
+ *
  * Kept in memory (one server process): read once at startup and after every change, so the yard
  * generators (tribeSaveV2, molochStrongholds, gauntlet) can use them without waiting. The database is only
  * reached from here when reading or writing (the server module is loaded then, not with this file), so the
@@ -32,6 +37,12 @@ const sql = async (query: string, params: unknown[] = []) => {
 };
 
 export type DesignKind = "tribe" | "moloch" | "kit-original";
+
+/** QoL #412: the layouts whose saved versions are kept. */
+export type HistoryKind = "tribe" | "moloch" | "kit";
+
+/** How many saved versions of each layout are kept (the one in use not counted). */
+export const HISTORY_KEPT = 5;
 
 export type BuildingData = Record<string, Record<string, unknown>>;
 
@@ -105,7 +116,9 @@ export const loadDesigns = async () => {
       });
     }
     loaded = true;
-    if (rows.length) logger.info(`Designs: ${rows.length} admin-designed layouts in use`);
+    // (QoL #412: the kept versions are not layouts in use)
+    const inUse = rows.filter((row) => !String(row.kind).startsWith("hist-")).length;
+    if (inUse) logger.info(`Designs: ${inUse} admin-designed layouts in use`);
   } catch (err) {
     logger.warn(`Designs could not be read (has the 20260930_AddDesigns migration run?): ${(err as Error).message}`);
   }
@@ -145,6 +158,95 @@ export const deleteDesign = async (kind: DesignKind, key: string) => {
   await sql(`DELETE FROM bym.io_design WHERE kind = ? AND key = ?`, [kind, key]);
   await loadDesigns();
 };
+
+/**
+ * QoL #412: a layout written exactly as given: `defenders` null means the stock yard's monsters (the row's monsters
+ * and academy set to NULL), unlike saveDesign, which leaves them as they were. For putting a kept version back
+ * and for imports.
+ */
+export const putDesign = async (kind: "tribe" | "moloch", key: string, buildingdata: BuildingData, by: string, defenders: Defenders | null) => {
+  await sql(
+    `INSERT INTO bym.io_design (kind, key, buildingdata, monsters, academy, updated_by, updated_at)
+     VALUES (?, ?, CAST(? AS jsonb), CAST(? AS jsonb), CAST(? AS jsonb), ?, now())
+     ON CONFLICT (kind, key) DO UPDATE SET buildingdata = EXCLUDED.buildingdata, monsters = EXCLUDED.monsters,
+       academy = EXCLUDED.academy, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [kind, key, JSON.stringify(buildingdata), defenders ? JSON.stringify(defenders.monsters) : null, defenders ? JSON.stringify(defenders.academy) : null, by]
+  );
+  await loadDesigns();
+};
+
+/** QoL #412: one kept version of a layout (`id`: when it was kept, ms, as text). */
+export interface DesignVersion extends StoredDesign {
+  id: string;
+}
+
+const historyPrefix = (kind: HistoryKind, key: string) => `hist-${kind}:${key}@`;
+
+/** QoL #412: the kept versions of a layout, newest first (fresh copies). */
+export const designHistory = (kind: HistoryKind, key: string): DesignVersion[] => {
+  const prefix = historyPrefix(kind, key);
+  const out: DesignVersion[] = [];
+  for (const [k, v] of cache) {
+    if (k.startsWith(prefix)) out.push({ id: k.slice(prefix.length), ...(structuredClone(v) as StoredDesign) });
+  }
+  return out.sort((a, b) => Number(b.id) - Number(a.id));
+};
+
+/**
+ * QoL #412: keeps a version of a layout (the one about to be replaced), with who saved it and when (`at`, unix
+ * seconds; 0: now). The oldest past HISTORY_KEPT go.
+ */
+export const addHistory = async (kind: HistoryKind, key: string, buildingdata: BuildingData, defenders: Defenders | null, by: string | null, at: number) => {
+  const older = designHistory(kind, key);
+  for (const old of older.slice(HISTORY_KEPT - 1)) {
+    await sql(`DELETE FROM bym.io_design WHERE kind = ? AND key = ?`, [`hist-${kind}`, `${key}@${old.id}`]);
+  }
+  let stamp = Date.now();
+  while (older.some((v) => v.id === String(stamp))) stamp++;
+  const when = new Date(at > 0 ? at * 1000 : Date.now()).toISOString();
+  if (defenders) {
+    await sql(
+      `INSERT INTO bym.io_design (kind, key, buildingdata, monsters, academy, updated_by, updated_at)
+       VALUES (?, ?, CAST(? AS jsonb), CAST(? AS jsonb), CAST(? AS jsonb), ?, CAST(? AS timestamptz)) ON CONFLICT (kind, key) DO NOTHING`,
+      [`hist-${kind}`, `${key}@${stamp}`, JSON.stringify(buildingdata), JSON.stringify(defenders.monsters), JSON.stringify(defenders.academy), by, when]
+    );
+  } else {
+    await sql(
+      `INSERT INTO bym.io_design (kind, key, buildingdata, updated_by, updated_at)
+       VALUES (?, ?, CAST(? AS jsonb), ?, CAST(? AS timestamptz)) ON CONFLICT (kind, key) DO NOTHING`,
+      [`hist-${kind}`, `${key}@${stamp}`, JSON.stringify(buildingdata), by, when]
+    );
+  }
+  await loadDesigns();
+};
+
+/** QoL #412: one kept version taken out (it was put back in use). */
+export const dropHistory = async (kind: HistoryKind, key: string, id: string) => {
+  await sql(`DELETE FROM bym.io_design WHERE kind = ? AND key = ?`, [`hist-${kind}`, `${key}@${id}`]);
+  await loadDesigns();
+};
+
+/**
+ * QoL #420: the layouts in use (tribe, Moloch and kit-original rows; not the kept versions), as the export script
+ * (scripts/export-designs.ts) writes them, sorted by kind and key.
+ */
+export const allDesigns = () =>
+  [...cache.entries()]
+    .map(([id, d]) => {
+      const at = id.indexOf(":");
+      return { kind: id.slice(0, at), key: id.slice(at + 1), d };
+    })
+    .filter((row) => !row.kind.startsWith("hist-"))
+    .sort((a, b) => (a.kind === b.kind ? (a.key < b.key ? -1 : a.key > b.key ? 1 : 0) : a.kind < b.kind ? -1 : 1))
+    .map(({ kind, key, d }) => ({
+      kind,
+      key,
+      buildingdata: structuredClone(d.buildingdata),
+      monsters: d.defenders ? structuredClone(d.defenders.monsters) : null,
+      academy: d.defenders ? structuredClone(d.defenders.academy) : null,
+      updatedBy: d.updatedBy ?? null,
+      updatedAt: d.updatedAt ? new Date(d.updatedAt * 1000).toISOString() : null,
+    }));
 
 /** A fresh copy of a design's buildings (every yard made from it gets its own, attacks change them). */
 const copy = (design: StoredDesign | null) => (design ? (structuredClone(design.buildingdata) as BuildingData) : null);

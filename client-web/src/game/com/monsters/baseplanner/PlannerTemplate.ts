@@ -1,23 +1,34 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
-import { Point } from "flash/geom";
-import { BASE, BFOUNDATION, BaseTemplate, BaseTemplateNode, GLOBAL, GRID, InstanceManager, PlannerNode } from "@game";
+import { Point, Rectangle } from "flash/geom";
+import { BASE, BFOUNDATION, BaseTemplate, BaseTemplateNode, GLOBAL, GRID, InstanceManager, IoTd, PlannerNode } from "@game";
 
 export class PlannerTemplate extends ASObject {
     static {
-        as3.fields(this, { slot: 0, name: null, inventoryData: null, displayData: null, _savableData: null });
+        as3.fields(this, { slot: 0, name: null, inventoryData: null, displayData: null, _savableData: null, ioGhosts: null, ioGhostsFilled: 0 });
     }
 
     public static readonly _DECORATION_ID: int = 1000000;
+
+    /**
+     * Inferno-only (QoL #685): a planned building not built yet (a "ghost"): a node of its kind with this id, kept in the
+     * slot with the rest. No building has it, so Apply passes it by (BASE.getPlannedBuilding finds none).
+     */
+    public static readonly IO_GHOST_ID: int = 2000000;
     public slot: uint;
     public name: string;
     public inventoryData: Vector<PlannerNode>;
     public displayData: Vector<PlannerNode>;
     private _savableData: BaseTemplate;
+    /** (QoL #685) The plan's planned buildings: BaseTemplateNode (x, y, IO_GHOST_ID, type). Always this one array. */
+    public ioGhosts: any[];
+    /** (QoL #685) How many buildings built since the plan was saved went onto their planned spots when it was loaded. */
+    public ioGhostsFilled: int;
 
     public $ctor(param1: BaseTemplate = null): void {
         this.inventoryData = new Vector<PlannerNode>(0, false, PlannerNode);
         this.displayData = new Vector<PlannerNode>(0, false, PlannerNode);
+        this.ioGhosts = [];
         super.$ctor();
         if (param1) {
             this.importData(param1);
@@ -35,6 +46,12 @@ export class PlannerTemplate extends ASObject {
                 _loc2_.push(new BaseTemplateNode(_loc4_.x | 0, _loc4_.y | 0, _loc4_.id >>> 0, _loc4_.type >>> 0));
             }
             _loc3_++;
+        }
+        // (Inferno-only, QoL #685: the planned buildings are saved with the slot)
+        if (GLOBAL.INFERNO_ONLY) {
+            for (let g of (this.ioGhosts ?? [])) {
+                _loc2_.push(new BaseTemplateNode(g.x | 0, g.y | 0, PlannerTemplate.IO_GHOST_ID, g.type >>> 0));
+            }
         }
         _loc1_.nodes = _loc2_;
         _loc1_.slot = this.slot;
@@ -59,11 +76,23 @@ export class PlannerTemplate extends ASObject {
         let _loc13_: uint = 0;
         as3.vsetLength(this.displayData, 0);
         as3.vsetLength(this.inventoryData, 0);
+        this.ioGhosts.length = 0;
+        this.ioGhostsFilled = 0;
         let _loc2_: Vector<BaseTemplateNode> = new Vector<BaseTemplateNode>(0, false, BaseTemplateNode);
         let _loc3_: int = 0;
+        // (Inferno-only, 13 October, bug report #89: a plan saved while two buildings had one id has two places for one
+        // building; the second is taken as one that has gone: a building of its kind from storage goes there, if any)
+        let used: any[] = [];
         while (_loc3_ < param1.nodes.length) {
             _loc6_ = as3.vget(param1.nodes, _loc3_);
             _loc7_ = this.getBuildingFromNode(_loc6_);
+            if (_loc7_ && GLOBAL.INFERNO_ONLY && _loc6_.id != PlannerTemplate._DECORATION_ID) {
+                if (used.indexOf(_loc7_) >= 0) {
+                    _loc7_ = null;
+                } else {
+                    used.push(_loc7_);
+                }
+            }
             if (!_loc7_) {
                 _loc2_.push(_loc6_);
             } else {
@@ -109,10 +138,44 @@ export class PlannerTemplate extends ASObject {
             }
             _loc3_++;
         }
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioTakeGhosts(_loc2_);
+        }
+    }
+
+    /**
+     * Inferno-only (QoL #685): the slot's planned buildings that nothing took: one of that kind built since the plan was
+     * saved (in the yard, not on the plan: it would be in the plan's storage) goes onto its planned spot ("put it on its
+     * planned spot": Apply then moves it there, asked as ever); the rest stay planned. A stored one of the kind has
+     * taken its place already (the leftover nodes above).
+     */
+    private ioTakeGhosts(param1: Vector<BaseTemplateNode>): void {
+        for (let node of (param1 ?? [])) {
+            if (!node || node.id != PlannerTemplate.IO_GHOST_ID || !(node.type > 0)) {
+                continue;
+            }
+            let built: PlannerNode = null;
+            for (let n of (this.inventoryData ?? [])) {
+                if (n && n.type == node.type && n.building && n.building._id != PlannerTemplate._DECORATION_ID && n.category != PlannerNode.TYPE_DECORATION && !IoTd.plannerLocked(n)) {
+                    built = n;
+                    break;
+                }
+            }
+            if (built) {
+                this.inventoryData.splice(this.inventoryData.indexOf(built), 1);
+                built.x = node.x;
+                built.y = node.y;
+                built.stored = 0;
+                this.displayData.push(built);
+                this.ioGhostsFilled++;
+            } else {
+                this.ioGhosts.push(new BaseTemplateNode(node.x, node.y, PlannerTemplate.IO_GHOST_ID, node.type));
+            }
+        }
     }
 
     private getBuildingFromNode(param1: BaseTemplateNode): BFOUNDATION {
-        return BASE.getBuildingByID(param1.id);
+        return BASE.getPlannedBuilding(param1);
     }
 
     private getNodesFromUnusedBuildings(param1: BaseTemplate): Vector<PlannerNode> {
@@ -120,7 +183,7 @@ export class PlannerTemplate extends ASObject {
         let _loc2_: Vector<BFOUNDATION> = BASE.getYardPlannerBuildings();
         let _loc3_: Vector<PlannerNode> = new Vector<PlannerNode>(0, false, PlannerNode);
         for (_loc4_ of (_loc2_ ?? [])) {
-            if (!param1.getNodeFromBuildingID(_loc4_._id >>> 0)) {
+            if (!param1.getNodeFromBuildingID(_loc4_._id >>> 0, _loc4_._type)) {
                 _loc3_.push(new PlannerNode(_loc4_));
             }
         }
@@ -146,7 +209,8 @@ export class PlannerTemplate extends ASObject {
                     _loc5_ = Number(_loc4_.substr(_loc4_.indexOf("b") + 1)) | 0;
                     _loc6_ = BASE._buildingsStored[_loc4_].Get() | 0;
 
-                    if (GLOBAL._buildingProps[_loc5_ - 1] && GLOBAL._buildingProps[_loc5_ - 1].cls == null) {
+                    // (Inferno-only, Hellgate Defense: the run's walls are in storage for the planner)
+                    if (GLOBAL._buildingProps[_loc5_ - 1] && GLOBAL._buildingProps[_loc5_ - 1].cls == null && !(IoTd.on && _loc5_ == 17)) {
                         continue;
                     }
 
@@ -168,6 +232,12 @@ export class PlannerTemplate extends ASObject {
                         _loc10_._lvl.Set(_loc9_);
                         _loc10_._fortification.Set(0);
                         _loc10_._range = 0;
+                        // (Inferno-only, Hellgate Defense: a stored wall is no decoration: its node and its square read its props
+                        // and its footprint)
+                        if (IoTd.on && _loc5_ == 17) {
+                            _loc10_._buildingProps = GLOBAL._buildingProps[_loc5_ - 1];
+                            _loc10_._footprint = [new Rectangle(0, 0, 20, 20)];
+                        }
                         _loc1_.push(new PlannerNode(_loc10_));
                         _loc7_++;
                     }

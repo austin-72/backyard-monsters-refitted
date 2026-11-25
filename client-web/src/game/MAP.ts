@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, DisplayObject, IBitmapDrawable, MovieClip, Sprite, 
 import { Event, KeyboardEvent, MouseEvent } from "flash/events";
 import { Matrix, Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BFOUNDATION, BYMConfig, CREEPS, Cubic, GLOBAL, GRID, IoPinchZoom, KeyboardInputHandler, LOGGER, Linear, MAPBG, MagmaPuddle, MonsterBase, PLANNER, RasterData, Renderer, Targeting, TweenLite, UI2 } from "@game";
+import { BFOUNDATION, BYMConfig, CREEPS, Cubic, GLOBAL, GRID, IoGroundFx, IoPinchZoom, IoTilt, IoYardPick, KeyboardInputHandler, LOGGER, Linear, MAPBG, MagmaPuddle, MonsterBase, PLANNER, RasterData, Renderer, Targeting, TweenLite, UI2 } from "@game";
 
 export class MAP extends ASObject {
     static {
@@ -40,6 +40,13 @@ export class MAP extends ASObject {
     public static _dragged: boolean;
 
     public static _dragDistance: number;
+
+    /**
+     * Inferno-only (8 October, from the base game's pull request #292): while the yard is being dragged, the
+     * ground answers the mouse through this one rectangle instead of every building's hit area under the
+     * pointer (the browser build hit-tests the whole tree on every pointer move).
+     */
+    private static _dragHitArea: Sprite;
 
     public static _EFFECTSBMP: BitmapData;
 
@@ -101,9 +108,9 @@ export class MAP extends ASObject {
 
     private static _instance: MAP;
 
-    private static _canvas: BitmapData;
+    public static _canvas: BitmapData;
 
-    private static _canvasContainer: Bitmap;
+    public static _canvasContainer: Bitmap;
 
     public static MAP_WIDTH: uint; // const
 
@@ -121,7 +128,7 @@ export class MAP extends ASObject {
     public static _autoScrollUntil: int;
 
     static {
-        as3.lazyStatics(this, { _inited: false, _dragX: NaN, _dragY: NaN, tx: NaN, ty: NaN, targX: NaN, targY: NaN, d: NaN, _startX: NaN, _startY: NaN, _autoScroll: false, stage: null, _dragging: false, _dragged: false, _dragDistance: NaN, _EFFECTSBMP: null, _GROUND: null, _EDGE: null, _UNDERLAY: null, _RESOURCES: null, _BUILDINGBASES: null, _WORKERS: null, _WALLS: null, _EFFECTS: null, _CREEPSMC: null, _BUILDINGFOOTPRINTS: null, _BUILDINGINFO: null, _PROJECTILES: null, _FIREBALLS: null, _EFFECTSTOP: null, _BGTILES: null, _BUILDINGTOPS: null, _damageGrid: null, _following: false, _sortTo: 0, _canScroll: false, MAP_TYPE_GRASS: 0, MAP_TYPE_ROCK: 0, MAP_TYPE_SAND: 0, MAP_TYPE_CRATER: 0, MAP_TYPE_LAVA: 0, DEPTH_SHADOW: 0, _bmdTile: null, s_texture: null, _instance: null, _canvas: null, _canvasContainer: null, MAP_WIDTH: 0, MAP_HEIGHT: 0, _viewRect: null, _effectsRasterData: null, vol: NaN, _ioButtonDown: false, _autoScrollUntil: 0 }, () => {
+        as3.lazyStatics(this, { _inited: false, _dragX: NaN, _dragY: NaN, tx: NaN, ty: NaN, targX: NaN, targY: NaN, d: NaN, _startX: NaN, _startY: NaN, _autoScroll: false, stage: null, _dragging: false, _dragged: false, _dragDistance: NaN, _dragHitArea: null, _EFFECTSBMP: null, _GROUND: null, _EDGE: null, _UNDERLAY: null, _RESOURCES: null, _BUILDINGBASES: null, _WORKERS: null, _WALLS: null, _EFFECTS: null, _CREEPSMC: null, _BUILDINGFOOTPRINTS: null, _BUILDINGINFO: null, _PROJECTILES: null, _FIREBALLS: null, _EFFECTSTOP: null, _BGTILES: null, _BUILDINGTOPS: null, _damageGrid: null, _following: false, _sortTo: 0, _canScroll: false, MAP_TYPE_GRASS: 0, MAP_TYPE_ROCK: 0, MAP_TYPE_SAND: 0, MAP_TYPE_CRATER: 0, MAP_TYPE_LAVA: 0, DEPTH_SHADOW: 0, _bmdTile: null, s_texture: null, _instance: null, _canvas: null, _canvasContainer: null, MAP_WIDTH: 0, MAP_HEIGHT: 0, _viewRect: null, _effectsRasterData: null, vol: NaN, _ioButtonDown: false, _autoScrollUntil: 0 }, () => {
             MAP._inited = false;
             MAP.stage = GLOBAL._ROOT.stage;
             MAP._sortTo = 0;
@@ -162,6 +169,15 @@ export class MAP extends ASObject {
             // old ground listening, and its Scroll ran into the next cleared map (bug report #47)
             MAP.ioLetGo(MAP._GROUND);
             MAP._GROUND = as3.as(GLOBAL._layerMap.addChild(new Sprite()), Sprite);
+            // A new yard starts at normal size (IoPinchZoom's lens)
+            IoPinchZoom.resetLens();
+            MAP._dragHitArea = new Sprite();
+            MAP._dragHitArea.graphics.beginFill(0);
+            MAP._dragHitArea.graphics.drawRect(-MAP.MAP_WIDTH / 2, -MAP.MAP_HEIGHT / 2, MAP.MAP_WIDTH, MAP.MAP_HEIGHT);
+            MAP._dragHitArea.graphics.endFill();
+            MAP._dragHitArea.visible = false;
+            MAP._dragHitArea.mouseEnabled = false;
+            MAP._GROUND.addChild(MAP._dragHitArea);
             if (!BYMConfig.instance.RENDERER_ON) {
                 MAP._BGTILES = as3.as(MAP._GROUND.addChild(new MovieClip()), MovieClip);
             }
@@ -275,6 +291,11 @@ export class MAP extends ASObject {
         }
         Targeting.init();
         MAP._inited = true;
+        // Inferno-only (14 October): the yard seen at the admin's tilt (IoTilt)
+        if (BYMConfig.instance.RENDERER_ON) {
+            IoTilt.canvasK = 1;
+            IoTilt.apply();
+        }
     }
 
     public static get effectsBMD(): BitmapData {
@@ -283,6 +304,11 @@ export class MAP extends ASObject {
 
     public static get texture(): string {
         return MAP.s_texture;
+    }
+
+    /** The ground's own drawing in the yard (the browser renderer; IoGroundFx lays the moving light just over it). */
+    public static get ioGroundRaster(): RasterData {
+        return MAP._effectsRasterData;
     }
 
     public static get instance(): MAP {
@@ -317,6 +343,8 @@ export class MAP extends ASObject {
             MAP._bmdTile.dispose();
             MAP._bmdTile = null;
             MAP.Edge();
+            // Inferno-only (12 October): the invite grounds' moving light (glowing, shifting), or none
+            IoGroundFx.start(MAP.s_texture);
         } else {
             _loc4_ = -2;
             while (_loc4_ < 2) {
@@ -357,6 +385,7 @@ export class MAP extends ASObject {
 
     public static Clear(): void {
         if (MAP._GROUND) {
+            MAP._GROUND.hitArea = null;
             MAP._GROUND.removeEventListener(MouseEvent.MOUSE_DOWN, MAP.Click);
             MAP._GROUND.removeEventListener(Event.ENTER_FRAME, MAP.Scroll);
             MAP._GROUND.removeEventListener(MouseEvent.MOUSE_UP, MAP.ioButtonUp);
@@ -372,6 +401,10 @@ export class MAP extends ASObject {
         }
         if (BYMConfig.instance.RENDERER_ON && GLOBAL._ROOT.hasEventListener(Event.RENDER)) {
             GLOBAL._ROOT.removeEventListener(Event.RENDER, as3.bind(MAP._instance, MAP._instance.render));
+        }
+        // (Inferno-only, 21 October: the yard gone, the graphics card's picture of it under the game's canvas hidden)
+        if (GLOBAL.INFERNO_ONLY) {
+            Renderer.ioGlLetGo();
         }
         MAP._BGTILES = null;
         MAP._BUILDINGBASES = null;
@@ -497,9 +530,13 @@ export class MAP extends ASObject {
     }
 
     public static Click(param1: MouseEvent = null): void {
+        // Inferno-only: a pet or a worker under the pointer (its menu opens if this is a click, not a drag)
+        IoYardPick.down();
         if (UI2._scrollMap) {
-            MAP._dragX = MAP.stage.mouseX - MAP._GROUND.x;
-            MAP._dragY = MAP.stage.mouseY - MAP._GROUND.y;
+            // (in the yard layer's coordinates: with IoPinchZoom's lens on, a finger's move is the lens's
+            // times smaller on the yard)
+            MAP._dragX = IoPinchZoom.mouseX(MAP.stage) - MAP._GROUND.x;
+            MAP._dragY = IoPinchZoom.mouseY(MAP.stage) - MAP._GROUND.y;
             MAP._startX = MAP._GROUND.x;
             MAP._startY = MAP._GROUND.y;
             MAP._dragging = true;
@@ -530,6 +567,9 @@ export class MAP extends ASObject {
     }
 
     public static Release(param1: MouseEvent): void {
+        if (MAP._GROUND && MAP._GROUND.hitArea) {
+            MAP._GROUND.hitArea = null;
+        }
         MAP._dragging = false;
         MAP._dragged = false;
         MAP.stage.removeEventListener(MouseEvent.MOUSE_UP, MAP.Release);
@@ -543,7 +583,8 @@ export class MAP extends ASObject {
         let _loc4_: int = 0;
         if (!GLOBAL._catchup) {
             MAP.tx = GLOBAL._SCREEN.x - (param1 - GLOBAL._SCREEN.width / 2);
-            MAP.ty = GLOBAL._SCREEN.y - (param2 - GLOBAL._SCREEN.height / 2);
+            // (14 October: on a tilted yard a point is k times as far down: IoTilt)
+            MAP.ty = GLOBAL._SCREEN.y - (param2 * IoTilt.canvasK - GLOBAL._SCREEN.height / 2);
             _loc3_ = GLOBAL._SCREEN.width | 0;
             _loc4_ = GLOBAL._SCREEN.height | 0;
             MAP._GROUND.x = MAP.tx;
@@ -591,7 +632,7 @@ export class MAP extends ASObject {
             // Backstop: if the glide never reports finishing (its tween cancelled), give the camera back.
             MAP._autoScrollUntil = (getTimer() + (((time + delay + pause) * 1000) | 0) + 2000) | 0;
             MAP.tx = 0 - (X - 380);
-            MAP.ty = 0 - (Y - 340);
+            MAP.ty = 0 - (Y * IoTilt.canvasK - 340);
             w = MAP.stage.stageWidth;
             h = GLOBAL.GetGameHeight();
             if (ease) {
@@ -674,26 +715,30 @@ export class MAP extends ASObject {
             MAP.ty = 0 - MAP.ty + GLOBAL._ROOT.stage.stageHeight * 0.5;
             MAP._dragX = MAP.tx;
             MAP._dragY = MAP.ty;
-            BFOUNDATION.updateAllRasterData();
         } else if (MAP._dragging && UI2._scrollMap && !MAP._autoScroll && MAP._canScroll) {
-            _loc15_ = MAP.stage.mouseX;
-            _loc16_ = MAP.stage.mouseY;
+            _loc15_ = IoPinchZoom.mouseX(MAP.stage);
+            _loc16_ = IoPinchZoom.mouseY(MAP.stage);
             MAP.tx = _loc15_ - MAP._dragX >> 0;
             MAP.ty = _loc16_ - MAP._dragY >> 0;
             _loc17_ = _loc15_ - (MAP._dragX + MAP._startX);
             _loc18_ = _loc16_ - (MAP._dragY + MAP._startY);
             MAP._dragDistance = Math.abs(_loc17_ * _loc17_ + _loc18_ * _loc18_);
-            if (MAP._dragDistance > 100) {
+            if (MAP._dragDistance > 100 && !MAP._dragged) {
+                // (a drag now: the buildings' raster data follows the view in resizeViewRect, and the
+                // ground is hit-tested as one rectangle until the button is let go)
                 MAP._dragged = true;
-                BFOUNDATION.updateAllRasterData();
+                if (MAP._dragHitArea && MAP._dragHitArea.parent == MAP._GROUND) {
+                    MAP._GROUND.hitArea = MAP._dragHitArea;
+                }
             }
         }
         let _loc2_: int = GLOBAL._ROOT.stage.stageWidth;
         let _loc3_: int = GLOBAL._ROOT.stage.stageHeight;
         let _loc4_: int = -1615;
         let _loc5_: int = 2375;
-        let _loc6_: int = -650;
-        let _loc7_: int = 1325;
+        // (a tilted yard is k times as tall: IoTilt)
+        let _loc6_: int = Math.round(-650 * IoTilt.canvasK) | 0;
+        let _loc7_: int = Math.round(1325 * IoTilt.canvasK) | 0;
         let _loc8_: int = 670;
         let _loc9_: int = 760;
         let _loc10_: int = (_loc5_ - (_loc2_ >> 1)) | 0;
@@ -701,29 +746,38 @@ export class MAP extends ASObject {
         if (GLOBAL._zoomed) {
             _loc10_ = ((_loc5_ - _loc2_ + _loc9_ / _loc11_) / _loc11_) | 0;
         }
-        if (MAP.tx > _loc10_) {
-            MAP.tx = _loc10_;
+        if (MAP.tx > _loc10_ + IoPinchZoom.lensMarginX) {
+            MAP.tx = _loc10_ + IoPinchZoom.lensMarginX;
         }
         _loc10_ = (_loc4_ + (_loc2_ >> 1)) | 0;
         if (GLOBAL._zoomed) {
             _loc10_ = ((_loc4_ + _loc2_ + _loc9_ / _loc11_) / _loc11_) | 0;
         }
-        if (MAP.tx < _loc10_) {
-            MAP.tx = _loc10_;
+        if (MAP.tx < _loc10_ - IoPinchZoom.lensMarginX) {
+            MAP.tx = _loc10_ - IoPinchZoom.lensMarginX;
         }
         _loc10_ = (_loc6_ + (_loc3_ >> 1)) | 0;
         if (GLOBAL._zoomed) {
             _loc10_ = ((_loc6_ + _loc3_ + _loc8_ / _loc11_) / _loc11_) | 0;
         }
-        if (MAP.ty < _loc10_) {
-            MAP.ty = _loc10_;
+        if (MAP.ty < _loc10_ - IoPinchZoom.lensMarginY) {
+            MAP.ty = _loc10_ - IoPinchZoom.lensMarginY;
         }
         _loc10_ = (_loc7_ - (_loc3_ >> 1)) | 0;
         if (GLOBAL._zoomed) {
             _loc10_ = ((_loc7_ - _loc3_ + _loc8_ / _loc11_) / _loc11_) | 0;
         }
-        if (MAP.ty > _loc10_) {
-            MAP.ty = _loc10_;
+        if (MAP.ty > _loc10_ + IoPinchZoom.lensMarginY) {
+            MAP.ty = _loc10_ + IoPinchZoom.lensMarginY;
+        }
+        // (14 October: a yard tilted so far it is shorter than the screen (IoTilt) sits in the middle of it, top and
+        // bottom limits crossed)
+        if (IoTilt.canvasK < 1) {
+            let ioLo: number = ((_loc6_ + (_loc3_ >> 1)) | 0) - IoPinchZoom.lensMarginY;
+            let ioHi: number = ((_loc7_ - (_loc3_ >> 1)) | 0) + IoPinchZoom.lensMarginY;
+            if (!GLOBAL._zoomed && ioLo > ioHi) {
+                MAP.ty = _loc3_ >> 1;
+            }
         }
         MAP.d = 2;
         MAP.targX = MAP._GROUND.x;
@@ -757,11 +811,31 @@ export class MAP extends ASObject {
         return MAP._canvas;
     }
 
+    /** Inferno-only (14 October): the canvas replaced (IoTilt: another height), the renderer drawing into it. */
+    public ioCanvasChanged(c: BitmapData): void {
+        if (this._renderer) {
+            this._renderer.canvas = c;
+        }
+    }
+
+    /** Inferno-only: the next frame drawn whole. */
+    public ioRedrawAll(): void {
+        if (this._renderer) {
+            this._renderer.ioRedrawAll();
+        }
+    }
+
     public get canvasContainer(): Bitmap {
         return MAP._canvasContainer;
     }
 
     public get offset(): Point {
+        // (#304: before the canvas exists, a tower's ring asked for it)
+        if (!MAP._canvasContainer) {
+            this._point.x = 0;
+            this._point.y = 0;
+            return this._point;
+        }
         this._point.x = MAP._canvasContainer.x;
         this._point.y = MAP._canvasContainer.y;
         return this._point;
@@ -781,14 +855,30 @@ export class MAP extends ASObject {
         }
     }
 
+    /**
+     * The part of the yard on screen (the renderer draws what meets it). Inferno-only (8 October, from the base
+     * game's pull request #292): only when it changed, and then every building's raster data follows (their
+     * on-screen test): before, the buildings were brought up to date on every frame of a drag, moving or not,
+     * and not at all while the camera eased to a stop after one (buildings at the edges could stay hidden).
+     */
     public resizeViewRect(): void {
-        let _loc1_: Rectangle = GLOBAL._SCREEN;
-        let _loc2_: int = 32;
-        let _loc3_: int = 50;
-        MAP._viewRect.width = _loc1_.width * (1 / MAP._GROUND.scaleX) + _loc2_;
-        MAP._viewRect.height = _loc1_.height * (1 / MAP._GROUND.scaleY) + _loc2_;
-        MAP._viewRect.x = -(MAP._GROUND.x * (1 / MAP._GROUND.scaleX)) - (1 / MAP._GROUND.scaleX - 1) * _loc3_ + (MAP.MAP_WIDTH >>> 1) + _loc1_.x - _loc2_;
-        MAP._viewRect.y = -(MAP._GROUND.y * (1 / MAP._GROUND.scaleY)) - (1 / MAP._GROUND.scaleY - 1) * _loc3_ + (MAP.MAP_HEIGHT >>> 1) + _loc1_.y - _loc2_;
+        let screen: Rectangle = GLOBAL._SCREEN;
+        let padding: int = 32;
+        let scaleOffset: int = 50;
+        let inverseScaleX: number = 1 / MAP._GROUND.scaleX;
+        let inverseScaleY: number = 1 / MAP._GROUND.scaleY;
+        let width: number = screen.width * inverseScaleX + padding;
+        let height: number = screen.height * inverseScaleY + padding;
+        let x: number = -(MAP._GROUND.x * inverseScaleX) - (inverseScaleX - 1) * scaleOffset + (MAP.MAP_WIDTH >>> 1) + screen.x - padding;
+        let y: number = -(MAP._GROUND.y * inverseScaleY) - (inverseScaleY - 1) * scaleOffset + (MAP.MAP_HEIGHT >>> 1) + screen.y - padding;
+        if (MAP._viewRect.x == x && MAP._viewRect.y == y && MAP._viewRect.width == width && MAP._viewRect.height == height) {
+            return;
+        }
+        MAP._viewRect.x = x;
+        MAP._viewRect.y = y;
+        MAP._viewRect.width = width;
+        MAP._viewRect.height = height;
+        BFOUNDATION.updateAllRasterData();
     }
 
     private render(param1: Event): void {

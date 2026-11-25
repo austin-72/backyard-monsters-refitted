@@ -1,7 +1,9 @@
 /**
  * The Brimstone Pit: the Inferno casino (building 141). Players wager Shiny against the house; every
- * outcome is decided here, on the server, from a provably fair seed (services/casino/rng.ts), and the
- * client only shows it. Nothing here moves Shiny between players, and nothing buys or sells Shiny.
+ * outcome is decided here, on the server, from a seeded draw (services/casino/rng.ts), and the client only shows
+ * it. Since 8 October a player who is down overall gets luck (below), which can redraw a losing result: a bet is
+ * provably fair only at luck 0, as the Fairness tab says (QoL #640, 14 October: this said "provably fair" without
+ * that). Nothing here moves Shiny between players, and nothing buys or sells Shiny.
  *
  * Every number the games pay is in this file. Changing it needs a server restart only (the client asks
  * for the rules with casino/state and shows what it is sent).
@@ -34,48 +36,80 @@ export const casinoConfig = {
   maxPayout: 0,
 
   /**
+   * Luck (8 October, the user's): a silent stat, never sent to the game. A player whose whole Pit history is
+   * down (everything paid to them less everything they staked, every settled bet in every game, all time) gets
+   * luck from `table` (the user's: Shiny down -> luck): 10 down 1%, 100 down 5%, 500 down 10%, 1,000 down 20%,
+   * 1,500 down 25%, 2,000 down 30%, 2,500 or more down 35% (the most). Between two rows it goes up in a straight
+   * line (750 down: 15%); under 10 down, from 0 to 1%. Every bet gets it whole, however big (the user's).
+   * Luck 0 at even or ahead: those bets are drawn
+   * exactly as the Fairness tab says. services/casino/luck.ts has where it acts: a losing result of an instant
+   * game drawn again (once, with the bet's next numbers) with that chance; a card game dealt twice and the better
+   * deal kept; a Sabnox found in Bone Pile moved to another pile. Ascent, the Derby and Devil's Dice have one
+   * result for the whole table: luck leaves them alone. Each bet keeps the luck it had (casino_bet.luck) and
+   * whether it changed the result (casino_bet.lucky), for the admins.
+   */
+  luck: {
+    enabled: true,
+    /** [Shiny down, luck] from least to most down; the last row's luck is the most, for that and anything further down. */
+    table: [
+      [0, 0],
+      [10, 0.01],
+      [100, 0.05],
+      [500, 0.1],
+      [1000, 0.2],
+      [1500, 0.25],
+      [2000, 0.3],
+      [2500, 0.35],
+    ] as [number, number][],
+  },
+
+  /**
    * The Pit level each game opens at. A game not listed here is not open yet (coming in a later
    * update); the lobby shows it as coming soon.
    */
   unlockLevel: {
     magmadrop: 1,
     scratch: 1,
+    hilo: 1,
     roulette: 2,
     bonepile: 2,
+    blackjack: 2,
     slots: 3,
+    dice: 3,
+    deal: 3,
     ascent: 4,
     derby: 5,
     fortune: 6,
   } as Record<string, number>,
 
   /**
-   * Wins announced to everyone in Global chat (chat/chatBroadcasts.ts noteCasinoWin), as the game
-   * celebrates them (CasinoWindow.bigWin): every jackpot; every BIG WIN (`bigWin` times the stake or more),
-   * MEGA WIN (`megaWin`) and EPIC WIN (`epicWin`); and any other win that makes at least `minProfit`
-   * Shiny over its stake, or pays `minMultiplier` times its stake. Apart from jackpots, only a win paying
-   * more than `minPayout` Shiny is announced (the user's: a BIG WIN of 120 Shiny on 10 is not). So one
-   * player's quick Magma Drops cannot fill the chat, a BIG WIN or one of the others waits `gapSeconds`
-   * after that player's last announcement (jackpots, MEGA and EPIC WINs never wait). The admins' wins
-   * are never announced.
+   * Wins announced to everyone in Global chat (chat/chatBroadcasts.ts noteCasinoWin). 26 October, the user's: only a
+   * win paying at least `minPayout` Shiny at `minMultiplier` times its stake or more, and only when it is that
+   * player's best of the last `recordHours` hours, by its multiplier or by the Shiny it paid, among all their wins of
+   * those hours (a jackpot too). The words over it stay as the game celebrates it (CasinoWindow.bigWin): BIG WIN
+   * at `bigWin` times the stake, MEGA WIN at `megaWin`, EPIC WIN at `epicWin`. The admins' wins are never announced.
    */
   announce: {
     enabled: true,
     bigWin: 10,
     megaWin: 50,
     epicWin: 200,
-    gapSeconds: 10,
-    minProfit: 2500,
-    minMultiplier: 25,
     minPayout: 500,
+    minMultiplier: 10,
+    recordHours: 24,
   },
 
   /** Games shown in the lobby, in order, with the level they will open at once they are in. */
   lobby: [
     { id: "magmadrop", name: "Magma Drop", level: 1 },
     { id: "scratch", name: "Brimstone Scratchers", level: 1 },
+    { id: "hilo", name: "Higher or Lower", level: 1 },
     { id: "roulette", name: "Wormzer Roulette", level: 2 },
     { id: "bonepile", name: "Bone Pile", level: 2 },
+    { id: "blackjack", name: "Cinderjack", level: 2 },
     { id: "slots", name: "Magma Slots", level: 3 },
+    { id: "dice", name: "Devil's Dice", level: 3 },
+    { id: "deal", name: "The Undertaker's Offer", level: 3 },
     { id: "ascent", name: "Balthazar's Ascent", level: 4 },
     { id: "derby", name: "Magma Derby", level: 5 },
     { id: "fortune", name: "Korath's Fortune", level: 6 },
@@ -148,6 +182,59 @@ export const casinoConfig = {
   },
 
   /**
+   * Cinderjack (blackjack; 7 October, the user's pick): the player against the dealer, Moloch. A shoe of
+   * `decks` decks shuffled afresh for every hand (services/casino/games/blackjack.ts). The dealer stands on every
+   * 17 (`hitSoft17` false) and looks at the hole card under an Ace or a ten (a dealer's blackjack ends the hand
+   * at once: only the first bet is lost). A blackjack pays 3 to 2 (`blackjackPays`); a win 1 to 1; a tie
+   * pushes. Double on any two cards (after a split too: `doubleAfterSplit`); split a pair once (`maxHands` 2),
+   * split Aces one card each (a 21 after a split is not a blackjack); no insurance, no surrender. Played by the
+   * book (basic strategy) the game returns about 99.6% (scripts/casino-rtp.ts simulates it); played worse,
+   * less. A hand left alone for `idleHours` stands and is settled.
+   */
+  blackjack: {
+    decks: 6,
+    hitSoft17: false,
+    blackjackPays: 1.5,
+    maxHands: 2,
+    doubleAfterSplit: true,
+    idleHours: 24,
+  },
+
+  /**
+   * Higher or Lower (7 October, the user's pick): cards from an endless deck (each any of the 52, as likely);
+   * guess whether the next is the same or higher, or the same or lower, than the one showing (Ace low). The
+   * chance of a guess on rank r (1 Ace to 13 King) is (14 - r) / 13 or r / 13; after right guesses with chances
+   * p1 ... pk the multiplier is rtp / (p1 x ... x pk), rounded down to 2 decimals, held to `maxMultiplier`:
+   * 99.99% returned wherever the player stops, a little less for the rounding (99.2% at the worst: 1.29x
+   * for 1.2999x after one guess at 10 in 13). A wrong
+   * guess loses the bet. Skip a card (up to `maxSkips` a game) to see another without a guess. `cards` are
+   * drawn for a game at the start (its secret; the hash is shown): used up, the game is cashed out. Left alone
+   * for `idleHours`: cashed out (the bet given back if nothing was guessed).
+   */
+  hilo: {
+    rtp: 0.9999,
+    cards: 120,
+    maxSkips: 20,
+    idleHours: 24,
+  },
+
+  /**
+   * The Undertaker's Offer (Deal or No Deal; 7 October, the user's pick, Pit level 3): twelve sealed coffins hold these
+   * twelve prizes (multipliers of the bet), shuffled from the player's seeds. The player keeps one and opens the
+   * others, `rounds` at a time (3, 3, 2, 2: ten opened); after each round the Undertaker offers to buy the kept coffin
+   * for `offers[round]` times the average of the prizes still sealed (75%, 85%, 92%, 97%), rounded down. With two
+   * coffins left the player keeps theirs or swaps it. Going to the end returns the prizes' average: 11.99 / 12 =
+   * 99.92%; a deal returns less (the Undertaker's price for certainty: 97% to 75% of what going on is worth). Left
+   * alone for `idleHours`: the kept coffin is opened and paid.
+   */
+  deal: {
+    prizes: [0, 0.01, 0.05, 0.1, 0.25, 0.33, 0.5, 0.75, 1, 1.5, 2.5, 5],
+    rounds: [3, 3, 2, 2],
+    offers: [0.75, 0.85, 0.92, 0.97],
+    idleHours: 24,
+  },
+
+  /**
    * Balthazar's Ascent (crash), one round for every player at once: `bettingSeconds` to bet, then
    * Balthazar flies and the multiplier climbs, m(t) = floor(100 x e^(growth x t ms)) / 100 (1.82x at 10 s,
    * 3.32x at 20 s), until a Sharpshooter Tower shoots him down at the round's crash point, drawn from the round's
@@ -195,6 +282,32 @@ export const casinoConfig = {
     history: 10,
     /** Bettors listed on a race (the biggest bets first, one line per player and runner). */
     listed: 30,
+  },
+
+  /**
+   * Devil's Dice (7 October, the user's pick: at Pit level 3): tables of up to `seats` players, each round the
+   * same bones thrown for the whole table, every bet against the house (nothing moves between players). For
+   * `bettingSeconds` the seated players bet; then the Devil throws two bones every `rollMs` (the first
+   * `firstRollMs` after bets close). Each bone shows 1 to 5 pips, or the Devil (one face in six). A throw with
+   * no Devil is safe: the chance of k safe throws is (25/36)^k, and the multiplier after k is
+   * floor(100 x rtp / (25/36)^k) / 100: 1.43x, 2.07x, 2.98x, 4.29x, 6.19x, 8.91x, 12.83x, 18.48x, 26.62x,
+   * 38.33x, 55.20x, 79.48x. Bank between throws (by hand: the server's clock decides which throws are done)
+   * or set a bank after N throws; the Devil takes whatever is still on the table. After `maxRolls` safe throws
+   * what is left is banked at the last. Every point to stop returns rtp less its rounding: 99.31% at the worst
+   * (bank after one throw), 99.77% to 99.83% after two to four, 99.93% to 99.99% after five or more
+   * (scripts/casino-rtp.ts). The bones come from the round's seed (its hash
+   * shown first, the seed once the round is over). A seat not heard from for `seatSeconds` is given up.
+   */
+  dice: {
+    seats: 4,
+    bettingSeconds: 12,
+    firstRollMs: 1500,
+    rollMs: 2600,
+    resultSeconds: 5,
+    maxRolls: 12,
+    rtp: 0.9999,
+    seatSeconds: 25,
+    history: 10,
   },
 
   /**

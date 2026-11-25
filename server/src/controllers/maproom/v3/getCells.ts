@@ -91,7 +91,7 @@ export const getMapRoomCells: KoaController = async (ctx) => {
       return;
     }
 
-    // Note: the client uses 1-based cell IDs (MapRoom3.as: CalculateCellId: y * width + x + 1)
+    // Note: the client uses 1-based cell IDs (MapRoom3.ts: CalculateCellId: y * width + x + 1)
     // so that cellId 0 can serve as a "no cell" sentinel for uninitialized AS3 ints.
     // Subtract 1 here to convert back to 0-based grid coordinates.
     const requestedCoords: Coord[] = cellids.map((id) => {

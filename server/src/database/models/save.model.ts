@@ -440,6 +440,9 @@ export class Save {
 
 
   public static saveKeys: Extract<keyof Save, string>[] = [
+    // (18 October, SUSPECTED-BUGS.md: storedata, protected, outposts, homebase, wmstatus, level, locked and usemap
+    // were taken from a save as sent, though the game never sends them: only the cheat detector kept them out, so
+    // with it off a save could give itself store items, workers and protection. Not taken any more.)
     "buildingdata",
     "buildingkeydata",
     "researchdata",
@@ -460,7 +463,6 @@ export class Save {
     "frontpage",
     "academy",
     "loot",
-    "storedata",
     "coords",
     "quests",
     "player",
@@ -472,9 +474,6 @@ export class Save {
     "attackersiege",
     "updates",
     "effects",
-    "homebase",
-    "outposts",
-    "wmstatus",
     "chatservers",
     "achieved",
     "attacks",
@@ -482,16 +481,12 @@ export class Save {
     "sentinvites",
     "sentgifts",
     "fbpromos",
-    "level",
     "catapult",
     "flinger",
     "destroyed",
     "damage",
-    "locked",
-    "protected",
     "champion",
     "over",
-    "usemap",
     "basevalue",
     "empirevalue",
     "points",
@@ -501,8 +496,6 @@ export class Save {
   public static attackSaveKeys: Extract<keyof Save, string>[] = [
     "destroyed",
     "damage",
-    "locked",
-    "protected",
     "monsters",
     "champion",
     "over",

@@ -5,11 +5,12 @@ import { IOErrorEvent, KeyboardEvent, MouseEvent } from "flash/events";
 import { Matrix } from "flash/geom";
 import { TextField, TextFieldType, TextFormat, TextFormatAlign } from "flash/text";
 import { Keyboard } from "flash/ui";
-import { ALLIANCES, AllianceConstants, AllianceFormPopup, AllianceTabBase, BrowseActionPopup, Button_CLIP, GLOBAL, ImageCache, KEYS, SOUNDS, URLLoaderApi } from "@game";
+import { getTimer } from "flash/utils";
+import { AllianceConstants, AllianceFormPopup, ALLIANCES, AllianceTabBase, BrowseActionPopup, Button_CLIP, GLOBAL, ImageCache, IoAllianceUi, IoCrest, KEYS, SOUNDS, URLLoaderApi } from "@game";
 
 export class BrowseTab extends AllianceTabBase {
     static {
-        as3.fields(this, { _filterMode: 0, _filterBtnAll: null, _filterBtnWorld: null, _activePopup: null, _currentPage: 1, _totalPages: 0, _searchTerm: "", _searchField: null, _resultsLayer: null, _loading: false });
+        as3.fields(this, { _filterMode: 0, _filterBtnAll: null, _filterBtnWorld: null, _activePopup: null, _currentPage: 1, _totalPages: 0, _searchTerm: "", _searchField: null, _resultsLayer: null, _loading: false, _shown: null, _note: null });
     }
 
     private static PAD: int; // const
@@ -101,6 +102,19 @@ export class BrowseTab extends AllianceTabBase {
     private _searchField: TextField;
     private _resultsLayer: MovieClip;
     private _loading: boolean;
+    /** (QoL #543) what the rows on show were asked with: { page, filter, term }, or null before any */
+    private _shown: any;
+    private _note: TextField;
+
+    /**
+     * (Inferno-only, QoL #543) the pages asked for, by "filter|page|term": { t (getTimer), r (the answer) }. One less
+     * than a minute old is shown without asking again (the server allows 30 searches a minute); an older one stands
+     * in for a page the server refuses.
+     */
+    private static _cache: any = {};
+    private static _cacheAid: int = -1;
+    private static readonly CACHE_MS: int = 60000;
+    private static readonly CACHE_KEEP_MS: int = 600000;
 
     public $ctor(): void {
         super.$ctor();
@@ -124,6 +138,10 @@ export class BrowseTab extends AllianceTabBase {
      */
     private _fetch(): void {
         if (this._loading) {
+            return;
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            this._ioFetch();
             return;
         }
         this._loading = true;
@@ -168,6 +186,108 @@ export class BrowseTab extends AllianceTabBase {
         this._buildPagination();
     }
 
+    /** (QoL #543) What the current page is asked with. */
+    private _ioKey(): string {
+        return this._filterMode + "|" + this._currentPage + "|" + String(this._searchTerm || "").toLowerCase();
+    }
+
+    /**
+     * (Inferno-only, QoL #543) As _fetch, from memory when the page was asked for within the last minute; the rows on
+     * show stay until the answer, and stay (with "Couldn't refresh") when the server refuses or fails.
+     */
+    private _ioFetch(): void {
+        this._dismissActivePopup();
+        if (BrowseTab._cacheAid != ALLIANCES._allianceID) {
+            // (joined, left or made one: whose row is "mine" and every stance changed)
+            BrowseTab._cache = {};
+            BrowseTab._cacheAid = ALLIANCES._allianceID;
+        }
+        let key: string = this._ioKey();
+        let hit: any = BrowseTab._cache[key];
+        if (hit && getTimer() - Number(hit.t) < BrowseTab.CACHE_MS) {
+            this._ioShow(hit.r);
+            return;
+        }
+        this._loading = true;
+        let vars: any[] = [["search", this._searchTerm], ["page", String(this._currentPage - 1)], ["world", this._filterMode == 1 ? "true" : "false"]];
+        new URLLoaderApi().load(GLOBAL._allianceURL + BrowseTab.ENDPOINT, vars, (response: any): void => {
+            this._ioAnswer(key, response);
+        }, (e: IOErrorEvent): void => {
+            this._ioAnswer(key, null);
+        });
+    }
+
+    private _ioAnswer(key: string, response: any): void {
+        this._loading = false;
+        let ok: boolean = response != null && !response.error && response.alliances != null;
+        if (ok) {
+            let now: int = getTimer();
+            for (let k in BrowseTab._cache) {
+                if (now - Number(BrowseTab._cache[k].t) > BrowseTab.CACHE_KEEP_MS) {
+                    delete BrowseTab._cache[k];
+                }
+            }
+            BrowseTab._cache[key] = { "t": now, "r": response };
+        }
+        if (this.stage == null) {
+            return;
+        }
+        if (key != this._ioKey()) {
+            // (another page, filter or search was chosen while this one was on its way)
+            this._ioFetch();
+            return;
+        }
+        if (ok) {
+            this._ioShow(response);
+            return;
+        }
+        let stale: any = BrowseTab._cache[key];
+        let kept: boolean = true;
+        if (stale) {
+            this._ioShow(stale.r);
+        } else if (this._shown) {
+            // the rows on show stay: back to what they were asked with
+            this._currentPage = this._shown.page | 0;
+            this._filterMode = this._shown.filter | 0;
+            this._searchTerm = String(this._shown.term);
+            if (this._searchField) {
+                this._searchField.text = this._searchTerm;
+            }
+            this._drawFilterBtn(this._filterBtnAll, KEYS.Get("alliance_filter_all"), BrowseTab.BTN_FILTER_W, BrowseTab.BTN_H, this._filterMode == 0);
+            this._drawFilterBtn(this._filterBtnWorld, KEYS.Get("alliance_filter_world"), BrowseTab.BTN_FILTER_W, BrowseTab.BTN_H, this._filterMode == 1);
+        } else {
+            // (nothing to keep showing)
+            kept = false;
+            this._clearResults();
+            this._showStatus(KEYS.Get("io_al2_browse_failed"));
+        }
+        if (this._note && kept) {
+            this._note.text = KEYS.Get("io_al2_browse_stale");
+            this._note.visible = true;
+        }
+    }
+
+    /** (QoL #543) Draws an answer (fresh or from memory) and notes what it was asked with. */
+    private _ioShow(response: any): void {
+        this._onSearchComplete(response);
+        this._shown = { "page": this._currentPage, "filter": this._filterMode, "term": this._searchTerm };
+        if (this._note) {
+            this._note.visible = false;
+        }
+    }
+
+    /** (QoL #543) A stance changed in a row: the pages in memory follow. */
+    private static _ioPatchCache(allianceId: int, relationship: int): void {
+        for (let k in BrowseTab._cache) {
+            let list: any[] = as3.as(BrowseTab._cache[k].r.alliances, Array);
+            for (let item of as3.values(list || [])) {
+                if ((item.alliance_id | 0) == allianceId) {
+                    item.relationship = relationship;
+                }
+            }
+        }
+    }
+
     private _onSearchFail(e: IOErrorEvent): void {
         this._loading = false;
         if (this.stage == null) {
@@ -182,7 +302,8 @@ export class BrowseTab extends AllianceTabBase {
      * diplomacy swatch colour and flagging the viewer's own alliance (the "me"
      * row, which is highlighted and has no actions button). leader_baseid is
      * carried through unrendered for the actions popup's Visit Leader button,
-     * and is 0 when the leader has no main yard to visit.
+     * and is 0 when the leader has no main yard to visit. (Inferno-only, QoL #166:
+     * and who can join, for the popup's join button: joinMode, minLevel.)
      * @param {Array} list - Raw server alliance rows.
      * @returns {Array} Rows for _buildTable.
      */
@@ -192,7 +313,7 @@ export class BrowseTab extends AllianceTabBase {
         while (i < list.length) {
             let item: any = list[i];
             let allianceId: int = item.alliance_id | 0;
-            out.push({ rank: item.rank | 0, name: String(item.name), members: item.members | 0, ep: GLOBAL.INFERNO_ONLY ? GLOBAL.FormatNumber(Number(item.ep)) : String(item.ep), leader: String(item.leader_name), leader_baseid: Number(item.leader_baseid), relationship: item.relationship | 0, color: this._relationshipColor(item.relationship | 0), alliance_id: allianceId, image: item.image | 0, self: allianceId != 0 && allianceId == ALLIANCES._allianceID });
+            out.push({ rank: item.rank | 0, name: String(item.name), members: item.members | 0, ep: GLOBAL.INFERNO_ONLY ? GLOBAL.FormatNumber(Number(item.ep)) : String(item.ep), leader: String(item.leader_name), leader_baseid: Number(item.leader_baseid), relationship: item.relationship | 0, color: this._relationshipColor(item.relationship | 0), alliance_id: allianceId, image: item.image | 0, crest: item.crest || null, self: allianceId != 0 && allianceId == ALLIANCES._allianceID, tag: item.tag ? String(item.tag) : null, max: item.max_members | 0, online: item.online != null ? item.online | 0 : -1, desc: item.description ? String(item.description) : "", theirs: item.their_stance != null ? item.their_stance | 0 : 0, joinMode: item.join_mode ? String(item.join_mode) : "request", minLevel: item.min_level | 0 });
             i++;
         }
         return out;
@@ -207,7 +328,11 @@ export class BrowseTab extends AllianceTabBase {
      * @param {int} id - Shield id 1-41.
      * @param {int} inset - Padding between the box edge and the shield.
      */
-    private _loadShield(container: MovieClip, id: int, inset: int): void {
+    private _loadShield(container: MovieClip, id: int, inset: int, crest: any = null): void {
+        // (14 October: its own crest, when it has one)
+        if (IoCrest.fit(container, crest, (BrowseTab.ROW_H - inset * 2) | 0, inset + (((BrowseTab.ICON_W - BrowseTab.ROW_H) / 2) | 0), inset)) {
+            return;
+        }
         if (id <= 0) {
             return;
         }
@@ -357,6 +482,15 @@ export class BrowseTab extends AllianceTabBase {
         let sfmt: TextFormat = new TextFormat("Verdana", 11, 0x333333, true);
         this._searchField.defaultTextFormat = sfmt;
         this._searchField.addEventListener(KeyboardEvent.KEY_DOWN, as3.bind(this, this._onSearchKey));
+        this._searchField.name = "ioAlBrowseSearch";
+
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #543: under the search box, when the rows on show could not be refreshed)
+            this._note = IoAllianceUi.addText(this, "", inputX, (BrowseTab.CTRL_Y + INPUT_BOX_H + 1) | 0, 10, 0xA03010, true, BrowseTab.INPUT_W);
+            this._note.height = 15;
+            this._note.name = "ioAlBrowseNote";
+            this._note.visible = false;
+        }
 
         let btnSearch: Button_CLIP = as3.as(this.addChild(new Button_CLIP()), Button_CLIP);
         btnSearch.Setup(KEYS.Get("alliance_btn_search"), false, BrowseTab.BTN_SEARCH_W, BrowseTab.BTN_H);
@@ -439,15 +573,43 @@ export class BrowseTab extends AllianceTabBase {
             iconMC.graphics.lineTo(BrowseTab.ICON_W, BrowseTab.ROW_H);
             iconMC.x = BrowseTab.C_NAME_X + 1;
             iconMC.y = rowBaseY;
-            this._loadShield(iconMC, rowData.image | 0, 3);
+            this._loadShield(iconMC, rowData.image | 0, 3, rowData.crest);
 
             rowData.swatch = iconMC;
 
             const nameX: int = (BrowseTab.C_NAME_X + 1 + BrowseTab.ICON_W + 8) | 0;
-            this._addLabel(tableMC, as3.str(rowData.name), nameX, rowBaseY, (BrowseTab.C_MEM_X - nameX - 5) | 0, BrowseTab.ROW_H, false, TextFormatAlign.LEFT);
-            this._addLabel(tableMC, String(rowData.members), BrowseTab.C_MEM_X, rowBaseY, BrowseTab.C_MEM_W, BrowseTab.ROW_H, false, TextFormatAlign.CENTER);
+            // (Inferno-only, QoL #170: its chat tag before the name, and "12/50", or Full)
+            // (QoL #170: the start of its description under the name, and how many are online under the count)
+            const nameW: int = (BrowseTab.C_MEM_X - nameX - 5) | 0;
+            let desc: string = rowData.desc ? String(rowData.desc) : "";
+            this._addLabel(tableMC, (rowData.tag ? "[" + rowData.tag + "] " : "") + as3.str(rowData.name), nameX, (desc ? rowBaseY - 8 : rowBaseY) | 0, nameW, BrowseTab.ROW_H, false, TextFormatAlign.LEFT);
+            if (desc) {
+                let descField: TextField = IoAllianceUi.addText(tableMC, desc, nameX, (rowBaseY + 18) | 0, 10, AllianceConstants.IO_MUTED, false, nameW);
+                descField.height = 16;
+                descField.name = "ioAlBrowseDesc";
+                // (one line: cut short with "..." where it runs past the column)
+                while (descField.textWidth > nameW - 6 && desc.length > 4) {
+                    desc = desc.slice(0, -2).replace(/\s+$/, "");
+                    descField.text = desc + "...";
+                }
+            }
+            let full: boolean = (rowData.max | 0) > 0 && (rowData.members | 0) >= (rowData.max | 0);
+            let online: int = rowData.online != null ? rowData.online | 0 : -1;
+            this._addLabel(tableMC, (rowData.max | 0) > 0 ? (full ? KEYS.Get("io_ally_full") : rowData.members + "/" + rowData.max) : String(rowData.members), BrowseTab.C_MEM_X, (online >= 0 ? rowBaseY - 8 : rowBaseY) | 0, BrowseTab.C_MEM_W, BrowseTab.ROW_H, full, TextFormatAlign.CENTER, (full ? 0xC0281C : 0) >>> 0);
+            if (online >= 0) {
+                let onField: TextField = IoAllianceUi.addText(tableMC, KEYS.Get("io_al2_browse_online", { "v1": String(online) }), BrowseTab.C_MEM_X, (rowBaseY + 18) | 0, 10, (online > 0 ? AllianceConstants.IO_GAINED : AllianceConstants.IO_MUTED) >>> 0, online > 0, BrowseTab.C_MEM_W, IoAllianceUi.CENTER);
+                onField.height = 16;
+                onField.name = "ioAlBrowseOnline";
+            }
             this._addLabel(tableMC, as3.str(rowData.ep), BrowseTab.C_EP_X, rowBaseY, BrowseTab.C_EP_W, BrowseTab.ROW_H, false, TextFormatAlign.CENTER);
-            this._addLabel(tableMC, as3.str(rowData.leader), (BrowseTab.C_LDR_X + 5) | 0, rowBaseY, (BrowseTab.C_LDR_W - 5) | 0, BrowseTab.ROW_H, false, TextFormatAlign.LEFT);
+            // (Inferno-only, QoL #176: how they have flagged the player's alliance, under the leader's name)
+            let theirs: int = GLOBAL.INFERNO_ONLY && !rowData.self ? rowData.theirs | 0 : 0;
+            this._addLabel(tableMC, as3.str(rowData.leader), (BrowseTab.C_LDR_X + 5) | 0, (theirs != 0 ? rowBaseY - 8 : rowBaseY) | 0, (BrowseTab.C_LDR_W - 5) | 0, BrowseTab.ROW_H, false, TextFormatAlign.LEFT);
+            if (theirs != 0) {
+                let stanceField: TextField = IoAllianceUi.addText(tableMC, KEYS.Get(theirs > 0 ? "io_al4_their_ally" : "io_al4_their_foe"), (BrowseTab.C_LDR_X + 5) | 0, (rowBaseY + 18) | 0, 10, (theirs > 0 ? AllianceConstants.IO_GAINED : AllianceConstants.IO_LOST) >>> 0, true, (BrowseTab.C_LDR_W - 8) | 0);
+                stanceField.height = 16;
+                stanceField.name = "ioAl4TheirStance";
+            }
 
             // The viewer's own alliance has no actions to take on itself.
             if (!rowData.self) {
@@ -620,6 +782,8 @@ export class BrowseTab extends AllianceTabBase {
 
         let onRelationshipChanged: Function = (): void => {
             this._repaintRelationship(rowData);
+            // (QoL #543)
+            BrowseTab._ioPatchCache(rowData.alliance_id | 0, rowData.relationship | 0);
         };
 
         this._activePopup = new BrowseActionPopup(rowData, as3.bind(this, this._dismissActivePopup), onRelationshipChanged);

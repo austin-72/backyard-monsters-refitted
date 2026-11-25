@@ -3,6 +3,9 @@ name: bymr
 volumes:
   db:
   pgadmin:
+  # (14 October, QoL #272: Redis keeps mutes, chat bans, maintenance mode, the announcement and Global chat
+  # history; with its own volume and an append-only file they survive the container being re-created)
+  redis:
 
 
 networks:
@@ -32,6 +35,12 @@ services:
     build: .
     container_name: bymr-api-server
     restart: unless-stopped
+    # (14 October, QoL #7: the rest of .env reaches the server too: SESSION_LIFETIME, SESSION_BIND_DEVICE,
+    # SAVED_LOGIN_DAYS, DB_POOL_MAX, COMPRESS_REPLIES, SMTP_*, ... The list below still wins for the keys it
+    # names, so DB_HOST and REDIS_URL point inside Docker whatever .env says.)
+    env_file:
+      - path: .env
+        required: false
     environment:
       - ENV=${ENV:-local}
       - BASE_URL=${BASE_URL:-http://localhost}
@@ -59,6 +68,16 @@ services:
       # Bound for the same reason: publishing is a file copy, no image rebuild.
       - ./public/web:/app/public/web
       - ./public/web-dev:/app/public/web-dev
+      # (14 October, QoL #264: the server's log file, kept on the host: a rebuild used to lose it)
+      - ./logs:/app/logs
+      # (15 October, QoL #270: the backups folder, read only: the admin panel shows the newest backup and a failure)
+      - ${BACKUP_DIR:-./backups}:/app/backups:ro
+    # (and Docker's own copy of the console output, rotated: 10 files of 20 MB)
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "10"
     ports:
       - ${API_PORT:-3001}:3001
       - ${CHAT_WS_PORT:-3010}:3010
@@ -97,8 +116,9 @@ services:
       - POSTGRES_DB=${DB_NAME:-bym}
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-dev12345}
+    # (14 October, QoL #263: only this computer can reach the database; the server reaches it inside Docker)
     ports:
-      - ${DB_HOST_PORT:-5432}:5432
+      - 127.0.0.1:${DB_HOST_PORT:-5432}:5432
     networks:
       - bymr
     volumes:
@@ -180,8 +200,13 @@ services:
   redis:
     image: redis:8.10.1
     container_name: bymr-redis-cache
+    # (QoL #272: an append-only file on its own volume; 100 MB at most, the least used keys go first)
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "100mb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis:/data
+    # (QoL #263: Redis has no password, so only this computer can reach it)
     ports:
-      - ${REDIS_PORT:-6379}:6379
+      - 127.0.0.1:${REDIS_PORT:-6379}:6379
     networks:
       - bymr
     restart: unless-stopped

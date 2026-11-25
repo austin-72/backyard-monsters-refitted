@@ -1,14 +1,14 @@
 import * as as3 from "as3";
 import { int } from "as3";
 import { Loader, LoaderInfo, MovieClip, Sprite, Stage, StageScaleMode } from "flash/display";
-import { ErrorEvent, Event, IOErrorEvent, MouseEvent, TimerEvent, UncaughtErrorEvent } from "flash/events";
+import { ErrorEvent, Event, IOErrorEvent, KeyboardEvent, MouseEvent, TimerEvent, UncaughtErrorEvent } from "flash/events";
 import { ExternalInterface } from "flash/external";
 import { Rectangle } from "flash/geom";
 import { SoundMixer } from "flash/media";
 import { SharedObject, URLRequest } from "flash/net";
 import { ApplicationDomain, LoaderContext, Security } from "flash/system";
 import { Timer } from "flash/utils";
-import { BASE, ExternalInterfaceManager, GLOBAL, IoBugReport, IoTestMode, LOGGER, LOGIN, MapRoomManager, MarketingRecapture, PLEASEWAIT, ReferencedExposedStructures, SWFProfiler } from "@game";
+import { BASE, ExternalInterfaceManager, GLOBAL, IoBugReport, IoServerHold, IoTestMode, LOGGER, LOGIN, MapRoomManager, MarketingRecapture, PLEASEWAIT, ReferencedExposedStructures, SWFProfiler, URLLoaderApi, IoEscape, IoHotkeys, KEYS } from "@game";
 
 export class GAME extends Sprite {
     static {
@@ -85,6 +85,8 @@ export class GAME extends Sprite {
         if (this._ioStarted) {
             return;
         }
+        // (Inferno-only, 16 October: requests held while the server restarts)
+        IoServerHold.Install();
         if (serverUrl) {
             urls._baseURL = serverUrl + "base/";
             urls._apiURL = serverUrl + "api/" + apiVersionSuffix;
@@ -129,13 +131,15 @@ export class GAME extends Sprite {
         deadline = (GLOBAL.Timestamp() + 6) | 0;
         wait = new Timer(200);
         // Admin test mode ends with the account: it is switched off (the account put back) first.
-        if (GLOBAL.ioTestMode()) {
+        if (GLOBAL.ioTestMode() || IoTestMode.realOn()) { // (QoL #396: the real-costs profile too)
             IoTestMode.switchOff((): void => {
-                GAME.ioReloadGame(false);
+                GAME.ioSignOut((): void => {
+                    GAME.ioReloadGame(false);
+                });
             });
             return;
         }
-        PLEASEWAIT.Show("Switching account...");
+        PLEASEWAIT.Show(KEYS.Get("io_tr_game_switching")); // (QoL #235)
         try {
             BASE.Save();
         } catch (e) {
@@ -143,10 +147,40 @@ export class GAME extends Sprite {
         wait.addEventListener(TimerEvent.TIMER, (e: TimerEvent): void => {
             if (BASE._saveCounterA == BASE._saveCounterB && !BASE._saving || GLOBAL.Timestamp() > deadline) {
                 wait.stop();
-                GAME.ioReloadGame(false);
+                GAME.ioSignOut((): void => {
+                    GAME.ioReloadGame(false);
+                });
             }
         });
         wait.start();
+    }
+
+    /**
+     * Inferno-only (13 October): this play session ended on the server (Switch account), so signing in again here,
+     * as any account, asks nothing about "another device"; then `next`, whatever the answer (at most 4 s).
+     */
+    private static ioSignOut(next: Function): void {
+        let done: boolean = false;
+        let go: Function = (r: any = null): void => {
+            if (!done) {
+                done = true;
+                next();
+            }
+        };
+        if (!GLOBAL.INFERNO_ONLY || !LOGIN.token) {
+            go();
+            return;
+        }
+        let guard: Timer = new Timer(4000, 1);
+        guard.addEventListener(TimerEvent.TIMER, (e: TimerEvent): void => {
+            go();
+        });
+        guard.start();
+        try {
+            new URLLoaderApi().load(GLOBAL._apiURL + "player/logout", [["v", "1"]], go, go);
+        } catch (e) {
+            go();
+        }
     }
 
     /**
@@ -161,7 +195,7 @@ export class GAME extends Sprite {
         }
         GAME._ioReloading = true;
         GLOBAL.Halt();
-        PLEASEWAIT.Show(keepLogin ? "Reloading..." : "Opening the login page...");
+        PLEASEWAIT.Show(KEYS.Get(keepLogin ? "io_tr_game_reloading" : "io_tr_game_to_login")); // (QoL #235)
         GAME.ioReloadGame(keepLogin);
     }
 
@@ -182,9 +216,13 @@ export class GAME extends Sprite {
             try {
                 let saved: SharedObject = SharedObject.getLocal("bymr_data", "/");
                 delete saved.data.token;
+                // (13 October) the login page next, not the account signing in by itself; its saved login stays,
+                // so its name on the login page signs it in
+                delete saved.data.ioAutoEmail;
                 saved.flush();
             } catch (e) {
             }
+            LOGIN.ioTabSession(null);
         }
         // 1. The launcher reloads the game.
         try {
@@ -225,7 +263,7 @@ export class GAME extends Sprite {
         }
         GAME._ioReloading = false;
         PLEASEWAIT.Hide();
-        GLOBAL.Message(keepLogin ? "Close the game and start it again to continue." : "Close the game and start it again to get to the login page.");
+        GLOBAL.Message(KEYS.Get(keepLogin ? "io_tr_game_restart_continue" : "io_tr_game_restart_login")); // (QoL #235)
     }
 
     /**
@@ -252,7 +290,7 @@ export class GAME extends Sprite {
         });
         loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR, (e: IOErrorEvent): void => {
             PLEASEWAIT.Hide();
-            GLOBAL.Message("The game could not be loaded again. Close it and start it again to switch account.");
+            GLOBAL.Message(KEYS.Get("io_tr_game_reload_failed")); // (QoL #235)
         });
         loader.load(new URLRequest(address), fresh);
     }
@@ -269,15 +307,55 @@ export class GAME extends Sprite {
             if (params && params.token) {
                 GAME.token = as3.str(params.token);
                 GAME.sharedObj.data.token = GAME.token;
+                // Inferno-only (18 October, SUSPECTED-BUGS.md: the token stayed in the address bar and the history, so
+                // a screenshot or a copied link showed a working login) taken off the address, as the invite code
+                // is; a reload of the tab signs in with the tab's own session (LOGIN.ioSaveLogin)
+                if (GLOBAL.INFERNO_ONLY) {
+                    try {
+                        let w: any = window as any;
+                        let u: any = new w.URL(w.location.href);
+                        if (u.searchParams.has("token")) {
+                            u.searchParams.delete("token");
+                            w.history.replaceState(w.history.state, "", u.pathname + (u.search || "") + (u.hash || ""));
+                        }
+                    } catch (err) {
+                    }
+                }
             } else if (GAME.sharedObj.data.ioResumeToken) {
                 // Inferno-only: loaded again by GAME.ioReload (Oops "Reload"): log in as before.
                 GAME.token = String(GAME.sharedObj.data.ioResumeToken);
                 GAME.sharedObj.data.token = GAME.token;
+            } else if (GLOBAL.INFERNO_ONLY && LOGIN.ioTabSession() && LOGIN.ioTabReloaded()) {
+                // Inferno-only (13 October): this tab reloaded: its own play session, so nothing is asked about
+                // "another device" (refused, LOGIN goes on to the saved login)
+                GAME.token = LOGIN.ioTabSession();
+            } else if (GLOBAL.INFERNO_ONLY && LOGIN.ioAutoEmail()) {
+                // Inferno-only (13 October): the account signed in last signs in with its saved login (LOGIN.Login)
+                delete GAME.sharedObj.data.token;
+            } else if (GLOBAL.INFERNO_ONLY && GAME.sharedObj.data.token) {
+                // Inferno-only (12 October): the login saved in this browser (LOGIN), so the player stays
+                // logged in between visits. The server takes it only from the network it was made on; when
+                // it refuses it, the login page is shown and the saved login forgotten (LOGIN.ioTokenRefused).
+                GAME.token = String(GAME.sharedObj.data.token);
             }
             delete GAME.sharedObj.data.ioResumeToken;
             if (params && params.ref) {
                 // Started from a friend's invite link: kept until an account is registered with it.
                 GAME.sharedObj.data.ioReferral = String(params.ref);
+                // (Inferno-only, QoL #519: from when, as it lasts 30 days; and taken off the address, so a reload
+                // or Switch account doesn't store it again for the next account made in this browser)
+                if (GLOBAL.INFERNO_ONLY) {
+                    GAME.sharedObj.data.ioReferralAt = Date.now();
+                    try {
+                        let w: any = window as any;
+                        let u: any = new w.URL(w.location.href);
+                        if (u.searchParams.has("ref")) {
+                            u.searchParams.delete("ref");
+                            w.history.replaceState(w.history.state, "", u.pathname + (u.search || "") + (u.hash || ""));
+                        }
+                    } catch (err) {
+                    }
+                }
             }
             GAME.sharedObj.flush();
         } catch (e) {
@@ -340,6 +418,23 @@ export class GAME extends Sprite {
         LOGIN.Login();
         this.stage.scaleMode = StageScaleMode.NO_SCALE;
         this.stage.addEventListener(Event.RESIZE, GLOBAL.ResizeGame);
+        if (GLOBAL.INFERNO_ONLY) {
+            // Inferno-only (14 October, QoL #2): any click, tap, key or wheel counts as being here. The stock
+            // away timer only noticed the mouse moving 50 px sideways, so a player typing in chat (or playing
+            // with the keys, or tapping in one column on a phone) got "Anyone home?" and was stopped at 10 min.
+            let here: Function = (e: Event): void => {
+                if (GLOBAL._afktimer) {
+                    GLOBAL.UpdateAFKTimer();
+                }
+            };
+            this.stage.addEventListener(MouseEvent.MOUSE_DOWN, here, true);
+            this.stage.addEventListener(MouseEvent.MOUSE_WHEEL, here, true);
+            this.stage.addEventListener(KeyboardEvent.KEY_DOWN, here, true);
+            // (QoL #36, #216: Esc and the browser's Back close what's open)
+            IoEscape.Setup(this.stage);
+            // (QoL #35, #38: the yard's keys)
+            IoHotkeys.Setup(this.stage);
+        }
         this.stage.showDefaultContextMenu = false;
         ExternalInterfaceManager.Initialize();
 

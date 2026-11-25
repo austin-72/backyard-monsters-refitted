@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Inferno admin</title>
+<title>Inferno admin · Inferno Map Room 2</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#120a07">
 <style>
   :root { --bg:#1b100c; --panel:#2a1a13; --line:#4a2e22; --text:#f1e4d6; --dim:#b89f8c; --accent:#e0662b; --bad:#e04848; --good:#5fbf6a; }
   * { box-sizing:border-box; }
@@ -22,7 +24,7 @@
   input, textarea, select { background:#140c09; color:var(--text); border:1px solid var(--line); border-radius:6px; padding:6px 8px; font:inherit; }
   textarea { width:100%; min-height:70px; }
   button.act { background:var(--accent); color:#fff; border:0; border-radius:6px; padding:6px 12px; cursor:pointer; font:inherit; }
-  button.act.bad { background:var(--bad); } button.act.plain { background:#5a3a2c; }
+  button.act.bad { background:var(--bad); } button.act.plain { background:#5a3a2c; } button.act:disabled { opacity:.4; cursor:default; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
   th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
   th { color:var(--dim); font-weight:600; }
@@ -34,12 +36,16 @@
   #toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:#000c; padding:10px 16px; border-radius:8px; display:none; max-width:90%; }
   a { color:var(--accent); cursor:pointer; }
   #signin { max-width:520px; margin:80px auto; text-align:center; }
+  /* (QoL #261) the support role: the panel read only. What changes something is greyed (the server refuses it anyway). */
+  body.ro [onclick*="act("], body.ro [onclick^="do"], body.ro [onclick*="maint"], body.ro [onclick^="announce"], body.ro [onclick*="Set("],
+  body.ro [onclick*="compGo"], body.ro [onclick*="cheatDismiss"], body.ro [onclick*="cheatBan"], body.ro [onclick*="kitRestore"], body.ro [data-write] { opacity:.35; pointer-events:none; cursor:default; }
+  #roleBadge { color:var(--bad); font-size:13px; }
 </style>
 </head>
 <body>
 <div id="signin" class="card" style="display:none">
   <h2>Inferno admin panel</h2>
-  <p>Open the panel with the <b>Admin</b> button in the game. That signs you in here for 12 hours.</p>
+  <p>Open the panel with the <b>Admin</b> menu in the game (<b>Admin panel</b>). That signs you in here for 12 hours.</p>
 </div>
 
 <div id="app" style="display:none">
@@ -51,13 +57,38 @@
 <main>
 
 <section data-tab="Status">
-  <div class="card"><h2>Server</h2><div class="grid" id="statusGrid"></div></div>
+  <div class="card"><h2>Server</h2><div class="grid" id="statusGrid"></div>
+    <p><a onclick="loadOnline()">who is online</a></p><div id="onlineList"></div></div>
+  <div class="card"><h2>Panel sessions</h2>
+    <p class="dim">Everyone signed in to this panel, and from where. Every sign-in is in the Log.</p>
+    <div id="sessionList" class="dim">Loading…</div>
+    <div class="row"><button class="act plain" onclick="if(confirm('Sign out every other panel session?'))act('sessionEnd',{others:true},loadSessions)">Sign out all others</button></div>
+  </div>
   <div class="card">
     <h2>Maintenance mode</h2>
     <p class="dim">While on, only admins can log in; everyone else is shown the message. Players already in the game are not thrown out.</p>
     <div id="maintState" class="row"></div>
     <textarea id="maintMsg" placeholder="The server is down for maintenance. Back soon!"></textarea>
-    <div class="row"><button class="act bad" onclick="maintOn()">Turn on</button><button class="act plain" onclick="maintOff()">Turn off</button></div>
+    <div class="row"><button class="act bad" onclick="maintOn()">Turn on</button><button class="act plain" onclick="maintOff()">Turn off</button>
+      · or plan it in <input id="maintMin" type="number" value="15" min="1" max="1440" style="width:70px"> minutes <button class="act" onclick="maintPlan()">Plan</button><button class="act plain" onclick="maintPlanCancel()">Cancel the plan</button></div>
+    <p id="maintPlan" class="dim"></p>
+    <p class="dim">Planned: players in the game are warned 15, 5 and 1 minutes before; at the time maintenance mode goes on by itself and they are told (their yard is saved first). Admins play on.</p>
+  </div>
+  <div class="card">
+    <h2>Shiny for many players (compensation)</h2>
+    <p class="dim">Banned players, and players who haven't opened the game yet (no yard), are never included. It reaches each player's main yard; a player who is online sees it after a reload.</p>
+    <div class="row"><select id="compWho" onchange="$('compDays').style.display=this.value==='active'?'':'none';$('compList').style.display=this.value==='list'?'':'none'">
+      <option value="active">players active in the last</option><option value="all">everyone</option><option value="list">these players</option></select>
+      <span id="compDays"><input id="compDaysN" type="number" value="7" min="1" max="365" style="width:70px"> days</span></div>
+    <textarea id="compList" style="display:none" placeholder="Names or ids, separated by spaces, commas or new lines"></textarea>
+    <div class="row">Shiny each <input id="compAmt" type="number" placeholder="+50" style="width:110px"> note <input id="compNote" placeholder="why (required), e.g. Saturday's outage" style="flex:1">
+      <button class="act plain" onclick="compPreview()">Preview</button><button class="act" id="compGo" onclick="compGo()" disabled>Give</button></div>
+    <p id="compSeen" class="dim"></p>
+  </div>
+  <div class="card">
+    <h2>Admins in test mode</h2>
+    <p class="dim">Test mode keeps a copy of the admin's yard and puts it back when it ends. Switch it off here for someone who left it on.</p>
+    <div id="testModeList" class="dim">Loading…</div>
   </div>
   <div class="card">
     <h2>Moloch's Gauntlet</h2>
@@ -72,6 +103,38 @@
     <div class="row"><button class="act" onclick="hfoSet('on')">Turn on</button><button class="act bad" onclick="hfoSet('off')">Turn off</button></div>
   </div>
   <div class="card">
+    <h2>Frozen Monster Invasion</h2>
+    <p class="dim">The monthly invasion, for players who have won Hell Freezes Over's last wave. Its days come from the config's calendar, unless it is opened or closed here. A player's card shows their waves and totems, and can start their waves this month again.</p>
+    <div id="fmiState" class="row dim">Loading…</div>
+    <div id="fmiProgress" class="row dim"></div>
+    <!-- (QoL #398: open now, close now, the calendar) -->
+    <div class="row"><button class="act" id="fmiOpen" onclick="fmiSet('open')">Open now</button> for <input id="fmiHours" type="number" min="1" max="744" style="width:80px"> hours
+      <button class="act bad" id="fmiClose" onclick="fmiSet('closed')">Close now</button><button class="act plain" id="fmiAuto" onclick="fmiSet('auto')">Calendar</button></div>
+    <p class="dim">Open now: this month's invasion (or the one open now), its progress going on, for the hours given (the calendar's own days if that ends later), even into next month. Close now: shut until the 1st of next month, so next month's invasion comes on its day. Calendar: neither. Players' games see it within a minute; every change is in the Log.</p>
+  </div>
+  <!-- (20 October: Trick or Treat's switch) -->
+  <div class="card">
+    <h2>Trick or Treat</h2>
+    <p class="dim">The Halloween event: one door for each wild tribe, knocked on once (25 Shiny, or 1,000 level 6 Zagnoids round the yard; all killed pays the 25 after all). Its days come from the config's calendar (30 October to 2 November, Chicago time), unless it is opened or closed here. Once it's over, everyone who knocked gets 6 Mini-Pumpkins the next time they're home.</p>
+    <div id="totState" class="row dim">Loading…</div>
+    <div id="totProgress" class="row dim"></div>
+    <div class="row"><button class="act" id="totOpen" onclick="totSet('open')">Open now</button> <button class="act bad" id="totClose" onclick="totSet('closed')">Close now</button> for <input id="totHours" type="number" min="1" max="744" value="24" style="width:80px"> hours
+      <button class="act plain" id="totAuto" onclick="totSet('auto')">Calendar</button></div>
+    <p class="dim">Open now: the doors open for the hours given. Close now: shut for the hours given (closing it after its days starts the Mini-Pumpkins). Calendar: neither. Players' games see it within a minute; every change is in the Log.</p>
+  </div>
+  <!-- (QoL #399: the Wart Bloom's switch) -->
+  <div class="card">
+    <h2>Wart Bloom</h2>
+    <p class="dim">Every weekend, Friday 6 pm to Sunday midnight (US Central), warts grow faster in main yards. Skip this weekend's (the rest of it, if it is on), start one now for some hours, or change how much faster. Players' games see it within a minute; the start and end are announced in Global chat as usual.</p>
+    <div id="bloomState" class="row dim">Loading…</div>
+    <div class="row"><button class="act" id="bloomNow" onclick="bloomSet('now')">Bloom now</button> for <input id="bloomHours" type="number" value="6" min="1" max="72" style="width:70px"> hours
+      <button class="act plain" id="bloomEnd" onclick="bloomSet('end')">End the bloom started here</button></div>
+    <div class="row"><button class="act bad" id="bloomSkip" onclick="bloomSet('skip')">Skip this weekend</button><button class="act plain" id="bloomUnskip" onclick="bloomSet('unskip')">Undo the skip</button></div>
+    <div class="row">Rate <input id="bloomRate" type="number" min="2" max="10" style="width:70px"> times as fast <button class="act" id="bloomRateSet" onclick="bloomSet('rate')">Set</button>
+      <button class="act plain" id="bloomAuto" onclick="bloomSet('auto')">All back to normal</button></div>
+    <p class="dim">The game uses one rate for every bloom it knows of (last week's too, for players away since), so change it during a bloom or between them. A bloom started here and a weekend one join up if they meet. All back to normal: the weekends, the usual rate, a bloom started here ends now.</p>
+  </div>
+  <div class="card">
     <h2>Announcement</h2>
     <p class="dim">A popup every player sees once, on their next yard load or within a few seconds if they are playing.</p>
     <div id="annState" class="dim"></div>
@@ -84,14 +147,35 @@
 
 <section data-tab="Players">
   <div class="card">
-    <div class="row"><input id="q" placeholder="Filter by username or player id" oninput="filterPlayers()"><button onclick="loadPlayers()">Refresh</button></div>
+    <div class="row"><input id="q" placeholder="Filter by username, player id, email or address" style="min-width:300px" oninput="filterPlayers()"><button onclick="loadPlayers(false)">Refresh</button></div>
     <p id="playerCount" class="dim"></p>
     <div id="results" class="overflow" style="max-height:420px;overflow-y:auto"></div>
   </div>
   <div id="playerCard"></div>
+  <div class="card">
+    <h2>Inactive players</h2>
+    <div class="row">Not seen for <input id="inactDays" type="number" value="30" min="1" max="3650" style="width:80px"> days or more,
+      <select id="inactOrder"><option value="oldest">longest gone first</option><option value="recent">most recently seen first</option></select>
+      <button class="act" id="inactList" onclick="loadInactive(false)">List</button></div>
+    <p class="dim">Read only. Last seen is the last save of their main yard; players who never opened the game are not listed.</p>
+    <div id="inactive" class="overflow" style="max-height:420px;overflow-y:auto"></div>
+  </div>
 </section>
 
 <section data-tab="Reports">
+  <div class="card">
+    <h2>Player reports</h2>
+    <p class="dim">Chat lines and letters players reported, with the lines or letters around them as the server has them. One row for each reported player and kind, with the latest report; the last 5 under it. A letter's sender is blocked for the player who reported it. Mute or ban from the player's card, then dismiss; a new report opens it again.</p>
+    <div class="row"><select id="prStatus" onchange="loadPlayerReports()"><option value="open">Open</option><option value="fixed">Dismissed</option></select></div>
+    <div id="playerReports" class="overflow"></div>
+  </div>
+  <div class="card">
+    <h2>Cheat detection</h2>
+    <p class="dim">Found automatically: each is something the game itself can never send, checked with room to spare, so every row is a changed game or forged requests, never bad luck. The proof is kept with it. Nobody is banned automatically: look, then ban from the player's card, or dismiss.</p>
+    <div class="row"><select id="cheatStatus" onchange="loadCheats()"><option value="open">Open</option><option value="dismissed">Dismissed</option></select> <select id="cheatRule" onchange="renderCheats()"><option value="">every check</option></select> <a onclick="$('cheatRules').style.display=$('cheatRules').style.display==='none'?'':'none'">what each check is</a></div>
+    <div id="cheatRules" style="display:none"></div>
+    <div id="cheats" class="overflow"></div>
+  </div>
   <div class="card"><h2>Attack-violation reports</h2><p class="dim">Attacks the server refused, per player. Ban, or dismiss to set the count back to 0.</p><div id="reports" class="overflow"></div></div>
 </section>
 
@@ -99,8 +183,21 @@
   <div class="card">
     <h2>Bugs reported by the game</h2>
     <p class="dim">Errors players' games hit, sent automatically. The same problem is grouped into one row. Mark a bug fixed once a fix is published; if it is reported again it comes back here.</p>
-    <div class="row"><select id="bugStatus" onchange="loadBugs()"><option value="open">Open</option><option value="fixed">Fixed</option></select></div>
+    <div class="row"><select id="bugStatus" onchange="loadBugs()"><option value="open">Open</option><option value="fixed">Fixed</option></select>
+      <input id="bugQ" placeholder="Search the problem or details" oninput="renderBugs()"> build <select id="bugBuild" onchange="renderBugs()"><option value="">any</option></select>
+      sort <select id="bugSort" onchange="renderBugs()"><option value="last">last seen</option><option value="count">times</option><option value="players">players</option><option value="first">first seen</option></select></div>
     <div id="bugs" class="overflow"></div>
+  </div>
+</section>
+
+<section data-tab="Chat">
+  <div class="card">
+    <h2>Chat</h2>
+    <p class="dim">Read only. Alliance chats keep every line; each Global room keeps only its last 100 lines (for 30 days). Lines deleted by a moderator are gone. At most 500 lines are shown, newest first: search to narrow them.</p>
+    <div class="row"><input id="chatQ" placeholder="Search the text or a name" style="flex:1" onkeydown="if(event.key==='Enter')loadChat()">
+      <select id="chatWhere"><option value="all">Global and alliances</option><option value="global">Global rooms</option><option value="alliance">Alliances</option></select>
+      last <input id="chatDays" type="number" value="30" min="1" max="30" style="width:70px"> days <button class="act" id="chatSearch" onclick="loadChat()">Search</button></div>
+    <div id="chatLines" class="overflow"></div>
   </div>
 </section>
 
@@ -121,11 +218,35 @@
     <button class="act bad" onclick="resetAll()">Reset every tribe yard</button>
   </div>
   <div class="card"><h2>Worlds</h2><div id="worlds" class="overflow"></div></div>
+  <div class="card">
+    <h2>Outpost kits: earlier versions</h2>
+    <p class="dim">Each Designer save or reset of a kit keeps a copy of the kit file (inferno-kits.json) as it was before, the last 5. <b>Restore</b> puts all six kits back as they were in that copy and draws their pictures again; the file as it is now is copied first, so a restore can be undone the same way. Players see it the next time they open the kits. A kit's Reset in the Designer still goes back to the kit as it was before anyone changed it.</p>
+    <div id="kitBackups" class="dim">Loading…</div>
+  </div>
+</section>
+
+<section data-tab="Health">
+  <div class="card">
+    <h2>Server health</h2>
+    <div class="row"><button class="act plain" id="healthRefresh" onclick="loadHealth()">Refresh</button> <span id="healthWhen" class="dim"></span></div>
+    <div class="grid" id="healthGrid"></div>
+  </div>
+  <div class="card">
+    <h2>Failures per hour (HTTP 5xx)</h2>
+    <p class="dim">Counted since the server started (<span id="healthSince"></span>), the last 24 hours. Each failure, with its stack, is also in the Bugs tab (<i>Server 500 on …</i>).</p>
+    <div id="healthHours" class="overflow"></div>
+  </div>
+  <div class="card">
+    <h2>Slow requests in the last hour</h2>
+    <p class="dim">Requests still running after 15 seconds, with what the server looked like then (the server log has the database's queries too: <i>Slow request</i>). Kept since the server started, the last 200.</p>
+    <div id="healthSlow" class="overflow"></div>
+  </div>
 </section>
 
 <section data-tab="Log">
   <div class="card">
-    <div class="row"><input id="logQ" placeholder="Filter by admin, player, action or text" onkeydown="if(event.key==='Enter')loadLog()"><button class="act" onclick="loadLog()">Filter</button></div>
+    <div class="row"><input id="logQ" placeholder="Filter by admin, player, action or text" onkeydown="if(event.key==='Enter')loadLog()">
+      from <input id="logFrom" type="date"> to <input id="logTo" type="date"><button class="act" onclick="loadLog()">Filter</button><button class="act plain" onclick="logCsv()">Download CSV (rows shown)</button></div>
     <div id="log" class="overflow"></div>
   </div>
 </section>
@@ -135,7 +256,7 @@
 <div id="toast"></div>
 
 <script>
-const TABS = ["Status", "Players", "Reports", "Bugs", "Invites", "Map", "Log"];
+const TABS = ["Status", "Players", "Reports", "Bugs", "Chat", "Invites", "Map", "Health", "Log"];
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const when = (v) => (v ? new Date(v).toLocaleString() : "-");
@@ -164,9 +285,10 @@ async function act(action, body, done) {
 }
 
 function show(tab) {
+  if (history.replaceState) history.replaceState(null, "", "#" + tab);
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("on", s.dataset.tab === tab));
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.textContent === tab));
-  ({ Status: loadStatus, Players: loadPlayers, Reports: loadReports, Bugs: loadBugs, Invites: loadInvites, Map: loadWorlds, Log: loadLog }[tab] || (() => {}))();
+  ({ Status: loadStatus, Players: () => loadPlayers(false), Reports: loadReports, Bugs: loadBugs, Chat: loadChat, Invites: loadInvites, Map: () => { loadWorlds(); loadKitBackups(); }, Health: loadHealth, Log: () => loadLog(false) }[tab] || (() => {}))();
 }
 
 // ---- Status, maintenance, announcements
@@ -175,15 +297,72 @@ async function loadStatus() {
   $("statusGrid").innerHTML = [
     ["Players online", s.online], ["Server version", s.version],
     ["Published client build", s.publishedBuild || "none"], ["Required client build", s.requiredBuild || "any"],
-  ].map(([k, v]) => `<div class="stat"><span class="dim">${esc(k)}</span><b>${esc(v)}</b></div>`).join("");
+  ].map(([k, v]) => `<div class="stat"><span class="dim">${esc(k)}</span><b>${esc(v)}</b></div>`).join("") + backupStat(s.backups);
   $("maintState").innerHTML = s.maintenance ? `<span class="bad">ON</span>: ${esc(s.maintenance)}` : `<span class="good">Off</span>`;
+  $("maintPlan").innerHTML = s.maintenancePlan ? `Planned for <b>${when(s.maintenancePlan.at)}</b>: ${esc(s.maintenancePlan.message)}` : "";
   $("annState").innerHTML = s.announcement ? `Showing now: "${esc(s.announcement.text)}"` : "No announcement is showing.";
   const h = s.hfo;
   $("hfoState").innerHTML = !h ? "" : `${h.enabled ? '<span class="good">On</span>' : '<span class="dim">Off</span>'} · ${Number(h.started)} started · ${Number(h.waves)} on the waves · ${Number(h.done)} freed Rimegrave`;
+  loadTestMode();
+  loadSessions();
+  loadFmi();
+  loadTot();
+  loadBloom(); // (QoL #399)
   const g = s.gauntlet;
   $("gauntletState").innerHTML = !g ? "" : g.open
     ? `<span class="good">Open</span> (${esc(g.month)}) until ${when(g.closesAt * 1000)}${g.forced ? " · opened here" : ""}`
     : `<span class="dim">Closed</span>${g.forced ? " · closed here" : ""}${g.opensAt ? ` · opens ${when(g.opensAt * 1000)}` : ""}`;
+}
+// (QoL #257: who is online, as Who's Online counts them; #259: the panel's sessions)
+async function loadOnline() {
+  const { players } = await api("online");
+  $("onlineList").innerHTML = players.length
+    ? `<table><tr><th>Player</th><th>Last active</th></tr>${players.map((p) => `<tr><td><a onclick="show('Players');openPlayer(${p.id})">${esc(p.username)}</a>${p.hidden ? ' <span class="dim">(appearing offline)</span>' : ""}</td><td>${when(p.at)}</td></tr>`).join("")}</table>`
+    : '<p class="dim">Nobody is online.</p>';
+}
+async function loadSessions() {
+  const { sessions } = await api("sessions");
+  $("sessionList").className = "";
+  $("sessionList").innerHTML = sessions.length
+    ? `<table><tr><th>Admin</th><th>Since</th><th>From</th><th></th></tr>${sessions.map((x) => `<tr><td>${esc(x.username)}${x.mine ? ' <span class="good">(this one)</span>' : ""}</td><td>${when(x.at)}</td><td>${esc(x.ip)}<div class="dim" style="font-size:12px">${esc(x.agent)}</div></td>
+        <td>${x.mine ? "" : `<a class="bad" onclick="act('sessionEnd',{id:'${esc(x.id)}'},loadSessions)">sign out</a>`}</td></tr>`).join("")}</table>`
+    : '<p class="dim">No sessions recorded (sessions opened before 15 October are not listed).</p>';
+}
+// (QoL #401: compensation with a preview; Give asks the count seen back)
+let compCount = -1;
+const compBody = () => ({ who: $("compWho").value, days: $("compDaysN").value, list: $("compList").value });
+async function compPreview() {
+  const r = await api("compensatePreview", compBody());
+  compCount = r.count;
+  $("compSeen").innerHTML = `<b>${num(r.count)}</b> player(s)${r.sample.length ? `: ${r.sample.map(esc).join(", ")}${r.count > r.sample.length ? ", …" : ""}` : ""}`;
+  $("compGo").disabled = !r.count;
+}
+function compGo() {
+  const amount = Math.trunc(Number($("compAmt").value));
+  if (!amount) return toast("Give an amount of Shiny.", true);
+  if (!$("compNote").value.trim()) return toast("A note is required.", true);
+  if (compCount < 1) return toast("Preview it first.", true);
+  if (!confirm(`${amount > 0 ? "Give" : "Take"} ${num(Math.abs(amount))} Shiny ${amount > 0 ? "to" : "from"} each of ${num(compCount)} players?`)) return;
+  act("compensate", { ...compBody(), amount, note: $("compNote").value, count: compCount }, () => { compCount = -1; $("compGo").disabled = true; $("compSeen").textContent = "Done."; });
+}
+// (QoL #405: who is in test mode, with Switch off)
+async function loadTestMode() {
+  const { users } = await api("testModeList");
+  $("testModeList").className = users.length ? "" : "dim";
+  $("testModeList").innerHTML = users.length
+    ? `<table><tr><th>Admin</th><th>Since</th><th></th></tr>${users.map((u) => `<tr><td><a onclick="show('Players');openPlayer(${u.id})">${esc(u.username)}</a></td><td>${when(u.since)}</td>
+        <td><a class="bad" onclick="if(confirm('Switch test mode off for ${esc(u.username)}? Their yard is put back as it was when it started.'))act('testModeOff',{id:${u.id}},loadTestMode)">switch off</a></td></tr>`).join("")}</table>`
+    : "Nobody is in test mode.";
+}
+// (QoL #270: the newest backup, red when over a day old or when the last one failed)
+function backupStat(b) {
+  if (!b) return "";
+  if (!b.found) return `<div class="stat"><span class="dim">Backups</span><b style="font-size:14px" class="dim">folder not found</b></div>`;
+  const age = b.newest ? (Date.now() - b.newest.at) / 3600000 : Infinity;
+  const bad = b.failed || age > 26;
+  const size = b.newest ? (b.newest.size >= 1e9 ? (b.newest.size / 1e9).toFixed(1) + " GB" : (b.newest.size / 1e6).toFixed(1) + " MB") : "";
+  return `<div class="stat"><span class="dim">Newest backup</span><b style="font-size:14px" class="${bad ? "bad" : "good"}">${b.newest ? `${esc(when(b.newest.at))} · ${esc(size)}` : "none"}</b>
+    <span class="dim" style="font-size:12px">${num(b.count)} kept${b.failed ? ` · <span class="bad">the last one failed: ${esc(b.failed)}</span>` : age > 26 && b.newest ? ' · <span class="bad">over a day old</span>' : ""}</span></div>`;
 }
 const hfoSet = (state) => { if (confirm(state === "on" ? "Turn Hell Freezes Over on? Players start once they qualify." : "Turn Hell Freezes Over off? Nobody new starts; players who started keep going.")) act("hfo", { state }, loadStatus); };
 const hfoLine = (h) => {
@@ -191,46 +370,132 @@ const hfoLine = (h) => {
   const day = h.day < 1 ? `waiting for day 1${h.nextAt ? ` (${when(h.nextAt * 1000)})` : ""}` : h.day < 4 ? `day ${h.day}${h.ready ? " (done; next day " + (h.nextAt ? when(h.nextAt * 1000) : "now") + ")" : ""}` : h.done ? "Rimegrave freed" : `waves: ${Number(h.won)}/13 won, ${Number(h.skipped)} skipped, wave ${Math.min(13, Number(h.current))} next`;
   return `${esc(day)} · small patches ${esc(h.small)} · big ${esc(h.big)} · towers ${esc(h.towers)} · ${Number(h.paid)} shiny paid`;
 };
+// (QoL #398: the Frozen Monster Invasion: its state, its players' progress, open / close / calendar)
+async function loadFmi() {
+  let f;
+  try { ({ fmi: f } = await api("fmiControl")); } catch (e) { $("fmiState").textContent = "Not available."; return; }
+  const w = f.shown, c = f.calendar, o = f.override;
+  if (!$("fmiHours").value) $("fmiHours").value = 24 * 7;
+  $("fmiState").className = "row";
+  $("fmiState").innerHTML = `${!f.enabled ? '<span class="dim">Off in the config</span>' : w.open ? '<span class="good">Open</span>' : '<span class="dim">Closed</span>'}
+    · Invasion ${Number(w.kind)} (${esc(w.key)}): ${when(w.startsAt * 1000)} to ${when(w.endsAt * 1000)}
+    ${o ? `· <b>${o.state === "open" ? "opened" : "closed"} here</b>${o.by ? ` by ${esc(o.by)}` : ""} ${when(o.since * 1000)}, until ${when(o.until * 1000)} <span class="dim">(the calendar: ${when(c.startsAt * 1000)} to ${when(c.endsAt * 1000)})</span>` : '· <span class="dim">by the calendar</span>'}`;
+  const by = f.byWon || [];
+  const won = by.slice(1).reduce((a, b) => a + b, 0);
+  $("fmiProgress").className = "row";
+  $("fmiProgress").innerHTML = `<span>${num(f.players)} player(s) in it · ${num(won)} won a wave or more · ${num(by[f.waves] || 0)} won all ${Number(f.waves)} · ${num(f.fightingNow)} fighting a wave now</span>
+    ${f.players ? `<details id="fmiByWave"><summary class="dim">players by waves won</summary><table><tr><th>Waves won</th><th>Players</th></tr>${by.map((n, i) => n ? `<tr><td>${i}</td><td>${num(n)}</td></tr>` : "").join("")}</table></details>` : ""}`;
+}
+function fmiSet(state) {
+  const h = Math.trunc(Number($("fmiHours").value));
+  if (state === "open" && !(h >= 1 && h <= 744)) return toast("From 1 to 744 hours.", true);
+  const q = state === "open" ? `Open the Frozen Monster Invasion now for ${h} hours?` : state === "closed" ? "Close the Frozen Monster Invasion now, until next month? Players fighting a wave can still finish it." : "Leave the Frozen Monster Invasion to the calendar again?";
+  if (confirm(q)) act("fmiSet", { state, hours: state === "open" ? h : undefined }, loadFmi);
+}
+// (20 October: Trick or Treat: its state, the doors knocked on, open / close / calendar)
+async function loadTot() {
+  let t;
+  try { ({ tot: t } = await api("totControl")); } catch (e) { $("totState").textContent = "Not available."; return; }
+  const w = t.shown, c = t.calendar, o = t.override;
+  $("totState").className = "row";
+  $("totState").innerHTML = `${!t.enabled ? '<span class="dim">Off in the config</span>' : w.open ? '<span class="good">Open</span>' : '<span class="dim">Closed</span>'}
+    · ${esc(w.key)}: ${when(w.startsAt * 1000)} to ${when(w.endsAt * 1000)}
+    ${o ? `· <b>${o.state === "open" ? "opened" : "closed"} here</b>${o.by ? ` by ${esc(o.by)}` : ""} ${when(o.since * 1000)}, until ${when(o.until * 1000)} <span class="dim">(the calendar: ${when(c.startsAt * 1000)} to ${when(c.endsAt * 1000)})</span>` : '· <span class="dim">by the calendar</span>'}`;
+  $("totProgress").className = "row";
+  $("totProgress").innerHTML = `<span>${num(t.players)} player(s) knocked · ${num(t.knocks)} door(s): ${num(t.treats)} treat(s), tricks ${num(t.tricksWon)} won / ${num(t.tricksLost)} lost / ${num(t.tricksWaiting)} still to face · Mini-Pumpkins given to ${num(t.pumpkinsGiven)}</span>`;
+}
+function totSet(state) {
+  const h = Math.trunc(Number($("totHours").value));
+  if (state !== "auto" && !(h >= 1 && h <= 744)) return toast("From 1 to 744 hours.", true);
+  const q = state === "open" ? `Open Trick or Treat now for ${h} hours?` : state === "closed" ? `Close Trick or Treat now for ${h} hours? Tricks waiting still come.` : "Leave Trick or Treat to the calendar again?";
+  if (confirm(q)) act("totSet", { state, hours: state === "auto" ? undefined : h }, loadTot);
+}
+// (QoL #399: the Wart Bloom's switch)
+async function loadBloom() {
+  let b;
+  try { ({ bloom: b } = await api("wartBloom")); } catch (e) { $("bloomState").textContent = "Not available."; return; }
+  const span = (s) => { const m = Math.max(1, Math.round(s / 60)); return m >= 1440 ? `${Math.floor(m / 1440)}d ${Math.floor((m % 1440) / 60)}h` : m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m`; };
+  if (!$("bloomRate").value) $("bloomRate").value = b.rate;
+  const wk = b.weekend;
+  const extraOn = (b.extra || []).some((x) => x[0] <= b.now && b.now < x[1]);
+  $("bloomState").className = "row";
+  $("bloomState").innerHTML = `${b.on ? `<span class="good">On</span> until ${when(b.on[1] * 1000)} (${span(b.on[1] - b.now)} left)${extraOn ? " · started here" : ""}` : '<span class="dim">Not on</span>'}
+    · next: ${b.next ? `${when(b.next[0] * 1000)} to ${when(b.next[1] * 1000)}` : "none"}
+    · rate <b>${Number(b.rate)}×</b>${Number(b.rate) !== Number(b.usualRate) ? ` <span class="dim">(usually ${Number(b.usualRate)}×)</span>` : ""}
+    · this weekend's: ${wk ? `${when(wk[0] * 1000)} to ${when(wk[1] * 1000)}` : "-"}${b.weekendSkipped ? ` <span class="bad">skipped</span> <span class="dim">(${when(b.weekendSkipped.at * 1000)})</span>` : ""}`;
+  $("bloomSkip").disabled = !!b.weekendSkipped;
+  $("bloomUnskip").disabled = !b.weekendSkipped;
+  $("bloomEnd").disabled = !extraOn;
+}
+function bloomSet(what) {
+  const hours = Math.trunc(Number($("bloomHours").value)), rate = Math.trunc(Number($("bloomRate").value));
+  if (what === "now" && !(hours >= 1 && hours <= 72)) return toast("From 1 to 72 hours.", true);
+  if (what === "rate" && !(rate >= 2 && rate <= 10)) return toast("A rate from 2 to 10.", true);
+  const q = { now: `Start a Wart Bloom now for ${hours} hours?`, end: "End the bloom started here now?", skip: "Skip this weekend's Wart Bloom (the rest of it, if it is on now)?", unskip: "Bring this weekend's Wart Bloom back?", rate: `Warts ${rate} times as fast in every bloom?`, auto: "All back to normal: the weekends, the usual rate, and a bloom started here ends now?" }[what];
+  if (confirm(q)) act("wartBloomSet", { what, hours, rate }, loadBloom);
+}
+async function loadFmiPlayer(id) {
+  let r;
+  try { r = await api("fmiPlayer", { id }); } catch (e) { $("fmiRow").textContent = "Frozen Monster Invasion: not available."; return; }
+  const v = r.view, t = r.totems || {};
+  const totems = `totems: Invasion 1 level ${Number(t.fmi1 || 0)}, Invasion 2 level ${Number(t.fmi2 || 0)}`;
+  $("fmiRow").innerHTML = `Frozen Monster Invasion: ${!r.enabled ? '<span class="dim">off in the config</span>' : !r.eligible ? '<span class="dim">can\'t take part yet (Hell Freezes Over\'s last wave not won)</span>'
+    : v ? `Invasion ${Number(v.kind)} (${esc(v.key)}${v.open ? ", open" : ", closed"}): ${Number(v.won)}/${Number(v.waves)} waves won${v.fight ? `, fighting wave ${Number(v.fight.wave)} since ${when(v.fight.at * 1000)}` : ""}${v.last ? `; last: wave ${Number(v.last.wave)} ${esc(v.last.result)} (${Number(v.last.destroyed)}% destroyed) ${when(v.last.at * 1000)}` : ""}` : ""} · ${esc(totems)}`
+    // (QoL #398: their waves this month started again)
+    + (r.enabled && v && (v.won || v.fight || v.last) ? ` <button class="act plain" id="fmiResetBtn" onclick="if(confirm('Start this player\\'s Frozen Monster Invasion waves again this month, from wave 1? Their totems stay.'))act('fmiReset',{id:${Number(id)}},()=>loadFmiPlayer(${Number(id)}))">Start again</button>` : "");
+}
 const gauntletSet = (state) => { if (state === "auto" || confirm(state === "open" ? "Open Moloch's Gauntlet now?" : "Close Moloch's Gauntlet now?")) act("gauntlet", { state }, loadStatus); };
 const maintOn = () => { const m = $("maintMsg").value.trim(); if (!m) return toast("Write the message players will see.", true); if (confirm("Turn maintenance mode on?")) act("maintenance", { message: m }, loadStatus); };
 const maintOff = () => act("maintenance", { message: "" }, loadStatus);
+const maintPlan = () => { const m = $("maintMsg").value.trim(); if (!m) return toast("Write the message players will see.", true); if (confirm(`Maintenance in ${$("maintMin").value} minutes? Players are warned.`)) act("maintenanceAt", { minutes: $("maintMin").value, message: m }, loadStatus); };
+const maintPlanCancel = () => act("maintenanceAt", { cancel: true }, loadStatus);
 const announce = () => { if (confirm("Send this announcement to every player?")) act("announce", { text: $("annText").value, hours: $("annHours").value, chat: $("annChat").checked }, loadStatus); };
 const announceClear = () => act("announceClear", {}, loadStatus);
 
-// ---- Players: every player by id, filtered as you type
-let allPlayers = [];
-async function loadPlayers() {
-  const { players } = await api("players");
-  allPlayers = players;
-  filterPlayers();
+// ---- Players: a page at a time from the server (QoL #255), filtered as you type, sorted by a column
+let allPlayers = [], playerTotal = 0, playerFound = 0;
+async function loadPlayers(more) {
+  const q = $("q").value.trim();
+  const r = await api("players", { q, sort: playerSort.key, desc: playerSort.desc, offset: more ? allPlayers.length : 0, limit: 200 });
+  allPlayers = more ? allPlayers.concat(r.players) : r.players;
+  playerTotal = r.total;
+  if (r.found !== undefined) playerFound = r.found;
+  renderPlayers();
 }
 // sorting: click a column heading (again to reverse). Invites: friends who joined through the player's link.
 let playerSort = { key: "id", desc: false };
-const PLAYER_SORTS = {
-  id: (a, b) => a.id - b.id,
-  username: (a, b) => String(a.username).localeCompare(String(b.username), undefined, { sensitivity: "base" }) || a.id - b.id,
-  invites: (a, b) => (a.invites || 0) - (b.invites || 0) || (a.invitesPaid || 0) - (b.invitesPaid || 0) || b.id - a.id,
-};
 function sortPlayers(key) {
   // a new column starts with what you most likely want first: most invites, A to Z, oldest id
   playerSort = playerSort.key === key ? { key, desc: !playerSort.desc } : { key, desc: key === "invites" };
-  filterPlayers();
+  loadPlayers(false);
 }
-function filterPlayers() {
-  const f = $("q").value.trim().toLowerCase();
-  const found = f ? allPlayers.filter((p) => String(p.id).includes(f) || String(p.username).toLowerCase().includes(f)) : allPlayers.slice();
-  const cmp = PLAYER_SORTS[playerSort.key] || PLAYER_SORTS.id;
-  const shown = found.sort((a, b) => (playerSort.desc ? -cmp(a, b) : cmp(a, b)));
-  $("playerCount").textContent = f ? `${shown.length} of ${allPlayers.length} players` : `${allPlayers.length} players`;
-  const rows = shown.slice(0, 1000);
+let filterTimer = 0;
+function filterPlayers() { clearTimeout(filterTimer); filterTimer = setTimeout(() => loadPlayers(false), 250); }
+function renderPlayers() {
+  const f = $("q").value.trim();
+  $("playerCount").textContent = f ? `${playerFound} of ${playerTotal} players` : `${playerTotal} players`;
   const head = (key, label) => `<th><a id="sort_${key}" onclick="sortPlayers('${key}')">${label}${playerSort.key === key ? (playerSort.desc ? " ▼" : " ▲") : ""}</a></th>`;
-  $("results").innerHTML = rows.length
-    ? `<table><tr>${head("id", "Id")}${head("username", "Username")}${head("invites", "Invites accepted")}<th></th></tr>${rows.map((p) => `<tr><td>${p.id}</td><td>${esc(p.username)} ${p.banned ? '<span class="bad">banned</span>' : ""}</td>
+  $("results").innerHTML = allPlayers.length
+    ? `<table><tr>${head("id", "Id")}${head("username", "Username")}${head("invites", "Invites accepted")}<th></th></tr>${allPlayers.map((p) => `<tr><td>${p.id}</td><td>${esc(p.username)} ${p.banned ? '<span class="bad">banned</span>' : ""}</td>
         <td>${p.invites ? `${p.invites} <span class="dim">(${p.invitesPaid || 0} paid)</span>` : '<span class="dim">0</span>'} ${p.inviteBarred ? '<span class="bad">barred</span>' : ""}</td>
-        <td><a onclick="openPlayer(${p.id})">open</a></td></tr>`).join("")}</table>${shown.length > rows.length ? `<p class="dim">Showing the first ${rows.length}; filter to narrow it down.</p>` : ""}`
+        <td><a onclick="openPlayer(${p.id})">open</a></td></tr>`).join("")}</table>${allPlayers.length < playerFound ? `<p><button class="act plain" id="playersMore" onclick="loadPlayers(true)">Load ${Math.min(200, playerFound - allPlayers.length)} more</button> <span class="dim">${allPlayers.length} of ${playerFound} shown</span></p>` : ""}`
     : '<p class="dim">Nobody matches.</p>';
 }
 const search = filterPlayers;
+
+// (QoL #254: players not seen for N days, read only)
+let inactiveRows = [], inactiveFound = 0;
+async function loadInactive(more) {
+  const r = await api("inactive", { days: $("inactDays").value, order: $("inactOrder").value, offset: more ? inactiveRows.length : 0, limit: 200 });
+  inactiveRows = more ? inactiveRows.concat(r.players) : r.players;
+  if (r.found !== undefined) inactiveFound = r.found;
+  $("inactive").innerHTML = inactiveRows.length
+    ? `<p class="dim">${num(inactiveFound)} player(s) not seen for ${Number(r.days)} days or more.</p><table><tr><th>Player</th><th>Last seen</th><th>Registered</th><th>Outposts</th></tr>${inactiveRows.map((p) => `<tr>
+        <td><a onclick="openPlayer(${Number(p.id)})">${esc(p.username)}</a> <span class="dim">#${Number(p.id)}</span> ${p.banned ? '<span class="bad">banned</span>' : ""}</td>
+        <td>${when(p.lastSeen)}</td><td>${when(p.registered)}</td><td>${num(p.outposts)}</td></tr>`).join("")}</table>
+      ${inactiveRows.length < inactiveFound ? `<p><button class="act plain" id="inactMore" onclick="loadInactive(true)">Load ${Math.min(200, inactiveFound - inactiveRows.length)} more</button> <span class="dim">${inactiveRows.length} of ${inactiveFound} shown</span></p>` : ""}`
+    : '<p class="dim">Nobody has been away that long.</p>';
+}
 
 // Invites: what came of a referral (adminApi player.invites)
 const INVITE_STATUS = { paid: ["paid", "good"], "same-ip": ["not paid: same connection", "bad"], "no-inviter": ["not paid: inviter gone", "bad"],
@@ -266,19 +531,24 @@ function doInviteBar() {
 let current = null;
 async function openPlayer(id) {
   const p = await api("player", { id });
+  if (history.replaceState) history.replaceState(null, "", "#Players/" + Number(id));
   current = p;
   const r = p.resources || {};
   const muted = p.mutedUntil && p.mutedUntil > Date.now();
   $("playerCard").innerHTML = `
   <div class="card"><h2>${esc(p.username)} <span class="dim">#${p.id}</span> ${p.banned ? '<span class="bad">BANNED</span>' : ""}</h2>
     <div class="grid">
-      ${[["Registered", when(p.registered)], ["Last seen", when(p.lastSeen)], ["World", p.world ? p.world.slice(0, 8) + "…" : "-"], ["Home", p.home ? p.home.join(", ") : "-"],
+      ${[["Registered", when(p.registered)], ["Last seen", when(p.lastSeen)], ["World", p.world ? p.world.slice(0, 8) + "…" : "-"], ["Home", p.home ? p.home.join(", ") : "-", p.home ? `inspectAt('${esc(p.world)}',${Number(p.home[0])},${Number(p.home[1])})` : ""],
          ["Alliance id", p.allianceId ?? "none"], ["Shiny", num(p.credits)], ["Outposts", p.outposts], ["Refused attacks", p.attackViolations],
          ["Login streak", p.streak.day + " (last " + (p.streak.lastCollected || "never") + ")"], ["Shiny lock", p.shinyLocked ? "locked" : "no"], ["Chat", muted ? "muted until " + when(p.mutedUntil) : "can talk"]]
-        .map(([k, v]) => `<div class="stat"><span class="dim">${esc(k)}</span><b style="font-size:15px">${esc(v)}</b></div>`).join("")}
+        .map(([k, v, go]) => `<div class="stat"><span class="dim">${esc(k)}</span><b style="font-size:15px">${go ? `<a onclick="${go}">${esc(v)}</a>` : esc(v)}</b></div>`).join("")}
     </div>
     ${p.banned ? `<p>Ban reason: ${esc(p.banReason || "(none given)")}</p>` : ""}
+    ${p.baseid ? `<p><a id="viewYard" href="/?ioview=${encodeURIComponent(p.baseid)}" target="_blank" rel="noopener noreferrer">View yard in game</a>
+      <span class="dim">opens the game in a new tab, signed in as you, on this player's main yard, view only (as a visit: nothing on it changes). A game you have open in another tab may be signed out.</span></p>` : ""}
+    ${(p.cheats || []).length ? `<p><span class="bad">Cheat detection:</span> ${p.cheats.map((c) => `${esc(c.title)} (${num(c.count)}×, last ${when(c.last)})`).join("; ")} <a onclick="show('Reports')">see the proof</a></p>` : ""}
   </div>
+  <div class="card" id="accountCard"><h2>Account and sign-in</h2><div id="accountBody" class="dim">Loading…</div><div id="resetOut"></div></div>
   ${invitesCard(p)}
   <div class="card"><h2>Ban</h2>
     ${p.banned
@@ -287,16 +557,19 @@ async function openPlayer(id) {
   </div>
   <div class="card"><h2>Shiny and resources</h2>
     <div class="row">Change shiny by <input id="crAmt" type="number" placeholder="+500 or -200" style="width:130px"> note <input id="crNote" placeholder="why (required)" style="flex:1"><button class="act" onclick="doCredits()">Apply</button></div>
-    <div class="row">Set resources: bone <input id="r1" type="number" value="${r.r1 ?? 0}" style="width:120px"> coal <input id="r2" type="number" value="${r.r2 ?? 0}" style="width:120px"> sulfur <input id="r3" type="number" value="${r.r3 ?? 0}" style="width:120px"> magma <input id="r4" type="number" value="${r.r4 ?? 0}" style="width:120px"></div>
-    <div class="row">note <input id="resNote" placeholder="why (required)" style="flex:1"><button class="act" onclick="doResources()">Set</button></div>
+    <div class="row">Resources now: bone ${Number(r.r1 ?? 0).toLocaleString()} · coal ${Number(r.r2 ?? 0).toLocaleString()} · sulfur ${Number(r.r3 ?? 0).toLocaleString()} · magma ${Number(r.r4 ?? 0).toLocaleString()}</div>
+    <div class="row">Add (or take, with a minus): bone <input id="r1" type="number" placeholder="+/-" style="width:120px"> coal <input id="r2" type="number" placeholder="+/-" style="width:120px"> sulfur <input id="r3" type="number" placeholder="+/-" style="width:120px"> magma <input id="r4" type="number" placeholder="+/-" style="width:120px"></div>
+    <div class="row">note <input id="resNote" placeholder="why (required)" style="flex:1"><button class="act" onclick="doResources()">Apply</button></div>
     <p class="dim">Takes effect on the player's next yard load; a player who is online should reload.</p>
   </div>
+  <div class="card"><h2>Shiny ledger</h2><div id="ledgerCard" class="dim">Loading…</div></div>
   <div class="card"><h2>Login streak</h2>
     <div class="row">Days collected in a row <input id="stDay" type="number" min="0" max="6" value="${p.streak.day}" style="width:70px"> <button class="act" onclick="act('streak',{id:${p.id},day:$('stDay').value},()=>openPlayer(${p.id}))">Set</button>
     <button class="act plain" onclick="act('streak',{id:${p.id},day:0},()=>openPlayer(${p.id}))">Reset to 0</button></div>
     <p class="dim">Setting N means N days are done and today's reward is still to collect.</p>
   </div>
   <div class="card"><h2>Quest book</h2><div id="questCard" class="dim">Loading…</div></div>
+  <div class="card"><h2>Monsters</h2><div id="monsterCard" class="dim">Loading…</div></div>
   <div class="card"><h2>Saved kits</h2>
     <table><tr><th>Slot</th><th>Name</th><th>Buildings</th><th>Saved</th><th></th></tr>
     ${p.kits.map((k) => k.name
@@ -305,13 +578,24 @@ async function openPlayer(id) {
       : `<tr><td>${k.slot}</td><td class="dim" colspan="4">empty</td></tr>`).join("")}</table>
   </div>
   <div class="card"><h2>Chat</h2>
-    <div class="row">Mute for <input id="muteMin" type="number" value="60" min="1" style="width:90px"> minutes <button class="act bad" onclick="act('mute',{id:${p.id},minutes:$('muteMin').value},()=>openPlayer(${p.id}))">Mute</button>
+    ${muted && p.muteReason ? `<p>Muted for: ${esc(p.muteReason)}</p>` : ""}
+    <div class="row">Mute for <input id="muteMin" type="number" value="60" min="1" style="width:90px"> minutes, reason <input id="muteWhy" maxlength="200" placeholder="the player sees this" style="flex:1"> <button class="act bad" onclick="act('mute',{id:${p.id},minutes:$('muteMin').value,reason:$('muteWhy').value},()=>openPlayer(${p.id}))">Mute</button>
     <button class="act plain" onclick="act('unmute',{id:${p.id}},()=>openPlayer(${p.id}))">Unmute</button></div>
     <div class="row">Chat moderator: <b>${p.chatMod ? "yes" : "no"}</b>
       ${p.chatMod
         ? `<button class="act plain" onclick="act('chatMod',{id:${p.id},on:0},()=>openPlayer(${p.id}))">Remove moderator</button>`
         : `<button class="act" onclick="if(confirm('Make this player a chat moderator? They get a [Mod] badge, and can delete chat lines and mute players (up to a day; never admins or other moderators).'))act('chatMod',{id:${p.id},on:1},()=>openPlayer(${p.id}))">Make moderator</button>`}</div>
     <p class="dim">Moderators now: ${(p.chatMods || []).length ? p.chatMods.map((m) => `<a onclick="openPlayer(${m.id})">${esc(m.username)}</a>`).join(", ") : "none"}. Their deletes and mutes are in the log.</p>
+  </div>
+  <div class="card"><h2>Name</h2>
+    <div class="row">Rename to <input id="renameTo" maxlength="12" placeholder="2-12 letters, numbers or _" style="width:200px"> <button class="act" onclick="doRename()">Rename</button>
+      <span class="dim">${p.renameCooldown ? `their own next rename: ${when(p.renameCooldown)}` : "they can rename themselves now"}</span>
+      ${p.renameCooldown ? `<button class="act plain" onclick="act('renameCooldownReset',{id:${p.id}},()=>openPlayer(${p.id}))">Let them rename now</button>` : ""}</div>
+    <p class="dim">A rename from here doesn't start their own 6-month wait. Their yards, alliance and world move to the new name; a game already open shows the old one until it reloads.</p>
+  </div>
+  <div class="card"><h2>Scores</h2>
+    <div class="row">${p.boardHidden ? `<span class="bad">Off the Pit's and Hellgate's boards</span> <button class="act plain" onclick="act('scoreUnhide',{id:${p.id}},()=>openPlayer(${p.id}))">Put back on the boards</button>` : `<input id="wipeWhy" placeholder="why (for the log), e.g. arcade cheat" style="flex:1"> <button class="act bad" onclick="doScoreWipe()">Wipe scores</button>`}</div>
+    <p class="dim">Wipe: the Devil's Arcade's scores and ghosts and the Hellgate best are deleted, and the player is left off the Brimstone Pit's and Hellgate's boards (the Pit's bets stay, as its history). Boards update within 5 minutes.</p>
   </div>
   <div class="card"><h2>Other</h2>
     <div class="row"><button class="act plain" onclick="act('shinyUnlock',{id:${p.id}},()=>openPlayer(${p.id}))">Lift shiny lock</button></div>
@@ -321,15 +605,112 @@ async function openPlayer(id) {
       ${p.hfo ? "" : `<button class="act plain" onclick="if(confirm('Start Hell Freezes Over for this player now, whether or not they qualify? Day 1 begins 24 hours later (or use Next day).'))act('hfoStart',{id:${p.id}},()=>openPlayer(${p.id}))">Start now</button>`}
       ${p.hfo && p.hfo.day < 4 ? `<button class="act plain" onclick="if(confirm('Start the next day on this player\\'s next load of their yard, whatever the time and tasks?'))act('hfoNextDay',{id:${p.id}},()=>openPlayer(${p.id}))">Next day</button>` : ""}
       ${p.hfo ? `<button class="act bad" onclick="if(confirm('Clear this player\\'s Hell Freezes Over progress? It starts again when they qualify (or Start now). Shiny already paid is not paid again; a Rimegrave unlocked stays.'))act('hfoReset',{id:${p.id}},()=>openPlayer(${p.id}))">Reset</button>` : ""}</div>
+    <div class="row" id="fmiRow">Frozen Monster Invasion: <span class="dim">loading…</span></div>
     <div class="row">Move main yard to X <input id="mvX" type="number" style="width:80px"> Y <input id="mvY" type="number" style="width:80px"> <button class="act" onclick="doRelocate()">Move</button></div>
     <p class="dim">The target must be free land in the player's own world. Their outposts stay where they are.</p>
   </div>
+  <div class="card"><h2>Logins (90 days)</h2><div id="loginCard" class="dim">Loading…</div></div>
+  <div class="card"><h2>Actions</h2><div id="actionsCard" class="dim">Loading…</div></div>
+  <div class="card"><h2>Copies of the yards</h2><div id="backupCard" class="dim">Loading…</div></div>
   <div class="card"><h2 class="bad">Delete account</h2>
     <p>Deletes <b>${esc(p.username)}</b> for good: their main yard, outposts and every other yard, their map cells, mail, pets, casino history, quest book and the account itself. An alliance they lead goes to its longest-serving officer (or member), or is deleted if nobody else is in it. This cannot be undone.</p>
     <div class="row">Type the username <input id="delName" placeholder="${esc(p.username)}" autocomplete="off" style="width:180px"> reason <input id="delReason" placeholder="why (for the log)" style="flex:1"><button class="act bad" id="delBtn" onclick="doDelete()">Delete account</button></div>
   </div>`;
   $("playerCard").scrollIntoView({ behavior: "smooth" });
   loadQuests(p.id);
+  loadFmiPlayer(p.id);
+  loadLogins(p.id);
+  loadMonsters(p.id);
+  loadLedger(p.id);
+  loadActions(p.id);
+  loadYardCopies(p.id);
+  loadAccount(p.id); // (QoL #244, #245, #261)
+}
+// (QoL #403: the Strongbox, the Academy and the Compounds of the main yard; unlock or set a level while the player is away)
+async function loadMonsters(id) {
+  let m;
+  try { m = await api("monsters", { id }); } catch (e) { $("monsterCard").textContent = "Not available (" + e.message + ")."; return; }
+  const box = { unlocked: "good", unlocking: "", locked: "dim" };
+  $("monsterCard").className = "";
+  $("monsterCard").innerHTML = `
+    ${m.monsters.length ? `<div style="max-height:320px;overflow-y:auto"><table id="monsterTable"><tr><th>Monster</th><th>Strongbox</th><th>Academy level</th><th>Training ends</th><th>In the Compounds</th></tr>
+      ${m.monsters.map((x) => `<tr><td>${esc(x.id)}</td><td class="${box[x.strongbox] ?? ""}">${esc(x.strongbox)}</td><td>${x.level || "-"}</td><td>${x.trainingEnds ? when(x.trainingEnds) : "-"}</td><td>${num(x.housed)}</td></tr>`).join("")}</table></div>`
+      : '<p class="dim">Nothing in the Strongbox, the Academy or the Compounds as saved.</p>'}
+    <div class="row">Monster <input id="monId" placeholder="IC1, C12…" maxlength="5" style="width:90px">
+      <button class="act" id="monUnlock" onclick="doMonster('unlock')">Unlock in Strongbox</button>
+      Academy level <input id="monLevel" type="number" min="1" max="6" value="1" style="width:70px"> <button class="act" id="monAcademy" onclick="doMonster('academy')">Set level</button></div>
+    <div class="row">note <input id="monNote" placeholder="why (required)" style="flex:1"></div>
+    <p class="${m.canChange ? "bad" : "dim"}">${m.canChange ? esc(m.canChange) : "The player's game isn't open: a change is taken on their next load."} Their game sends its whole Strongbox and Academy with every save, so changes are only made while it's closed. Unlocking gives Academy level 1 too if it has none; setting a level stops training under way for it. Both are in the log, with what was there before.</p>`;
+}
+function doMonster(what) {
+  const monster = $("monId").value.trim().toUpperCase(), note = $("monNote").value.trim(), level = $("monLevel").value;
+  if (!monster) return toast("Type the monster's id (IC1, C12…).", true);
+  if (!note) return toast("A note is required.", true);
+  if (!confirm(what === "unlock" ? `Unlock ${monster} in ${current.username}'s Strongbox?` : `Set ${monster} to Academy level ${level} for ${current.username}?`)) return;
+  act("monsterGive", { id: current.id, monster, what, level, note }, () => loadMonsters(current.id));
+}
+// (QoL #252: every Shiny change the server has a record of, with its source)
+async function loadLedger(id) {
+  let l;
+  try { l = await api("shinyLedger", { id }); } catch (e) { $("ledgerCard").textContent = "Not available (" + e.message + ")."; return; }
+  const sum = l.lines.reduce((t, x) => t + (Number(x.amount) || 0), 0);
+  $("ledgerCard").className = "";
+  $("ledgerCard").innerHTML = `
+    <p>Shiny now: <b>${num(l.credits)}</b>. ${num(l.lines.length)}${l.more ? "+" : ""} recorded change(s), ${sum >= 0 ? "+" : ""}${num(sum)} in all.</p>
+    ${l.lines.length ? `<div style="max-height:320px;overflow-y:auto"><table id="ledgerTable"><tr><th>When</th><th>Source</th><th>Shiny</th><th>What</th></tr>
+      ${l.lines.map((x) => `<tr><td>${x.at ? when(x.at) : "-"}</td><td>${esc(x.source)}</td><td class="${x.amount > 0 ? "good" : x.amount < 0 ? "bad" : "dim"}">${x.amount == null ? "?" : (x.amount > 0 ? "+" : "") + num(x.amount)}</td><td>${esc(x.details)}</td></tr>`).join("")}</table></div>` : '<p class="dim">No recorded changes.</p>'}
+    <details><summary class="dim">Not in the ledger (no record is kept)</summary><ul class="dim">${l.notLogged.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>`;
+}
+// (QoL #505: what the player did, and what admins did to the account)
+const ACTION_KIND = { player: ["player", ""], attack: ["attack", "dim"], admin: ["admin", "bad"] };
+async function loadActions(id) {
+  let a;
+  try { a = await api("playerActions", { id }); } catch (e) { $("actionsCard").textContent = "Not available (" + e.message + ")."; return; }
+  $("actionsCard").className = "";
+  $("actionsCard").innerHTML = `
+    ${a.lines.length ? `<div style="max-height:320px;overflow-y:auto"><table id="actionsTable"><tr><th>When</th><th>Who</th><th>Action</th><th>Details</th></tr>
+      ${a.lines.map((x) => { const [k, cls] = ACTION_KIND[x.kind] || [x.kind, "dim"]; return `<tr><td>${when(x.at)}</td><td class="${cls}">${esc(k)}</td><td>${esc(x.action)}</td><td>${esc(x.details)}</td></tr>`; }).join("")}</table></div>` : '<p class="dim">Nothing recorded.</p>'}
+    <p class="dim">The player log (relocations and abandoned outposts, 90 days), the attacks they made, and the admin log's entries for this account.</p>
+    <details><summary class="dim">Not recorded</summary><ul class="dim">${a.notLogged.map((t) => `<li>${esc(t)}</li>`).join("")}</ul></details>`;
+}
+// (QoL #250: the copies of the player's yards that exist; 16 October: a yard copied now, or restored to a copy)
+async function loadYardCopies(id) {
+  let b;
+  try { b = await api("yardBackups", { id }); } catch (e) { $("backupCard").textContent = "Not available (" + e.message + ")."; return; }
+  const files = b.dumps.files || [];
+  $("backupCard").className = "";
+  $("backupCard").innerHTML = `
+    <p><b>Daily backups</b> (the whole database each): ${b.dumps.found ? (files.length ? `${num(files.length)}, from ${when(files[files.length - 1].at)} to ${when(files[0].at)}` : "none in the folder") : '<span class="dim">the backup folder isn\'t here</span>'}.</p>
+    ${files.length ? `<details><summary class="dim">the backups</summary><table id="dumpTable"><tr><th>File</th><th>Made</th><th>Size</th></tr>${files.map((f) => `<tr><td>${esc(f.name)}</td><td>${when(f.at)}</td><td>${bytes(f.size)}</td></tr>`).join("")}</table></details>` : ""}
+    <p><b>Their yards now</b>: ${(b.yards || []).length ? (b.yards || []).map((y) => `${esc(y.type)} ${esc(y.baseid)} (${y.buildings == null ? "-" : num(y.buildings)} buildings, saved ${y.savedAt ? when(y.savedAt) : "-"}) <a id="yardCopy${esc(y.baseid)}" onclick="yardCopy(${Number(id)},'${esc(y.baseid)}')">copy now</a>`).join(" · ") : '<span class="dim">none</span>'}</p>
+    <p><b>Yards kept</b>: outposts kept when the player relocated or abandoned one, copies made here, and each yard as it was before a restore (90 days):</p>
+    ${b.kept.length ? `<table id="keptTable"><tr><th>When</th><th>Why</th><th>Base id</th><th>Yard</th><th>Last saved</th><th>Buildings</th><th></th></tr>${b.kept.map((k) => `<tr><td>${when(k.at)}</td><td>${esc(k.action)} (log #${k.logId})${k.by ? ` <span class="dim">by ${esc(k.by)}</span>` : ""}</td><td>${esc(k.baseid)}</td><td>${esc(k.type)}</td><td>${k.savedAt ? when(k.savedAt) : "-"}</td><td>${k.buildings == null ? "-" : num(k.buildings)}</td>
+      <td>${k.restorable && k.buildings != null ? `<a class="bad" id="yardRestore${Number(k.logId)}_${esc(k.baseid)}" onclick="yardRestore(${Number(id)},${Number(k.logId)},'${esc(k.baseid)}','${esc(k.type)}','${esc(when(k.savedAt || k.at))}')">Restore yard to ${esc(when(k.savedAt || k.at))}</a>` : '<span class="dim">' + (k.restorable ? "no buildings" : "yard gone") + "</span>"}</td></tr>`).join("")}</table>` : '<p class="dim">none</p>'}
+    ${b.testSnapshot ? `<p><b>Test mode snapshot</b> taken ${when(b.testSnapshot.at)} (${b.testSnapshot.saves} yard(s), ${b.testSnapshot.cells} map cell(s)): put back when test mode ends.</p>` : ""}
+    <p class="dim">Restore writes the copy's buildings into that same yard (their damage, keys, the buildings in storage and the warts too); resources, Shiny, monsters, the Strongbox and Academy, quests and the map stay as they are now. Monsters a yard with less housing can't hold are lost on its next load, as in any yard over capacity. It is refused while the player is in the game (or was in the last 10 minutes) or in test mode, and while the yard is attacked. The yard as it is is kept first, listed here, so a restore can be undone the same way. Only copies of the player's own main yard or outposts they still have. A daily backup can't be restored from here: that means loading it into a separate database and copying this player's rows (their saves and map cells) from it, while they are offline: see RUNNING-INFERNO-ONLY.md, "Backups".</p>`;
+}
+function yardCopy(id, baseid) {
+  if (confirm(`Keep a copy of yard ${baseid} as it is saved now?`)) act("yardCopy", { id, baseid }, () => loadYardCopies(id));
+}
+function yardRestore(id, logId, baseid, type, at) {
+  if (!confirm(`Restore ${current && current.id === id ? current.username + "'s" : "this player's"} ${type} ${baseid} to the copy of ${at} (log #${logId})?\n\nIts buildings are replaced with the copy's. The yard as it is now is kept first, so this can be undone.`)) return;
+  act("yardRestore", { id, logId, baseid, confirm: 1 }, () => loadYardCopies(id));
+}
+// (QoL #246: the player's logins, 90 days, and the accounts used in the same browser)
+const LOGIN_RESULT = { ok: ["signed in", "good"], kicked: ["signed in, signed the other device out", "good"], "wrong-password": ["wrong password", "bad"],
+  banned: ["refused: banned", "bad"], maintenance: ["refused: maintenance", "dim"] };
+async function loadLogins(id) {
+  let h;
+  try { h = await api("loginHistory", { id }); } catch (e) { $("loginCard").textContent = "Not available (" + e.message + ")."; return; }
+  const res = (r) => { const [text, cls] = LOGIN_RESULT[r] || [r, "dim"]; return `<span class="${cls}">${esc(text)}</span>`; };
+  const wrong = h.logins.filter((l) => l.result === "wrong-password").length;
+  $("loginCard").className = "";
+  $("loginCard").innerHTML = `
+    <p>${num(h.logins.length)} login(s) in the last ${Number(h.days)} days${wrong ? `, <span class="bad">${num(wrong)} with a wrong password</span>` : ""}.
+      Same browser as: ${h.sameBrowser.length ? h.sameBrowser.map((o) => `<a onclick="openPlayer(${Number(o.id)})">${esc(o.username || "#" + o.id)}</a>${o.banned ? ' <span class="bad">banned</span>' : ""} <span class="dim">(last ${when(o.last)})</span>`).join(", ") : '<span class="dim">no other account</span>'}</p>
+    ${h.logins.length ? `<div style="max-height:320px;overflow-y:auto"><table><tr><th>When</th><th>Result</th><th>Browser</th><th>Address</th></tr>${h.logins.map((l) => `<tr><td>${when(l.at)}</td><td>${res(l.result)}</td>
+      <td>${esc(l.agent)} <span class="dim" style="font-size:12px">${l.browser ? esc(l.browser.slice(0, 6)) : "(first login there)"}</span></td><td>${esc(l.ip)}</td></tr>`).join("")}</table></div>` : '<p class="dim">No logins recorded (they are kept from 15 October).</p>'}
+    <p class="dim">A browser is known by its own key (a cookie), whatever its network; its first login on this server has none yet. Same browser: other accounts that logged in in one of this player's browsers in the last 90 days (alts, or a shared computer).</p>`;
 }
 async function loadQuests(id) {
   let q;
@@ -351,8 +732,18 @@ async function loadQuests(id) {
     <details><summary class="dim">Counts</summary><pre style="white-space:pre-wrap">${esc(JSON.stringify(q.counters, null, 1))}</pre></details>`;
 }
 function doBan() { const reason = $("banReason").value.trim(); if (!reason) return toast("Give the player a reason.", true); if (confirm("Ban " + current.username + "?")) act("ban", { id: current.id, reason }, () => openPlayer(current.id)); }
-function doCredits() { act("credits", { id: current.id, amount: $("crAmt").value, note: $("crNote").value }, () => openPlayer(current.id)); }
-function doResources() { act("resources", { id: current.id, r1: $("r1").value, r2: $("r2").value, r3: $("r3").value, r4: $("r4").value, note: $("resNote").value }, () => openPlayer(current.id)); }
+// (QoL #402: asks first, with the Shiny before and after)
+function doCredits() {
+  const amount = Math.trunc(Number($("crAmt").value));
+  if (!amount) return toast("Give an amount, +500 or -200.", true);
+  if (!$("crNote").value.trim()) return toast("A note is required.", true);
+  const before = Number(current.credits || 0), after = Math.max(0, before + amount);
+  if (!confirm(`${amount > 0 ? "Give" : "Take"} ${num(Math.abs(amount))} Shiny ${amount > 0 ? "to" : "from"} ${current.username}?\n\n${num(before)} now -> ${num(after)} after.`)) return;
+  act("credits", { id: current.id, amount, note: $("crNote").value }, () => openPlayer(current.id));
+}
+// (14 October, QoL #279: amounts are added to what the yard has when the server applies them; only the boxes
+// filled in are sent. Setting all four from the card overwrote whatever the player gathered since it opened.)
+function doResources() { act("resources", { id: current.id, mode: "add", r1: $("r1").value, r2: $("r2").value, r3: $("r3").value, r4: $("r4").value, note: $("resNote").value }, () => openPlayer(current.id)); }
 function doDelete() {
   const name = $("delName").value.trim(), reason = $("delReason").value.trim();
   if (name !== current.username) return toast("Type the username exactly to confirm.", true);
@@ -361,10 +752,89 @@ function doDelete() {
   const gone = current.username;
   act("deleteAccount", { id: current.id, confirm: name, reason }, () => { $("playerCard").innerHTML = `<div class="card"><h2>${esc(gone)} was deleted.</h2></div>`; current = null; loadPlayers(); });
 }
+function doRename() {
+  const name = $("renameTo").value.trim();
+  if (!name) return toast("Type the new name.", true);
+  if (confirm(`Rename ${current.username} to ${name}?`)) act("rename", { id: current.id, username: name }, () => { openPlayer(current.id); loadPlayers(false); });
+}
+function doScoreWipe() {
+  const reason = $("wipeWhy").value.trim();
+  if (!reason) return toast("Give a reason (it goes in the log).", true);
+  if (confirm(`Wipe ${current.username}'s arcade and Hellgate scores and take them off the Pit's board?`)) act("scoreWipe", { id: current.id, reason }, () => openPlayer(current.id));
+}
 function doRelocate() { if (confirm("Move " + current.username + "'s main yard?")) act("relocate", { id: current.id, x: $("mvX").value, y: $("mvY").value }, () => openPlayer(current.id)); }
 
 // ---- Reports
+// (QoL #407: a filter by check, a note with a dismissal, reopen, and Ban with this proof)
+let cheatRows = [], cheatStatusNow = "open";
+async function loadCheats() {
+  cheatStatusNow = $("cheatStatus") ? $("cheatStatus").value : "open";
+  const { reports, rules } = await api("cheats", { status: cheatStatusNow });
+  $("cheatRules").innerHTML = `<table>${rules.map((r) => `<tr><td><b>${esc(r.title)}</b></td><td class="dim">${esc(r.why)}</td></tr>`).join("")}</table>`;
+  const sel = $("cheatRule"), keep = sel.value;
+  sel.innerHTML = `<option value="">every check</option>` + rules.map((r) => `<option value="${esc(r.id)}">${esc(r.title)}</option>`).join("");
+  sel.value = keep;
+  cheatRows = reports;
+  renderCheats();
+}
+function renderCheats() {
+  const status = cheatStatusNow, rule = $("cheatRule").value;
+  const reports = rule ? cheatRows.filter((r) => r.rule === rule) : cheatRows;
+  const proof = (e) => {
+    const rest = Object.entries(e || {}).filter(([k]) => k !== "at");
+    return rest.map(([k, v]) => `<div class="dim" style="font-size:12px"><b>${esc(k)}</b> ${esc(typeof v === "object" ? JSON.stringify(v) : String(v))}</div>`).join("");
+  };
+  $("cheats").innerHTML = reports.length
+    ? `<table><tr><th>Player</th><th>Found</th><th>Times</th><th>Proof (the latest)</th><th>First / last</th><th></th></tr>${reports.map((r) => `<tr data-cheat="${r.id}">
+        <td><a onclick="show('Players');openPlayer(${r.userid})">${esc(r.username || "#" + r.userid)}</a> ${r.banned ? '<span class="bad">banned</span>' : ""}</td>
+        <td><b>${esc(r.title)}</b><div class="dim" style="font-size:12px;max-width:340px">${esc(r.why)}</div></td>
+        <td>${num(r.count)}${r.refused ? `<div class="dim" style="font-size:12px">${num(r.refused)} refused</div>` : ""}</td>
+        <td style="max-width:420px;word-break:break-word">${proof(r.evidence)}${(r.samples || []).length > 1 ? `<details><summary class="dim" style="font-size:12px">earlier (${r.samples.length - 1})</summary>${r.samples.slice(1).map((x) => `<div style="margin-top:4px">${esc(String(x.at || "").slice(0, 16))}${proof(x)}</div>`).join("")}</details>` : ""}</td>
+        <td>${when(r.first)}<br>${when(r.last)}</td>
+        <td>${r.reviewedBy
+          ? `<span class="dim">dismissed by ${esc(r.reviewedBy)}${r.note ? `: ${esc(r.note)}` : ""}</span><br><a onclick="act('cheatReopen',{id:${r.id}},loadCheats)">reopen</a>`
+          : `<a onclick="cheatDismiss(${r.id})">dismiss</a>${r.banned ? "" : ` · <a class="bad" onclick="cheatBan(${r.id})">ban with this proof</a>`}`}</td></tr>`).join("")}</table>`
+    : `<p class="dim">${status === "open" ? "Nothing found." : "None dismissed."}</p>`;
+}
+function cheatDismiss(id) {
+  const note = prompt("Dismiss this report. A note for it (optional), e.g. why it is not a cheat:", "");
+  if (note === null) return;
+  act("cheatDismiss", { id, note }, loadCheats);
+}
+function cheatBan(id) {
+  const r = cheatRows.find((x) => x.id === id);
+  if (!r) return;
+  const reason = prompt(`Ban ${r.username || "#" + r.userid}? The reason they will see:`, `Cheating detected: ${r.title} (${r.count}x, report ${r.id}).`);
+  if (!reason) return;
+  act("ban", { id: r.userid, reason }, loadCheats);
+}
+// (QoL #152, #185: players' reports of a chat line or a letter; kept with the game's bug reports, services/admin/bugReports.ts)
+const isPlayerReport = (b) => String(b.title || "").startsWith("Player report (");
+async function loadPlayerReports() {
+  const status = $("prStatus").value;
+  const { bugs } = await api("bugs", { status });
+  const rows = bugs.filter(isPlayerReport);
+  const pre = (x) => `<pre style="white-space:pre-wrap;font-size:12px;margin:4px 0">${esc(x)}</pre>`;
+  $("playerReports").innerHTML = rows.length
+    ? `<table><tr><th>Reported</th><th>Reports</th><th>The latest</th><th>Last</th><th></th></tr>${rows.map((b) => {
+        const id = Number((String(b.title).match(/\(#(\d+)\)\s*$/) || [])[1] || 0);
+        const label = String(b.title).replace(/^Player report /, "");
+        return `<tr>
+        <td>${id ? `<a onclick="show('Players');openPlayer(${id})">${esc(label)}</a>` : esc(label)}</td>
+        <td>${num(b.count)}${(b.reporters || []).length ? `<div class="dim" style="font-size:12px">by ${b.reporters.map((r) => `<a onclick="show('Players');openPlayer(${Number(r.id)})">${esc(r.username)}</a>`).join(", ")}</div>` : ""}</td>
+        <td style="max-width:480px;word-break:break-word">${pre(b.details)}${b.context ? `<details><summary class="dim" style="font-size:12px">around it</summary>${pre(b.context)}</details>` : ""}
+          ${(b.samples || []).length > 1 ? `<details><summary class="dim" style="font-size:12px">the last ${b.samples.length} reports</summary>${b.samples.map((x) => `<div style="border-top:1px solid var(--line);margin-top:4px">${pre(String(x.at || "").slice(0, 16) + "\n" + (x.details || "") + (x.context ? "\n\n" + x.context : ""))}</div>`).join("")}</details>` : ""}</td>
+        <td>${when(b.lastSeen)}<div class="dim" style="font-size:12px">first ${when(b.firstSeen)}</div></td>
+        <td>${status === "open"
+          ? `<a onclick="act('bugStatus',{id:${b.id},status:'fixed'},loadPlayerReports)">dismiss</a>`
+          : `<a onclick="act('bugStatus',{id:${b.id},status:'open'},loadPlayerReports)">reopen</a>`}
+          · <a class="bad" onclick="if(confirm('Delete this report?'))act('bugDelete',{id:${b.id}},loadPlayerReports)">delete</a></td></tr>`;
+      }).join("")}</table>`
+    : `<p class="dim">${status === "open" ? "No reports." : "None dismissed."}</p>`;
+}
 async function loadReports() {
+  loadPlayerReports();
+  loadCheats();
   const { reports } = await api("reports");
   $("reports").innerHTML = reports.length
     ? `<table><tr><th>Player</th><th>Refused</th><th>Latest</th><th>Updated</th><th></th></tr>${reports.map((r) => `<tr>
@@ -377,20 +847,42 @@ async function loadReports() {
 }
 
 // ---- Bugs
+// (QoL #406: search, a build filter, sorting and Copy as issue; QoL #258: the last 5 reports of each)
+let bugRows = [], bugStatusNow = "open";
 async function loadBugs() {
-  const status = $("bugStatus").value;
-  const { bugs } = await api("bugs", { status });
+  bugStatusNow = $("bugStatus").value;
+  const { bugs } = await api("bugs", { status: bugStatusNow });
+  // (QoL #152, #185: players' reports are in the Reports tab)
+  bugRows = bugs.filter((b) => !isPlayerReport(b));
+  const builds = [...new Set(bugs.map((b) => b.build).filter(Boolean))].sort().reverse();
+  const sel = $("bugBuild"), keep = sel.value;
+  sel.innerHTML = `<option value="">any</option>` + builds.map((b) => `<option>${esc(b)}</option>`).join("");
+  sel.value = builds.includes(keep) ? keep : "";
+  renderBugs();
+}
+function renderBugs() {
+  const status = bugStatusNow, q = $("bugQ").value.trim().toLowerCase(), build = $("bugBuild").value, sort = $("bugSort").value;
+  const by = { last: (a, b) => new Date(b.lastSeen) - new Date(a.lastSeen), count: (a, b) => b.count - a.count, players: (a, b) => b.players - a.players, first: (a, b) => new Date(b.firstSeen) - new Date(a.firstSeen) }[sort];
+  const bugs = bugRows.filter((b) => (!build || b.build === build) && (!q || (b.title + "\n" + b.details + "\n" + b.context).toLowerCase().includes(q))).sort(by);
   $("bugs").innerHTML = bugs.length
     ? `<table><tr><th>#</th><th>Problem</th><th>Times</th><th>Players</th><th>Build</th><th>Last seen</th><th></th></tr>${bugs.map((b) => `<tr>
         <td>${b.id}</td>
-        <td><b>${esc(b.title)}</b><details><summary class="dim">details</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(b.details)}\n\n${esc(b.context)}</pre></details></td>
+        <td><b>${esc(b.title)}</b><details><summary class="dim">details</summary><pre style="white-space:pre-wrap;font-size:12px">${esc(b.details)}\n\n${esc(b.context)}</pre></details>
+          ${(b.samples || []).length > 1 ? `<details><summary class="dim">the last ${b.samples.length} reports</summary>${b.samples.map((x) => `<pre style="white-space:pre-wrap;font-size:12px;border-top:1px solid var(--line);padding-top:4px">${esc(String(x.at || "").slice(0, 16))} · build ${esc(x.build)}${x.userid ? " · player #" + Number(x.userid) : ""}\n${esc(x.details)}\n\n${esc(x.context)}</pre>`).join("")}</details>` : ""}</td>
         <td>${num(b.count)}</td><td>${num(b.players)}${(b.reporters || []).length ? `<div class="dim" style="font-size:12px">${b.reporters.map((r) => `<a onclick="show('Players');openPlayer(${Number(r.id)})">${esc(r.username)}</a>`).join(", ")}</div>` : ""}</td>
         <td>${esc(b.build)}</td><td>${when(b.lastSeen)}<div class="dim" style="font-size:12px">first ${when(b.firstSeen)}</div></td>
         <td>${status === "open"
           ? `<a onclick="act('bugStatus',{id:${b.id},status:'fixed'},loadBugs)">mark fixed</a>`
           : `<a onclick="act('bugStatus',{id:${b.id},status:'open'},loadBugs)">reopen</a>`}
+          · <a onclick="bugCopy(${b.id})">copy as issue</a>
           · <a class="bad" onclick="if(confirm('Delete this bug report?'))act('bugDelete',{id:${b.id}},loadBugs)">delete</a></td></tr>`).join("")}</table>`
-    : `<p class="dim">${status === "open" ? "No open bugs." : "Nothing marked fixed yet."}</p>`;
+    : `<p class="dim">${bugRows.length ? "Nothing matches." : status === "open" ? "No open bugs." : "Nothing marked fixed yet."}</p>`;
+}
+async function bugCopy(id) {
+  const b = bugRows.find((x) => x.id === id);
+  if (!b) return;
+  const text = `### Bug #${b.id}: ${b.title}\n\n- Seen ${b.count} times by ${b.players} player(s), first ${b.firstSeen}, last ${b.lastSeen}\n- Last build: ${b.build}\n\n\`\`\`\n${b.details}\n\`\`\`\n\n<details><summary>Context</summary>\n\n\`\`\`\n${b.context}\n\`\`\`\n</details>\n`;
+  try { await navigator.clipboard.writeText(text); toast("Copied as an issue."); } catch (e) { prompt("Copy this:", text); }
 }
 
 // ---- Invites
@@ -416,16 +908,160 @@ async function inspect() {
     <tr><th>Tribe here</th><td>${esc(c.tribe.tribe)} level ${c.tribe.level}</td></tr>
     <tr><th>Stored base</th><td>${s ? `${esc(s.type)}${s.owner ? ` of <a onclick="show('Players');openPlayer(${s.owner.id})">${esc(s.owner.username)}</a>` : ""}, base ${esc(s.baseid)}, created ${when(s.created)}${s.destroyed ? ', <span class="bad">destroyed</span>' : ""}` : '<span class="dim">none (a tribe yard is generated fresh when attacked)</span>'}</td></tr></table>`;
 }
+// (QoL #409: from a player's card: their home cell in the Map tab)
+async function inspectAt(world, x, y) {
+  show("Map");
+  await loadWorlds();
+  if ([...$("mapWorld").options].some((o) => o.value === world)) $("mapWorld").value = world;
+  $("cx").value = x; $("cy").value = y;
+  inspect();
+}
 const resetCell = () => { if (confirm("Reset the stored tribe yard on this cell?")) act("resetTribes", { world: $("mapWorld").value, x: $("cx").value, y: $("cy").value }, inspect); };
 const resetAll = () => { if (confirm("Reset EVERY stored tribe yard?") && confirm("Really? This cannot be undone.")) act("resetTribes", { all: true }); };
 
-// ---- Log
-async function loadLog() {
-  const { log } = await api("log", { q: $("logQ").value });
-  $("log").innerHTML = log.length
-    ? `<table><tr><th>When</th><th>Admin</th><th>Action</th><th>Player</th><th>Details</th></tr>${log.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.admin_name)}</td><td>${esc(l.action)}</td><td>${esc(l.target_name ?? "")}</td><td>${esc(l.details)}</td></tr>`).join("")}</table>`
-    : '<p class="dim">Nothing logged yet.</p>';
+// ---- Chat (QoL #256: read only, the last 30 days at most)
+async function loadChat() {
+  const r = await api("chat", { q: $("chatQ").value.trim(), where: $("chatWhere").value, days: $("chatDays").value });
+  $("chatLines").innerHTML = r.lines.length
+    ? `<table><tr><th>When</th><th>Room</th><th>Who</th><th>Line</th></tr>${r.lines.map((l) => `<tr><td style="white-space:nowrap">${when(l.at)}</td><td class="dim">${esc(l.room)}</td>
+        <td>${l.userid ? `<a onclick="show('Players');openPlayer(${Number(l.userid)})">${esc(l.name || "#" + l.userid)}</a>` : '<span class="dim">(server)</span>'}</td>
+        <td style="word-break:break-word">${esc(l.text)}</td></tr>`).join("")}</table>${r.more ? '<p class="dim">More lines match: only the newest 500 are shown. Search to narrow them.</p>' : `<p class="dim">${r.lines.length} line(s).</p>`}`
+    : '<p class="dim">No chat lines match.</p>';
 }
+
+// ---- Health (QoL #269)
+const bytes = (n) => (!n ? "-" : n >= 1e9 ? (n / 1e9).toFixed(2) + " GB" : n >= 1e6 ? (n / 1e6).toFixed(1) + " MB" : (n / 1e3).toFixed(0) + " KB");
+async function loadHealth() {
+  const { health: h } = await api("health");
+  $("healthWhen").textContent = "as of " + when(h.now);
+  $("healthSince").textContent = when(h.startedAt);
+  const db = h.db, rd = h.redis;
+  const dbBad = db && (db.waiting > 0 || (db.max && db.inUse >= db.max));
+  const rdBad = rd && rd.max && rd.used >= rd.max * 0.9;
+  const hourNow = h.perHour[h.perHour.length - 1] || { errors: 0, requests: 0 };
+  $("healthGrid").innerHTML = [
+    ["Database connections", db ? `${db.inUse} in use / ${db.max ?? "?"}` : "not readable", db ? `${db.idle} free, ${db.waiting} waiting for one` : "", dbBad],
+    ["Redis memory", rd ? rd.usedHuman || bytes(rd.used) : "not readable", rd ? `peak ${rd.peakHuman || "?"} · ${rd.max ? "limit " + (rd.maxHuman || bytes(rd.max)) : "no limit"}${rd.policy ? " (" + rd.policy + ")" : ""}${rd.keys != null ? " · " + num(rd.keys) + " keys" : ""}` : "", rdBad],
+    ["Slow requests, last hour", num(h.slow.length), h.slow.filter((s) => !s.ended).length ? h.slow.filter((s) => !s.ended).length + " still running" : "", h.slow.length > 0],
+    ["5xx this hour", num(hourNow.errors), `of ${num(hourNow.requests)} requests`, hourNow.errors > 0],
+    ["Server memory", bytes(h.memory.rss), `heap ${bytes(h.memory.heapUsed)}`, false],
+    ["Up for", h.uptime >= 86400 ? Math.floor(h.uptime / 86400) + " d " + Math.floor((h.uptime % 86400) / 3600) + " h" : Math.floor(h.uptime / 3600) + " h " + Math.floor((h.uptime % 3600) / 60) + " min", "", false],
+  ].map(([k, v, sub, bad]) => `<div class="stat"><span class="dim">${esc(k)}</span><b class="${bad ? "bad" : ""}" style="font-size:16px">${esc(v)}</b>${sub ? `<span class="dim" style="font-size:12px">${esc(sub)}</span>` : ""}</div>`).join("");
+  const most = Math.max(1, ...h.perHour.map((x) => x.errors));
+  $("healthHours").innerHTML = `<table><tr><th>Hour</th><th>Requests</th><th>5xx</th><th style="width:40%"></th></tr>${h.perHour.slice().reverse().map((x) => `<tr>
+      <td>${esc(new Date(x.hour).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }))}</td><td>${num(x.requests)}</td>
+      <td class="${x.errors ? "bad" : "dim"}">${num(x.errors)}</td><td>${x.errors ? `<div style="height:10px;background:var(--bad);border-radius:3px;width:${Math.max(2, Math.round((x.errors / most) * 100))}%"></div>` : ""}</td></tr>`).join("")}</table>`;
+  $("healthSlow").innerHTML = h.slow.length
+    ? `<table><tr><th>When</th><th>Request</th><th>Player</th><th>Took</th><th>Server then</th></tr>${h.slow.map((s) => `<tr><td style="white-space:nowrap">${when(s.at)}</td><td>${esc(s.method)} ${esc(s.path)}</td>
+        <td>${s.userid ? `<a onclick="show('Players');openPlayer(${Number(s.userid)})">#${Number(s.userid)}</a>` : '<span class="dim">-</span>'}</td>
+        <td>${s.ended ? `${(s.ended.ms / 1000).toFixed(1)} s, ${s.ended.failed ? '<span class="bad">failed</span>' : "status " + Number(s.ended.status)}` : `<span class="bad">still running</span> (${Math.round(s.waited / 1000)} s when seen)`}</td>
+        <td class="dim" style="font-size:12px">${esc(s.server)}</td></tr>`).join("")}</table>`
+    : '<p class="dim">No request took 15 seconds or more in the last hour.</p>';
+}
+
+// ---- Outpost kits' earlier versions (QoL #271)
+async function loadKitBackups() {
+  let r;
+  try { r = await api("kitBackups"); } catch (e) { $("kitBackups").textContent = "Not available."; return; }
+  $("kitBackups").className = r.backups.length ? "" : "dim";
+  $("kitBackups").innerHTML = r.backups.length
+    ? `<table><tr><th>Kept</th><th>Kits in it</th><th></th></tr>${r.backups.map((b) => `<tr><td style="white-space:nowrap">${when(b.at)}<div class="dim" style="font-size:12px">${esc(b.name)}</div></td>
+        <td>${b.kits ? b.kits.map((k) => k.buildings ? `${k.slot}: ${esc(k.name)} <span class="dim">(${num(k.buildings)})</span>` : `<span class="dim">${k.slot}: empty</span>`).join(" · ") : '<span class="bad">unreadable</span>'}</td>
+        <td>${b.kits ? `<a class="bad" data-backup="${esc(b.name)}" onclick="kitRestore(this.dataset.backup)">restore</a>` : ""}</td></tr>`).join("")}</table>`
+    : "No copies yet: one is kept at the next Designer save of a kit.";
+}
+function kitRestore(name) {
+  if (!confirm(`Put all six outpost kits back as they were in ${name}? The kits as they are now are copied first.`)) return;
+  act("kitRestore", { name }, loadKitBackups);
+}
+
+// ---- Log (QoL #260: pages past 200, a date range, CSV; #409: the player's name opens their card)
+let logRows = [];
+async function loadLog(more) {
+  const r = await api("log", { q: $("logQ").value, from: $("logFrom").value, to: $("logTo").value, offset: more ? logRows.length : 0 });
+  logRows = more ? logRows.concat(r.log) : r.log;
+  $("log").innerHTML = logRows.length
+    ? `<table><tr><th>When</th><th>Admin</th><th>Action</th><th>Player</th><th>Details</th></tr>${logRows.map((l) => `<tr><td>${when(l.at)}</td><td>${esc(l.admin_name)}</td><td>${esc(l.action)}</td>
+        <td>${l.target_id ? `<a onclick="show('Players');openPlayer(${Number(l.target_id)})">${esc(l.target_name ?? "#" + l.target_id)}</a>` : esc(l.target_name ?? "")}</td><td>${esc(l.details)}</td></tr>`).join("")}</table>
+      ${r.more ? `<p><button class="act plain" id="logMore" onclick="loadLog(true)">Older</button> <span class="dim">${logRows.length} shown</span></p>` : `<p class="dim">${logRows.length} rows.</p>`}`
+    : '<p class="dim">Nothing logged in that range.</p>';
+}
+function logCsv() {
+  const cell = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = [["when", "admin", "action", "player id", "player", "details"].join(",")].concat(logRows.map((l) => [l.at, l.admin_name, l.action, l.target_id ?? "", l.target_name ?? "", l.details].map(cell).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/csv" }));
+  a.download = "admin-log.csv";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+// ---- Inferno-only (16 October, QoL #244, #245, #261): the card's "Account and sign-in" (email and addresses, other
+// accounts on the address, where it is signed in, Sign out everywhere, a one-time reset link, the admin role), and the
+// support role's read-only panel
+let myRole = null;
+const ROLE_WORDS = { owner: "owner", admin: "admin", support: "support (read only)" };
+async function loadAccount(id) {
+  let a;
+  try { a = await api("account", { id }); } catch (e) { if ($("accountBody")) $("accountBody").textContent = "Not available (" + e.message + ")."; return; }
+  if (!current || current.id !== id || !$("accountBody")) return;
+  const kind = { game: "the game", launcher: "the launcher app" };
+  $("accountBody").className = "";
+  $("accountBody").innerHTML = `
+    <div class="grid">
+      ${[["Email", a.email], ["Last address", a.lastIp || "-"], ["Registered from", a.registrationIp || "-"], ["Admin role", a.role ? ROLE_WORDS[a.role] + (a.roleFromConfig ? " (the config's)" : "") : "none"]]
+        .map(([k, v]) => `<div class="stat"><span class="dim">${esc(k)}</span><b style="font-size:15px;word-break:break-all">${esc(v)}</b></div>`).join("")}
+    </div>
+    <p id="sameIp">Other accounts on this address: ${a.sameIp.length
+      ? a.sameIp.map((o) => `<a onclick="openPlayer(${Number(o.id)})">${esc(o.username)}</a> <span class="dim">#${Number(o.id)}${o.on.length ? " · " + o.on.map(esc).join(", ") : ""}</span>${o.banned ? ' <span class="bad">banned</span>' : ""}`).join(", ") + (a.sameIpMore ? ", …" : "")
+      : '<span class="dim">none</span>'}</p>
+    <h3 style="margin:12px 0 6px">Signed in</h3>
+    ${a.play.length || a.saved.length ? `<table id="accountSessions"><tr><th>What</th><th>Browser</th><th>Since</th><th>Last used</th></tr>
+      ${a.play.map((p) => `<tr><td>playing, in ${esc(kind[p.type] || p.type)}</td><td>${esc(p.agent || "?")}</td><td>${when(p.since)}</td><td class="dim">now</td></tr>`).join("")}
+      ${a.saved.map((s) => `<tr><td>saved login <span class="dim">(name on the login page)</span></td><td>${esc(s.agent || "?")}</td><td>${when(s.created)}</td><td>${when(s.lastUsed)}</td></tr>`).join("")}</table>`
+      : '<p class="dim">Not signed in anywhere.</p>'}
+    <div class="row"><button class="act bad" id="signOutEverywhere" data-write onclick="doSignOutEverywhere()">Sign out everywhere</button>
+      <span class="dim">Ends every play session, saved login, chat sign-in and panel session of this account. The password stays as it is.</span></div>
+    <h3 style="margin:12px 0 6px">Password reset link</h3>
+    <div class="row"><button class="act" id="resetMake" data-write onclick="doResetLink()">Make a reset link</button>
+      ${a.resetLinkUntil ? `<span>A link is out, good until <b>${when(a.resetLinkUntil)}</b>.</span> <button class="act plain" id="resetCancel" data-write onclick="doResetCancel()">Cancel it</button>` : '<span class="dim">No link is out.</span>'}</div>
+    <p class="dim">For a player who forgot their password: give them the link privately (a direct message on Discord). It opens a page on this server where they choose a new password. It works once, for 24 hours; a new link replaces the one before. Setting the new password signs them out everywhere.</p>
+    ${a.you.canSetRole ? `<h3 style="margin:12px 0 6px">Admin role</h3>
+      <div class="row"><select id="roleSel"><option value="">none</option>${a.roles.map((r) => `<option value="${esc(r)}"${a.role === r ? " selected" : ""}>${esc(ROLE_WORDS[r] || r)}</option>`).join("")}</select>
+        <button class="act" id="roleSet" data-write onclick="doSetRole()">Set role</button></div>
+      <p class="dim">Owner: everything, and sets roles. Admin: everything else (test mode, the Designer, playing in maintenance). Support: the panel read only, and the game's Admin menu. Takes effect on their next request.</p>` : ""}`;
+}
+async function doResetLink() {
+  if (!confirm(`Make a one-time password reset link for ${current.username}? It works once, for 24 hours; a link made before stops working.`)) return;
+  let r;
+  try { r = await api("resetLink", { id: current.id }); } catch (e) { return; }
+  const link = location.origin + r.path;
+  $("resetOut").innerHTML = `<div class="row"><input id="resetLinkText" readonly style="flex:1;min-width:260px" value="${esc(link)}"><button class="act plain" id="resetCopy" onclick="copyResetLink()">Copy</button></div>
+    <p class="dim">Shown here once: the server keeps only a hash of it. Whoever has it can set ${esc(current.username)}'s password until ${when(r.expiresAt)}, so send it to the player only.</p>`;
+  loadAccount(current.id);
+}
+async function copyResetLink() {
+  const box = $("resetLinkText");
+  try { await navigator.clipboard.writeText(box.value); toast("Copied."); } catch (e) { box.focus(); box.select(); toast("Selected: copy it with Ctrl+C."); }
+}
+function doResetCancel() { if (confirm("Cancel the reset link? It stops working.")) act("resetLinkCancel", { id: current.id }, () => { $("resetOut").innerHTML = ""; return loadAccount(current.id); }); }
+function doSignOutEverywhere() {
+  if (confirm(`Sign ${current.username} out everywhere? Every game, saved login, chat and panel session of the account ends; they sign in again with their password.`)) act("signOutEverywhere", { id: current.id }, () => loadAccount(current.id));
+}
+function doSetRole() {
+  const role = $("roleSel").value;
+  if (confirm(`Make ${current.username}'s admin role ${role ? ROLE_WORDS[role] || role : "none"}?`)) act("setRole", { id: current.id, role }, () => loadAccount(current.id));
+}
+(async () => {
+  try {
+    const me = await api("whoami");
+    myRole = me.role || null;
+    if (myRole === "support") {
+      document.body.classList.add("ro");
+      document.querySelector("header").insertAdjacentHTML("beforeend", '<span id="roleBadge">Read only (support)</span>');
+    }
+  } catch (e) {}
+})();
 
 // ---- Start
 (async () => {
@@ -434,7 +1070,10 @@ async function loadLog() {
     $("app").style.display = "block";
     $("who").innerHTML = `Signed in as <b>${esc(me.username)}</b> · <a onclick="api('signout').then(()=>location.reload())">sign out</a>`;
     $("tabs").innerHTML = TABS.map((t) => `<button onclick="show('${t}')">${t}</button>`).join("");
-    show("Status");
+    // (QoL #408: #Players/123 opens that card; #Bugs and the like a tab; the address follows the tab)
+    const [tab, id] = decodeURIComponent(location.hash.slice(1)).split("/");
+    show(TABS.includes(tab) ? tab : "Status");
+    if (tab === "Players" && Number(id) > 0) openPlayer(Number(id));
   } catch (e) {}
 })();
 </script>

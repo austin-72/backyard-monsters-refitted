@@ -22,10 +22,33 @@ export const tokenAuthFailureErr = () =>
     isClientFriendly: true,
   });
 
+/** A saved login used from another network than the one it was made on (12 October). */
+/** (13 October) A play session that is no longer the account's current one: signed out by a newer one. */
+/**
+ * (QoL #524: with where and when the newer session started, when it is known: "[where: Chrome on Android; at: <ISO>]",
+ * which the game shows in the player's own time)
+ */
+export const sessionReplacedErr = (where: { agent: string | null; at: Date } | null = null) =>
+  new ClientSafeError({
+    message: "Could not authenticate: this account started playing on another device or window (or its password was changed)." +
+      (where ? ` [where: ${String(where.agent || "another browser").replace(/[\];]/g, "")}; at: ${where.at.toISOString()}]` : ""),
+    status: Status.UNAUTHORIZED,
+    data: {},
+    isClientFriendly: true,
+  });
+
+export const tokenDeviceErr = () =>
+  new ClientSafeError({
+    message: "Could not authenticate with user token: this login was made in another browser. Please log in again.",
+    status: Status.UNAUTHORIZED,
+    data: {},
+    isClientFriendly: true,
+  });
+
 export const emailPasswordErr = () =>
   new ClientSafeError({
     message:
-      "Your login credentials are incorrect. Please check and try again. If you forgot your password, you can reset it by clicking on forgot password.",
+      "Your email or password is wrong. Please check and try again. Forgot your password? Ask an admin on Discord for a reset link.",
     status: Status.CONFLICT,
     data: {},
     isClientFriendly: true,
@@ -181,6 +204,19 @@ export const takeoverCellErr = () =>
     message: "The server attempted to take over this cell but failed unexpectedly. Please try again.",
     status: Status.INTERNAL_SERVER_ERROR,
     data: {},
+    isClientFriendly: false,
+  });
+
+/**
+ * (16 October, bug report #96) a takeover refused for a reason the player can do something about: the yard not
+ * destroyed enough yet, already theirs, another takeover of it under way. They were the 500 "failed unexpectedly".
+ */
+export const takeoverRefusedErr = (message: string, status: Status = Status.CONFLICT) =>
+  new ClientSafeError({
+    message,
+    status,
+    data: { refresh: true },
+    // (said as `error`: the game shows "There was a problem taking over this yard: " and it)
     isClientFriendly: false,
   });
 
@@ -445,3 +481,13 @@ export const powerupLeaderOnlyErr = () =>
     data: {},
     isClientFriendly: true,
   });
+
+// Inferno-only (22 October, the user's picks from Round 2 of the proposals): a power-up's planned start
+export const powerupNoPlanErr = () =>
+  new ClientSafeError({ message: "There's no start planned for that power-up.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
+
+export const powerupPlanTimeErr = () =>
+  new ClientSafeError({ message: "Pick a time from 5 minutes to 7 days from now.", status: Status.CONFLICT, data: {}, isClientFriendly: true });
+
+export const powerupPlanChargeErr = () =>
+  new ClientSafeError({ message: "It won't be charged by then. Pick a later time, or speed up its charge first.", status: Status.CONFLICT, data: {}, isClientFriendly: true });

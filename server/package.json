@@ -22,6 +22,7 @@
     "consumer:list": "bun src/scripts/api-consumers.ts list",
     "consumer:revoke": "bun src/scripts/api-consumers.ts revoke",
     "admin:claim": "bun src/scripts/admin-claim.ts",
+    "restart:announce": "bun src/scripts/announce-restart.ts",
     "typecheck": "bunx tsc --noEmit"
   },
   "engines": {

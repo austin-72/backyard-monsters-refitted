@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { Event, MouseEvent } from "flash/events";
-import { KEYS, POPUPS, POPUPSETTINGS, SubscriptionCancelPopup, SubscriptionHandler, subscriptions_membership_popup } from "@game";
+import { GLOBAL, IoFormat, KEYS, POPUPS, POPUPSETTINGS, SubscriptionCancelPopup, SubscriptionHandler, subscriptions_membership_popup } from "@game";
 
 export class MembershipPopup extends subscriptions_membership_popup {
     static {
@@ -9,6 +9,17 @@ export class MembershipPopup extends subscriptions_membership_popup {
 
     private _cancelConfirm: SubscriptionCancelPopup;
 
+    /**
+     * The club's renewal or end day. Inferno-only (QoL #574): the game's one date, in the player's language
+     * (IoFormat.date); it was the browser's own way of writing it.
+     */
+    private static ioDay(seconds: number): string {
+        if (GLOBAL.INFERNO_ONLY) {
+            return IoFormat.date(seconds);
+        }
+        return new Date(seconds * 1000).toLocaleDateString();
+    }
+
     public $ctor(): void {
         let _loc1_: boolean = false;
         super.$ctor();
@@ -16,9 +27,9 @@ export class MembershipPopup extends subscriptions_membership_popup {
         this.tTitle.htmlText = KEYS.Get("dc_panel_benefits");
         this.tDescription.htmlText = KEYS.Get("dc_benefits_desc");
         if (_loc1_) {
-            this.tRenew.htmlText = KEYS.Get("dc_benefits_renew", { "v1": new Date(SubscriptionHandler.instance.renewalDate * 1000).toLocaleDateString() });
+            this.tRenew.htmlText = KEYS.Get("dc_benefits_renew", { "v1": MembershipPopup.ioDay(SubscriptionHandler.instance.renewalDate) });
         } else {
-            this.tRenew.htmlText = KEYS.Get("dc_benefits_expire", { "v1": new Date(SubscriptionHandler.instance.expirationDate * 1000).toLocaleDateString() });
+            this.tRenew.htmlText = KEYS.Get("dc_benefits_expire", { "v1": MembershipPopup.ioDay(SubscriptionHandler.instance.expirationDate) });
         }
         if (_loc1_) {
             this.bChange.buttonMode = true;

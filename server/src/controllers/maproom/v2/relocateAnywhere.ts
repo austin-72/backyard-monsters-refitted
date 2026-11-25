@@ -10,6 +10,7 @@ import { ClientSafeError } from "../../../middleware/clientSafeError.js";
 import { getCurrentDateTime } from "../../../utils/getCurrentDateTime.js";
 import { permissionErr } from "../../../errors/errors.js";
 import { logger } from "../../../utils/logger.js";
+import { addToPlayerLog, keepOutpostSaves, logPlayerAction } from "../../../services/user/playerLog.js";
 
 /** An attack on the main yard this recent is still running (its saves are taken for 30 minutes). */
 const ATTACK_WINDOW = 30 * 60;
@@ -52,10 +53,21 @@ export const relocateAnywhere: KoaController = async (ctx) => {
     const oldWorld = save.worldid;
     const oldBookmarks = user.bookmarks;
 
+    // (QoL #494: everything it takes to put it back, logged before it goes: the place, the outposts, the resources)
+    const before = {
+      world: oldWorld,
+      home: save.homebase ?? null,
+      outposts: (save.outposts ?? []) as unknown,
+      resources: { ...((save.resources ?? {}) as Record<string, number>) },
+    };
+
     // Resources to 0 (the storage limits stay); written with the rest by leaveWorld.
     const resources = { ...((save.resources ?? {}) as Record<string, number>) };
     for (const key of ["r1", "r2", "r3", "r4"]) resources[key] = 0;
     save.resources = resources as never;
+
+    const logId = await logPlayerAction(user.userid, user.username, "relocate", before);
+    await keepOutpostSaves(logId, user.userid);
 
     // Outposts and home cell go (leaveWorld), then a new home the way a new player gets one.
     await leaveWorld(user, save);
@@ -68,6 +80,7 @@ export const relocateAnywhere: KoaController = async (ctx) => {
     }
 
     const coords = (save.homebase ?? []).map(Number);
+    await addToPlayerLog(logId, { to: { world: save.worldid, home: coords } });
     logger.info(`Relocate: '${user.username}' moved from ${from} to ${coords.join(",")}, ${outposts} outpost(s) let go, resources to 0`);
     ctx.status = Status.OK;
     ctx.body = { error: 0, coords, outposts };

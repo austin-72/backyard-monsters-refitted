@@ -170,7 +170,7 @@ class GuardTowerTesla extends ASObject implements ITickable {
     }
 
     private fire(): void {
-        SOUNDS.Play("lightningfire", 0.8);
+        SOUNDS.ioPlayAt("lightningfire", 0.8, this.m_x, this.m_y);
         EFFECTS.Lightning(this.m_x | 0, this.m_y | 0, this.m_target.x | 0, this.m_target.getDisplayY() | 0, this.parent);
         this.m_target.modifyHealth(-this.m_damage, this.m_target);
         this.m_timeAbleToFire = Number(GLOBAL.Timestamp()) + this.m_attackSpeed;

@@ -1,4 +1,3 @@
-import { Filter as BadWords } from "bad-words";
 
 import { AllianceMessageType } from "../../enums/Alliance.js";
 import { Status } from "../../enums/StatusCodes.js";
@@ -20,8 +19,6 @@ export const PIN_DAYS = 30;
 const TITLE_MAX = 80;
 const BODY_MAX = 600;
 const COORD_MAX = 999;
-
-const filter = new BadWords();
 
 const sql = <T>(query: string, params: unknown[] = []) => postgres.em.getConnection().execute<T[]>(query, params);
 
@@ -78,8 +75,37 @@ export const unreadPins = async (allianceId: number, userid: number) => {
   return Number(rows[0]?.n ?? 0);
 };
 
+// (Inferno-only, 7 October, the user's call: no word filter on what players write to each other.)
 const cleanText = (value: unknown, max: number) =>
-  filter.clean(String(value ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]+/g, " ").trim().slice(0, max)).trim();
+  String(value ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]+/g, " ").trim().slice(0, max).trim();
+
+/**
+ * Inferno-only (QoL #177): a pin the leader marked Keep stays until it is removed (or un-kept): its expires_at is
+ * set to KEPT_UNTIL, so nothing that reads expires_at needs to know (no new column). Renew (the leader or an
+ * officer) gives a pin PIN_DAYS days from now again.
+ */
+const KEPT_UNTIL = "9999-12-31T00:00:00Z";
+
+const isKept = (expires: Date | string) => new Date(expires).getUTCFullYear() >= 9000;
+
+/** "keep" (the leader), "unkeep" (the leader: PIN_DAYS days from now), "renew" (the leader or an officer). */
+export const setPinLife = async (allianceId: number, id: unknown, action: "keep" | "unkeep" | "renew") => {
+  const pin = Number(id);
+  if (!Number.isSafeInteger(pin) || pin <= 0) throw boardErr("That pin is no longer on the board.");
+  const renewed = `now() + interval '${PIN_DAYS} days'`;
+  // (renewing a kept pin would un-keep it: a kept pin is left as it is)
+  const next =
+    action === "keep"
+      ? `CAST(? AS timestamptz)`
+      : action === "unkeep"
+        ? renewed
+        : `CASE WHEN expires_at >= CAST(? AS timestamptz) THEN expires_at ELSE ${renewed} END`;
+  const changed = await sql<{ id: number }>(
+    `UPDATE bym.alliance_pin SET expires_at = ${next} WHERE id = ? AND alliance_id = ? AND expires_at > now() RETURNING id`,
+    action === "unkeep" ? [pin, allianceId] : [KEPT_UNTIL, pin, allianceId]
+  );
+  if (!changed.length) throw boardErr("That pin is no longer on the board.");
+};
 
 /** The board, top first (expired pins removed as it is read). */
 export const listPins = async (allianceId: number) => {
@@ -90,6 +116,8 @@ export const listPins = async (allianceId: number) => {
   );
   const names = await worldNames([...new Set(rows.map((r) => r.world_id).filter((w): w is string => !!w))]);
   return rows.map((r) => ({
+    // (Inferno-only, QoL #177: kept by the leader: it doesn't go)
+    kept: isKept(r.expires_at),
     id: Number(r.id),
     title: r.title,
     body: r.body,
@@ -149,7 +177,9 @@ export const savePin = async (
   );
   // Said in Alliance chat: the title, and the place as a token the chat makes clickable.
   const token = x !== null && y !== null ? ` [map:${x},${y}${worldTag(worldId) ? `:${worldTag(worldId)}` : ""}]` : "";
-  await announceShout({ allianceId, author: user, type: AllianceMessageType.PINNED, body: `${title}${token}` });
+  // (13 October: not by a player muted or banned in chat: the pin's title in Alliance chat was a way round the mute)
+  const muted = Number((await redis.get(`chat:mute:${user.userid}`).catch(() => null)) ?? 0) > Date.now() || (await redis.get(`chat:banned:${user.userid}`).catch(() => null)) === "1";
+  if (!muted) await announceShout({ allianceId, author: user, type: AllianceMessageType.PINNED, body: `${title}${token}` });
   return { id: Number(rows[0].id) };
 };
 

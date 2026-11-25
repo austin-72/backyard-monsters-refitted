@@ -1,4 +1,6 @@
 import { BaseType } from "../../enums/Base.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+import { checkLegacySave } from "../../services/anticheat/requestChecks.js";
 import { SaveKeys } from "../../enums/SaveKeys.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { permissionErr } from "../../errors/errors.js";
@@ -13,7 +15,7 @@ import type { KoaController } from "../../utils/KoaController.js";
 import { logger } from "../../utils/logger.js";
 import { BaseSaveSchema } from "../../schemas/BaseSaveSchema.js";
 import { academyHandler } from "../base/save/handlers/academyHandler.js";
-import { updateAttackLog } from "../../services/base/createAttackLog.js";
+import { gainsOf, updateAttackLog } from "../../services/base/createAttackLog.js";
 import { attackLootHandler } from "../base/save/handlers/attackLootHandler.js";
 import { buildingDataHandler } from "../base/save/handlers/buildingDataHandler.js";
 import { defenderLootHandler } from "../base/save/handlers/defenderLootHandler.js";
@@ -57,6 +59,19 @@ export const infernoSave: KoaController = async (ctx) => {
 
     if (!isOwner && baseSave.attackid === 0) throw permissionErr();
 
+    // (Inferno-only: the game saves its own yards to /base/save, never here: services/anticheat)
+    // (18 October: whatever the yard: a Hellgate run's yard, a Designer draft or an old Inferno yard saved here wrote
+    // the request's store data and then its purchase, which paid invite and wart Shiny into the main yard again and
+    // again. Reported as before; refused even when the cheat detector only reports.)
+    if (isOwner && infernoOnlyConfig.enabled) {
+      await checkLegacySave(user, baseSave.baseid);
+      throw permissionErr();
+    }
+
+    // (13 October) nor an attack on a main yard or an outpost: those are saved to /base/save, with its attack and loot
+    // checks. Here an attack save could set the defender's resources from an empty set and write any field.
+    if (isAttack && infernoOnlyConfig.enabled && (baseSave.type === BaseType.MAIN || baseSave.type === BaseType.OUTPOST)) throw permissionErr();
+
     // Only the player whose attack was loaded last (infernoModeAttack), and recently, writes to the yard.
     if (isAttack) {
       const last = baseSave.attacks?.at(-1);
@@ -76,10 +91,12 @@ export const infernoSave: KoaController = async (ctx) => {
           break;
 
         case SaveKeys.POINTS:
+          if (value == null) break;
           baseSave.points = value.toString();
           break;
 
         case SaveKeys.BASEVALUE:
+          if (value == null) break;
           baseSave.basevalue = value.toString();
           break;
 
@@ -138,7 +155,7 @@ export const infernoSave: KoaController = async (ctx) => {
     if (isAttack) postgres.em.persist(userSave);
 
     // Inferno-only: the attacker's attack log gets the damage, loot and report so far (createAttackLog.ts).
-    if (isAttack) await updateAttackLog(user, baseSave, { over: saveData.over, lootreport: body.lootreport });
+    if (isAttack) await updateAttackLog(user, baseSave, { over: saveData.over, lootreport: body.lootreport, paid: isOwner ? 0 : gainsOf(saveData.attackloot) });
 
     if (isAttack) baseSave.attackid = saveData.over ? 0 : baseSave.attackid;
 

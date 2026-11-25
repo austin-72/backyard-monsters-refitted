@@ -43,7 +43,24 @@ export class BUILDING8 extends BFOUNDATION {
             this._buildingTitle += " <font color=\"#CC0000\">" + KEYS.Get("cloc_overdrive", { "v1": GLOBAL.ToTime(GLOBAL._lockerOverdrive) }) + "</font>";
         }
         if (CREATURELOCKER._unlocking != null && Boolean(CREATURELOCKER._lockerData[CREATURELOCKER._unlocking])) {
-            this._specialDescription = "Unlocking the " + CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name + " " + GLOBAL.ToTime((CREATURELOCKER._lockerData[CREATURELOCKER._unlocking].e - GLOBAL.Timestamp()) | 0) + " remaining<br>";
+            // (Inferno-only: the monster's name, not its key, "#m_valgos#")
+            let unlockingName: string = GLOBAL.INFERNO_ONLY ? KEYS.Get(as3.str(CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name)) : CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name;
+            this._specialDescription = "Unlocking the " + unlockingName + " " + GLOBAL.ToTime((CREATURELOCKER._lockerData[CREATURELOCKER._unlocking].e - GLOBAL.Timestamp()) | 0) + " remaining<br>";
+        }
+        // (Inferno-only, QoL #350, #363: what the next level opens, by name)
+        if (GLOBAL.INFERNO_ONLY && this._lvl.Get() > 0 && this._lvl.Get() < this.getEffectiveLevelMax()) {
+            let next: int = (this._lvl.Get() + 1) | 0;
+            let names: any[] = [];
+            let all: any = CREATURELOCKER.GetAppropriateCreatures();
+            for (let id in all) {
+                let c: any = CREATURELOCKER._creatures[id];
+                if (c && !c.blocked && (c.level | 0) == next && (c.page | 0) > 0) {
+                    names.push(KEYS.Get(as3.str(c.name)));
+                }
+            }
+            if (names.length) {
+                this._upgradeDescription = KEYS.Get("io_cloc_opens", { "v1": next, "v2": names.join(", ") });
+            }
         }
     }
 
@@ -100,7 +117,11 @@ export class BUILDING8 extends BFOUNDATION {
     }
 
     public override Recycle(): void {
-        if (CREATURELOCKER._unlocking != null) {
+        if (CREATURELOCKER._unlocking != null && GLOBAL.INFERNO_ONLY) {
+            // Inferno-only (14 October, QoL #438): as the Academy does while training, the Strongbox can't be
+            // recycled during an unlock (recycling cancelled it: days of unlock time lost in one click).
+            GLOBAL.Message(KEYS.Get("io_cloc_recycle_unlocking", { "v1": KEYS.Get(as3.str(CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name)) }));
+        } else if (CREATURELOCKER._unlocking != null) {
             GLOBAL.Message(KEYS.Get("cloc_err_cantrecycle", { "v1": CREATURELOCKER._creatures[CREATURELOCKER._unlocking].name }), KEYS.Get("msg_recyclebuilding_btn"), as3.bind(this, this.RecycleB));
         } else {
             super.Recycle();

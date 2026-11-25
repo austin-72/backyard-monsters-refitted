@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { int, uint } from "as3";
 import { Event } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { ATTACK, BTOWER, CREEPS, EFFECTS, GLOBAL, IAttackable, MonsterBase, PATHING, SOUNDS, Targeting } from "@game";
+import { ATTACK, BTOWER, CREEPS, EFFECTS, GLOBAL, IAttackable, IoTd, MonsterBase, PATHING, SOUNDS, Targeting, IoTd2 } from "@game";
 
 /**
  * Inferno-only: the Cinder Coil (building 144, newtowers.md). It fires in a cycle (the user's, 28 September),
@@ -21,7 +21,7 @@ import { ATTACK, BTOWER, CREEPS, EFFECTS, GLOBAL, IAttackable, MonsterBase, PATH
  */
 export class INFERNO_CINDER_COIL extends BTOWER {
     static {
-        as3.fields(this, { _spinScale: 1, _phase: 0, _stageTicks: 0, _angle: 0, _speed0: 0, _aimFrom: 0, _aimTurn: 0, _aimGoal: 0, _lockedTarget: null, _chainFlags: 0, shots: 0 });
+        as3.fields(this, { _spinScale: 1, _phase: 0, _stageTicks: 0, _ioCycle: 0, _angle: 0, _speed0: 0, _aimFrom: 0, _aimTurn: 0, _aimGoal: 0, _lockedTarget: null, _chainFlags: 0, shots: 0 });
     }
 
     public static ID: int; // const
@@ -85,6 +85,8 @@ export class INFERNO_CINDER_COIL extends BTOWER {
     private _spinScale: number;
     private _phase: int;
     private _stageTicks: int;
+    /** Inferno-only (Hellgate Defense): steps of the charge owed by a Fire rate upgrade (IoTd.cycleSpeed). */
+    private _ioCycle: number;
     /** The coil's heading as a smooth angle in aim frames [0, 32). */
     private _angle: number;
     private _speed0: number;
@@ -131,6 +133,15 @@ export class INFERNO_CINDER_COIL extends BTOWER {
     public override TickAttack(): void {
         if (this._phase != INFERNO_CINDER_COIL.IDLE) {
             this.stepCycle();
+            // Inferno-only (Hellgate Defense): the charge takes longer than its reload, so a Fire rate upgrade
+            // runs the charge faster too
+            if (GLOBAL.ioTdMode()) {
+                this._ioCycle += IoTd.cycleSpeed(this) - 1;
+                while (this._ioCycle >= 1 && this._phase != INFERNO_CINDER_COIL.IDLE) {
+                    this._ioCycle -= 1;
+                    this.stepCycle();
+                }
+            }
         }
         super.TickAttack();
         if (this._phase == INFERNO_CINDER_COIL.IDLE) {
@@ -386,7 +397,11 @@ export class INFERNO_CINDER_COIL extends BTOWER {
             alt = cur._movement == "fly" ? cur._altitude : 0;
             EFFECTS.Lightning(from.x | 0, from.y | 0, cur.x | 0, (cur.y - alt) | 0, null, INFERNO_CINDER_COIL.ARC_COLOUR);
             dealt = (dmg * cur._damageMult) | 0;
+            // (Hellgate Defense 2: this tower deals the hit, IoTd2.hurt)
+            let ioSrc: any = IoTd2.source;
+            IoTd2.source = this;
             cur.modifyHealth(-dealt);
+            IoTd2.source = ioSrc;
             ATTACK.Damage(cur.x, cur.y - alt, dealt | 0);
             hit.push(cur);
             from = new Point(cur.x, cur.y - alt);

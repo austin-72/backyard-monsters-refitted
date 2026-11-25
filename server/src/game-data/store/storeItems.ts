@@ -1142,6 +1142,15 @@ export const storeItems: { [key: string]: StoreItem } = {
     i: 0,
     a: 0,
   },
+  // Inferno-only (10 October): the D.A.V.E. Club's Sign, free (services/yard/signs.ts)
+  BUILDING150: {
+    t: "decoration_sign",
+    d: "",
+    du: 0,
+    c: [0],
+    i: 0,
+    a: 0,
+  },
   BLK2I: {
     t: "Upgrade blocks to stone",
     d: " ",
@@ -1152,6 +1161,24 @@ export const storeItems: { [key: string]: StoreItem } = {
   },
   BLK3I: {
     t: "Upgrade blocks to metal",
+    d: " ",
+    du: 0,
+    c: [1],
+    i: 1,
+    a: 1,
+  },
+  // Inferno-only (22 November): walls to level 4 (Studded Iron) and 5 (Fireblack), priced by the game as BLK2I and
+  // BLK3I are (the quantity is the Shiny: the flags io_price_wall_studded and io_price_wall_fireblack a wall a step)
+  BLK4I: {
+    t: "Upgrade blocks to studded iron",
+    d: " ",
+    du: 0,
+    c: [1],
+    i: 1,
+    a: 1,
+  },
+  BLK5I: {
+    t: "Upgrade blocks to fireblack",
     d: " ",
     du: 0,
     c: [1],
@@ -1325,4 +1352,29 @@ if (infernoOnlyConfig.enabled) {
   storeItems.SP2.c = [p.reduce1h];
   storeItems.SP3.c = [p.reduce2h];
   storeItems.SP1.d = `If the worker has less than ${p.closeEnoughMinutes} minutes remaining you can finish now <b>for free</b>!`;
+}
+
+/**
+ * Inferno-only (14 October, the user's): the animated decorations (client INFERNOYARDPROPS 157-169; their art:
+ * client-web/tools/trophy-art/decor.py), bought for Shiny when placed from the build menu's Decorations, Animated.
+ */
+if (infernoOnlyConfig.enabled) {
+  storeItems.BUILDING157 = { t: "Bubbling Cauldron", d: " ", du: 0, c: [300], i: 1, a: 0 };
+  storeItems.BUILDING158 = { t: "Chained Imp", d: " ", du: 0, c: [250], i: 1, a: 0 };
+  storeItems.BUILDING159 = { t: "Lava Fountain", d: " ", du: 0, c: [400], i: 1, a: 0 };
+  storeItems.BUILDING160 = { t: "Soul Lantern", d: " ", du: 0, c: [150], i: 1, a: 0 };
+  storeItems.BUILDING161 = { t: "Hellfire Brazier", d: " ", du: 0, c: [150], i: 1, a: 0 };
+  storeItems.BUILDING162 = { t: "Skull Totem", d: " ", du: 0, c: [200], i: 1, a: 0 };
+  storeItems.BUILDING163 = { t: "Pendulum Blade", d: " ", du: 0, c: [350], i: 1, a: 0 };
+  storeItems.BUILDING164 = { t: "Ember Geyser", d: " ", du: 0, c: [300], i: 1, a: 0 };
+  storeItems.BUILDING165 = { t: "Eye of the Abyss", d: " ", du: 0, c: [250], i: 1, a: 0 };
+  storeItems.BUILDING166 = { t: "Spit Roast", d: " ", du: 0, c: [300], i: 1, a: 0 };
+  storeItems.BUILDING167 = { t: "Bat Weathervane", d: " ", du: 0, c: [200], i: 1, a: 0 };
+  storeItems.BUILDING168 = { t: "Magma Waterwheel", d: " ", du: 0, c: [400], i: 1, a: 0 };
+  storeItems.BUILDING169 = { t: "Tentacle Pit", d: " ", du: 0, c: [350], i: 1, a: 0 };
+  // (16 October, the user's) the Alliance Banner: its owner's alliance shield on a banner (client IoAllianceBanner)
+  storeItems.BUILDING170 = { t: "Alliance Banner", d: " ", du: 0, c: [200], i: 1, a: 0 };
+  // (22 October, the user's) the Champion Statue: its owner's champion in bronze, turning (client IoChampionStatue);
+  // its price is the Extras' (services/shop/ioShop.ts: one kept for it pays instead)
+  storeItems.BUILDING171 = { t: "Champion Statue", d: " ", du: 0, c: [infernoOnlyConfig.prices.shop.championStatue], i: 1, a: 0 };
 }

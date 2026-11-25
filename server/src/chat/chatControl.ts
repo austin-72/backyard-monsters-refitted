@@ -7,7 +7,8 @@ export const CHAT_CONTROL_CHANNEL = "chat:control";
 export type ChatControlMessage =
   | { type: ChatControlType.AllianceEvict; userId: number }
   | { type: ChatControlType.RefreshUser; userId: number }
-  | { type: ChatControlType.Announce; body: string };
+  | { type: ChatControlType.Announce; body: string }
+  | { type: ChatControlType.Muted; userId: number; minutes: number; reason: string };
 
 /**
  * Forces a player out of their alliance chat channel.
@@ -34,6 +35,18 @@ export const disconnectAllianceChat = async (userId: number) => {
  */
 export const refreshChatUser = async (userId: number) => {
   const message: ChatControlMessage = { type: ChatControlType.RefreshUser, userId };
+  await redis
+    .publish(CHAT_CONTROL_CHANNEL, JSON.stringify(message))
+    .catch((err) => logger.error(`Chat control publish failed for user ${userId}: ${err}`));
+};
+
+/**
+ * Inferno-only (QoL #262): a connected player is told at once that they were muted, for how long and why.
+ *
+ * @param {number} userId - The player.
+ */
+export const tellMuted = async (userId: number, minutes: number, reason: string) => {
+  const message: ChatControlMessage = { type: ChatControlType.Muted, userId, minutes, reason };
   await redis
     .publish(CHAT_CONTROL_CHANNEL, JSON.stringify(message))
     .catch((err) => logger.error(`Chat control publish failed for user ${userId}: ${err}`));

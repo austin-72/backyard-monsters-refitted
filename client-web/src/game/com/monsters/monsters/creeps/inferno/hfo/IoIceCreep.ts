@@ -84,7 +84,9 @@ export class IoIceCreep extends CreepBase {
             row = (((this._frameNumber / 8) | 0) % walkRows + 1) | 0;
         }
         let cell: int = (row * 30 + column) | 0;
-        if (cell != this.m_lastCell) {
+        // (26 October: also the same frame again, when the same-frame cache tells: a picture wiped since (healed to full)
+        // was left empty until the frame changed)
+        if (cell != this.m_lastCell || SPRITES.ioSameFrame) {
             let sheet: any = SPRITES.GetSpriteDescriptor(this._creatureID);
             if (!sheet || !sheet.image) {
                 return;

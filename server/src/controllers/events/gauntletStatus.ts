@@ -5,7 +5,7 @@ import { WorldMapCell } from "../../database/models/worldmapcell.model.js";
 import { MapRoomCell, MapRoomVersion } from "../../enums/MapRoom.js";
 import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { postgres } from "../../server.js";
-import { gauntletStatus } from "../../services/events/gauntlet.js";
+import { gauntletCatapult, gauntletStatus } from "../../services/events/gauntlet.js";
 import { isTestMode } from "../../services/admin/testMode.js";
 import { userCell } from "../maproom/v2/cells/userCell.js";
 
@@ -37,4 +37,15 @@ export const getGauntletStatus: KoaController = async (ctx) => {
     if (data) home = { ...data, x: cell.x, y: cell.y };
   }
   ctx.body = { error: 0, enabled: true, ...(await gauntletStatus(user, await isTestMode(user))), home };
+};
+
+/** POST /gauntlet/catapult: a catapult was fired in the Gauntlet attack running (10 October; the no-catapults trophy). */
+export const gauntletCatapultController: KoaController = async (ctx) => {
+  const user: User = ctx.authUser;
+  ctx.status = Status.OK;
+  if (!infernoOnlyConfig.enabled || !infernoOnlyConfig.gauntlet.enabled) {
+    ctx.body = { error: 0, enabled: false };
+    return;
+  }
+  ctx.body = { error: 0, ...(await gauntletCatapult(user, await isTestMode(user))) };
 };

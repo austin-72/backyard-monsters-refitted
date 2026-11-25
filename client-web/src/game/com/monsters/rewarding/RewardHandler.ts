@@ -171,13 +171,7 @@ export class RewardHandler extends ASObject implements IHandler {
                 }
                 BASE.Save(0, false, true);
                 break;
-            case RewardHandler.k_UPDATE_VALUE:
-                _loc2_ = RewardHandler.instance.getRewardByID(as3.str(param1.data[2]));
-                if (_loc2_) {
-                    _loc2_.value = param1.data[3];
-                    RewardHandler.instance.addAndApplyReward(_loc2_, true);
-                }
-                BASE.Save(0, false, true);
+            // (the original had this case twice, the second never reached: removed)
         }
         return true;
     }

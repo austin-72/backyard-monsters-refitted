@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
-import { BASE, BTRAP, GLOBAL, InstanceManager, KEYS } from "@game";
+import { BASE, BTRAP, GLOBAL, InstanceManager, KEYS, IoDevil } from "@game";
 
 /**
  * Inferno-only (3 October): traps that went off stay in the yard, disarmed (BTRAP.ioDisarmed). One click
@@ -30,6 +30,13 @@ export class IoTrapRearm extends ASObject {
                 if (c["r" + i]) {
                     r[i - 1] += Number(c["r" + i].Get());
                 }
+            }
+        }
+        // (13 November: the Devil's Contract's Wrath Traps' price)
+        let ioMul: number = GLOBAL.INFERNO_ONLY ? IoDevil.mul("trapRearm") : 1;
+        if (ioMul != 1) {
+            for (let i: int = 0; i < 4; i++) {
+                r[i] = Math.ceil(r[i] * ioMul);
             }
         }
         return r;

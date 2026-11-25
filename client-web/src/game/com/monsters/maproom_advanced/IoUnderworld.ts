@@ -3,7 +3,7 @@ import { ASObject, Class, Vector, int, uint } from "as3";
 import { Bitmap, BitmapData, DisplayObject, MovieClip } from "flash/display";
 import { IOErrorEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { CellData, DepthsTile_bridge_n, DepthsTile_bridge_ne, DepthsTile_bridge_nw, DepthsTile_bridge_s, DepthsTile_bridge_se, DepthsTile_bridge_sw, DepthsTile_lava, DepthsTile_lava_2, DepthsTile_lava_3, DepthsTile_lava_4, DepthsTile_lava_5, DepthsTile_lava_6, DepthsTile_lava_7, DepthsTile_lava_8, DepthsTile_lava_9, DepthsTile_platform_1, DepthsTile_platform_2, DepthsTile_platform_3, DepthsTile_platform_4, GLOBAL, HellTileVariants, ImageCache, MapRoomCell, POWERUPS, URLLoaderApi, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { CellData, DepthsTile_bridge_n, DepthsTile_bridge_ne, DepthsTile_bridge_nw, DepthsTile_bridge_s, DepthsTile_bridge_se, DepthsTile_bridge_sw, DepthsTile_lava, DepthsTile_lava_2, DepthsTile_lava_3, DepthsTile_lava_4, DepthsTile_lava_5, DepthsTile_lava_6, DepthsTile_lava_7, DepthsTile_lava_8, DepthsTile_lava_9, DepthsTile_platform_1, DepthsTile_platform_2, DepthsTile_platform_3, DepthsTile_platform_4, GLOBAL, HellTileVariants, ImageCache, KEYS, IoQuests, MapRoomCell, POWERUPS, URLLoaderApi, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
 
 /**
  * Inferno-only: the Underworld, called the Depths of Hell in the game (the user's name, 4 October; the code
@@ -67,8 +67,11 @@ export class IoUnderworld extends ASObject {
 
     private static readonly PORTAL_ICON: string = "ioPortal";
 
-    /** What the game calls the underworld. */
-    public static readonly NAME: string = "Depths of Hell";
+    /** What the game calls the underworld (QoL #235: in the player's language, once the language file is in). */
+    public static get NAME(): string {
+        let said: string = KEYS.Get("io_tr_maps_depths");
+        return said && said != "io_tr_maps_depths" ? said : "Depths of Hell";
+    }
 
     // ---- the Depths' own ground (the user's, 4 October)
     /**
@@ -170,6 +173,8 @@ export class IoUnderworld extends ASObject {
         IoUnderworld.under = want;
         if (want) {
             IoUnderworld.requestReach();
+            // Inferno-only quest book: the Depths visited
+            IoQuests.once("depths");
         }
     }
 
@@ -332,6 +337,15 @@ export class IoUnderworld extends ASObject {
             }
         }
         return false;
+    }
+
+    /**
+     * Inferno-only (QoL #339): the player's nearest overworld yard to this portal, [x, y, cells away, Flinger
+     * range], or null (no reach yet, or no yard up here).
+     */
+    public static nearest(index: int): any[] {
+        let near: any = IoUnderworld._reach ? IoUnderworld._reach.near : null;
+        return near ? as3.as(near[String(index)], Array) : null;
     }
 
     /** Is this portal held from below: an underworld outpost of the player is next to its end? */

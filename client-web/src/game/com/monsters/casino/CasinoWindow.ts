@@ -3,10 +3,12 @@ import { ASObject, int, uint } from "as3";
 import { DisplayObject, GradientType, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { ColorMatrixFilter, GlowFilter } from "flash/filters";
-import { Matrix } from "flash/geom";
+import { Matrix, Rectangle } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { AscentGame, BonePileGame, CASINO, CasinoUI, DerbyGame, GLOBAL, LiveTab, MagmaDropGame, POPUPSETTINGS, RouletteGame, SOUNDS, ScratchersGame, SlotsGame } from "@game";
+import { setTimeout } from "flash/utils";
+import { AscentGame, BetSelector, BlackjackGame, BonePileGame, CASINO, CasinoUI, DerbyGame, DiceGame, GLOBAL, HiLoGame, IoChatLift, IoKit, KEYS, LiveTab, MagmaDropGame, POPUPSETTINGS, RouletteGame, ScratchersGame, SlotsGame, SOUNDS, UndertakerGame } from "@game";
 
+// (QoL #235: the Pit's texts in the player's language: keys io_t3c_*, the games' names left as they are)
 /**
  * Inferno-only: the Brimstone Pit's window (opened from the Pit's info panel: BRIMSTONEPIT). A lobby of
  * the eight games (those not open at the Pit's level greyed, those not in yet marked coming soon) with
@@ -16,7 +18,7 @@ import { AscentGame, BonePileGame, CASINO, CasinoUI, DerbyGame, GLOBAL, LiveTab,
  */
 export class CasinoWindow extends ASObject {
     static {
-        as3.fields(this, { _big: null, _bigT: 0, _bigAmount: 0, _bigText: null, _bigGems: null, _favorLine: null, mc: null, _content: null, _shiny: null, _level: null, _tabs: null, _game: null, _toast: null, _toastT: 0, _embers: null, _live: null, _liveT: 0, _emberLayer: null });
+        as3.fields(this, { _big: null, _bigT: 0, _bigAmount: 0, _bigText: null, _bigGems: null, _favorLine: null, mc: null, _content: null, _shiny: null, _level: null, _tabs: null, _game: null, _toast: null, _toastT: 0, _embers: null, _live: null, _liveT: 0, _emberLayer: null, _tabNow: 0, _emberT: 0, _ioSound: null, _ioGameId: null });
     }
 
     public static readonly W: int = 740;
@@ -48,6 +50,9 @@ export class CasinoWindow extends ASObject {
     private _level: TextField;
     private _tabs: any[];
     private _game: any;
+
+    /** (18 October) The game open (openGame's id), for the Watch menu (IoWatch); null in the lobby and the other tabs. */
+    private _ioGameId: string;
     private _toast: TextField;
     private _toastT: int;
     private _embers: any[];
@@ -55,6 +60,12 @@ export class CasinoWindow extends ASObject {
     private _live: any;
     private _liveT: int;
     private _emberLayer: Sprite;
+    /** The tab showing (0 Games, 1 Live, 2 History, 3 Fairness). */
+    private _tabNow: int;
+    /** Embers rising through the window. */
+    private _emberT: int;
+    /** Inferno-only (QoL #394): the sound switch, at the right end of the tabs' row. */
+    private _ioSound: Sprite;
 
     public $ctor(): void {
         this._bigGems = [];
@@ -66,7 +77,7 @@ export class CasinoWindow extends ASObject {
         this.mc.name = "casinoWindow";
         this.drawFrame();
         // the header: title, level, Shiny
-        this.mc.addChild(CasinoUI.at(CasinoUI.title("THE BRIMSTONE PIT", 30, (CasinoWindow.W - 200) | 0), -CasinoWindow.W / 2 + 100, -CasinoWindow.H / 2 + 12));
+        this.mc.addChild(CasinoUI.at(CasinoUI.title(KEYS.Get("io_t3c_title"), 30, (CasinoWindow.W - 200) | 0), -CasinoWindow.W / 2 + 100, -CasinoWindow.H / 2 + 12));
         this._level = as3.as(this.mc.addChild(CasinoUI.label("", 12, CasinoUI.ASH, true, 200, TextFormatAlign.LEFT)), TextField);
         this._level.x = -CasinoWindow.W / 2 + 26;
         this._level.y = -CasinoWindow.H / 2 + 26;
@@ -86,15 +97,23 @@ export class CasinoWindow extends ASObject {
         gem.y = -CasinoWindow.H / 2 + 36;
         gem.filters = [new GlowFilter(0x7AE0FF, 0.8, 8, 8, 2, 2)];
         // tabs
-        let names: any[] = ["Games", "Live", "History", "Fairness"];
+        let names: any[] = [KEYS.Get("io_t3c_tab_games"), KEYS.Get("io_t3c_tab_live"), KEYS.Get("io_t3c_tab_history"), KEYS.Get("io_t3c_tab_fair")];
         let i: int = 0;
         while (i < names.length) {
-            let tab: Sprite = CasinoUI.toggle(as3.str(names[i]), 110, 26, this.tabClick(i));
+            let tab: Sprite = CasinoUI.toggle(as3.str(names[i]), 110, 26, this.tabClick(i), "tab");
             tab.x = -CasinoWindow.W / 2 + 26 + i * 118;
             tab.y = -CasinoWindow.H / 2 + 62;
             this.mc.addChild(tab);
             this._tabs.push(tab);
             i++;
+        }
+        // (QoL #394: the sound switch at the right end of the tabs' row, under the Shiny: the tabs end at 120 from
+        // the middle, the games draw from 26 px below it)
+        if (GLOBAL.INFERNO_ONLY) {
+            this._ioSound = CasinoUI.ioSoundToggle("ioPitSound");
+            this._ioSound.x = CasinoWindow.W / 2 - 26 - 34;
+            this._ioSound.y = -CasinoWindow.H / 2 + 62;
+            this.mc.addChild(this._ioSound);
         }
         this._content = as3.as(this.mc.addChild(new Sprite()), Sprite);
         this._content.x = CasinoWindow.CX;
@@ -121,22 +140,12 @@ export class CasinoWindow extends ASObject {
         this._toast = as3.as(this.mc.addChild(CasinoUI.label("", 14, 16777215, true, (CasinoWindow.W - 100) | 0, TextFormatAlign.CENTER)), TextField);
         this._toast.name = "casinoToast";
         this._toast.x = -CasinoWindow.W / 2 + 50;
-        this._toast.y = CasinoWindow.H / 2 - 44;
+        // (in the gap under the games' panels: it sat across their bottom edge; 9 October)
+        this._toast.y = CasinoWindow.H / 2 - 33;
         this._toast.filters = [new GlowFilter(0x3A0A04, 1, 4, 4, 8, 2)];
         // close
-        let x: Sprite = as3.as(this.mc.addChild(new Sprite()), Sprite);
-        x.name = "casinoClose";
-        x.buttonMode = true;
-        x.mouseChildren = false;
-        x.graphics.lineStyle(2, 14708778, 1);
-        x.graphics.beginFill(2755078, 1);
-        x.graphics.drawCircle(0, 0, 14);
-        x.graphics.endFill();
-        x.graphics.lineStyle(3, 16766346, 1);
-        x.graphics.moveTo(-5, -5);
-        x.graphics.lineTo(5, 5);
-        x.graphics.moveTo(5, -5);
-        x.graphics.lineTo(-5, 5);
+        // (the kit's close button, 11 October)
+        let x: Sprite = as3.as(this.mc.addChild(IoKit.closeButton("casinoClose", 14, (e: any): void => {})), Sprite);
         x.x = CasinoWindow.W / 2 - 22;
         x.y = -CasinoWindow.H / 2 + 22;
         x.addEventListener(MouseEvent.CLICK, as3.bind(this, this.close));
@@ -145,15 +154,17 @@ export class CasinoWindow extends ASObject {
         GLOBAL._layerTop.addChild(this.mc);
         POPUPSETTINGS.AlignToCenter(this.mc);
         POPUPSETTINGS.ScaleUp(this.mc);
+        // (Inferno-only: the chat stays usable over the Pit)
+        IoChatLift.lift();
         this.selectTab(0);
-        this.message("Entering the Pit...", CasinoUI.ASH);
+        this.message(KEYS.Get("io_t3c_entering"), CasinoUI.ASH);
         CASINO.getState(as3.bind(this, this.onState));
     }
 
     /** Opens the window (the player's own yard only, not during an attack). */
     public static Show(): void {
         if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
-            GLOBAL.Message("The Brimstone Pit only opens in your own yard.");
+            GLOBAL.Message(KEYS.Get("io_t3c_own_yard"));
             return;
         }
         if (CasinoWindow._open) {
@@ -171,16 +182,81 @@ export class CasinoWindow extends ASObject {
         return CasinoWindow._open != null;
     }
 
+    /** (18 October) The game being played, for the Watch menu (IoWatch): {title, mc}, or null. */
+    public static ioLiveInfo(): any {
+        let w: CasinoWindow = CasinoWindow._open;
+        if (!w || !w._game || !w._ioGameId || !w.mc || !w.mc.stage) {
+            return null;
+        }
+        return { "title": LiveTab.gameName(w._ioGameId), "mc": w.mc };
+    }
+
+    /**
+     * Inferno-only (QoL #386): the Pit's keys (IoHotkeys): Space presses the game's main button (Deal, Start, Bet,
+     * Drop, Spin, Buy, Place bet; never Cash Out), H S D P in Cinderjack (Hit, Stand, Double, Split), the up and down
+     * arrows in Higher or Lower. Only a button showing and enabled is pressed.
+     */
+    public static ioKey(k: int): boolean {
+        let game: any = CasinoWindow._open ? CasinoWindow._open._game : null;
+        if (!game) {
+            return false;
+        }
+        let press: Function = (b: any): boolean => {
+            if (!b || !b.visible || b["casinoEnabled"] === false || !b.stage) {
+                return false;
+            }
+            b.dispatchEvent(new MouseEvent(MouseEvent.CLICK, true, false));
+            return true;
+        };
+        if (k == 32) {
+            for (let f of ["_deal", "_start", "_action", "_drop", "_spin", "_buy", "_place"]) {
+                if (press(game[f])) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (game instanceof BlackjackGame) {
+            let i: int = [72, 83, 68, 80].indexOf(k);
+            if (i >= 0) {
+                return press(game[["_hit", "_stand", "_double", "_split"][i]]);
+            }
+        }
+        if (game instanceof HiLoGame && (k == 38 || k == 40)) {
+            return press(CasinoWindow.ioNamed(game, k == 38 ? "casinoHiLo:hi" : "casinoHiLo:lo"));
+        }
+        return false;
+    }
+
+    private static ioNamed(root: any, name: string): any {
+        if (!root) {
+            return null;
+        }
+        if (root.name == name) {
+            return root;
+        }
+        if (root.numChildren) {
+            for (let i: int = 0; i < root.numChildren; i++) {
+                let hit: any = CasinoWindow.ioNamed(root.getChildAt(i), name);
+                if (hit) {
+                    return hit;
+                }
+            }
+        }
+        return null;
+    }
+
     /** The games a Pit level opens (the building's description; the server's config decides). */
     public static gamesAtLevel(level: int): string {
-        let names: any[] = ["Magma Drop and Brimstone Scratchers", "Wormzer Roulette and Bone Pile", "Magma Slots and Magma tickets", "Balthazar's Ascent", "Magma Derby", "Korath's Fortune"];
+        // (the games' names stay as they are; the words between them in the player's language)
+        let names: any[] = [KEYS.Get("io_t3c_lvl1"), KEYS.Get("io_t3c_lvl2"), KEYS.Get("io_t3c_lvl3"), "Balthazar's Ascent", "Magma Derby", "Korath's Fortune"];
         let out: any[] = [];
         let i: int = 0;
         while (i < Math.min(level, names.length)) {
             out.push(names[i]);
             i++;
         }
-        return out.join("; ") + (level < names.length ? ". Next level: " + names[level] + "." : ".");
+        return level < names.length ? KEYS.Get("io_t3c_lvl_next", { "v1": out.join("; "), "v2": names[level] }) : out.join("; ") + ".";
     }
 
     /** Obsidian, a molten rim, the cavern behind (casino/lobby/lobby_bg.jpg). */
@@ -193,6 +269,8 @@ export class CasinoWindow extends ASObject {
         bg.graphics.drawRoundRect(-CasinoWindow.W / 2, -CasinoWindow.H / 2, CasinoWindow.W, CasinoWindow.H, 22, 22);
         bg.graphics.endFill();
         bg.filters = [new GlowFilter(0xFF4A00, 0.55, 18, 18, 2, 2)];
+        // (12 October: its inside is opaque, so a live yard under it is not drawn again under it: DisplayObject.ioOccludes)
+        this.mc.ioOccludes(new Rectangle(-CasinoWindow.W / 2 + 12, -CasinoWindow.H / 2 + 12, CasinoWindow.W - 24, CasinoWindow.H - 24));
         let art: Sprite = as3.as(this.mc.addChild(new Sprite()), Sprite);
         CasinoUI.picture(art, "casino/lobby/lobby_bg.jpg", -CasinoWindow.W / 2 + 6, -CasinoWindow.H / 2 + 6, CasinoWindow.W - 12, CasinoWindow.H - 12, (b: any): void => {
             b.alpha = 0.95;
@@ -209,6 +287,21 @@ export class CasinoWindow extends ASObject {
         band.graphics.beginGradientFill(GradientType.LINEAR, [0x0C0605, 0x0C0605], [0.85, 0], [0, 255], m2);
         band.graphics.drawRect(-CasinoWindow.W / 2 + 6, -CasinoWindow.H / 2 + 6, CasinoWindow.W - 12, 100);
         band.graphics.endFill();
+        // the kit's forged rim over the edge (11 October); the plain molten line and its glow until it has loaded
+        let rim: Shape = as3.as(this.mc.addChild(new Shape()), Shape);
+        rim.name = "casinoRim";
+        let drawRim: Function = (): void => {
+            rim.graphics.clear();
+            if (IoKit.frame(rim.graphics, -CasinoWindow.W / 2, -CasinoWindow.H / 2, CasinoWindow.W, CasinoWindow.H)) {
+                bg.filters = [];
+                bg.graphics.clear();
+                bg.graphics.beginGradientFill(GradientType.LINEAR, [0x1E1210, 0x0C0706], [1, 1], [0, 255], m);
+                bg.graphics.drawRoundRect(-CasinoWindow.W / 2, -CasinoWindow.H / 2, CasinoWindow.W, CasinoWindow.H, 22, 22);
+                bg.graphics.endFill();
+            }
+        };
+        drawRim();
+        IoKit.whenLoaded(["frame"], drawRim);
     }
 
     private tabClick(i: int): Function {
@@ -218,6 +311,7 @@ export class CasinoWindow extends ASObject {
     }
 
     public selectTab(i: int): void {
+        this._tabNow = i;
         let k: int = 0;
         while (k < this._tabs.length) {
             CasinoUI.choose(as3.cast(this._tabs[k], Sprite), k == i);
@@ -239,20 +333,30 @@ export class CasinoWindow extends ASObject {
     }
 
     private onState(r: any): void {
+        let self: CasinoWindow = null;
         if (!this.mc) {
             return;
         }
         if (r.error) {
             this.message(String(r.error), CasinoUI.LOSS);
+            // (asked again: one failed answer left the window empty till it was opened again; 9 October)
+            self = this;
+            setTimeout((): void => {
+                if (self.mc && !CASINO.state) {
+                    CASINO.getState(as3.bind(self, self.onState));
+                }
+            }, 5000);
             return;
         }
         this.message("", 0);
         if (CASINO.state && CASINO.state.shiny_locked) {
-            this.message("Shiny is turned off on your account, so you cannot play in the Brimstone Pit.", CasinoUI.LOSS);
+            this.message(KEYS.Get("io_t3c_shiny_locked"), CasinoUI.LOSS);
         } else if (CASINO.state && CASINO.state.closed) {
             this.message(String(CASINO.state.closed), CasinoUI.LOSS);
         }
-        if (!this._game) {
+        // (the lobby drawn again only if it is the lobby showing: History and Fairness have no game either, and
+        // were left for it; 9 October)
+        if (!this._game && this._tabNow == 0) {
             this.selectTab(0);
         }
     }
@@ -265,17 +369,20 @@ export class CasinoWindow extends ASObject {
         if (!games || !games.length) {
             return;
         }
-        let TW: int = 160;
-        let TH: int = 150;
+        // (nine games or more, from 7 October: five a row, a little smaller; eleven or more: half of them a row)
+        let per: int = games.length > 10 ? Math.ceil(games.length / 2) | 0 : (games.length > 8 ? 5 : 4);
+        let gap: int = games.length > 10 ? 8 : (games.length > 8 ? 12 : 20);
+        let TW: int = games.length > 10 ? ((CasinoWindow.CW - 8 - (per - 1) * gap) / per) | 0 : (games.length > 8 ? 128 : 160);
+        let TH: int = (games.length > 10 ? Math.min(124, TW + 14) : (games.length > 8 ? 128 : 150)) | 0;
         let i: int = 0;
         while (i < games.length) {
             let g: any = games[i];
-            let row: int = i < 4 ? 0 : 1;
-            let col: int = (i < 4 ? i : i - 4) | 0;
-            let rowCount: int = (row == 0 ? 4 : games.length - 4) | 0;
-            let x0: number = (CasinoWindow.CW - (rowCount * TW + (rowCount - 1) * 20)) / 2;
+            let row: int = i < per ? 0 : 1;
+            let col: int = (i < per ? i : i - per) | 0;
+            let rowCount: int = (row == 0 ? per : games.length - per) | 0;
+            let x0: number = (CasinoWindow.CW - (rowCount * TW + (rowCount - 1) * gap)) / 2;
             let tile: Sprite = this.tile(g, TW, TH);
-            tile.x = x0 + col * (TW + 20);
+            tile.x = x0 + col * (TW + gap);
             tile.y = 6 + row * (TH + 14);
             this._content.addChild(tile);
             i++;
@@ -286,7 +393,7 @@ export class CasinoWindow extends ASObject {
         let jp: Sprite = CasinoUI.panel(jw, 40);
         jp.x = Number(favor ? 20 : (CasinoWindow.CW - 420) / 2);
         jp.y = 6 + 2 * TH + 14 + 16;
-        let jl: TextField = CasinoUI.label("SLOTS JACKPOT", 11, CasinoUI.ASH, true, 200, TextFormatAlign.LEFT);
+        let jl: TextField = CasinoUI.label(KEYS.Get("io_t3c_slots_jackpot"), 11, CasinoUI.ASH, true, 200, TextFormatAlign.LEFT);
         jl.x = 16;
         jl.y = 12;
         jp.addChild(jl);
@@ -300,7 +407,7 @@ export class CasinoWindow extends ASObject {
         this._favorLine = null;
         if (favor) {
             let ready: boolean = Boolean(favor.ready) && !st.closed && !st.shiny_locked;
-            let fb: Sprite = CasinoUI.button(ready ? "FREE SPIN" : "MOLOCH'S FAVOR", 260, 40, (e: MouseEvent): void => {
+            let fb: Sprite = CasinoUI.button(ready ? KEYS.Get("io_t3c_free_spin") : "MOLOCH'S FAVOR", 260, 40, (e: MouseEvent): void => {
                 this.openGame("slots");
                 if (this._game instanceof SlotsGame) {
                     (as3.as(this._game, SlotsGame)).playFavor();
@@ -317,7 +424,7 @@ export class CasinoWindow extends ASObject {
             this._favorLine.name = ready ? "ready" : "used";
             this._content.addChild(this._favorLine);
             if (ready) {
-                this._favorLine.text = "Moloch's Favor: a free " + CasinoUI.number(favor.bet | 0) + " Shiny spin";
+                this._favorLine.text = KEYS.Get("io_t3c_favor_line", { "v1": CasinoUI.number(favor.bet | 0) });
             }
         }
     }
@@ -335,12 +442,18 @@ export class CasinoWindow extends ASObject {
             // greyed and darkened
             art.filters = [new ColorMatrixFilter([0.2, 0.4, 0.1, 0, -10, 0.2, 0.4, 0.1, 0, -10, 0.2, 0.4, 0.1, 0, -10, 0, 0, 0, 1, 0])];
         }
-        let name: TextField = CasinoUI.label(String(g.name), 13, 16777215, true, w, TextFormatAlign.CENTER);
+        let name: TextField = CasinoUI.label(String(g.name), w < 120 ? 11 : 13, 16777215, true, w, TextFormatAlign.CENTER);
         name.y = h - 40;
+        if (name.textWidth > w - 8) {
+            // a long name (The Undertaker's Offer on a narrow tile): two lines
+            name.multiline = name.wordWrap = true;
+            name.height = 32;
+            name.y = h - 54;
+        }
         name.filters = [new GlowFilter(0x000000, 1, 4, 4, 8, 2)];
         t.addChild(name);
-        let status: string = !g.open ? "Coming soon" : (!g.unlocked ? "Pit level " + g.level : (g.id == "bonepile" && st && st.bonepile ? "Your game is open" : ""));
-        let live: boolean = Boolean(g.unlocked && (g.id == "ascent" || g.id == "derby"));
+        let status: string = !g.open ? KEYS.Get("io_t3c_soon") : (!g.unlocked ? KEYS.Get("io_t3c_tile_level", { "v1": g.level }) : (st && st[g.id] && (g.id == "bonepile" || g.id == "blackjack" || g.id == "hilo" || g.id == "deal") ? KEYS.Get("io_t3c_game_open") : ""));
+        let live: boolean = Boolean(g.unlocked && (g.id == "ascent" || g.id == "derby" || g.id == "dice"));
         if (status || live) {
             let s: TextField = CasinoUI.label(status, 11, g.open ? CasinoUI.EMBER : CasinoUI.ASH, true, w, TextFormatAlign.CENTER);
             s.y = h - 22;
@@ -372,6 +485,8 @@ export class CasinoWindow extends ASObject {
     /** Opens a game in the window (the lobby comes back with its Lobby button). */
     public openGame(id: string): void {
         this.endGame();
+        // (QoL #383: the game's bet as it was last left)
+        BetSelector.ioGame = id;
         CasinoUI.removeAll(this._content);
         let k: int = 0;
         while (k < this._tabs.length) {
@@ -388,19 +503,29 @@ export class CasinoWindow extends ASObject {
             this._game = new SlotsGame(this);
         } else if (id == "bonepile") {
             this._game = new BonePileGame(this);
+        } else if (id == "blackjack") {
+            this._game = new BlackjackGame(this);
+        } else if (id == "hilo") {
+            this._game = new HiLoGame(this);
+        } else if (id == "deal") {
+            this._game = new UndertakerGame(this);
         } else if (id == "ascent") {
             this._game = new AscentGame(this);
         } else if (id == "derby") {
             this._game = new DerbyGame(this);
+        } else if (id == "dice") {
+            this._game = new DiceGame(this);
         } else if (id == "fortune") {
             this._game = new SlotsGame(this, "fortune");
         }
         if (this._game) {
+            this._ioGameId = id;
             this._content.addChild(as3.as(this._game, Sprite));
         }
     }
 
     private endGame(): void {
+        this._ioGameId = null;
         if (this._game) {
             this._game.dispose();
             this._game = null;
@@ -417,7 +542,7 @@ export class CasinoWindow extends ASObject {
         let p: Sprite = null;
         let t: TextField = null;
         p = as3.as(this._content.addChild(CasinoUI.panel(CasinoWindow.CW, (CasinoWindow.CH - 10) | 0)), Sprite);
-        t = CasinoUI.label("Loading your last bets...", 12, CasinoUI.ASH, true, (CasinoWindow.CW - 40) | 0);
+        t = CasinoUI.label(KEYS.Get("io_t3c_hist_loading"), 12, CasinoUI.ASH, true, (CasinoWindow.CW - 40) | 0);
         t.x = 20;
         t.y = 14;
         p.addChild(t);
@@ -430,8 +555,13 @@ export class CasinoWindow extends ASObject {
                 return;
             }
             let bets: any[] = as3.as(r.bets, Array);
-            t.text = bets.length ? "Your last bets (every one can be checked against its seeds in Fairness)" : "No bets yet.";
-            let cols: any[] = [["Game", 20, 170], ["Bet", 190, 80], ["Paid", 270, 90], ["x", 360, 70], ["Nonce", 430, 70], ["When", 500, 180]];
+            t.text = bets.length ? KEYS.Get("io_t3c_hist_title") : KEYS.Get("io_t3c_hist_none");
+            if (GLOBAL.INFERNO_ONLY && bets.length) {
+                // (QoL #392: a filter by game, pages, Older, and a row's details)
+                this.ioHistory(p, bets);
+                return;
+            }
+            let cols: any[] = [[KEYS.Get("io_t3c_col_game"), 20, 170], [KEYS.Get("io_t3c_col_bet"), 190, 80], [KEYS.Get("io_t3c_col_paid"), 270, 90], ["x", 360, 70], ["Nonce", 430, 70], [KEYS.Get("io_t3c_col_when"), 500, 180]];
             let c: any[] = null;
             for (c of as3.values(cols)) {
                 let hd: TextField = CasinoUI.label(as3.str(c[0]), 11, CasinoUI.EMBER, true, c[2] | 0);
@@ -443,10 +573,14 @@ export class CasinoWindow extends ASObject {
             while (i < Math.min(bets.length, 18)) {
                 let b: any = bets[i];
                 let won: boolean = (b.payout | 0) > (b.stake | 0);
-                let vals: any[] = [LiveTab.gameName(String(b.game)), b.game == "favor" ? "FREE" : CasinoUI.number(b.stake | 0), CasinoUI.number(b.payout | 0), CasinoUI.mult(Number(b.multiplier)), b.nonce == null ? "-" : String(b.nonce), String(b.created_at).replace("T", " ").substr(0, 19)];
+                // (9 October: a bet still in play, a race not run yet or a game not finished, is not a loss; one
+                // given back is not either)
+                let open: boolean = b.status == "open";
+                let back: boolean = b.status == "refunded";
+                let vals: any[] = [LiveTab.gameName(String(b.game)), b.game == "favor" ? KEYS.Get("io_t3c_free") : CasinoUI.number(b.stake | 0), open ? KEYS.Get("io_pit_hist_open") : back ? KEYS.Get("io_pit_hist_back") : CasinoUI.number(b.payout | 0), open || back ? "-" : CasinoUI.mult(Number(b.multiplier)), b.nonce == null ? "-" : String(b.nonce), String(b.created_at).replace("T", " ").substr(0, 19)];
                 let j: int = 0;
                 while (j < cols.length) {
-                    let v: TextField = CasinoUI.label(as3.str(vals[j]), 11, (j == 2 ? (won ? CasinoUI.WIN : ((b.payout | 0) > 0 ? CasinoUI.GOLD : CasinoUI.ASH)) : 0xE8DCC8) >>> 0, false, cols[j][2] | 0);
+                    let v: TextField = CasinoUI.label(as3.str(vals[j]), 11, (j == 2 ? (open || back ? CasinoUI.GOLD : won ? CasinoUI.WIN : ((b.payout | 0) > 0 ? CasinoUI.GOLD : CasinoUI.ASH)) : 0xE8DCC8) >>> 0, false, cols[j][2] | 0);
                     v.x = Number(cols[j][1]);
                     v.y = 60 + i * 19;
                     p.addChild(v);
@@ -455,6 +589,299 @@ export class CasinoWindow extends ASObject {
                 i++;
             }
         });
+    }
+
+    /** QoL #392: the History tab's rows a page. */
+    public static readonly IO_PER_PAGE: int = 16;
+
+    /**
+     * Inferno-only (QoL #392): the History tab's table with a filter by game (the games among the bets loaded: a
+     * button that goes round them, "All games" first), pages of IO_PER_PAGE (◀ 1/3 ▶), Older (the 50 bets before the
+     * oldest loaded, from the server's `before`; shown while a load came back full) and a row's details when it is
+     * clicked (ioBetDetails). Today's totals on the title's line count every bet loaded (QoL #130).
+     */
+    private ioHistory(p: Sprite, first: any[]): void {
+        let all: any[] = first.concat();
+        let game: string = "";
+        let page: int = 0;
+        let more: boolean = first.length >= 50;
+        let loading: boolean = false;
+        let render: Function = null;
+        let today: TextField = CasinoUI.label(CasinoWindow.ioToday(all), 11, CasinoUI.GOLD, true, (CasinoWindow.CW - 230) | 0, TextFormatAlign.RIGHT);
+        today.name = "ioPitToday";
+        today.x = 210;
+        today.y = 15;
+        p.addChild(today);
+        let cols: any[] = [[KEYS.Get("io_t3c_col_game"), 20, 170], [KEYS.Get("io_t3c_col_bet"), 190, 80], [KEYS.Get("io_t3c_col_paid"), 270, 90], [CasinoUI.times(), 360, 70], ["Nonce", 430, 70], [KEYS.Get("io_t3c_col_when"), 500, 180]];
+        for (let c of as3.values(cols)) {
+            let hd: TextField = CasinoUI.label(as3.str(c[0]), 11, CasinoUI.EMBER, true, c[2] | 0);
+            hd.x = Number(c[1]);
+            hd.y = 40;
+            p.addChild(hd);
+        }
+        let list: Sprite = as3.as(p.addChild(new Sprite()), Sprite);
+        list.name = "ioPitRows";
+        let games: Function = (): any[] => {
+            let out: any[] = [];
+            for (let b of as3.values(all)) {
+                if (out.indexOf(String(b.game)) < 0) {
+                    out.push(String(b.game));
+                }
+            }
+            return out;
+        };
+        let shown: Function = (): any[] => game ? all.filter((b: any): boolean => String(b.game) == game) : all;
+        let pages: Function = (): int => Math.max(1, Math.ceil(shown().length / CasinoWindow.IO_PER_PAGE)) | 0;
+        // the controls under the table (the rows end at 366)
+        let filter: Sprite = CasinoUI.toggle("", 180, 24, (e: MouseEvent): void => {
+            let g: any[] = games();
+            let k: int = g.indexOf(game);
+            game = k + 1 >= g.length ? "" : as3.str(g[k + 1]);
+            page = 0;
+            render();
+        });
+        filter.name = "ioPitFilter";
+        filter.x = 20;
+        filter.y = 368;
+        p.addChild(filter);
+        let prev: Sprite = CasinoUI.toggle("◀", 32, 24, (e: MouseEvent): void => {
+            if (page > 0) {
+                page--;
+                render();
+            }
+        });
+        prev.name = "ioPitPrev";
+        prev.x = 470;
+        prev.y = 368;
+        p.addChild(prev);
+        let pageText: TextField = CasinoUI.label("", 11, 0xE8DCC8, true, 62, TextFormatAlign.CENTER);
+        pageText.name = "ioPitPage";
+        pageText.x = 504;
+        pageText.y = 372;
+        p.addChild(pageText);
+        let next: Sprite = CasinoUI.toggle("▶", 32, 24, (e: MouseEvent): void => {
+            if (page < pages() - 1) {
+                page++;
+                render();
+            }
+        });
+        next.name = "ioPitNext";
+        next.x = 568;
+        next.y = 368;
+        p.addChild(next);
+        let older: Sprite = null;
+        older = CasinoUI.toggle(KEYS.Get("io_pit_hist_older"), 74, 24, (e: MouseEvent): void => {
+            if (!more || loading || !all.length) {
+                return;
+            }
+            loading = true;
+            CasinoUI.relabel(older, "...");
+            let oldest: number = Number(all[all.length - 1].id);
+            CASINO.history((r: any): void => {
+                if (!this.mc || !p.parent) {
+                    return;
+                }
+                loading = false;
+                CasinoUI.relabel(older, KEYS.Get("io_pit_hist_older"));
+                if (r.error) {
+                    this.message(String(r.error), CasinoUI.LOSS);
+                    return;
+                }
+                let got: any[] = as3.as(r.bets, Array) || [];
+                let added: any[] = got.filter((b: any): boolean => Number(b.id) < oldest);
+                more = got.length >= 50 && added.length > 0;
+                if (!added.length) {
+                    this.message(KEYS.Get("io_pit_hist_no_older"), CasinoUI.ASH);
+                    render();
+                    return;
+                }
+                all = all.concat(added);
+                CasinoUI.setText(today, CasinoWindow.ioToday(all));
+                // (the page the first of them is on, in the list as it is filtered)
+                let at: int = shown().indexOf(added[0]) | 0;
+                if (at >= 0) {
+                    page = (at / CasinoWindow.IO_PER_PAGE) | 0;
+                }
+                render();
+            }, oldest);
+        });
+        older.name = "ioPitOlder";
+        older.x = 606;
+        older.y = 368;
+        p.addChild(older);
+        render = (): void => {
+            CasinoUI.removeAll(list);
+            let rows: any[] = shown();
+            let n: int = pages();
+            page = Math.max(0, Math.min(page, n - 1)) | 0;
+            CasinoUI.relabel(filter, (game ? LiveTab.gameName(game) : KEYS.Get("io_pit_hist_all")) + " ▾");
+            CasinoUI.setText(pageText, (page + 1) + "/" + n);
+            prev.alpha = page > 0 ? 1 : 0.4;
+            next.alpha = page < n - 1 ? 1 : 0.4;
+            older.visible = more;
+            let i: int = 0;
+            while (i < CasinoWindow.IO_PER_PAGE && page * CasinoWindow.IO_PER_PAGE + i < rows.length) {
+                list.addChild(this.ioHistoryRow(rows[page * CasinoWindow.IO_PER_PAGE + i], cols, i));
+                i++;
+            }
+        };
+        render();
+    }
+
+    /** QoL #392: one bet's row (ioPitRow0, ioPitRow1, ... down the page), lit when pointed at; a click shows it. */
+    private ioHistoryRow(b: any, cols: any[], i: int): Sprite {
+        let row: MovieClip = new MovieClip();
+        row.name = "ioPitRow" + i;
+        row.y = 60 + i * 19;
+        let lit: Function = (on: boolean): void => {
+            row.graphics.clear();
+            row.graphics.beginFill(0xFFB040, on ? 0.14 : 0);
+            row.graphics.drawRoundRect(14, -1, CasinoWindow.CW - 28, 19, 6, 6);
+            row.graphics.endFill();
+        };
+        lit(false);
+        row.buttonMode = true;
+        row.mouseChildren = false;
+        row.addEventListener(MouseEvent.ROLL_OVER, (e: MouseEvent): void => {
+            lit(true);
+        });
+        row.addEventListener(MouseEvent.ROLL_OUT, (e: MouseEvent): void => {
+            lit(false);
+        });
+        row.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            CasinoWindow.ioBetDetails(b);
+        });
+        let won: boolean = (b.payout | 0) > (b.stake | 0);
+        let open: boolean = b.status == "open";
+        let back: boolean = b.status == "refunded";
+        let vals: any[] = [LiveTab.gameName(String(b.game)), b.game == "favor" ? KEYS.Get("io_t3c_free") : CasinoUI.number(b.stake | 0), open ? KEYS.Get("io_pit_hist_open") : back ? KEYS.Get("io_pit_hist_back") : CasinoUI.number(b.payout | 0), open || back ? "-" : CasinoUI.mult(Number(b.multiplier)), b.nonce == null ? "-" : String(b.nonce), String(b.created_at).replace("T", " ").substr(0, 19)];
+        let j: int = 0;
+        while (j < cols.length) {
+            let v: TextField = CasinoUI.label(as3.str(vals[j]), 11, (j == 2 ? (open || back ? CasinoUI.GOLD : won ? CasinoUI.WIN : ((b.payout | 0) > 0 ? CasinoUI.GOLD : CasinoUI.ASH)) : 0xE8DCC8) >>> 0, false, cols[j][2] | 0);
+            v.x = Number(cols[j][1]);
+            row.addChild(v);
+            j++;
+        }
+        return row;
+    }
+
+    /**
+     * QoL #392: a bet of the History tab in a message: its game, bet, what it paid, its multiplier, nonce and time, and
+     * what the server keeps of how it went that reads in a line (casino/history's outcome: a cup, a risk, a ticket, where
+     * the ball landed, the reels, a race's winner, a cash-out; not its paths, grids or cards).
+     */
+    public static ioBetDetails(b: any): void {
+        let open: boolean = b.status == "open";
+        let back: boolean = b.status == "refunded";
+        let free: boolean = b.game == "favor";
+        let o: any = b.outcome && typeof b.outcome == "object" ? b.outcome : {};
+        let name: Function = (id: any): string => String(CASINO.MONSTER_NAMES[id] || ScratchersGame.ioName(String(id)) || id);
+        let lines: any[] = [];
+        let add: Function = (key: string, v1: any = null, v2: any = null): void => {
+            lines.push(KEYS.Get(key, { "v1": v1, "v2": v2 }));
+        };
+        if (o.free_bet != null) {
+            add("io_pit_hist_free", CasinoUI.number(Number(o.free_bet)));
+        }
+        if (o.risk != null) {
+            add("io_pit_hist_risk", MagmaDropGame.ioRisk(String(o.risk)));
+        }
+        if (o.slot != null && b.game == "magmadrop") {
+            add("io_pit_hist_cup", (Number(o.slot) | 0) + 1);
+        }
+        if (o.tier != null) {
+            add("io_pit_hist_ticket", String(o.tier).toUpperCase());
+        }
+        if (o.prize != null && b.game == "scratch") {
+            add("io_pit_hist_prize", name(o.prize));
+        }
+        if (o.monster != null) {
+            add("io_pit_hist_landed", name(o.monster) + (o.color != null && o.color != "wormzer" ? " - " + String(o.color).toUpperCase() : ""));
+        }
+        if (o.symbols instanceof Array) {
+            add("io_pit_hist_reels", (as3.as(o.symbols, Array)).map((s: any): string => name(s)).join(", "));
+        }
+        if (o.line != null && o.line != "none") {
+            add("io_pit_hist_line", String(o.line).replace("_", " "));
+        }
+        if ((Number(o.jackpot_won) || 0) > 0) {
+            add("io_pit_hist_jackpot", CasinoUI.number(Number(o.jackpot_won)));
+        }
+        if (o.winner != null) {
+            add("io_pit_hist_winner", name(o.winner), o.odds != null && typeof o.odds == "number" ? CasinoUI.mult(Number(o.odds)) : "-");
+        }
+        if (o.cashed != null) {
+            if (o.at != null) {
+                add("io_pit_hist_banked", CasinoUI.multFixed(Number(o.cashed)), Number(o.at) | 0);
+            } else {
+                add("io_pit_hist_cashed", CasinoUI.multFixed(Number(o.cashed)));
+            }
+        } else if (o.lost === true && (b.game == "ascent" || b.game == "dice")) {
+            add(b.game == "ascent" ? "io_pit_hist_shot" : "io_pit_hist_devil");
+        }
+        if (o.auto != null && Number(o.auto) > 0) {
+            if (b.game == "dice") {
+                add("io_pit_hist_autodice", Number(o.auto) | 0);
+            } else {
+                add("io_pit_hist_auto", CasinoUI.multFixed(Number(o.auto)));
+            }
+        }
+        if (o.sabnox != null) {
+            add("io_pit_hist_sabnox", Number(o.sabnox) | 0);
+        }
+        if (o.bust != null) {
+            add("io_pit_hist_bust", (Number(o.bust) | 0) + 1);
+        }
+        if (o.kept != null && b.game == "deal") {
+            add("io_pit_hist_coffin", (Number(o.kept) | 0) + 1);
+        }
+        let paid: string = open ? KEYS.Get("io_pit_hist_open") : (back ? KEYS.Get("io_pit_hist_back") : CasinoUI.number(b.payout | 0));
+        let text: string = "<b>" + LiveTab.gameName(String(b.game)) + "</b><br><br>" + KEYS.Get("io_pit_hist_detail", {
+            "v1": free ? KEYS.Get("io_t3c_free") : CasinoUI.number(b.stake | 0),
+            "v2": paid,
+            "v3": open || back ? "-" : CasinoUI.mult(Number(b.multiplier)),
+            "v4": b.nonce == null ? "-" : String(b.nonce),
+            "v5": String(b.created_at).replace("T", " ").substr(0, 19)
+        });
+        if (lines.length) {
+            text += "<br><br>• " + lines.slice(0, 6).join("<br>• ");
+        }
+        GLOBAL.Message(text);
+    }
+
+    /**
+     * Inferno-only (QoL #130): "Today (UTC): wagered 120 · paid out 95 · net -25", from the bets the History tab has
+     * (the last 50). The day is the Pit's own, which turns at midnight UTC (Moloch's Favor's), by the server's clock.
+     * Bets still in play and bets given back are left out; a free spin wagers nothing. When the oldest bet loaded is
+     * from today too, earlier ones may be missing, and the line says so.
+     */
+    public static ioToday(bets: any[]): string {
+        let st: any = CASINO.state;
+        let day: string = new Date(new Date().getTime() + Number(st && st.live_offset ? st.live_offset : 0)).toISOString().substr(0, 10);
+        let staked: number = 0;
+        let paid: number = 0;
+        let n: int = 0;
+        for (let b of as3.values(bets)) {
+            let at: Date = new Date(String(b.created_at));
+            if (isNaN(at.getTime()) || at.toISOString().substr(0, 10) != day) {
+                continue;
+            }
+            n++;
+            if (b.status == "open" || b.status == "refunded") {
+                continue;
+            }
+            staked += b.game == "favor" ? 0 : Number(b.stake) || 0;
+            paid += Number(b.payout) || 0;
+        }
+        staked = Math.round(staked);
+        paid = Math.round(paid);
+        let net: number = paid - staked;
+        let line: string = KEYS.Get("io_pit_today", { "v1": CasinoUI.number(staked), "v2": CasinoUI.number(paid), "v3": (net > 0 ? "+" : (net < 0 ? "-" : "")) + CasinoUI.number(Math.abs(net)) });
+        if (n > 0 && n >= bets.length && bets.length >= 50) {
+            line += " " + KEYS.Get("io_pit_today_partial", { "v1": bets.length });
+        }
+        return line;
     }
 
     // ---- Fairness
@@ -478,29 +905,29 @@ export class CasinoWindow extends ASObject {
             y = (y + ((h > 0 ? h : size + 10) + 2)) | 0;
             return f;
         };
-        put("Every result is drawn from your seeds, before you see it, and can be checked.", 13, CasinoUI.GOLD, true);
-        put("A bet's numbers are HMAC-SHA256(server seed, \"client seed:nonce:block\"), four bytes to a number between 0 and 1. The server seed stays secret while it is in use: you see its SHA-256 hash first. Change seeds to see it, then recompute any past bet from the server seed, your client seed and the bet's nonce. A win with part of a Shiny (1.5x on 1) pays one more Shiny with that part's chance, decided by the bet's next number.", 11, 0xE8DCC8, false, 60);
+        put(KEYS.Get("io_t3c_fair_title"), 13, CasinoUI.GOLD, true);
+        put(KEYS.Get("io_t3c_fair_body"), 11, 0xE8DCC8, false, 60);
         y += 4;
         if (!st || !st.seed) {
-            put("Loading...", 11, CasinoUI.ASH, false);
+            put(KEYS.Get("io_t3c_loading"), 11, CasinoUI.ASH, false);
             return;
         }
-        put("Server seed (hash)", 11, CasinoUI.EMBER, true);
+        put(KEYS.Get("io_t3c_fair_hash"), 11, CasinoUI.EMBER, true);
         let hash: TextField = as3.cast(put(String(st.seed.server_seed_hash), 11, 0xFFFFFF, false), TextField);
         hash.selectable = true;
         hash.mouseEnabled = true;
-        put("Client seed (yours to choose: letters, digits, - and _)", 11, CasinoUI.EMBER, true);
+        put(KEYS.Get("io_t3c_fair_client"), 11, CasinoUI.EMBER, true);
         client = CasinoUI.input(300, 24, String(st.seed.client_seed), 32, "A-Za-z0-9_\\-");
         client.x = 20;
         client.y = y;
         p.addChild(client);
-        let nonce: TextField = CasinoUI.label("Bets on these seeds: " + st.seed.nonce, 11, CasinoUI.ASH, true, 220);
+        let nonce: TextField = CasinoUI.label(KEYS.Get("io_t3c_fair_nonce", { "v1": st.seed.nonce }), 11, CasinoUI.ASH, true, 220);
         nonce.x = 340;
         nonce.y = y + 4;
         p.addChild(nonce);
         y += 34;
         revealed = null;
-        btn = CasinoUI.button("CHANGE SEEDS", 180, 32, (e: MouseEvent): void => {
+        btn = CasinoUI.button(KEYS.Get("io_t3c_fair_change"), 180, 32, (e: MouseEvent): void => {
             CasinoUI.enable(btn, false);
             CASINO.rotateSeed(client.text, (r: any): void => {
                 if (!this.mc) {
@@ -511,15 +938,18 @@ export class CasinoWindow extends ASObject {
                     CasinoUI.enable(btn, true);
                     return;
                 }
-                this.message("New seeds. The old server seed is shown below.", CasinoUI.GOLD);
-                this.selectTab(3);
+                this.message(KEYS.Get("io_t3c_fair_new"), CasinoUI.GOLD);
+                // (only if Fairness still shows: a game opened meanwhile was closed mid-spin; 9 October)
+                if (this.mc && this._tabNow == 3 && !this._game) {
+                    this.selectTab(3);
+                }
             });
         });
         btn.x = 20;
         btn.y = y;
         p.addChild(btn);
         y += 44;
-        put("Seeds you have changed (their server seeds, now shown)", 11, CasinoUI.EMBER, true);
+        put(KEYS.Get("io_t3c_fair_old"), 11, CasinoUI.EMBER, true);
         revealed = as3.cast(put("...", 10, 0xE8DCC8, false, 150), TextField);
         revealed.selectable = true;
         revealed.mouseEnabled = true;
@@ -533,7 +963,7 @@ export class CasinoWindow extends ASObject {
             for (s of as3.values(list)) {
                 lines.push("server " + s.server_seed + "\n   hash " + s.server_seed_hash + "  client " + s.client_seed + "  bets " + s.nonces);
             }
-            revealed.text = lines.length ? lines.slice(0, 4).join("\n") : "None yet.";
+            revealed.text = lines.length ? lines.slice(0, 4).join("\n") : KEYS.Get("io_t3c_none_yet");
         });
     }
 
@@ -550,8 +980,19 @@ export class CasinoWindow extends ASObject {
     }
 
     private tick(e: Event): void {
-        this._shiny.text = CasinoUI.number(CASINO.credits());
-        this._level.text = CASINO.state ? ((CASINO.state.level | 0) > 0 ? "Pit level " + CASINO.state.level : "") : "";
+        // (the yard reloaded under it, a visit from the chat say: its layer was thrown away, and the window
+        // kept playing and asking the server, unseen; 9 October)
+        if (this.mc && !this.mc.stage) {
+            this.close();
+            return;
+        }
+        // (only when they change: setting a text every frame drew it again every frame; 7 October, performance)
+        CasinoUI.setText(this._shiny, CasinoUI.number(CASINO.credits()));
+        CasinoUI.setText(this._level, CASINO.state ? ((CASINO.state.level | 0) > 0 ? KEYS.Get("io_t3c_level", { "v1": CASINO.state.level }) : "") : "");
+        if (this._ioSound) {
+            // (QoL #394: muted or not, as it is now)
+            this._ioSound["ioSoundRedraw"]();
+        }
         if (this._toastT > 0) {
             --this._toastT;
             if (this._toastT < 30) {
@@ -570,7 +1011,8 @@ export class CasinoWindow extends ASObject {
 
     /** The lobby's "Next Favor in 5:12:03" (the server's clock: the day turns at midnight UTC). */
     private favorCountdown(): void {
-        let f: TextField = this._favorLine;
+        let f: TextField = null;
+        f = this._favorLine;
         if (!f || !f.parent || f.name != "used") {
             return;
         }
@@ -581,8 +1023,11 @@ export class CasinoWindow extends ASObject {
             // a new day: ask again (the button turns into today's spin)
             f.name = "asked";
             CASINO.getState((r: any): void => {
-                if (this.mc && !this._game && !r.error) {
+                if (this.mc && !this._game && this._tabNow == 0 && !r.error) {
                     this.selectTab(0);
+                } else if (r.error) {
+                    // (asked again in a second: it froze on the error; 9 October)
+                    f.name = "used";
                 }
             });
             return;
@@ -590,7 +1035,7 @@ export class CasinoWindow extends ASObject {
         let h: int = (left / 3600) | 0;
         let m: int = (((left / 60) | 0) % 60) | 0;
         let sec: int = (left % 60) | 0;
-        f.text = "Next free spin in " + h + ":" + (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec;
+        CasinoUI.setText(f, KEYS.Get("io_t3c_favor_next", { "v1": h + ":" + (m < 10 ? "0" : "") + m + ":" + (sec < 10 ? "0" : "") + sec }));
     }
 
     /**
@@ -604,9 +1049,11 @@ export class CasinoWindow extends ASObject {
             return false;
         }
         let x: number = payout / bet;
-        let word: string = x >= 200 ? "EPIC WIN!" : (x >= 50 ? "MEGA WIN!" : "BIG WIN!");
+        let word: string = x >= 200 ? KEYS.Get("io_t3c_epic_win") : (x >= 50 ? KEYS.Get("io_t3c_mega_win") : KEYS.Get("io_t3c_big_win"));
         let col: uint = (x >= 200 ? 0xFF4AD0 : (x >= 50 ? 0x6AE0FF : 0xFFD040)) >>> 0;
         CasinoUI.removeAll(this._big);
+        // (the last one's gems went with it: bug report #72, a win on a win in Magma Drop)
+        this._bigGems = [];
         this._big.graphics.clear();
         this._big.graphics.beginFill(0, 0.45);
         this._big.graphics.drawRoundRect(-CasinoWindow.W / 2 + 6, -CasinoWindow.H / 2 + 6, CasinoWindow.W - 12, CasinoWindow.H - 12, 18, 18);
@@ -638,7 +1085,7 @@ export class CasinoWindow extends ASObject {
         this._bigText.y = 6;
         this._bigText.filters = [new GlowFilter(0x000000, 1, 6, 6, 6, 2)];
         words.addChild(this._bigText);
-        words.addChild(CasinoUI.at(CasinoUI.label(CasinoUI.mult(Math.floor(x * 100) / 100) + " YOUR BET", 13, col, true, 600, TextFormatAlign.CENTER), -300, 48));
+        words.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_x_your_bet", { "v1": CasinoUI.mult(Math.floor(x * 100) / 100) }), 13, col, true, 600, TextFormatAlign.CENTER), -300, 48));
         this._bigAmount = payout;
         this._bigT = 230;
         this._big.visible = true;
@@ -652,7 +1099,9 @@ export class CasinoWindow extends ASObject {
         if (this._bigT <= 0) {
             let g0: int = (this._bigGems.length - 1) | 0;
             while (g0 >= 0) {
-                this._big.removeChild(as3.cast(this._bigGems[g0].s, DisplayObject));
+                if (this._bigGems[g0].s.parent) {
+                    this._bigGems[g0].s.parent.removeChild(this._bigGems[g0].s);
+                }
                 g0--;
             }
             this._bigGems = [];
@@ -695,7 +1144,9 @@ export class CasinoWindow extends ASObject {
             d.vy += 0.18;
             d.s.rotation += d.vr;
             if (d.s.y > CasinoWindow.H / 2) {
-                this._big.removeChild(as3.cast(d.s, DisplayObject));
+                if (d.s.parent) {
+                    d.s.parent.removeChild(d.s);
+                }
                 this._bigGems.splice(i, 1);
             }
             i--;
@@ -713,8 +1164,11 @@ export class CasinoWindow extends ASObject {
         if (++this._liveT >= 160) {
             this._liveT = 0;
             let any: boolean = false;
+            // (only while the lobby's tiles are showing: History and Fairness kept asking; 9 October)
             for (let k in this._live) {
-                any = true;
+                if (as3.cast(this._live[k], TextField).stage) {
+                    any = true;
+                }
             }
             if (any) {
                 CASINO.getState((r: any): void => {
@@ -728,23 +1182,39 @@ export class CasinoWindow extends ASObject {
             if (!f.parent) {
                 continue;
             }
+            if (id == "dice") {
+                // (the tables: how many sit at them)
+                let tabs: any[] = as3.as(st.live.dice_tables, Array);
+                let at: int = 0;
+                for (let tb of as3.values(tabs)) {
+                    at += tb.players | 0;
+                }
+                CasinoUI.setText(f, at > 0 ? KEYS.Get("io_t3c_live_tables", { "v1": at }) : KEYS.Get("io_t3c_live_seat"));
+                continue;
+            }
             let r: any = st.live[id];
             if (!r) {
-                f.text = "";
+                CasinoUI.setText(f, "");
                 continue;
             }
             let left: int = Math.max(0, Math.ceil((Number(r.starts_at) - now) / 1000)) | 0;
             if (id == "ascent") {
-                f.text = r.phase == "running" && now >= Number(r.starts_at) ? "Flying: " + (Math.floor(100 * Math.exp(0.00006 * (now - Number(r.starts_at)))) / 100).toFixed(2) + "x" : (r.phase == "betting" && left > 0 ? "Taking off in " + left + "s" : "Next flight soon");
+                // (QoL #581: the flight's multiplier written as the game writes it)
+                CasinoUI.setText(f, r.phase == "running" && now >= Number(r.starts_at) ? KEYS.Get("io_t3c_live_flying", { "v1": CasinoUI.multFixed(Math.floor(100 * Math.exp(0.00006 * (now - Number(r.starts_at)))) / 100) }) : (r.phase == "betting" && left > 0 ? KEYS.Get("io_t3c_live_takeoff", { "v1": left }) : KEYS.Get("io_t3c_live_flight_soon")));
             } else {
-                f.text = r.phase == "running" ? "Racing now!" : (r.phase == "betting" && left > 0 ? "Next race in " + ((left / 60) | 0) + ":" + (left % 60 < 10 ? "0" : "") + (left % 60) : "Next race soon");
+                CasinoUI.setText(f, r.phase == "running" ? KEYS.Get("io_t3c_live_racing") : (r.phase == "betting" && left > 0 ? KEYS.Get("io_t3c_live_race_in", { "v1": ((left / 60) | 0) + ":" + (left % 60 < 10 ? "0" : "") + (left % 60) }) : KEYS.Get("io_t3c_live_race_soon")));
             }
         }
     }
 
-    /** Embers rising through the window. */
     private embers(): void {
-        if (this._embers.length < 26 && Math.random() < 0.3) {
+        // (moved every other frame, twice as far, and 20 at most: each ember moved has the screen round it drawn
+        // again, a 32-pixel square or more, so 26 moving every frame cost the lobby as much again as the yard
+        // under it; 9 October)
+        if (++this._emberT % 2 == 1) {
+            return;
+        }
+        if (this._embers.length < 20 && Math.random() < 0.45) {
             let s: Shape = as3.as(this._emberLayer.addChild(new Shape()), Shape);
             let colors: any[] = [0xFFB040, 0xFF6A1A, 0xFFE08A, 0xFF4A10];
             s.graphics.beginFill(colors[(Math.random() * colors.length) | 0] >>> 0, 1);
@@ -757,9 +1227,9 @@ export class CasinoWindow extends ASObject {
         let i: int = (this._embers.length - 1) | 0;
         while (i >= 0) {
             let em: any = this._embers[i];
-            em.life++;
-            em.s.y -= em.vy;
-            em.s.x += Math.sin(Number(em.sway + em.life * 0.05)) * 0.4;
+            em.life += 2;
+            em.s.y -= em.vy * 2;
+            em.s.x += Math.sin(Number(em.sway + em.life * 0.05)) * 0.8;
             em.s.alpha = Math.max(0, 1 - em.life / 260);
             if (em.life > 260 || em.s.y < -CasinoWindow.H / 2 + 10) {
                 this._emberLayer.removeChild(as3.cast(em.s, DisplayObject));
@@ -777,6 +1247,7 @@ export class CasinoWindow extends ASObject {
         this.endGame();
         this.mc.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.tick));
         GLOBAL.BlockerRemove();
+        IoChatLift.drop();
         if (this.mc.parent) {
             this.mc.parent.removeChild(this.mc);
         }

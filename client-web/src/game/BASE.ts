@@ -4,11 +4,11 @@ import { DisplayObject, Loader, MovieClip, Sprite } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
 import { ExternalInterface } from "flash/external";
 import { Point } from "flash/geom";
-import { URLRequest } from "flash/net";
+import { SharedObject, URLRequest, netHooks } from "flash/net";
 import { System } from "flash/system";
 import { TextField } from "flash/text";
 import { Dictionary, getTimer, setTimeout } from "flash/utils";
-import { ACADEMY, ACHIEVEMENTS, ALLIANCES, ATTACK, AutoBankManager, BDECORATION, BFOUNDATION, BMUSHROOM, BRESOURCE, BTOTEM, BTOWER, BTRAP, BUILDING1, BUILDING10, BUILDING11, BUILDING112, BUILDING113, BUILDING115, BUILDING117, BUILDING118, BUILDING12, BUILDING13, BUILDING14, BUILDING15, BUILDING16, BUILDING17, BUILDING18, BUILDING19, BUILDING2, BUILDING20, BUILDING21, BUILDING22, BUILDING23, BUILDING24, BUILDING25, BUILDING26, BUILDING27, BUILDING3, BUILDING4, BUILDING5, BUILDING51, BUILDING52, BUILDING6, BUILDING7, BUILDING8, BUILDING9, BUILDINGINFO, BUILDINGS, BUY, BWALL, BYMConfig, BaseBuffHandler, BaseTemplate, BaseTemplateNode, BlackSpurtzCannon, BuildingOverlay, Bunker, CASINO, CHAMPIONCAGE, CHAMPIONCHAMBER, CHECKER, CREATURELOCKER, CREATURES, CREEPS, CUSTOMATTACKS, CellData, ChampionBase, Chat, Console, EFFECTS, Elastic, EnumYardType, FBPROMO_711_CLIP, FIREBALLS, Fire, FrontPageHandler, GAME, GIBLETS, GIFTS, GLOBAL, GRID, GuardTower, HOUSING, HOUSINGBUNKER, ICoreBuilding, IHandler, INFERNOPORTAL, INFERNOQUAKETOWER, INFERNO_CANNON_TOWER, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_MAGMA_TOWER, InstanceManager, InventoryManager, IoAttackLogs, IoBugReport, IoChangelog, IoDailyPopup, IoDesigner, IoGauntlet, IoHfo, IoHfoIce, IoHfoWaves, IoLeaderboards, IoOutpostsPopup, IoPets, IoReplayPlayer, IoReplayRecorder, IoTestMode, IoUnderworld, KEYS, LOGGER, LOGIN, MAP, MAPROOM, MAPROOM_DESCENT, MAPROOM_INFERNO, MARKETING, MONSTERBAITER, MONSTERLAB, MUSHROOMS, MapRoom3, MapRoom3OutpostSecured, MapRoom3Tutorial, MapRoomCell, MapRoomManager, MonsterMadness, MouseWheelEnabler, NewPopupSystem, OutpostDefender, PATHING, PLEASEWAIT, POPUPS, POWERUPS, PROJECTILES, ParticleText, PlannerTemplate, Player, PopupLostMainBase, QUESTS, QUEUE, RADIO, RasterData, ReplayableEventHandler, ResourceBombs, ResourceCapacityBaseBuff, ResourceOutpost, ResourcePackages, RewardHandler, SOUNDS, SPECIALEVENT, SPECIALEVENT_WM1, SPRITES, STORE, SecNum, SiegeBuilding, SiegeFactory, SiegeLab, SiegeWeapons, Smoke, SpurtzCannon, TRIBES, TUTORIAL, Targeting, TweenLite, UI2, UPDATES, URLLoaderApi, WMATTACK, WMBASE, WORKERS, com_monsters_maproom_advanced_MapRoom as MapRoom, md5, popup_attackedme, popup_damaged, popup_damagedbase_onvisit, popup_levelup, popup_loot, popup_prefab_help, print } from "@game";
+import { IoBaiter, IoBrag, IoLiveWatch, IoWatch, IoVisitUi, IoDave, IoFmi, IoFmiWaves, IoTrophies, IoTrophy, ACADEMY, ACHIEVEMENTS, ALLIANCES, ATTACK, AutoBankManager, BDECORATION, BFOUNDATION, BMUSHROOM, BRESOURCE, BTOTEM, BTOWER, BTRAP, BUILDING1, BUILDING10, BUILDING11, BUILDING112, BUILDING113, BUILDING115, BUILDING117, BUILDING118, BUILDING12, BUILDING13, BUILDING14, BUILDING15, BUILDING16, BUILDING17, BUILDING18, BUILDING19, BUILDING2, BUILDING20, BUILDING21, BUILDING22, BUILDING23, BUILDING24, BUILDING25, BUILDING26, BUILDING27, BUILDING3, BUILDING4, BUILDING5, BUILDING51, BUILDING52, BUILDING6, BUILDING7, BUILDING8, BUILDING9, BUILDINGINFO, BUILDINGS, BUY, BWALL, BYMConfig, BaseBuffHandler, BaseTemplate, BaseTemplateNode, BlackSpurtzCannon, BuildingOverlay, Bunker, CASINO, CHAMPIONCAGE, CHAMPIONCHAMBER, CHECKER, CREATURELOCKER, CREATURES, CREEPS, CUSTOMATTACKS, CellData, ChampionBase, Chat, Console, EFFECTS, Elastic, EnumYardType, FBPROMO_711_CLIP, FIREBALLS, Fire, FrontPageHandler, GAME, GIBLETS, GIFTS, GLOBAL, GRID, GuardTower, HOUSING, HOUSINGBUNKER, ICoreBuilding, IHandler, INFERNOPORTAL, INFERNOQUAKETOWER, INFERNO_CANNON_TOWER, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_MAGMA_TOWER, InstanceManager, InventoryManager, IoAttackLogs, IoBugReport, IoChangelog, IoWhosOnline, IoDailyPopup, IoDesigner, IoGauntlet, IoHfo, IoHfoIce, IoHfoWaves, IoLeaderboards, IoOutpostsPopup, IoPets, IoTerrainPopup, IoQuests, IoQuestBook, IoReplayPlayer, IoReplayRecorder, IoSiege, IoTd, IoTestMode, IoUnderworld, KEYS, LOGGER, LOGIN, MAP, MAPBG, MAPROOM, MAPROOM_DESCENT, MAPROOM_INFERNO, MARKETING, MONSTERBAITER, MONSTERLAB, MUSHROOMS, MapRoom3, MapRoom3OutpostSecured, MapRoom3Tutorial, MapRoomCell, MapRoomManager, MonsterMadness, MouseWheelEnabler, NewPopupSystem, OutpostDefender, PATHING, PLEASEWAIT, POPUPS, POWERUPS, PROJECTILES, ParticleText, PlannerTemplate, Player, PopupLostMainBase, QUESTS, QUEUE, RADIO, RasterData, ReplayableEventHandler, ResourceBombs, ResourceCapacityBaseBuff, ResourceOutpost, ResourcePackages, RewardHandler, SOUNDS, SPECIALEVENT, SPECIALEVENT_WM1, SPRITES, STORE, SecNum, SiegeBuilding, SiegeFactory, SiegeLab, SiegeWeapons, Smoke, SpurtzCannon, TRIBES, TUTORIAL, Targeting, TweenLite, UI2, UPDATES, URLLoaderApi, WMATTACK, WMBASE, WORKERS, com_monsters_maproom_advanced_MapRoom as MapRoom, md5, popup_attackedme, popup_damaged, popup_damagedbase_onvisit, popup_levelup, popup_loot, popup_prefab, popup_prefab_help, print, IoSign, IoTd2Tower, IoTilt, IoToast, MAILBOX, IoAllianceBanner, IoChampionStatue, IoShop, IoTot, IoSynergy, IoDevil } from "@game";
 
 export class BASE extends ASObject {
     public static _baseID: number;
@@ -133,6 +133,9 @@ export class BASE extends ASObject {
     private static _ioReplay: any;
 
     private static _ioReplayView: any;
+
+    /** (18 October) Inferno-only: the load's io_watch: the player's own yard is under another player's attack (IoLiveWatch). */
+    private static _ioWatch: any;
 
     public static _baseName: string;
 
@@ -275,9 +278,10 @@ export class BASE extends ASObject {
     public static IO_TEST_RESOURCES: number; // const
 
     static {
-        as3.lazyStatics(this, { _baseID: NaN, _wmID: 0, _resources: null, _hpResources: null, _bankedValue: NaN, _bankedTime: 0, _shakeCountdown: 0, _blockSave: false, _attackerArray: null, _attackerNameArray: null, _currentAttacks: null, _attacksModified: false, _deltaResources: null, _hpDeltaResources: null, _savedDeltaResources: null, _GIP: null, _processedGIP: null, _rawGIP: null, _lastProcessedGIP: 0, _credits: null, _hpCredits: 0, _saveCounterA: 0, _saveCounterB: 0, _saving: false, _paging: false, _lastSaveID: 0, _attackID: 0, _lastSaved: 0, _lastSaveRequest: 0, _saveOver: 0, _returnHome: false, _saveProtect: 0, _saveErrors: 0, _pageErrors: 0, _loadTime: 0, _loading: false, _infernoSaveLoad: false, _lastProcessed: 0, _lastProcessedB: 0, _catchupTime: 0, _currentTime: 0, _baseData: null, _upgradeData: null, _buildingCount: 0, _buildingHealthData: null, _buildingData: null, _buildingsAll: null, _buildingsWalls: null, _buildingsTowers: null, _buildingsBunkers: null, _buildingsHousing: null, _buildingsMain: null, _buildingsMushrooms: null, _buildingsGifts: null, _buildingsStored: null, buildings: null, _rawMonsters: null, _mushroomList: null, _lastSpawnedMushroom: 0, _ioReplay: null, _ioReplayView: null, _baseName: null, _baseSeed: 0, _loadedBaseID: NaN, _loadedFriendlyBaseID: NaN, _loadedFBID: NaN, _baseLevel: 0, _baseValue: NaN, _basePoints: NaN, _outpostValue: NaN, _processing: false, _timer: 0, _size: 0, _angle: NaN, _buildingCounts: null, _buildingStatsToggle: false, _lastPaged: 0, _tempLoot: null, _tempGifts: null, _tempSentGifts: null, _tempSentInvites: null, _isProtected: 0, _isReinforcements: 0, _isSanctuary: 0, _isFan: 0, _isBookmarked: 0, _installsGenerated: 0, _ownerName: null, _ownerPic: null, _pendingPurchase: null, _pendingPromo: 0, _pendingFBPromo: 0, _pendingFBPromoIDs: null, _salePromoTime: 0, _loadBase: null, _percentDamaged: 0, _userID: 0, _allianceID: 0, _damagedBaseWarnTime: NaN, _takeoverFirstOpen: 0, _takeoverPreviousOwnersName: null, s_processing: false, _tmpPercent: NaN, _oldSiegeData: null, loadObject: null, _ideltaResources: null, _iresources: null, _allianceArmamentTime: null, s_resourceCells: null, _loadedYardType: 0, m_yardType: 0, _firstBaseLoaded: false, _userDigits: null, _guardianData: null, s_eventBases: null, _showingWhatsNew: false, _needCurrentCell: false, _currentCellLoc: null, s_levels: null, _loadedSomething: false, _addtionalLoadArguments: null, _ioWelcomeShown: false, IO_LOAD_RETRIES: 0, _ioLoadSeq: 0, _ioServerResources: null, _ioStepDir: 0, IO_TEST_RESOURCES: NaN }, () => {
+        as3.lazyStatics(this, { _baseID: NaN, _wmID: 0, _resources: null, _hpResources: null, _bankedValue: NaN, _bankedTime: 0, _shakeCountdown: 0, _blockSave: false, _attackerArray: null, _attackerNameArray: null, _currentAttacks: null, _attacksModified: false, _deltaResources: null, _hpDeltaResources: null, _savedDeltaResources: null, _GIP: null, _processedGIP: null, _rawGIP: null, _lastProcessedGIP: 0, _credits: null, _hpCredits: 0, _saveCounterA: 0, _saveCounterB: 0, _saving: false, _paging: false, _lastSaveID: 0, _attackID: 0, _lastSaved: 0, _lastSaveRequest: 0, _saveOver: 0, _returnHome: false, _saveProtect: 0, _saveErrors: 0, _pageErrors: 0, _loadTime: 0, _loading: false, _infernoSaveLoad: false, _lastProcessed: 0, _lastProcessedB: 0, _catchupTime: 0, _currentTime: 0, _baseData: null, _upgradeData: null, _buildingCount: 0, _buildingHealthData: null, _buildingData: null, _buildingsAll: null, _buildingsWalls: null, _buildingsTowers: null, _buildingsBunkers: null, _buildingsHousing: null, _buildingsMain: null, _buildingsMushrooms: null, _buildingsGifts: null, _buildingsStored: null, buildings: null, _rawMonsters: null, _mushroomList: null, _lastSpawnedMushroom: 0, _ioReplay: null, _ioReplayView: null, _ioWatch: null, _baseName: null, _baseSeed: 0, _loadedBaseID: NaN, _loadedFriendlyBaseID: NaN, _loadedFBID: NaN, _baseLevel: 0, _baseValue: NaN, _basePoints: NaN, _outpostValue: NaN, _processing: false, _timer: 0, _size: 0, _angle: NaN, _buildingCounts: null, _buildingStatsToggle: false, _lastPaged: 0, _tempLoot: null, _tempGifts: null, _tempSentGifts: null, _tempSentInvites: null, _isProtected: 0, _isReinforcements: 0, _isSanctuary: 0, _isFan: 0, _isBookmarked: 0, _installsGenerated: 0, _ownerName: null, _ownerPic: null, _pendingPurchase: null, _pendingPromo: 0, _pendingFBPromo: 0, _pendingFBPromoIDs: null, _salePromoTime: 0, _loadBase: null, _percentDamaged: 0, _userID: 0, _allianceID: 0, _damagedBaseWarnTime: NaN, _takeoverFirstOpen: 0, _takeoverPreviousOwnersName: null, s_processing: false, _tmpPercent: NaN, _oldSiegeData: null, loadObject: null, _ideltaResources: null, _iresources: null, _allianceArmamentTime: null, s_resourceCells: null, _loadedYardType: 0, m_yardType: 0, _firstBaseLoaded: false, _userDigits: null, _guardianData: null, s_eventBases: null, _showingWhatsNew: false, _needCurrentCell: false, _currentCellLoc: null, s_levels: null, _loadedSomething: false, _addtionalLoadArguments: null, _ioWelcomeShown: false, IO_LOAD_RETRIES: 0, _ioLoadSeq: 0, _ioServerResources: null, _ioStepDir: 0, IO_TEST_RESOURCES: NaN }, () => {
             BASE._ioReplay = null;
             BASE._ioReplayView = null;
+            BASE._ioWatch = null;
             BASE._ideltaResources = null;
             BASE._iresources = null;
             BASE._allianceArmamentTime = new SecNum(0);
@@ -365,6 +369,7 @@ export class BASE extends ASObject {
         BASE._deltaResources = { "dirty": false, "r1": new SecNum(0), "r2": new SecNum(0), "r3": new SecNum(0), "r4": new SecNum(0) };
         BASE._hpDeltaResources = { "dirty": false, "r1": Number(0), "r2": Number(0), "r3": Number(0), "r4": Number(0) };
         BASE._savedDeltaResources = { "r1": new SecNum(0), "r2": new SecNum(0), "r3": new SecNum(0), "r4": new SecNum(0) };
+        BASE._ioDeltaSeq = BASE.ioNewDeltaSeq();
         BASE._loadBase = [];
         GLOBAL.Clear();
     }
@@ -378,6 +383,11 @@ export class BASE extends ASObject {
         // Hell Freezes Over: its things in the yard go with it (a wave left half-fought counts as lost)
         IoHfoWaves.Abandon();
         IoHfo.Cleanup();
+        // the Frozen Monster Invasion: the same
+        IoFmiWaves.Abandon();
+        IoFmi.Cleanup();
+        // Hellgate Defense: its interface and its run go with the arena
+        IoTd.Cleanup();
         SPECIALEVENT.ClearWildMonsterPowerups();
         SPECIALEVENT_WM1.ClearWildMonsterPowerups();
         BaseBuffHandler.instance.clearBuffs();
@@ -437,11 +447,16 @@ export class BASE extends ASObject {
         IoLeaderboards.CloseOpen();
         IoAttackLogs.CloseOpen();
         IoChangelog.CloseOpen();
+        IoWhosOnline.CloseOpen();
         WMATTACK.HideWarning();
         WMATTACK.ioResetSpawnLevel();
         GLOBAL.ioBlockersReset();
         WMATTACK._inProgress = false;
         MONSTERBAITER._scaredAway = false;
+        // (Inferno-only, 22 November: a baiter raid still on is let go)
+        if (GLOBAL.INFERNO_ONLY) {
+            IoBaiter.yardLeft();
+        }
         CUSTOMATTACKS._started = false;
         WMATTACK._queued = null;
         if (Boolean(WMATTACK._history) && Boolean(WMATTACK._history._queued)) {
@@ -457,6 +472,7 @@ export class BASE extends ASObject {
         BASE._deltaResources = { "dirty": false, "r1": new SecNum(0), "r2": new SecNum(0), "r3": new SecNum(0), "r4": new SecNum(0) };
         BASE._hpDeltaResources = { "dirty": false, "r1": 0, "r2": 0, "r3": 0, "r4": 0 };
         BASE._savedDeltaResources = { "r1": new SecNum(0), "r2": new SecNum(0), "r3": new SecNum(0), "r4": new SecNum(0) };
+        BASE._ioDeltaSeq = BASE.ioNewDeltaSeq();
     }
 
     public static LoadBase(url: string = null, userId: number = 0, baseId: number = 0, baseMode: string = "build", isError: boolean = false, baseType: int = -1, cellId: number = 0, keyValuePairs: any[] = null): boolean {
@@ -531,8 +547,80 @@ export class BASE extends ASObject {
         BASE.Load(GLOBAL._baseURL2, userId, baseId, baseType, cellId);
     }
 
+    /**
+     * Inferno-only (QoL #128, 14 October): a new player's welcome, once (kept in this browser), that opens the Quest
+     * Book at its first quest. Shown while the Getting Started tree's first quest isn't collected; the book is asked
+     * for as the yard loads, so this waits a few seconds for it.
+     */
+    private static ioNewPlayerWelcome(tries: int = 0): void {
+        if (!IoQuests.on || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYardOrInfernoMainYard) {
+            return;
+        }
+        let key: string = "ioWelcomed" + LOGIN._playerID;
+        let so: SharedObject = null;
+        try {
+            so = SharedObject.getLocal("bymr_data", "/");
+            if (so.data[key]) {
+                return;
+            }
+        } catch (e) {
+        }
+        let first: any = IoQuests.quest("s_sharp");
+        if (!first) {
+            if (tries < 10) {
+                setTimeout((): void => {
+                    BASE.ioNewPlayerWelcome((tries + 1) | 0);
+                }, 1000);
+            }
+            return;
+        }
+        try {
+            if (so) {
+                so.data[key] = 1;
+                so.flush();
+            }
+        } catch (e) {
+        }
+        if (String(first.state) == "claimed") {
+            return;
+        }
+        // (QoL #511: and, for an account made just now, the address it logs in with)
+        let body: string = KEYS.Get("io_welcome_new_body");
+        if (LOGIN.ioNewAccountEmail) {
+            body += "<br><br>" + KEYS.Get("io_welcome_email", { "v1": LOGIN.ioNewAccountEmail });
+            LOGIN.ioNewAccountEmail = null;
+        }
+        // (24 October: with a picture: its box was empty, the first thing every new player saw. Spurtz, the first monster)
+        POPUPS.DisplayGeneric(KEYS.Get("io_welcome_new_title"), body, KEYS.Get("io_welcome_new_btn"), "IC1-150.png", (e: MouseEvent): void => {
+            POPUPS.Next();
+            IoQuestBook.Show(null, "s_sharp");
+        });
+    }
+
+    /** Inferno-only (QoL #91): "While you were away" with each attacker, how often and how long ago, and the Attack Log. */
+    private static ioAwaySummary(attackers: any[]): void {
+        let lines: string[] = [];
+        let total: int = 0;
+        for (let a of as3.values(attackers)) {
+            total += a.count | 0;
+            let name: string = String(a.name || "?").replace(/[<>&]/g, "");
+            let ago: string = GLOBAL.ToTime((BASE._currentTime - (a.lastTime | 0)) | 0, true);
+            lines.push("• " + ((a.count | 0) > 1 ? KEYS.Get("io_away_line_n", { "v1": name, "v2": a.count | 0, "v3": ago }) : KEYS.Get("io_away_line", { "v1": name, "v2": ago })));
+        }
+        // (24 October: a picture in its box too, which was empty: a tower that held the yard)
+        POPUPS.DisplayGeneric(KEYS.Get("io_away_title", { "v1": total }), lines.join("<br>"), KEYS.Get("al_title"), "building-magma_tower.png", (e: MouseEvent): void => {
+            POPUPS.Next();
+            IoAttackLogs.Show();
+        });
+    }
+
     /** Inferno-only: the once-per-login welcome (text from the server, InfernoOnlyConfig.welcome). */
     private static ioWelcome(): void {
+        BASE.ioNewPlayerWelcome();
+        // (QoL #106: Moloch's Gauntlet has opened; QoL #603: or closes within a day)
+        if (!IoGauntlet.ioNoticeClosing()) {
+            IoGauntlet.ioNoticeOpen();
+        }
         let title: string = GLOBAL._flags && GLOBAL._flags.io_welcome_title ? String(GLOBAL._flags.io_welcome_title) : "";
         let body: string = GLOBAL._flags && GLOBAL._flags.io_welcome_body ? String(GLOBAL._flags.io_welcome_body) : "";
         if (BASE._ioWelcomeShown || body == "") {
@@ -562,7 +650,7 @@ export class BASE extends ASObject {
             status = null;
         }
         if (!status) {
-            GLOBAL.Message("The daily reward is not available right now.");
+            GLOBAL.Message(KEYS.Get("io_t3k_daily_unavailable"));
             return;
         }
         IoDailyPopup.Show(status);
@@ -583,6 +671,8 @@ export class BASE extends ASObject {
         BASE._baseID = baseId;
         GLOBAL._ioDesign = null;
         // (a Designer draft says so in its answer: io_design)
+        GLOBAL._ioTd = null;
+        // (and a Hellgate Defense run: io_td)
         BASE._baseLevel = 0;
         BASE._saveOver = 0;
         BASE._returnHome = false;
@@ -701,7 +791,41 @@ export class BASE extends ASObject {
                 LOGGER.Log("log", "BASE.Load: the answer for base " + baseId + " came after a newer load; not used");
                 return;
             }
-            if (tries > 0) {
+            // (22 October: after a retry, its "please wait" hidden as the yard is built, not before the ground's
+            // masks are waited for: up to 2.5 s of an empty screen with nothing saying it was loading)
+            let retried: boolean = tries > 0;
+            if (retried && !GLOBAL.INFERNO_ONLY) {
+                PLEASEWAIT.Hide();
+            }
+            // (Inferno-only, 21 October, the user's: more of the game on other threads) the yard's ground masks
+            // worked out in background threads first, several at once: they took the game's thread a second as the
+            // yard was built (four or five on a phone). The yard is built when they are ready, a moment later, as
+            // if the answer had taken that much longer to come (MAPBG.ioPrefetch).
+            if (GLOBAL.INFERNO_ONLY && data && data.baseseed != null && !data.error) {
+                let seed: int = data.baseseed | 0;
+                let ground: string = null;
+                try {
+                    ground = BASE.ioTerrainType();
+                } catch (e) {
+                    ground = "lava";
+                }
+                let answeredAt: int = getTimer();
+                if (MAPBG.ioPrefetch(seed, ground, 2500, (): void => {
+                    if (seq == BASE._ioLoadSeq) {
+                        // (the server's "now" moved on by the wait, or the game's clock would start that much behind)
+                        if (data.currenttime != null) {
+                            data.currenttime = ((data.currenttime | 0) + Math.round((getTimer() - answeredAt) / 1000)) | 0;
+                        }
+                        if (retried) {
+                            PLEASEWAIT.Hide();
+                        }
+                        BASE.handleBaseLoadSuccessful(data);
+                    }
+                })) {
+                    return;
+                }
+            }
+            if (retried && GLOBAL.INFERNO_ONLY) {
                 PLEASEWAIT.Hide();
             }
             BASE.handleBaseLoadSuccessful(data);
@@ -761,6 +885,37 @@ export class BASE extends ASObject {
     private static ioRefusal(serverData: any): string {
         let details: any = serverData ? serverData.errorDetails : null;
         return details && details.data && details.data.io_refused ? String(details.data.io_refused) : null;
+    }
+
+    /**
+     * The ground the yard being built stands on (Build). (21 October: on its own, so the yard's load can work out its
+     * ground's masks ahead, as soon as the server has answered: MAPBG.ioPrefetch.)
+     */
+    public static ioTerrainType(): string {
+        let terrainType: string = "grass";
+        if (!MapRoomManager.instance.isInMapRoom3 && GLOBAL._currentCell && (BASE.isOutpostOrInfernoOutpost || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW)) {
+            // Inferno-only: a current cell that isn't a Map Room 2 cell made this a null and the yard failed to load
+            if (!GLOBAL.INFERNO_ONLY || GLOBAL._currentCell instanceof MapRoomCell) {
+                terrainType = (as3.as(GLOBAL._currentCell, MapRoomCell)).terrain;
+            }
+        }
+        if (BASE.isInfernoMainYardOrOutpost) {
+            terrainType = "lava";
+            // Inferno-only (hell-yard-grounds): outposts and wild monster yards stand on the ground of their map
+            // cell's height (bone fields, netherrack, black rock); main yards keep the lava ground
+            if (GLOBAL.INFERNO_ONLY && !MapRoomManager.instance.isInMapRoom3 && GLOBAL._currentCell instanceof MapRoomCell && (BASE.isOutpostOrInfernoOutpost || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW)) {
+                terrainType = (as3.as(GLOBAL._currentCell, MapRoomCell)).ioYardGround || "lava";
+            }
+            // Inferno-only (10 October): a main yard stands on the ground its owner chose in the D.A.V.E. Club
+            if (GLOBAL.INFERNO_ONLY && BASE.isMainYardOrInfernoMainYard && !BASE.isOutpost && IoTerrainPopup.ground()) {
+                terrainType = IoTerrainPopup.ground();
+            }
+            // Hell Freezes Over: from Day 3 until the curse breaks, the player's main yard is frozen over
+            if (IoHfo.frozenGround()) {
+                terrainType = "hfo_frozen";
+            }
+        }
+        return terrainType;
     }
 
     private static handleBaseLoadSuccessful(data: any): void {
@@ -859,6 +1014,10 @@ export class BASE extends ASObject {
                 QUESTS._global.bonus_invites = BASE._installsGenerated;
                 BASE._lastProcessed = serverData.savetime | 0;
                 GLOBAL.t = BASE._lastProcessed;
+                // (Inferno-only, 21 October: no seconds owed from before paid on top of the server's time: Timekeeper)
+                if (GLOBAL.INFERNO_ONLY && GLOBAL._timekeeper) {
+                    GLOBAL._timekeeper.resync();
+                }
                 BASE._currentTime = serverData.currenttime | 0;
                 if (BASE._lastProcessed < BASE._currentTime - 60 * 60 * 24 * 30) {
                     // Limits the last known save time to 30 days ago at most, as this affects load times.
@@ -907,6 +1066,9 @@ export class BASE extends ASObject {
                         ALLIANCES.Clear();
                     }
                 }
+                // (Inferno-only, 26 October: the attacked yard's alliance's running Armament, another player's yard:
+                // POWERUPS.ioRebuff puts it on its buildings once they are made)
+                POWERUPS._ioDefend = GLOBAL.INFERNO_ONLY ? as3.as(serverData.io_defpowerups, Array) : null;
                 if (serverData.powerups) {
                     POWERUPS.Setup(as3.cast(serverData.powerups, Array), null, true);
                 }
@@ -914,8 +1076,10 @@ export class BASE extends ASObject {
                     POWERUPS.Setup(null, as3.cast(serverData.attpowerups, Array), true);
                 }
                 BASE._attackID = serverData.attackid | 0;
-                // Inferno-only: a Designer draft (GLOBAL.ioDesign, com/monsters/admin/IoDesigner.as).
+                // Inferno-only: a Designer draft (GLOBAL.ioDesign, com/monsters/admin/IoDesigner.ts).
                 GLOBAL._ioDesign = GLOBAL.INFERNO_ONLY && serverData.io_design && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD ? serverData.io_design : null;
+                // Inferno-only: a Hellgate Defense run's arena (GLOBAL.ioTd, com/monsters/td/IoTd.ts).
+                GLOBAL._ioTd = GLOBAL.INFERNO_ONLY && serverData.io_td && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD ? serverData.io_td : null;
                 if (serverData.worldsize) {
                     MapRoomManager.instance.mapWidth = serverData.worldsize[0] | 0;
                     MapRoomManager.instance.mapHeight = serverData.worldsize[1] | 0;
@@ -1007,6 +1171,22 @@ export class BASE extends ASObject {
                 if (serverData.mushrooms.s) {
                     BASE._lastSpawnedMushroom = serverData.mushrooms.s | 0;
                 }
+                // Inferno-only: the ground its owner chose (the D.A.V.E. Club: IoTerrainPopup), laid by Build
+                IoTerrainPopup.setData(GLOBAL.INFERNO_ONLY ? serverData.io_terrain : null, GLOBAL.INFERNO_ONLY ? serverData.io_terrains : null);
+                // Inferno-only: its owner's D.A.V.E. Club looks (workers, champions: IoDave), and the workers' sheet
+                IoDave.setYard(GLOBAL.INFERNO_ONLY ? serverData.io_dave : null);
+                // Inferno-only (16 October): its owner's alliance shield, for the Alliance Banners (IoAllianceBanner)
+                IoAllianceBanner.setYard(GLOBAL.INFERNO_ONLY ? serverData.io_ally_banner : null);
+                // Inferno-only (22 October): its owner's champion, for the Champion Statues (IoChampionStatue); the
+                // player's own Extras with their main yard (IoShop), and the yard's Pet Treats (IoPets)
+                IoChampionStatue.setYard(GLOBAL.INFERNO_ONLY ? serverData.io_statue : null);
+                if (GLOBAL.INFERNO_ONLY) {
+                    IoShop.setData(serverData.io_shop, serverData.io_shop_notices);
+                    // (13 November) the Devil's Contract: the player's own (with their main yard), the yard's owner's effects
+                    IoDevil.setData(serverData.io_devil, serverData.io_devil_yard);
+                    IoPets.setTreats(Number(serverData.io_pet_treats) || 0);
+                }
+                SPRITES.ioWorkerSprite();
                 // Inferno-only: a main yard's pets (IoPets), put in the yard once it is built
                 IoPets.setData(GLOBAL.INFERNO_ONLY ? serverData.io_pets : null);
                 if (GLOBAL.INFERNO_ONLY && serverData.io_petinfo) {
@@ -1015,6 +1195,8 @@ export class BASE extends ASObject {
                 // Inferno-only: an attack to record for its replay, or a replay's yard to play one over
                 BASE._ioReplay = GLOBAL.INFERNO_ONLY ? serverData.io_replay : null;
                 BASE._ioReplayView = GLOBAL.INFERNO_ONLY ? serverData.io_replay_view : null;
+                // (18 October: the player's own yard under another player's attack: watched, not played; IoLiveWatch)
+                BASE._ioWatch = GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD ? serverData.io_watch : null;
                 BASE._buildingHealthData = serverData.buildinghealthdata;
                 BASE._buildingData = serverData.buildingdata;
                 if (!MapRoomManager.instance.isInMapRoom3) {
@@ -1282,7 +1464,12 @@ export class BASE extends ASObject {
                             BASE._attackerArray.push({ "fbid": attackObj.fbid, "name": attackObj.name, "pic": attackObj.pic_square, "friend": attackObj.friend, "count": 1, "lastTime": attackObj.starttime });
                         }
                     }
-                    for (attackObj of as3.values(BASE._attackerArray)) {
+                    // (Inferno-only, QoL #91: two or more attackers while you were away: one window listing them, with
+                    // the Attack Log, instead of one window each)
+                    if (GLOBAL.INFERNO_ONLY && BASE._attackerArray.length > 1) {
+                        BASE.ioAwaySummary(BASE._attackerArray);
+                    }
+                    for (attackObj of as3.values(GLOBAL.INFERNO_ONLY && BASE._attackerArray.length > 1 ? [] : BASE._attackerArray)) {
                         popupMC = new popup_attackedme();
                         popupMC.gotoAndStop(1);
                         if (attackObj.count == 1) {
@@ -1534,25 +1721,7 @@ export class BASE extends ASObject {
         GLOBAL._render = false;
         PATHING.Setup();
         let timer: int = getTimer();
-        let terrainType: string = "grass";
-        if (!MapRoomManager.instance.isInMapRoom3 && GLOBAL._currentCell && (BASE.isOutpostOrInfernoOutpost || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW)) {
-            // Inferno-only: a current cell that isn't a Map Room 2 cell made this a null and the yard failed to load
-            if (!GLOBAL.INFERNO_ONLY || GLOBAL._currentCell instanceof MapRoomCell) {
-                terrainType = (as3.as(GLOBAL._currentCell, MapRoomCell)).terrain;
-            }
-        }
-        if (BASE.isInfernoMainYardOrOutpost) {
-            terrainType = "lava";
-            // Inferno-only (hell-yard-grounds): outposts and wild monster yards stand on the ground of their map
-            // cell's height (bone fields, netherrack, black rock); main yards keep the lava ground
-            if (GLOBAL.INFERNO_ONLY && !MapRoomManager.instance.isInMapRoom3 && GLOBAL._currentCell instanceof MapRoomCell && (BASE.isOutpostOrInfernoOutpost || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW)) {
-                terrainType = (as3.as(GLOBAL._currentCell, MapRoomCell)).ioYardGround || "lava";
-            }
-            // Hell Freezes Over: from Day 3 until the curse breaks, the player's main yard is frozen over
-            if (IoHfo.frozenGround()) {
-                terrainType = "hfo_frozen";
-            }
-        }
+        let terrainType: string = BASE.ioTerrainType();
         let map: MAP = new MAP(terrainType);
         let targeting: Targeting = new Targeting();
         QUEUE.Spawn(0);
@@ -1587,8 +1756,31 @@ export class BASE extends ASObject {
         }
 
         let buildingTypeCounts: Dictionary = new Dictionary();
+        // Inferno-only (13 October, bug report #89: "a plan with two places for one building", a Block and a Booby Trap):
+        // two buildings of the yard with one id. Everything finds a building by its id (the Yard Planner's plans, the
+        // lists of walls and towers), so the second was lost behind the first: planned twice, never moved, and left
+        // standing under the plan. In the player's own yard the second gets an id of its own (saved with the yard).
+        let ioIdsSeen: any = {};
+        let ioNextId: int = 0;
+        let ioRenumbered: any[] = [];
+        if (GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+            for (let b0 of as3.values(BASE._buildingData)) {
+                if (b0 && b0.t != 7 && (b0.id | 0) > ioNextId) {
+                    ioNextId = b0.id | 0;
+                }
+            }
+        }
         for (building of as3.values(BASE._buildingData)) {
             if (building) {
+                if (GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && building.t != 7 && building.id != null) {
+                    if (ioIdsSeen["b" + (building.id | 0)]) {
+                        let was: int = building.id | 0;
+                        ioNextId++;
+                        building.id = ioNextId;
+                        ioRenumbered.push("type " + building.t + " #" + was + " -> #" + ioNextId);
+                    }
+                    ioIdsSeen["b" + (building.id | 0)] = true;
+                }
                 if (building.t) {
                     buildingTypeCounts.set(building.t, buildingTypeCounts.get(building.t) || 0);
                     buildingTypeCounts.set(building.t, buildingTypeCounts.get(building.t) + 1);
@@ -1655,6 +1847,9 @@ export class BASE extends ASObject {
                     }
                 }
             }
+        }
+        if (ioRenumbered.length) {
+            LOGGER.Log("log", "Yard: " + ioRenumbered.length + " building(s) had another's id, given their own: " + ioRenumbered.slice(0, 6).join("; "));
         }
         BFOUNDATION.redrawAllShadowData();
         BASE._buildingHealthData = null;
@@ -1863,6 +2058,10 @@ export class BASE extends ASObject {
             BASE._currentTime = (BASE._currentTime + (getTimer() - BASE._timer) / 1000) | 0;
             GLOBAL._ROOT.removeEventListener(Event.ENTER_FRAME, BASE.ProcessB);
             GLOBAL.t = BASE._currentTime;
+            // (Inferno-only, 21 October: the clock now the server's: nothing owed from the catch-up paid on top: Timekeeper)
+            if (GLOBAL.INFERNO_ONLY && GLOBAL._timekeeper) {
+                GLOBAL._timekeeper.resync();
+            }
             BASE.ProcessD();
         }
     }
@@ -1941,6 +2140,8 @@ export class BASE extends ASObject {
                 while (tickIteration < 80) {
                     CREEPS.Tick();
                     CREATURES.Tick();
+                    IoSynergy.tick();
+                    IoDevil.battleTick();
                     for (tower of (allTowers ?? [])) {
                         // (Hell Freezes Over: a tower iced over by an ice monster waits: BTOWER.ioIceTick)
                         if (!(tower instanceof BTOWER && as3.cast(tower, BTOWER).ioIceTick())) {
@@ -2045,6 +2246,11 @@ export class BASE extends ASObject {
         SOUNDS.Setup();
         GLOBAL._render = true;
         GLOBAL._catchup = false;
+        // Inferno-only (10 October): the monsters hatched while the player was away came in during the catch-up just
+        // now, when saves don't happen: saved now, so the map (and attacks from it) have every one of them.
+        if (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD) && !GLOBAL.ioDesignMode()) {
+            BASE.Save();
+        }
         damageCount = 0;
         buildingInstances ||= InstanceManager.getInstancesByClass(BFOUNDATION);
         for (building of (buildingInstances ?? [])) {
@@ -2077,7 +2283,7 @@ export class BASE extends ASObject {
                             _loc3_.Repair();
                         }
                     }
-                    SOUNDS.Play("repair1", 0.25);
+                    SOUNDS.ioPlayFor("repair1", 0.25, 1800);
                     POPUPS.Next();
                 };
                 RepairNow = (param1: MouseEvent = null): void => {
@@ -2097,7 +2303,9 @@ export class BASE extends ASObject {
                     POPUPS.Next();
                 };
                 popupMCDamaged = new popup_damaged();
-                popupMCDamaged.mcFrame.Setup(false);
+                // (Inferno-only, 14 October, QoL #442: it can be closed, to repair later; it had no X and showed on
+                // every yard loaded, each outpost too)
+                popupMCDamaged.mcFrame.Setup(GLOBAL.INFERNO_ONLY);
                 popupMCDamaged.title.htmlText = "<b>" + KEYS.Get("pop_damaged_title") + "</b>";
                 popupMCDamaged.tA.htmlText = KEYS.Get("pop_damaged", { "v1": damageCount });
                 popupMCDamaged.bAction.SetupKey("pop_damaged_repairall_btn");
@@ -2132,7 +2340,7 @@ export class BASE extends ASObject {
                 };
                 numCreepsDamaged = GLOBAL.player.getNumDamagedCreeps();
                 popupMCCreepDamaged = new popup_damaged();
-                popupMCCreepDamaged.mcFrame.Setup(false);
+                popupMCCreepDamaged.mcFrame.Setup(GLOBAL.INFERNO_ONLY);
                 popupMCCreepDamaged.title.htmlText = "<b>" + KEYS.Get("pop_injured_title") + "</b>";
                 popupMCCreepDamaged.tA.htmlText = KEYS.Get("pop_injured", { "1": numCreepsDamaged });
                 popupMCCreepDamaged.bAction.SetupKey("btn_startheal");
@@ -2266,15 +2474,37 @@ export class BASE extends ASObject {
         // yard), or a replay plays over its yard (IoReplayRecorder, IoReplayPlayer)
         if (GLOBAL.INFERNO_ONLY) {
             IoPets.Setup();
-            if (BASE._ioReplay && BASE._ioReplay.rec && GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK) {
-                IoReplayRecorder.begin(String(BASE._ioReplay.key));
+            if (BASE._ioReplay && BASE._ioReplay.rec && (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK)) { // (QoL #96: a tribe yard's attack too)
+                IoReplayRecorder.begin(String(BASE._ioReplay.key), false, Boolean(BASE._ioReplay.live)); // (18 October: live, the yard's player is playing)
             }
             if (BASE._ioReplayView) {
                 IoReplayPlayer.Setup(BASE._ioReplayView);
             }
+            // (19 October: back after a long time away, the yard brought up to date by itself (GLOBAL.ioBackAfterAway):
+            // said once it is up, over the fresh yard)
+            if (GLOBAL._ioBackToast) {
+                GLOBAL._ioBackToast = false;
+                IoToast.Show(KEYS.Get("io_back_catchup"), 4000);
+            }
+            // (20 October: Trick or Treat: a trick still waiting comes now; its Mini-Pumpkins said once it's over)
+            IoTot.afterLoad();
+            // (22 October: the Harvest Drone's first round, and gifts or a Raid Insurance payout said once: IoShop)
+            IoShop.afterLoad();
+            // (18 October: attacks on the player's yards while they play, watched as they happen: IoLiveWatch)
+            IoLiveWatch.start();
+            IoWatch.afterLoad();
+            if (BASE._ioWatch && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                BASE._blockSave = true;
+                IoLiveWatch.fromServer(BASE._ioWatch);
+            }
         }
         // Hell Freezes Over: the event's ice, the tomb and its popups (the player's own main yard only)
         IoHfo.Setup();
+        // the Frozen Monster Invasion (the player's own main yard only), and the event trophies won
+        IoFmi.Setup();
+        IoTrophies.Sync();
+        // Hellgate Defense: the arena's run starts (the arena only)
+        IoTd.Setup();
         NewPopupSystem.instance.CheckAll(true);
         if (GLOBAL.mode == "help" && !(MapRoomManager.instance.isInMapRoom3 && BASE.isOutpost)) {
             promptSPost = false;
@@ -2304,6 +2534,11 @@ export class BASE extends ASObject {
         LOGGER.Stat([29, GLOBAL.mode]);
         LOGGER.Stat([88, GLOBAL._loadmode, BASE.m_yardType]);
         BASE._loading = false;
+        // (Inferno-only, 14 October: the first yard of the session, and the Descent's, appear with a slow nod)
+        IoTilt.yardReady();
+        // Inferno-only (QoL #667-#669, #671, #672, #676): a visited yard's owner chip, Bookmark / Share, Open on map /
+        // Attack, the alliance mates' ◀ ▶, building cards, sign marks and pet names (IoVisitUi; nothing in the player's own yard)
+        IoVisitUi.Setup();
         if (BASE._takeoverFirstOpen) {
             WMATTACK._history.lastAttack = GLOBAL.Timestamp() + 12 * 60 * 60;
             WMATTACK._history.sessionsSinceLastAttack = 0;
@@ -2319,7 +2554,11 @@ export class BASE extends ASObject {
                     POPUPS.Next();
                 };
                 ACHIEVEMENTS.Check("wmoutpost", 1);
-                POPUPS.DisplayGeneric(KEYS.Get("venividivici"), KEYS.Get("destroyedbase_takeover", { "v1": BASE._takeoverPreviousOwnersName }), KEYS.Get("btn_brag"), "building-outpost.png", BragA);
+                // (Inferno-only, QoL #332: no "Veni, Vidi, Vici!" Brag popup: its Brag posted nowhere, and it came
+                // before the kits that the new outpost opens on)
+                if (!GLOBAL.INFERNO_ONLY) {
+                    POPUPS.DisplayGeneric(KEYS.Get("venividivici"), KEYS.Get("destroyedbase_takeover", { "v1": BASE._takeoverPreviousOwnersName }), KEYS.Get("btn_brag"), "building-outpost.png", BragA);
+                }
             } else if (BASE._takeoverFirstOpen == 2) {
                 BragB = (): void => {
                     GLOBAL.CallJS("sendFeed", ["upgrade-mr", KEYS.Get("conqueredoutpost", { "v1": BASE._takeoverPreviousOwnersName }), KEYS.Get("venividivici"), "build-outpost.png"]);
@@ -2327,14 +2566,22 @@ export class BASE extends ASObject {
                 };
                 ++ACHIEVEMENTS._stats.playeroutpost;
                 ACHIEVEMENTS.Check();
-                POPUPS.DisplayGeneric(KEYS.Get("venividivici"), KEYS.Get("destroyedoutpost_takeover", { "v1": BASE._takeoverPreviousOwnersName }), KEYS.Get("btn_brag"), "building-outpost.png", BragB);
+                if (!GLOBAL.INFERNO_ONLY) {
+                    POPUPS.DisplayGeneric(KEYS.Get("venividivici"), KEYS.Get("destroyedoutpost_takeover", { "v1": BASE._takeoverPreviousOwnersName }), KEYS.Get("btn_brag"), "building-outpost.png", BragB);
+                }
             }
+        }
+        // (Inferno-only, QoL #99: a takeover: a toast with Brag, posted to chat with the new outpost's map token)
+        if (GLOBAL.INFERNO_ONLY && BASE._takeoverFirstOpen && GLOBAL._currentCell) {
+            IoBrag.ioTakeover(BASE._takeoverPreviousOwnersName, GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY);
         }
         BASE._takeoverFirstOpen = 0;
         if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
             if (BASE.isOutpostMapRoom2Only || BASE.isOutpostInfernoOnly) {
                 if (BASE._buildingCount == 1) {
-                    POPUPS.Push(new popup_prefab_help());
+                    // (Inferno-only, QoL #298: the kits at once; the help page before them came on every new outpost,
+                    // and it said kits bought with resources take time to build, which they don't)
+                    POPUPS.Push(GLOBAL.INFERNO_ONLY ? new popup_prefab() : new popup_prefab_help());
                 }
             } else {
                 if (GLOBAL.INFERNO_ONLY) {
@@ -2343,6 +2590,10 @@ export class BASE extends ASObject {
                     BASE.ioWelcome();
                     // Back from a Moloch's Gauntlet attack: its window again, with what the attack did.
                     IoGauntlet.AfterHome();
+                    // Back from a Siege attack (the Devil's Arcade): the arcade again, on Siege.
+                    IoSiege.AfterHome();
+                    // Back from a Hellgate run's end screen, asked to: the Devil's Arcade (QoL #376).
+                    IoTd.AfterHome();
                 } else {
                     MARKETING.Process();
                 }
@@ -2467,8 +2718,8 @@ export class BASE extends ASObject {
         let _loc5_: boolean = Boolean(BASE.isInfernoMainYardOrOutpost);
         if (BASE._pendingPurchase.length == 0) {
             if (param1 > BASE._credits.Get()) {
-                POPUPS.DisplayGetShiny();
-            } else if (!GLOBAL.ioConfirmShiny(param1, "to make up the missing resources and heal", (): void => {
+                POPUPS.ioShinyNeed(param1);
+            } else if (!GLOBAL.ioConfirmShiny(param1, KEYS.Get("io_t3k_for_topoff_heal"), (): void => {
                 BASE.startHealWithShiny(param1, param2, param3, param4);
             })) {
                 return;
@@ -2559,7 +2810,9 @@ export class BASE extends ASObject {
         if (GLOBAL._flags.pageinterval) {
             _loc2_ = GLOBAL._flags.pageinterval | 0;
         }
-        if (BASE._lastPaged >= _loc2_ && !BASE._paging && !BASE._saving && GLOBAL.Timestamp() - BASE._lastSaved >= _loc2_) {
+        // (Inferno-only: not in a Hellgate Defense arena or a Siege attack: their yards are the games', made for
+        // one run and deleted when it ends; bug report #77)
+        if (BASE._lastPaged >= _loc2_ && !BASE._paging && !BASE._saving && GLOBAL.Timestamp() - BASE._lastSaved >= _loc2_ && !IoTd.on && !IoSiege.attacking) {
             let activeEvent: any = SPECIALEVENT.getActiveSpecialEvent();
             if (activeEvent.active) {
                 BASE._blockSave = false;
@@ -2570,6 +2823,9 @@ export class BASE extends ASObject {
             }
         }
         ++BASE._lastPaged;
+        if (GLOBAL.INFERNO_ONLY) {
+            BASE.ioWarnExtraHousing();
+        }
         if (GLOBAL._extraHousing < GLOBAL.Timestamp() && HOUSING._housingUsed.Get() > HOUSING._housingCapacity.Get()) {
             HOUSING.Cull(false);
             GLOBAL._extraHousing = 0;
@@ -2577,6 +2833,29 @@ export class BASE extends ASObject {
             BASE.Save();
         }
         BASE.ShakeB();
+    }
+
+    /** When the Extra Housing warning was last given (its end time), so it is given once per purchase. */
+    private static _ioExhWarned: int = 0;
+
+    /**
+     * Inferno-only (QoL #283): Extra Housing ends within the hour and the Compound holds more than it will have room
+     * for: said once, with how many would go, so the player can juice or fling some first.
+     */
+    private static ioWarnExtraHousing(): void {
+        let end: int = GLOBAL._extraHousing | 0;
+        let left: int = (end - GLOBAL.Timestamp()) | 0;
+        if (end <= 0 || left <= 0 || left > 3600 || BASE._ioExhWarned == end || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !GLOBAL._extraHousingPower || GLOBAL._extraHousingPower.Get() <= 1) {
+            return;
+        }
+        HOUSING.HousingSpace();
+        let after: int = Math.floor(HOUSING._housingCapacity.Get() / GLOBAL._extraHousingPower.Get()) | 0;
+        let over: int = (HOUSING._housingUsed.Get() - after) | 0;
+        if (over <= 0) {
+            return;
+        }
+        BASE._ioExhWarned = end;
+        GLOBAL.Message(KEYS.Get("io_exh_ending", { "v1": GLOBAL.ioDuration(left), "v2": over }));
     }
 
     public static Purchase(param1: string, param2: int, param3: string, param4: boolean = false): boolean {
@@ -2624,6 +2903,34 @@ export class BASE extends ASObject {
             BASE._infernoSaveLoad = true;
         }
     }
+
+    /**
+     * Inferno-only (15 October, QoL #212): the page is closing. A save still waiting (the game saves a couple of
+     * seconds after a change) is sent now, with keepalive so it outlives the page. True when a save is on its way
+     * (this one, or one already sent), so the caller doesn't sign out in the same breath (the sign-out could reach
+     * the server first and the save be refused).
+     */
+    public static ioSaveOnClose(closing: boolean = true): boolean {
+        if (BASE._saving) {
+            return true;
+        }
+        if (BASE._saveCounterA == BASE._saveCounterB || BASE._blockSave) {
+            return false;
+        }
+        netHooks.keepalive = true;
+        BASE._ioClosing = closing;
+        try {
+            BASE.SaveB();
+        } catch (e) {
+        } finally {
+            netHooks.keepalive = false;
+            BASE._ioClosing = false;
+        }
+        return BASE._saving;
+    }
+
+    /** QoL #212: set while a closing page's last save is made (it asks the server to sign the game out after). */
+    private static _ioClosing: boolean = false;
 
     public static saveBLite(): boolean {
         return true;
@@ -2937,6 +3244,11 @@ export class BASE extends ASObject {
         let resourceLoot: any = { "r1": ATTACK._loot.r1.Get(), "r2": ATTACK._loot.r2.Get(), "r3": ATTACK._loot.r3.Get(), "r4": ATTACK._loot.r4.Get() };
         for (attackerCellData of (GLOBAL._attackerCellsInRange ?? [])) {
             attackerCell = attackerCellData.cell;
+            // (Inferno-only, QoL #71: a yard kept at home (PopupAttackA's Yards) gives no monsters; PopupAttackA
+            // leaves it out of the cells in range already, this keeps the two the same)
+            if (GLOBAL.INFERNO_ONLY && attackerCell && ATTACK.ioIsExcluded(attackerCell)) {
+                continue;
+            }
             if (attackerCell && attackerCell.mine && Boolean(attackerCell.resources)) {
                 if (attackerCell.flingerRange.Get()) {
                     flingerRange = POWERUPS.Apply(POWERUPS.ALLIANCE_DECLAREWAR, [attackerCell.flingerRange.Get()]);
@@ -2995,7 +3307,8 @@ export class BASE extends ASObject {
             homeCellUpdates = { "baseid": GLOBAL._homeBaseID, "m": attackerHomeCell.hpMonsterData, "p": 1 };
             cellUpdates.push(homeCellUpdates);
         }
-        if (GLOBAL._attackerCellsInRange.length == 0 && GLOBAL.mode === GLOBAL.e_BASE_MODE.ATTACK) {
+        // (Inferno-only, 22 October: test mode's practice attacks reach any yard, in range or not: not an error then)
+        if (GLOBAL._attackerCellsInRange.length == 0 && GLOBAL.mode === GLOBAL.e_BASE_MODE.ATTACK && !(GLOBAL.INFERNO_ONLY && IoTestMode.on())) {
             LOGGER.Log("err", "BASE.Save: No Cells in Range.");
         }
         return cellUpdates;
@@ -3111,7 +3424,7 @@ export class BASE extends ASObject {
         BASE.SaveDeltaResources();
         let saveData: any = {};
         // Admin test mode: the server refuses saves from a game still in test mode after it was switched off.
-        if (GLOBAL.ioTestMode()) {
+        if (GLOBAL.ioTestMode() || IoTestMode.realOn()) { // (QoL #396: the real-costs profile too)
             saveData["iotest"] = 1;
         }
         if (MapRoomManager.instance.isInMapRoom3 && !BASE.isInfernoMainYardOrOutpost) {
@@ -3131,6 +3444,11 @@ export class BASE extends ASObject {
         saveData["buildingkeydata"] = JSON.stringify(as3.vget(buildingSaveData, 2));
         saveData["stats"] = JSON.stringify(BASE.getStatsSaveData());
         saveData["resources"] = JSON.stringify(BASE.getResourceSaveData());
+        if (GLOBAL.INFERNO_ONLY) {
+            // (18 October) these resource changes' name: sent again (no answer came), the server takes only what
+            // was added since, not the whole change twice
+            saveData["ioseq"] = BASE._ioDeltaSeq || (BASE._ioDeltaSeq = BASE.ioNewDeltaSeq());
+        }
         if (MapRoomManager.instance.isInMapRoom2) {
             saveData["monsters"] = JSON.stringify(BASE.getHousingSaveData());
         } else {
@@ -3278,6 +3596,10 @@ export class BASE extends ASObject {
         }
         GLOBAL._timePlayed = 0;
         let saveDataList: any[] = BASE.getOrderedSaveVariablesFromObject(saveData);
+        // (Inferno-only, QoL #212: the page is closing: the server signs this game out once it is saved)
+        if (BASE._ioClosing) {
+            saveDataList.push(["io_close", "1"]);
+        }
         if (!GLOBAL._save) {
             BASE._saving = false;
             BASE._lastSaved = GLOBAL.Timestamp();
@@ -3314,6 +3636,9 @@ export class BASE extends ASObject {
                 return;
             }
             BASE._saveErrors = 0;
+            if (GLOBAL.INFERNO_ONLY) {
+                BASE.ioSaved();
+            }
             BASE._lastSaved = GLOBAL.Timestamp();
             BASE._lastSaveID = serverData.basesaveid | 0;
             // (not while the Brimstone Pit is showing a result: the game shows the Shiny as it lands)
@@ -3367,9 +3692,21 @@ export class BASE extends ASObject {
                 securedOutpost = new MapRoom3OutpostSecured(BASE.yardType, serverData.takeover);
                 POPUPS.Push(securedOutpost);
             }
+        } else if (GLOBAL.INFERNO_ONLY && serverData.errorDetails && serverData.errorDetails.data && serverData.errorDetails.data.io_refused == "watching") {
+            // (18 October) the yard is under another player's attack: nothing of it is saved until that is over, and
+            // the attack is watched instead (IoLiveWatch)
+            LOGGER.Log("log", "Base.Save: the yard is under attack: watched (" + serverData.error + ")");
+            BASE._blockSave = true;
+            IoLiveWatch.fromServer(serverData.errorDetails.data.io_watch);
+        } else if (GLOBAL.INFERNO_ONLY && (IoTd.on || GLOBAL.ioTdMode()) && serverData.errorDetails && (serverData.errorDetails.status | 0) == 409) {
+            // (bug report 78) a Hellgate Defense arena's save that went after its run ended: the arena is gone,
+            // nothing is lost (home is loaded next); not a reason to stop the game
+            LOGGER.Log("log", "Base.Save: a Hellgate Defense arena's save after its run ended: " + serverData.error);
+            BASE._blockSave = true;
         } else {
             LOGGER.Log("err", "Base.Save: " + JSON.stringify(serverData));
-            GLOBAL.ErrorMessage("BASE.SaveB 2: " + serverData.error);
+            // (Inferno-only, QoL #206: said in words, the code kept in small print for bug reports)
+            GLOBAL.ErrorMessage(GLOBAL.INFERNO_ONLY ? KEYS.Get("io_save_failed", { "v1": String(serverData.error || "") }) + " <font size=\"9\">(BASE.SaveB 2)</font>" : "BASE.SaveB 2: " + serverData.error);
         }
         BASE._saving = false;
     }
@@ -3378,9 +3715,86 @@ export class BASE extends ASObject {
         ++BASE._saveErrors;
         --BASE._saveCounterB;
         BASE._saving = false;
+        // (Inferno-only, 18 October: the save that ends an attack blocks every save after it as it goes; when it got
+        // no answer (a dropped connection, the proxy's 52x, a server restarting) it was never sent again: the attack
+        // hung on an empty field and its loot never reached the server. Let it go again.)
+        if (GLOBAL.INFERNO_ONLY && BASE._saveOver) {
+            BASE._blockSave = false;
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            BASE.ioSaveTrouble();
+            return;
+        }
         if (BASE._saveErrors >= 5) {
             LOGGER.Log("err", "Base.Save HTTP");
             GLOBAL.ErrorMessage("BASE.Save HTTP");
+        }
+    }
+
+    /** (Inferno-only, QoL #208) "Not saved yet" was said; "Reconnecting…" is up */
+    public static _ioToldRetry: boolean = false;
+
+    public static _ioReconnecting: boolean = false;
+
+    /** QoL #208: checks of the server while "Reconnecting…" is up (3 s apart: about 30 s) */
+    public static readonly IO_RECONNECT_TRIES: int = 10;
+
+    /**
+     * Inferno-only (QoL #208): a save the server didn't answer. From the 2nd in a row, "Not saved yet, trying
+     * again…"; at the 5th, "Reconnecting…" over the game while the server is asked every 3 s, and the game carries
+     * on (and saves) once it answers; the Oops only after about 30 s with no answer. It was silent until the 5th,
+     * then the Oops at once.
+     */
+    private static ioSaveTrouble(): void {
+        if (BASE._ioReconnecting) {
+            return;
+        }
+        if (BASE._saveErrors >= 5) {
+            BASE._ioReconnecting = true;
+            IoToast.Hide();
+            PLEASEWAIT.Show(KEYS.Get("io_reconnecting"));
+            BASE.ioReconnect(1);
+            return;
+        }
+        if (BASE._saveErrors >= 2) {
+            BASE._ioToldRetry = true;
+            IoToast.Show(KEYS.Get("io_save_retrying"), 30000);
+        }
+    }
+
+    private static ioReconnect(n: int): void {
+        GLOBAL.ioPing((): void => {
+            if (!BASE._ioReconnecting) {
+                return;
+            }
+            BASE._ioReconnecting = false;
+            PLEASEWAIT.Hide();
+            BASE._saveErrors = 0;
+            BASE.Save();
+        }, (): void => {
+            if (!BASE._ioReconnecting) {
+                return;
+            }
+            if (n >= BASE.IO_RECONNECT_TRIES) {
+                BASE._ioReconnecting = false;
+                PLEASEWAIT.Hide();
+                LOGGER.Log("err", "Base.Save HTTP");
+                GLOBAL.ErrorMessage("BASE.Save HTTP");
+                return;
+            }
+            setTimeout((): void => BASE.ioReconnect((n + 1) | 0), 3000);
+        });
+    }
+
+    /** (QoL #208) a save went through: what was said about it put right */
+    private static ioSaved(): void {
+        if (BASE._ioReconnecting) {
+            BASE._ioReconnecting = false;
+            PLEASEWAIT.Hide();
+        }
+        if (BASE._ioToldRetry) {
+            BASE._ioToldRetry = false;
+            IoToast.Show(KEYS.Get("io_save_back"), 2500);
         }
     }
 
@@ -3409,7 +3823,18 @@ export class BASE extends ASObject {
             if (serverData.error == 0) {
                 BASE._paging = false;
                 GLOBAL.SetFlags(serverData.flags);
+                let ioUnreadWas: int = GLOBAL._unreadMessages | 0;
                 GLOBAL._unreadMessages = !(!serverData.unreadmessages) ? serverData.unreadmessages | 0 : 0;
+                if (GLOBAL.INFERNO_ONLY && GLOBAL._unreadMessages > ioUnreadWas) {
+                    // (QoL #635)
+                    SOUNDS.ioNotify("mail");
+                }
+                if (GLOBAL.INFERNO_ONLY && GLOBAL._unreadMessages > ioUnreadWas && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !BASE.ioAttackRunning()) {
+                    // (QoL #186: a letter arrived while playing: said, with Open; only the envelope's count showed it)
+                    IoToast.Show(KEYS.Get("io_mail_new", { "v1": GLOBAL._unreadMessages }), 10000, KEYS.Get("io_mail_open"), (): void => {
+                        MAILBOX.Show();
+                    });
+                }
                 BASE._pageErrors = 0;
                 if (!CASINO.holdsCredits()) {
                     BASE._credits.Set(serverData.credits | 0);
@@ -3529,6 +3954,11 @@ export class BASE extends ASObject {
                 if (serverData.powerups) {
                     POWERUPS.Setup(as3.cast(serverData.powerups, Array), null, false);
                 }
+                // (18 October: the player's yard came under another player's attack: watched, IoLiveWatch)
+                if (GLOBAL.INFERNO_ONLY && serverData.io_watch && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                    BASE._blockSave = true;
+                    IoLiveWatch.fromServer(serverData.io_watch);
+                }
                 if (serverData.attpowerups) {
                     POWERUPS.Setup(null, as3.cast(serverData.attpowerups, Array), false);
                 }
@@ -3616,7 +4046,7 @@ export class BASE extends ASObject {
         }
         // Inferno-only: an underworld outpost has no Flinger (com/monsters/maproom_advanced/IoUnderworld)
         if (param1 == 5 && GLOBAL.INFERNO_ONLY && BASE.ioInUnderworldOutpost()) {
-            return { "error": true, "errorMessage": "Outposts in the Depths of Hell have no Flinger: they always reach the cells next to them." };
+            return { "error": true, "errorMessage": KEYS.Get("io_t3k_depths_noflinger") };
         }
         for (_loc7_ in GLOBAL._buildingProps) {
             if (GLOBAL._buildingProps[_loc7_].id == param1) {
@@ -3752,7 +4182,7 @@ export class BASE extends ASObject {
                 if (_loc24_ > 0) {
                     _loc4_ = true;
                     _loc28_ = _loc26_ ? GLOBAL.iresourceNames : GLOBAL._resourceNames;
-                    _loc5_ = "You need " + GLOBAL.FormatNumber(_loc25_) + " more " + KEYS.Get(as3.str(_loc28_[_loc24_ - 1]));
+                    _loc5_ = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_need_more", { "v1": GLOBAL.FormatNumber(_loc25_), "v2": KEYS.Get(as3.str(_loc28_[_loc24_ - 1])) }) : "You need " + GLOBAL.FormatNumber(_loc25_) + " more " + KEYS.Get(as3.str(_loc28_[_loc24_ - 1])); // (QoL #235)
                 }
             }
         }
@@ -3864,7 +4294,7 @@ export class BASE extends ASObject {
             if (_loc17_ > 0) {
                 _loc4_ = true;
                 _loc16_ = _loc11_ ? GLOBAL.iresourceNames : GLOBAL._resourceNames;
-                _loc5_ = "You need " + GLOBAL.FormatNumber(_loc18_) + " more " + KEYS.Get(as3.str(_loc16_[_loc17_ - 1]));
+                _loc5_ = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_need_more", { "v1": GLOBAL.FormatNumber(_loc18_), "v2": KEYS.Get(as3.str(_loc16_[_loc17_ - 1])) }) : "You need " + GLOBAL.FormatNumber(_loc18_) + " more " + KEYS.Get(as3.str(_loc16_[_loc17_ - 1])); // (QoL #235)
             }
             if (!_loc4_) {
                 if (_loc6_ < _loc8_.length) {
@@ -4022,6 +4452,10 @@ export class BASE extends ASObject {
     public static addBuildingB(param1: int, param2: boolean = false): BFOUNDATION {
         let _loc3_: any = false;
         let _loc4_: any = null;
+        // (Inferno-only, 22 October: a Champion Statue shows one of the player's champions: one unlocked first)
+        if (GLOBAL.INFERNO_ONLY && IoChampionStatue.Is(param1) && InventoryManager.buildingStorageCount(param1) == 0 && !IoShop.canPlaceStatue()) {
+            return null;
+        }
         BASE.BuildingDeselect();
         _loc3_ = GLOBAL._buildingProps[param1 - 1].costs[0].time.Get() == 0;
         if (!_loc3_) {
@@ -4072,6 +4506,15 @@ export class BASE extends ASObject {
         if (buildingProperties.type == "decoration") {
             if (BTOTEM.IsTotem(buildingNum) || BTOTEM.IsTotem2(buildingNum)) {
                 buildingFoundation = new BTOTEM(buildingNum);
+            } else if (IoSign.IsSign(buildingNum)) {
+                // Inferno-only (10 October): the D.A.V.E. Club's Sign (its message with it)
+                buildingFoundation = new IoSign(buildingNum);
+            } else if (IoTd2Tower.IsTower(buildingNum)) {
+                // Inferno-only (11 October): Hellgate Defense 2's Hellforged towers (their frames are IoTd2's)
+                buildingFoundation = new IoTd2Tower(buildingNum);
+            } else if (IoTrophies.IsTrophy(buildingNum)) {
+                // Inferno-only (10 October): the event trophies (their level as won)
+                buildingFoundation = new IoTrophy(buildingNum);
             } else {
                 buildingFoundation = new BDECORATION(buildingNum);
             }
@@ -4240,6 +4683,10 @@ export class BASE extends ASObject {
     }
 
     public static Shake(param1: int): void {
+        // (Inferno-only, QoL #229: none with Reduce motion)
+        if (GLOBAL.INFERNO_ONLY && GLOBAL.ioReduceMotion) {
+            return;
+        }
         BASE._shakeCountdown = param1;
     }
 
@@ -4255,6 +4702,9 @@ export class BASE extends ASObject {
         }
     }
 
+    /** Inferno-only (13 November): the next Charge is not a purchase (no Devil's Contract discount): IoDevil, the Crucible, kits. */
+    public static _ioPlainCharge: boolean = false;
+
     public static Charge(param1: int, param2: number, param3: boolean = false, param4: boolean = false): int {
         let _loc5_: any = null;
         let _loc6_: any = null;
@@ -4264,6 +4714,14 @@ export class BASE extends ASObject {
         if (GLOBAL.ioFreeBuild()) {
             return param2 | 0;
         }
+        // (Inferno-only, 13 November: the Devil's Contract's Merchant's Due: everything bought with resources costs
+        // less; not what isn't a purchase (BASE._ioPlainCharge: the Soul Crucible's pour, a kit, Hoarder's Seal's burn))
+        if (GLOBAL.INFERNO_ONLY && param2 > 0 && !BASE._ioPlainCharge) {
+            let ioCostMul: number = IoDevil.costMul();
+            if (ioCostMul != 1) {
+                param2 = Math.floor(param2 * ioCostMul);
+            }
+        }
         if (param4 && BASE.isInfernoMainYardOrOutpost) {
             param4 = false;
         }
@@ -4272,6 +4730,10 @@ export class BASE extends ASObject {
         _loc7_ = GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == "ibuild" ? BASE._hpResources : GLOBAL._hpAttackersResources;
         if (param2 <= _loc6_["r" + param1].Get()) {
             if (!param3) {
+                // Inferno-only quest book: the day's spending
+                if (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == "ibuild")) {
+                    IoQuests.spent(param2);
+                }
                 _loc6_["r" + param1].Add(-param2);
                 if (!param4) {
                     _loc7_["r" + param1] -= param2;
@@ -4449,8 +4911,20 @@ export class BASE extends ASObject {
         BASE._hpDeltaResources = { "dirty": false };
     }
 
+    /**
+     * (18 October, SUSPECTED-BUGS.md: a save the server took but whose answer was lost was sent again with the same
+     * resource changes, and they counted twice) the name of the resource changes saved since the last save answered:
+     * a new one each time they are cleared (a save answered); the same while they are sent again.
+     */
+    public static _ioDeltaSeq: string = null;
+
+    public static ioNewDeltaSeq(): string {
+        return "d" + Date.now().toString(36) + Math.floor(Math.random() * 2176782336).toString(36);
+    }
+
     public static CleanDeltaResources(): void {
         BASE._savedDeltaResources = { "r1": new SecNum(0), "r2": new SecNum(0), "r3": new SecNum(0), "r4": new SecNum(0) };
+        BASE._ioDeltaSeq = BASE.ioNewDeltaSeq();
         BASE._ideltaResources.r1.Set(0);
         BASE._ideltaResources.r2.Set(0);
         BASE._ideltaResources.r3.Set(0);
@@ -4460,6 +4934,12 @@ export class BASE extends ASObject {
     public static BuildBlockers(param1: BFOUNDATION, param2: boolean = false): string {
         if (GRID.FootprintBlocked(param1._footprint, new Point(param1._mc.x, param1._mc.y), true, param2)) {
             return "overlap";
+        }
+        // Inferno-only (Hellgate Defense): a tower from the shop goes inside the arena, and never where it
+        // would close the monsters' way
+        // (a tower of the shop's checked whatever `placing` says: a tower put down unchecked could go anywhere)
+        if (GLOBAL.ioTdMode() && param1 == GLOBAL._newBuilding && (IoTd.placing || IoTd.isTowerType(param1._type))) {
+            return IoTd.placeBlocker(param1);
         }
         return "";
     }
@@ -4494,10 +4974,10 @@ export class BASE extends ASObject {
             return;
         }
         if (BASE._saving || BASE._loading || BASE._saveCounterA != BASE._saveCounterB) {
-            GLOBAL.Message("Your yard is still saving. Try again in a moment.");
+            GLOBAL.Message(KEYS.Get("io_t3k_still_saving"));
             return;
         }
-        if (BASE.isMainYard && GLOBAL._bMap && !GLOBAL._bMap._canFunction) {
+        if (BASE.isMainYard && GLOBAL._bMap && !GLOBAL.ioMapRoomWorks()) {
             GLOBAL.Message(KEYS.Get("map_msg_damaged"));
             return;
         }
@@ -4529,7 +5009,7 @@ export class BASE extends ASObject {
             return;
         }
         if (BASE._saving || BASE._loading || BASE._saveCounterA != BASE._saveCounterB) {
-            GLOBAL.Message("Your yard is still saving. Try again in a moment.");
+            GLOBAL.Message(KEYS.Get("io_t3k_still_saving"));
             return;
         }
         if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD && GLOBAL.mode != "ibuild") {
@@ -4558,10 +5038,30 @@ export class BASE extends ASObject {
         }
         let dir: int = BASE._ioStepDir < 0 ? -1 : 1;
         BASE._ioStepDir = 1;
-        if (here < 0) {
-            return (dir > 0 ? 0 : count - 1) | 0;
+        // (QoL #318: in the Outposts list's order, as last sorted there; outposts it doesn't have, after)
+        let order: int[] = [];
+        if (IoOutpostsPopup.ioOrder) {
+            for (let id of IoOutpostsPopup.ioOrder) {
+                for (let i: int = 0; i < count; i++) {
+                    if (String(GLOBAL._mapOutpostIDs[i]) == id && order.indexOf(i) < 0) {
+                        order.push(i);
+                    }
+                }
+            }
         }
-        return ((here + dir + count) % count) | 0;
+        // (QoL #324: with the Outposts list's "Needs attention only", only those)
+        let only: boolean = IoOutpostsPopup.ioOrderOnly && order.length > 0;
+        for (let i: int = 0; i < count && !only; i++) {
+            if (order.indexOf(i) < 0) {
+                order.push(i);
+            }
+        }
+        let n: int = order.length | 0;
+        if (here < 0 || order.indexOf(here) < 0) {
+            return (dir > 0 ? order[0] : order[n - 1]) | 0;
+        }
+        let at: int = order.indexOf(here);
+        return order[(at + dir + n) % n] | 0;
     }
 
     public static LoadNext(param1: MouseEvent = null): void {
@@ -4578,7 +5078,7 @@ export class BASE extends ASObject {
         }
         if (MapRoomManager.instance.isInMapRoom2) {
             // (as ioLoadOutpost: a main yard without a Map Room yet crashed here)
-            if (BASE.isMainYard && GLOBAL._bMap && !GLOBAL._bMap._canFunction) {
+            if (BASE.isMainYard && GLOBAL._bMap && !GLOBAL.ioMapRoomWorks()) {
                 GLOBAL.Message(KEYS.Get("map_msg_damaged"));
                 return;
             }
@@ -4712,16 +5212,20 @@ export class BASE extends ASObject {
                 }
             }
         }
-        if (GLOBAL._harvesterOverdrive >= GLOBAL.Timestamp() && GLOBAL._harvesterOverdrivePower.Get() > 0) {
-            BASE._resources.r1Rate *= GLOBAL._harvesterOverdrivePower.Get();
-            BASE._resources.r2Rate *= GLOBAL._harvesterOverdrivePower.Get();
-            BASE._resources.r3Rate *= GLOBAL._harvesterOverdrivePower.Get();
-            BASE._resources.r4Rate *= GLOBAL._harvesterOverdrivePower.Get();
-        }
+        // (Inferno-only, 22 October: Production Overdrive or the alliance's Harvest Moon, the stronger: GLOBAL.ioHarvestMul)
+        // (13 November: and the Devil's Contract, per resource: GLOBAL.ioHarvestMulFor)
+        BASE._resources.r1Rate *= GLOBAL.ioHarvestMulFor(1);
+        BASE._resources.r2Rate *= GLOBAL.ioHarvestMulFor(2);
+        BASE._resources.r3Rate *= GLOBAL.ioHarvestMulFor(3);
+        BASE._resources.r4Rate *= GLOBAL.ioHarvestMulFor(4);
         if (BASE.isMainYardOrInfernoMainYard) {
             _loc2_ = 1;
             while (_loc2_ < 5) {
                 BASE._resources["r" + _loc2_ + "max"] *= GLOBAL._upgradePacking;
+                // (Inferno-only, 13 November: the Devil's Contract's Hoarder's Seal)
+                if (GLOBAL.INFERNO_ONLY && IoDevil.ownYard()) {
+                    BASE._resources["r" + _loc2_ + "max"] *= IoDevil.mul("storage");
+                }
                 BASE._resources["r" + _loc2_ + "max"] = Math.floor(Number(BASE._resources["r" + _loc2_ + "max"]));
                 if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && BASE.isMainYardOrInfernoMainYard) {
                     GLOBAL._yardResources["r" + _loc2_ + "max"] = BASE._resources["r" + _loc2_ + "max"];
@@ -4734,7 +5238,8 @@ export class BASE extends ASObject {
             _loc8_ = 1;
             while (_loc8_ < 5) {
                 if (MapRoomManager.instance.isInMapRoom2 && !BASE.usesInfernoBackend) {
-                    GLOBAL._resources["r" + _loc8_ + "max"] = GLOBAL._yardResources["r" + _loc8_ + "max"] + GLOBAL._mapOutpost.length * GLOBAL._outpostCapacity.Get();
+                    // (Inferno-only, 14 November: Hoarder's Seal on the outposts' share too, as on the yard's above)
+                    GLOBAL._resources["r" + _loc8_ + "max"] = GLOBAL._yardResources["r" + _loc8_ + "max"] + Math.floor(GLOBAL._mapOutpost.length * GLOBAL._outpostCapacity.Get() * (GLOBAL.INFERNO_ONLY && IoDevil.ownYard() ? IoDevil.mul("storage") : 1));
                     BASE._resources["r" + _loc8_ + "max"] = GLOBAL._resources["r" + _loc8_ + "max"];
                 } else {
                     GLOBAL._resources["r" + _loc8_ + "max"] = GLOBAL._yardResources["r" + _loc8_ + "max"];
@@ -4848,8 +5353,10 @@ export class BASE extends ASObject {
                     }
                     mc.title_txt.htmlText = "<b>" + KEYS.Get("pop_levelup_title") + "</b>";
                     mc.headline_txt.htmlText = KEYS.Get("pop_levelup_headline", { "v1": lvl.level });
-                    mc.body_txt.htmlText = KEYS.Get("pop_levelup_body");
-                    mc.bPost.SetupKey("btn_brag");
+                    // (Inferno-only, QoL #295: the Inferno line was chosen and then this one put over it, "don't forget
+                    // to brag about it")
+                    mc.body_txt.htmlText = KEYS.Get(GLOBAL.INFERNO_ONLY ? body : "pop_levelup_body");
+                    mc.bPost.SetupKey(GLOBAL.INFERNO_ONLY ? "btn_ok" : "btn_brag");
                     mc.bPost.addEventListener(MouseEvent.CLICK, StreamPost);
                     mc.bPost.Highlight = true;
                     POPUPS.Push(mc, null, null, "levelup", "levelup.v2.png");
@@ -4962,10 +5469,61 @@ export class BASE extends ASObject {
     }
 
     public static applyTemplate(param1: BaseTemplate): void {
+        let mv: any[] = null;
         let _loc2_: int = 0;
         let _loc3_: BaseTemplateNode = null;
         let _loc4_: Point = null;
         let _loc5_: BFOUNDATION = null;
+        // Inferno-only (7 October): every building off the grid, then all put down, then all on the grid again
+        // (moving one at a time, one put where another stood lost its cells when that one moved off), each
+        // building's place up to date (a moved tower fires from where it is: BFOUNDATION.ioPlaceAt).
+        if (GLOBAL.INFERNO_ONLY) {
+            let moves: any[] = [];
+            // (9 October, bug report 83: a cannon tower "landed at 380,-35, planned at 280,40". A plan with two places
+            // for one building moved it to the first, then the second; the check then put it back on the first, then
+            // on the second again, and its cells were taken on both. One building, one place: the first; the other
+            // is skipped and reported, with the ids, so a plan that has it can be found.)
+            let claimed: Dictionary = new Dictionary();
+            let twice: any[] = [];
+            for (_loc3_ of (param1.nodes ?? [])) {
+                _loc5_ = BASE.getBuildingFromNode(_loc3_);
+                if (_loc5_) {
+                    if (claimed.get(_loc5_)) {
+                        twice.push("type " + _loc5_._type + " #" + _loc5_._id + " at " + _loc3_.x + "," + _loc3_.y + " (first at " + claimed.get(_loc5_) + ")");
+                        continue;
+                    }
+                    claimed.set(_loc5_, _loc3_.x + "," + _loc3_.y);
+                    _loc5_.GridCost(false);
+                    moves.push([_loc5_, GRID.ToISO(_loc3_.x, _loc3_.y, 0), _loc3_]);
+                }
+            }
+            if (twice.length) {
+                LOGGER.Log("err", "Yard Planner: a plan with two places for one building: " + twice.slice(0, 5).join("; ") + " | " + param1.nodes.length + " places in the plan");
+            }
+            for (mv of as3.values(moves)) {
+                as3.cast(mv[0], BFOUNDATION).ioPlaceAt(as3.cast(mv[1], Point).x | 0, as3.cast(mv[1], Point).y | 0);
+            }
+            // (each where the plan says: checked, and reported if not, so a building that won't stay put shows up)
+            for (mv of as3.values(moves)) {
+                let landed: Point = GRID.FromISO(as3.cast(mv[0], BFOUNDATION).x, as3.cast(mv[0], BFOUNDATION).y);
+                let meant: Point = GRID.FromISO(as3.cast(mv[1], Point).x, as3.cast(mv[1], Point).y);
+                if (landed.x != meant.x || landed.y != meant.y) {
+                    let bf: BFOUNDATION = as3.cast(mv[0], BFOUNDATION);
+                    let node: BaseTemplateNode = as3.cast(mv[2], BaseTemplateNode);
+                    LOGGER.Log("err", "Yard Planner: building type " + bf._type + " landed at " + landed.x + "," + landed.y + ", planned at " + meant.x + "," + meant.y + " | building #" + bf._id + ", the plan's #" + node.id + " (type " + node.type + "), placed at " + as3.cast(mv[1], Point).x + "," + as3.cast(mv[1], Point).y + ", now " + bf.x + "," + bf.y + " (shown at " + bf._mc.x + "," + bf._mc.y + "), " + moves.length + " buildings moved");
+                    bf.ioPlaceAt(as3.cast(mv[1], Point).x | 0, as3.cast(mv[1], Point).y | 0);
+                }
+                as3.cast(mv[0], BFOUNDATION).GridCost(true);
+            }
+            PATHING.ResetCosts();
+            BFOUNDATION.redrawAllShadowData();
+            // (housing's monsters and the cage's guardian follow their building: #296)
+            for (mv of as3.values(moves)) {
+                as3.cast(mv[0], BFOUNDATION).ioPlannerMoved();
+            }
+            BASE.Save();
+            return;
+        }
         _loc2_ = 0;
         while (_loc2_ < param1.nodes.length) {
             _loc3_ = as3.vget(param1.nodes, _loc2_);
@@ -4979,7 +5537,7 @@ export class BASE extends ASObject {
         BASE.Save();
     }
 
-    private static getBuildingFromNode(param1: BaseTemplateNode): BFOUNDATION {
+    public static getBuildingFromNode(param1: BaseTemplateNode): BFOUNDATION {
         let _loc3_: BFOUNDATION = null;
         let _loc4_: int = 0;
         let _loc5_: any = null;
@@ -4995,9 +5553,25 @@ export class BASE extends ASObject {
             param1.id = _loc3_._id >>> 0;
             BASE._buildingsStored["b" + _loc4_].Set(BASE._buildingsStored["b" + _loc4_].Get() - 1);
         } else {
-            _loc3_ = BASE.getBuildingByID(param1.id);
+            _loc3_ = BASE.getPlannedBuilding(param1);
         }
         return _loc3_;
+    }
+
+    /**
+     * The yard's building a plan's node stands for: the one with its id, if it is still the same kind of
+     * building. Inferno-only (7 October, the user's: "sometimes when yard planner places it'll place a building
+     * in the wrong spot and it'll overlap something"): ids are given again after a reload (the next one is the
+     * highest in the yard, plus one), so a layout saved before a building was recycled could put a different
+     * building, of another kind and size, where the recycled one stood. A node whose building is now another kind
+     * is taken as a building that has gone (the planner puts one of that kind from storage there, if any).
+     */
+    public static getPlannedBuilding(param1: BaseTemplateNode): BFOUNDATION {
+        let b: BFOUNDATION = BASE.getBuildingByID(param1.id);
+        if (b && GLOBAL.INFERNO_ONLY && param1.type > 0 && b._type != (param1.type | 0)) {
+            return null;
+        }
+        return b;
     }
 
     public static getTemplate(): BaseTemplate {
@@ -5318,11 +5892,8 @@ export class BASE extends ASObject {
     }
 
     public static getEmpireResources(param1: int): number {
-        let _loc2_: int = 0;
-        _loc2_ = 1;
-        if (GLOBAL._harvesterOverdrive >= GLOBAL.Timestamp() && GLOBAL._harvesterOverdrivePower.Get() > 0) {
-            _loc2_ = GLOBAL._harvesterOverdrivePower.Get() | 0;
-        }
+        // (Inferno-only, 22 October: Production Overdrive or the alliance's Harvest Moon, the stronger)
+        let _loc2_: number = GLOBAL.ioHarvestMulFor(param1);
         return BASE._GIP["r" + param1].Get() * 360 * _loc2_;
     }
 

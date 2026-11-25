@@ -2,8 +2,8 @@
  * DELIBERATE DEVIATION (see DEVIATIONS.md): the Flash client ran this library's
  * own WebSocket protocol implementation over flash.net.Socket (raw TCP), which
  * browsers do not allow. This replacement keeps the library's public API and
- * events but uses the browser's native WebSocket. It is copied over the
- * converter's output by tools/as3-to-ts/cli.ts.
+ * events but uses the browser's native WebSocket. (It was written by hand when
+ * the rest of the game was converted from ActionScript.)
  */
 import * as as3 from "as3";
 import { int, uint } from "as3";

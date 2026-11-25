@@ -1,5 +1,5 @@
 /**
- * Hardcoded experience point values which come from the client in BASE.as.
+ * Hardcoded experience point values which come from the client in BASE.ts.
  * Wiki: https://backyardmonsters.fandom.com/wiki/Points
  * 
  * @constant {number[]} experiencePoints - Array of cumulative experience points required for each level.

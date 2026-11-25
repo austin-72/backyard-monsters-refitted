@@ -1071,7 +1071,7 @@ export class CHAMPIONCAGEPOPUP extends GUARDIANCAGEPOPUP_CLIP {
             _loc1_ = (_loc1_ * 2) | 0;
             _loc1_ = (_loc1_ * (CHAMPIONCAGE.GetGuardianProperty(CREATURES._guardian._creatureID, CREATURES._guardian._level.Get() | 0, "feedCount") - CREATURES._guardian._feeds.Get())) | 0;
             if (BASE._credits.Get() < _loc1_) {
-                POPUPS.DisplayGetShiny();
+                POPUPS.ioShinyNeed(_loc1_);
                 return;
             }
             if (!GLOBAL.ioConfirmShiny(_loc1_, "to evolve your champion now", (): void => {

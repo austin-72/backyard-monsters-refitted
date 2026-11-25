@@ -1,3 +1,4 @@
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { BaseType } from "../../enums/Base.js";
 import { Save } from "../../database/models/save.model.js";
 import { User } from "../../database/models/user.model.js";
@@ -30,6 +31,9 @@ const mapOwnerState = (user: User, userSave: Save) => ({
   rewards: userSave.rewards,
   homebase: userSave.homebase,
 });
+
+/** (18 October) Fields of a yard only its owner is sent. */
+const OWNER_ONLY = ["savetemplate", "quests", "gifts", "sentinvites", "sentgifts", "achieved"] as const;
 
 /**
  * Resolves the outpost owner, then shapes the save for the client.
@@ -67,6 +71,13 @@ export const buildSaveData = (save: Save, user: User, ownerSave: OwnerSave | nul
   const isOwner = save.type !== BaseType.INFERNO && save.userid === user.userid;
 
   if (isOwner && user.save) return Object.assign(filteredSave, mapOwnerState(user, user.save));
+
+  // (18 October, SUSPECTED-BUGS.md: an attacker or visitor was sent the owner's Yard Planner layouts, quests, gifts
+  // and invites) not to anyone else. (The store record stays: the attack works out the yard's storage from it.)
+  if (infernoOnlyConfig.enabled) {
+    const out = filteredSave as Record<string, unknown>;
+    for (const key of OWNER_ONLY) delete out[key];
+  }
 
   if (ownerSave) filteredSave.resources = ownerSave.resources;
 

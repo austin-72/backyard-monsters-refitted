@@ -67,7 +67,8 @@ export const updateCredits = (ctx: Context, save: Save, item: string, quantity: 
     // The item has a scaling cost depending on how many of that item the player currently owns
     // We subtract 1 here since the item would've been already added to the player's save by the caller
     const currentQuantity: number = save.storedata?.[item].q - 1;
-    itemCost = storeItem.c[currentQuantity];
+    // (13 October: past the last price, the last price; it was undefined, so the balance became NaN and the save failed)
+    itemCost = storeItem.c[Math.min(Math.max(0, currentQuantity | 0), storeItem.c.length - 1)];
   }
 
   // Never below 0: the database refuses a negative balance, which would fail the whole save.

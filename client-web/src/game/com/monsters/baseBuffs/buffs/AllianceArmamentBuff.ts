@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { Vector, int, uint } from "as3";
-import { BFOUNDATION, BTOWER, BTRAP, BWALL, BaseBuff, InstanceManager, KEYS, MapRoomManager, MultiplicationPropertyModifier } from "@game";
+import { BFOUNDATION, BTOWER, BTRAP, BWALL, BaseBuff, BaseBuffHandler, InstanceManager, KEYS, MapRoomManager, MultiplicationPropertyModifier } from "@game";
 
 export class AllianceArmamentBuff extends BaseBuff {
     public static readonly k_ArmorMultiplier: number = 1.5;
@@ -36,6 +36,24 @@ export class AllianceArmamentBuff extends BaseBuff {
         while (_loc2_ < _loc1_.length) {
             (_loc4_ = as3.as(as3.vget(_loc1_, _loc2_), BTRAP)).damageProperty.addModifier(new ArmamentTrapDamageMultiplier());
             _loc2_++;
+        }
+    }
+
+    /**
+     * Inferno-only (26 October): a building put down while Armament runs (BFOUNDATION.ioPlaceInner) gets it too (apply
+     * went over the buildings there then): a tower's or block's hit points, a trap's damage.
+     */
+    public static ioCover(b: BFOUNDATION): void {
+        if (!b || !BaseBuffHandler.instance.getBuffByID(AllianceArmamentBuff.ID)) {
+            return;
+        }
+        if ((b instanceof BTOWER || b instanceof BWALL) && b.maxHealthProperty && !b.maxHealthProperty.getModifierByType(ArmamentBuildingDefenseMultiplier)) {
+            b.maxHealthProperty.store();
+            b.maxHealthProperty.addModifier(new ArmamentBuildingDefenseMultiplier());
+            b.maxHealthProperty.updateHealth();
+        }
+        if (b instanceof BTRAP && (b as BTRAP).damageProperty && !(b as BTRAP).damageProperty.getModifierByType(ArmamentTrapDamageMultiplier)) {
+            (b as BTRAP).damageProperty.addModifier(new ArmamentTrapDamageMultiplier());
         }
     }
 

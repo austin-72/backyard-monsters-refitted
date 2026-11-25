@@ -9,6 +9,8 @@ export const CreateAllianceSchema = z.object({
   alliance_name: z.string().trim(),
   alliance_image: z.coerce.number().int().min(1).max(41),
   alliance_desc: z.string().trim().min(1).max(255),
+  /** Inferno-only (14 October): a designed crest (services/alliance/allianceCrest.ts), or none. */
+  alliance_crest: z.string().max(32).optional(),
 });
 
 /**
@@ -17,6 +19,11 @@ export const CreateAllianceSchema = z.object({
 export const EditAllianceSchema = z.object({
   alliance_image: z.coerce.number().int().min(1).max(41),
   alliance_desc: z.string().trim().min(1).max(255),
+  /** Inferno-only (13 October): a new name (renaming), and the chat tag; a game from before sends neither. */
+  alliance_name: z.string().trim().max(64).optional(),
+  alliance_tag: z.string().max(32).optional(),
+  /** Inferno-only (14 October): the crest designed ("" for the preset shield again); a game from before sends none. */
+  alliance_crest: z.string().max(32).optional(),
 });
 
 /**
@@ -40,14 +47,20 @@ export const SearchAlliancesSchema = z.object({
  */
 export const RequestJoinSchema = z.object({
   alliance_id: z.coerce.number().int().positive(),
+  /** Inferno-only (QoL #169): a few words to the leader, optional. */
+  message: z.string().max(400).optional(),
 });
 
 /**
  * Schema for the Members and Suggested tabs' Invite button.
  */
-export const InviteUserSchema = z.object({
-  userid: z.coerce.number().int().positive(),
-});
+export const InviteUserSchema = z
+  .object({
+    userid: z.coerce.number().int().positive().optional(),
+    // (Inferno-only, QoL #162: invite by name from the Recruit tab)
+    username: z.string().trim().min(2).max(12).regex(/^[a-zA-Z0-9_]+$/).optional(),
+  })
+  .refine((v) => v.userid !== undefined || v.username !== undefined);
 
 /**
  * Schema for the Members tab's leader-only Kick and Promote buttons.
@@ -89,6 +102,15 @@ export const ChangeRelationshipSchema = z.object({
  */
 export const ActivatePowerupSchema = z.object({
   powerup_id: z.coerce.number().int().positive(),
+  // (Inferno-only, 22 October: 2 runs longer and charges longer after; anything else is 1)
+  tier: z.coerce.number().int().optional(),
+});
+
+/** Inferno-only (22 October): a power-up's planned start (at: seconds; 0 cancels it). */
+export const PlanPowerupSchema = z.object({
+  powerup_id: z.coerce.number().int().positive(),
+  at: z.coerce.number().int().nonnegative(),
+  tier: z.coerce.number().int().optional(),
 });
 
 /**

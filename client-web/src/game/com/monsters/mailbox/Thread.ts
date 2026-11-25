@@ -1,9 +1,9 @@
 import * as as3 from "as3";
-import { uint } from "as3";
+import { int, uint } from "as3";
 import { Sprite, StageDisplayState } from "flash/display";
 import { Event, FocusEvent, FullScreenEvent, IOErrorEvent, KeyboardEvent, MouseEvent, TimerEvent } from "flash/events";
 import { Timer } from "flash/utils";
-import { ALLIANCES, Contact, GLOBAL, KEYS, LOGGER, LOGIN, MAPROOM, MailBox, MapRoomManager, SOUNDS, ScrollSet, ThreadData, ThreadMember, Thread_CLIP, UI2, URLLoaderApi, com_monsters_mailbox_Message as Message, com_monsters_maproom_advanced_MapRoom as MapRoom, frame, popup_report } from "@game";
+import { ALLIANCES, Chat, Contact, GLOBAL, KEYS, LOGGER, LOGIN, MAPROOM, MailBox, MapRoomManager, SOUNDS, ScrollSet, ThreadData, ThreadMember, Thread_CLIP, UI2, URLLoaderApi, com_monsters_mailbox_Message as Message, com_monsters_maproom_advanced_MapRoom as MapRoom, frame, popup_report } from "@game";
 
 export class Thread extends Thread_CLIP {
     static {
@@ -88,7 +88,11 @@ export class Thread extends Thread_CLIP {
         this.data.loadThread();
     }
 
+    private _ioLeft: any;
+
     public Validate(param1: TimerEvent = null): boolean {
+        // (Inferno-only, QoL #531: at most 580 characters, and a count once close)
+        this._ioLeft = Message.ioCount(this.msg_txt, this._ioLeft);
         let _loc2_: boolean = true;
         if (Message.getNotWS(this.msg_txt.text).length < 2) {
             _loc2_ = false;
@@ -135,11 +139,20 @@ export class Thread extends Thread_CLIP {
             this.data.Changed();
             reportCloseDown();
             MailBox.ShowInbox();
+            // (Inferno-only, QoL #185: the letters went to the admins too; #184: the block is the chat's ignore list now,
+            // so it can be undone there, and the chat learns of it at once)
+            if (GLOBAL.INFERNO_ONLY && (param1.error == undefined || param1.error == 0)) {
+                if (Chat._bymChat != null) {
+                    Chat._bymChat.ioChat2SyncIgnore();
+                }
+                GLOBAL.Message(KEYS.Get(param1.reported == 1 ? "io_chat2_mail_reported" : "io_chat2_mail_blocked"));
+            }
         };
         SOUNDS.Play("click1");
         popup = new popup_report();
         popup.tTitle.htmlText = KEYS.Get("report_title");
-        popup.tDesc.htmlText = KEYS.Get("report_desc");
+        // (Inferno-only, QoL #184, #185: what it does now: blocked in chat and mail, sent to the admins, can be undone)
+        popup.tDesc.htmlText = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_chat2_mail_report_desc") : KEYS.Get("report_desc");
         popup.Resize = (): void => {
             popup.x = this.mcFrame.x + this.mcFrame.width * 0.5 + 100;
             popup.y = this.mcFrame.y + this.mcFrame.height * 0.5;
@@ -336,6 +349,17 @@ export class Thread extends Thread_CLIP {
         if (this.data.convo.length >= 1) {
             _loc2_ = (_loc5_ = this.data.convo[this.data.convo.length - 1]).userid == LOGIN._playerID;
         }
+        if (GLOBAL.INFERNO_ONLY && _loc2_) {
+            // (Inferno-only, QoL #530: up to three in a row; the reply box vanished after one until the other player
+            // answered, a rule only this window had)
+            let mine: int = 0;
+            let k: int = (this.data.convo.length - 1) | 0;
+            while (k >= 0 && this.data.convo[k].userid == LOGIN._playerID) {
+                mine++;
+                k--;
+            }
+            _loc2_ = mine >= 3;
+        }
         if (!_loc2_) {
             this.msg_txt.addEventListener(FocusEvent.FOCUS_IN, as3.bind(this, this.onMsgFocusIn));
             this.msg_txt.addEventListener(FocusEvent.FOCUS_OUT, as3.bind(this, this.onMsgFocusOut));
@@ -467,6 +491,14 @@ export class Thread extends Thread_CLIP {
 
     private migrateRevoke(param1: MouseEvent): void {
         SOUNDS.Play("click1");
+        if (GLOBAL.INFERNO_ONLY && param1) {
+            // (QoL #496: asks first; a revoked invite can't be given back, only sent again)
+            let who: Contact = Contact.contactWithUserId(this.data.convo[0].userid >>> 0, true);
+            GLOBAL.ioDanger(KEYS.Get("io_revoke_ask", { "v1": who ? who.firstname : "" }), KEYS.Get("btn_revoke"), (): void => {
+                this.migrateRevoke(null);
+            });
+            return;
+        }
         let _loc2_: uint = this.data.userid >>> 0;
         let _loc3_: Contact = Contact.contactWithUserId(this.data.convo[0].userid >>> 0, true);
         let _loc4_: string = _loc3_.firstname;
@@ -567,6 +599,15 @@ export class Thread extends Thread_CLIP {
     private onSuccess(param1: any): void {
         if (param1.error != undefined && param1.error != 0) {
             LOGGER.Log("err", "message error - " + param1.error);
+            // Inferno-only (14 October, QoL #431): a reply the server refused (blocked, too long, too fast) was
+            // counted as sent and the thread reloaded over it: it vanished with no word. The text stays and the
+            // reason is shown.
+            if (GLOBAL.INFERNO_ONLY) {
+                this.sending = false;
+                GLOBAL.Message(KEYS.Get("io_mail_not_sent", { "v1": String(param1.error) }));
+                this.Validate();
+                return;
+            }
         }
         ++this.data.messagecount;
         this.data.Changed();
@@ -575,6 +616,11 @@ export class Thread extends Thread_CLIP {
 
     private onFail(param1: IOErrorEvent): void {
         this.sending = false;
+        // (Inferno-only, QoL #431: and a reply that got no answer says so; the text stays to send again)
+        if (GLOBAL.INFERNO_ONLY) {
+            GLOBAL.Message(KEYS.Get("io_mail_no_answer"));
+            this.Validate();
+        }
     }
 
     public scrollToMember(param1: ThreadMember): void {

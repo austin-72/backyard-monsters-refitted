@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, GradientType, MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { Matrix } from "flash/geom";
 import { TextField, TextFormat, TextFormatAlign } from "flash/text";
-import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, AllianceMessagePopup, BASE, EnumYardType, GLOBAL, ImageCache, IoAllianceMembersPopup, KEYS, MapRoomManager, PLEASEWAIT, SOUNDS } from "@game";
+import { AllianceConstants, AllianceMessagePopup, ALLIANCES, ALLIANCEWINDOW, BASE, EnumYardType, GLOBAL, ImageCache, IoAllianceMembersPopup, IoCrest, IoTextPrompt, KEYS, LOGIN, MapRoomManager, PLEASEWAIT, SOUNDS } from "@game";
 
 export class BrowseActionPopup extends MovieClip {
     static {
@@ -77,7 +77,15 @@ export class BrowseActionPopup extends MovieClip {
      * @returns {int} Height in pixels.
      */
     public static PopupHeight(): int {
-        return ALLIANCES._isLeader ? BrowseActionPopup.POPUP_H_LEADER : BrowseActionPopup.POPUP_H_MEMBER;
+        return BrowseActionPopup.ioShowsRelations() ? BrowseActionPopup.POPUP_H_LEADER : BrowseActionPopup.POPUP_H_MEMBER;
+    }
+
+    /**
+     * Whether the swatch row is drawn: the leader's; (Inferno-only, QoL #174) an officer's too, greyed with the
+     * reason when the leader hasn't let officers set relationships.
+     */
+    private static ioShowsRelations(): boolean {
+        return ALLIANCES._isLeader || (GLOBAL.INFERNO_ONLY && ALLIANCES.ioRole() == "officer");
     }
 
     private _build(): void {
@@ -95,7 +103,13 @@ export class BrowseActionPopup extends MovieClip {
         visitBtn.y = BrowseActionPopup.PAD;
         visitBtn.addEventListener(MouseEvent.CLICK, as3.bind(this, this._onVisitLeader));
 
-        let joinBtn: MovieClip = this._makeBtn(KEYS.Get("alliance_btn_request_join"));
+        // (Inferno-only, QoL #166: the alliance's join policy: Join now, Request to join or Invite only, and its level)
+        let joinBtn: MovieClip = this._makeBtn(GLOBAL.INFERNO_ONLY ? this._ioJoinLabel() : KEYS.Get("alliance_btn_request_join"));
+        joinBtn.name = "ioSocJoinBtn";
+        if (GLOBAL.INFERNO_ONLY && joinBtn.numChildren > 0) {
+            // ("Request to join (Lv 20+)": smaller where it is longer than the button)
+            GLOBAL.ioFitText(as3.as(joinBtn.getChildAt(0), TextField), 8);
+        }
         joinBtn.x = btnX;
         joinBtn.y = BrowseActionPopup.PAD + BrowseActionPopup.BTN_H + BrowseActionPopup.BTN_GAP;
         joinBtn.addEventListener(MouseEvent.CLICK, as3.bind(this, this._onRequestJoin));
@@ -105,9 +119,11 @@ export class BrowseActionPopup extends MovieClip {
         membersBtn.y = BrowseActionPopup.PAD + (BrowseActionPopup.BTN_H + BrowseActionPopup.BTN_GAP) * 2;
         membersBtn.addEventListener(MouseEvent.CLICK, as3.bind(this, this._onMembers));
 
-        if (!ALLIANCES._isLeader) {
+        if (!BrowseActionPopup.ioShowsRelations()) {
             return;
         }
+        // (QoL #174: an officer the leader hasn't let set relationships: the swatches greyed, the reason on a click)
+        let allowed: boolean = ALLIANCES._isLeader || ALLIANCES.ioCan("relations");
 
         const iconsY: int = (BrowseActionPopup.PAD + (BrowseActionPopup.BTN_H + BrowseActionPopup.BTN_GAP) * 2 + BrowseActionPopup.BTN_H + BrowseActionPopup.ICON_ROW_GAP) | 0;
         const startX: int = BrowseActionPopup.PAD;
@@ -124,8 +140,18 @@ export class BrowseActionPopup extends MovieClip {
             box.graphics.endFill();
             box.x = startX + ci * (BrowseActionPopup.ICON_W + BrowseActionPopup.ICON_GAP);
             box.y = iconsY;
-            box.addEventListener(MouseEvent.CLICK, this._makeRelationHandler(ci));
-            this._loadShield(box, shieldId, BrowseActionPopup.ICON_INSET);
+            box.name = "ioRelation" + ci;
+            if (allowed) {
+                box.addEventListener(MouseEvent.CLICK, this._makeRelationHandler(ci));
+            } else {
+                box.alpha = 0.35;
+                box.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                    SOUNDS.Play("click1");
+                    this._dismiss();
+                    GLOBAL.Message(KEYS.Get("io_al7_perm_no_relations"));
+                });
+            }
+            this._loadShield(box, shieldId, BrowseActionPopup.ICON_INSET, this._rowData != null ? this._rowData.crest : null);
             ci++;
         }
     }
@@ -139,7 +165,12 @@ export class BrowseActionPopup extends MovieClip {
      * @param {int} id - Shield id 1-41.
      * @param {int} inset - Padding between the swatch edge and the shield.
      */
-    private _loadShield(container: MovieClip, id: int, inset: int): void {
+    private _loadShield(container: MovieClip, id: int, inset: int, crest: any = null): void {
+        // (14 October: its own crest, when it has one)
+        let side: int = Math.min(BrowseActionPopup.ICON_W, BrowseActionPopup.ICON_H) - inset * 2;
+        if (IoCrest.fit(container, crest, side, ((BrowseActionPopup.ICON_W - side) / 2) | 0, ((BrowseActionPopup.ICON_H - side) / 2) | 0)) {
+            return;
+        }
         if (id <= 0) {
             return;
         }
@@ -282,6 +313,8 @@ export class BrowseActionPopup extends MovieClip {
         if (allianceId <= 0) {
             return;
         }
+        // (QoL #171: its tag, for the name menu each name opens)
+        let tag: string = this._rowData != null && this._rowData.tag ? String(this._rowData.tag) : null;
         this._dismiss();
         PLEASEWAIT.Show(KEYS.Get("msg_loading"));
         ALLIANCES.LoadAllianceMembers(allianceId, (response: any): void => {
@@ -290,7 +323,8 @@ export class BrowseActionPopup extends MovieClip {
                 GLOBAL.Message((response && response.error) ? String(response.error) : KEYS.Get("alliance_err_generic"));
                 return;
             }
-            new IoAllianceMembersPopup().Show(allianceName, as3.as(response.members, Array) || []);
+            // (QoL #171: which alliance they are in, for the name menu each name opens)
+            new IoAllianceMembersPopup().Show(allianceName, as3.as(response.members, Array) || [], allianceId, tag);
         });
     }
 
@@ -317,6 +351,14 @@ export class BrowseActionPopup extends MovieClip {
         BASE.LoadBase(null, 0, this._leaderBaseId, GLOBAL.e_BASE_MODE.VIEW, true, yardType);
     }
 
+    /** (QoL #166) "Join now", "Request to join" or "Invite only", with "(Lv 20+)" when it asks for a level. */
+    private _ioJoinLabel(): string {
+        let mode: string = this._rowData && this._rowData.joinMode ? String(this._rowData.joinMode) : "request";
+        let label: string = KEYS.Get(mode == "open" ? "io_soc_join_now" : (mode == "invite" ? "io_soc_join_invite_only" : "alliance_btn_request_join"));
+        let min: int = this._rowData ? this._rowData.minLevel | 0 : 0;
+        return min > 0 && mode != "invite" ? KEYS.Get("io_soc_join_lv", { "v1": label, "v2": String(min) }) : label;
+    }
+
     /**
      * Asks the alliance to take the player in. The confirmation is only shown
      * once the server has the request, so "REQUEST SENT!" means it was: a player
@@ -333,6 +375,38 @@ export class BrowseActionPopup extends MovieClip {
         }
 
         this._dismiss();
+        // (Inferno-only, QoL #166: invite only: said so (the server refuses it anyway); open: joined at once, asked first)
+        if (GLOBAL.INFERNO_ONLY && this._rowData) {
+            let named: string = this._rowData.name ? String(this._rowData.name) : "";
+            let mode: string = this._rowData.joinMode ? String(this._rowData.joinMode) : "request";
+            let min: int = this._rowData.minLevel | 0;
+            if (mode == "invite") {
+                GLOBAL.Message(KEYS.Get("io_soc_join_invite_only_msg", { "v1": named }));
+                return;
+            }
+            if (min > 0 && LOGIN._playerLevel > 0 && LOGIN._playerLevel < min) {
+                GLOBAL.Message(KEYS.Get("io_soc_join_level_msg", { "v1": named, "v2": String(min), "v3": String(LOGIN._playerLevel) }));
+                return;
+            }
+            if (mode == "open") {
+                GLOBAL.Message(KEYS.Get("io_soc_join_confirm", { "v1": named }), KEYS.Get("io_soc_join_now"), (): void => {
+                    this._sendRequest(allianceId, null);
+                });
+                return;
+            }
+        }
+        // (Inferno-only, QoL #169: a few words to the leader first, optional)
+        if (GLOBAL.INFERNO_ONLY) {
+            let name: string = this._rowData && this._rowData.name ? String(this._rowData.name) : "";
+            IoTextPrompt.Show(KEYS.Get("io_alliance_request_title", { "v1": name }), KEYS.Get("io_alliance_request_words"), "", 200, KEYS.Get("io_alliance_request_send"), (typed: string): void => {
+                this._sendRequest(allianceId, String(typed || "").replace(/^\s+|\s+$/g, ""));
+            });
+            return;
+        }
+        this._sendRequest(allianceId, null);
+    }
+
+    private _sendRequest(allianceId: int, message: string): void {
         PLEASEWAIT.Show(KEYS.Get("msg_loading"));
 
         ALLIANCES.RequestJoin(allianceId, (response: any): void => {
@@ -343,7 +417,17 @@ export class BrowseActionPopup extends MovieClip {
                 return;
             }
 
+            // (Inferno-only, QoL #166: an open alliance took the player in at once)
+            if (GLOBAL.INFERNO_ONLY && (response.joined | 0) == 1) {
+                ALLIANCES.ioJoined(response.alliancedata);
+                GLOBAL.Message(KEYS.Get("io_soc_joined", { "v1": String(response.alliancedata && response.alliancedata.name ? response.alliancedata.name : "") }));
+                if (ALLIANCEWINDOW._mc != null) {
+                    ALLIANCEWINDOW._mc.SelectTab(AllianceConstants.IO_TAB_OVERVIEW);
+                }
+                return;
+            }
+
             new AllianceMessagePopup().Show(KEYS.Get("alliance_join_request_title"), KEYS.Get("alliance_join_request_body"));
-        });
+        }, message);
     }
 }

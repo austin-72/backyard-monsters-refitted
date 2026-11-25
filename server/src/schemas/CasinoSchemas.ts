@@ -71,6 +71,49 @@ export const BonePileCashoutSchema = z.object({
   session_id: z.coerce.number().int().positive("That game could not be found."),
 });
 
+/** Cinderjack: a hand dealt. */
+export const BlackjackStartSchema = z.object({
+  request_id: requestId,
+  bet: stake,
+});
+
+export const BlackjackActSchema = z.object({
+  session_id: z.coerce.number().int().positive("That game could not be found."),
+  action: z.enum(["hit", "stand", "double", "split"], { message: "Hit, stand, double or split." }),
+});
+
+/** Higher or Lower: a game started (its first card dealt). */
+export const HiLoStartSchema = z.object({
+  request_id: requestId,
+  bet: stake,
+});
+
+export const HiLoGuessSchema = z.object({
+  session_id: z.coerce.number().int().positive("That game could not be found."),
+  guess: z.enum(["hi", "lo", "skip"], { message: "Higher, lower or skip." }),
+});
+
+export const HiLoCashoutSchema = z.object({
+  session_id: z.coerce.number().int().positive("That game could not be found."),
+});
+
+/** The Undertaker's Offer: a game started with the coffin the player keeps. */
+export const DealStartSchema = z.object({
+  request_id: requestId,
+  bet: stake,
+  coffin: z.coerce.number({ message: "Pick a coffin." }).int("Pick a coffin.").min(0, "Pick a coffin.").max(11, "Pick a coffin."),
+});
+
+export const DealOpenSchema = z.object({
+  session_id: z.coerce.number().int().positive("That game could not be found."),
+  coffin: z.coerce.number().int().min(0, "That is not a coffin.").max(11, "That is not a coffin."),
+});
+
+export const DealDecideSchema = z.object({
+  session_id: z.coerce.number().int().positive("That game could not be found."),
+  choice: z.enum(["deal", "nodeal", "keep", "swap"], { message: "Deal, no deal, keep or swap." }),
+});
+
 export const AscentBetSchema = z.object({
   request_id: requestId,
   round_id: z.coerce.number().int().positive("That flight could not be found."),
@@ -81,6 +124,27 @@ export const AscentBetSchema = z.object({
 
 export const AscentCashoutSchema = z.object({
   round_id: z.coerce.number().int().positive("That flight could not be found."),
+});
+
+/** Devil's Dice: a seat (at the table asked for, or any). */
+export const DiceSitSchema = z.object({
+  table: z.preprocess((v) => (v === "" || v == null ? undefined : v), z.coerce.number().int().positive().optional()),
+});
+
+export const DiceStateSchema = z.object({
+  table: z.coerce.number().int().positive("That table could not be found."),
+});
+
+export const DiceBetSchema = z.object({
+  request_id: requestId,
+  round_id: z.coerce.number().int().positive("That round could not be found."),
+  bet: stake,
+  /** Bank by itself after this many safe throws (empty / 0: by hand). */
+  auto: z.preprocess((v) => (v === "" || v == null || v === "0" || v === 0 ? undefined : v), z.coerce.number({ message: "Bank after 1 to 12 throws." }).int().optional()),
+});
+
+export const DiceBankSchema = z.object({
+  round_id: z.coerce.number().int().positive("That round could not be found."),
 });
 
 /** A Derby slip: `bets` as JSON, [{ "on": "spurtz", "amount": 10 }, ...], the runners to win. */

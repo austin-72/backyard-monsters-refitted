@@ -3,7 +3,7 @@ import { Vector, int } from "as3";
 import { MovieClip } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { BASE, CREATURELOCKER, CREATURES, CREEPS, GLOBAL, HATCHERY, HOUSING, HatcheryBase, IoQuests, KEYS, POPUPS, ResourcePackages, STORE, SecNum, TUTORIAL, popup_building } from "@game";
+import { BASE, CREATURELOCKER, CREATURES, CREEPS, GLOBAL, HATCHERY, HOUSING, HatcheryBase, IoQuests, KEYS, POPUPS, ResourcePackages, STORE, SecNum, TUTORIAL, mc_buildingalerticon, popup_building } from "@game";
 
 export class BUILDING13 extends HatcheryBase {
     static {
@@ -96,7 +96,7 @@ export class BUILDING13 extends HatcheryBase {
         let _loc4_: int = 0;
         _loc3_ = 0;
         while (_loc3_ < _loc2_.length) {
-            BASE.Fund(4, Math.ceil(as3.vget(_loc2_, _loc3_).Get() * 0.75), false, null, Boolean(_loc3_));
+            BASE.Fund(4, Math.ceil(as3.vget(_loc2_, _loc3_).Get() * 0.75), GLOBAL.INFERNO_ONLY, null, Boolean(_loc3_));
             _loc4_ = 0;
             if (as3.vget(_loc2_, _loc3_).Get() > 20000) {
                 _loc4_ = 12;
@@ -123,6 +123,42 @@ export class BUILDING13 extends HatcheryBase {
             _loc3_++;
         }
         super.Destroyed(param1);
+    }
+
+    /**
+     * Inferno-only (QoL #30): an incubator that is idle (nothing queued) or stalled (a monster hatched with no room
+     * for it), in the yard being built, once it works. (It had the full harvesters' alert icon over it till 20
+     * October.)
+     */
+    public get ioStalled(): boolean {
+        return GLOBAL.INFERNO_ONLY && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && this._countdownBuild.Get() + this._countdownUpgrade.Get() + this._countdownFortify.Get() == 0 && this.health > this.maxHealth * 0.5 && (this._inProduction == "" || this._productionStage.Get() == 2);
+    }
+
+    public override Update(param1: boolean = false): void {
+        super.Update(param1);
+        if (!(GLOBAL._render || param1)) {
+            return;
+        }
+        // (20 October: no alert icon over an incubator any more, idle or stalled)
+        if (this.ioStalled && !GLOBAL.INFERNO_ONLY) {
+            if (!this._mcAlert) {
+                if (!this._spriteAlert) {
+                    this._spriteAlert = new mc_buildingalerticon();
+                    this._spriteAlert.cacheAsBitmap = true;
+                    this._spriteAlert.mouseChildren = false;
+                    this._spriteAlert.mouseEnabled = false;
+                }
+                this._mcAlert = this._spriteAlert;
+                this._mcAlert.x = -3;
+                this._mcAlert.y = -60;
+                this.addChild(this._mcAlert);
+            }
+        } else if (this._mcAlert) {
+            if (this._mcAlert.parent) {
+                this._mcAlert.parent.removeChild(this._mcAlert);
+            }
+            this._mcAlert = null;
+        }
     }
 
     public override Description(): void {
@@ -175,7 +211,7 @@ export class BUILDING13 extends HatcheryBase {
 
     public ResetProduction(): void {
         if (this._taken.Get() > 0) {
-            BASE.Fund(4, this._taken.Get());
+            BASE.Fund(4, this._taken.Get(), GLOBAL.INFERNO_ONLY);
         }
         this._taken.Set(0);
         this._hasResources = false;
@@ -332,7 +368,7 @@ export class BUILDING13 extends HatcheryBase {
             return;
         }
         if (BASE._credits.Get() >= this._finishCost.Get()) {
-            if (!GLOBAL.ioConfirmShiny(this._finishCost.Get() | 0, "to finish hatching now", as3.bind(this, this.FinishNow))) {
+            if (!GLOBAL.ioConfirmShiny(this._finishCost.Get() | 0, KEYS.Get("io_t3k_for_hatch_now"), as3.bind(this, this.FinishNow))) {
                 return;
             }
             _loc1_ = [];
@@ -415,8 +451,33 @@ export class BUILDING13 extends HatcheryBase {
     }
 
     public override RecycleC(): void {
+        if (GLOBAL.INFERNO_ONLY) {
+            BUILDING13.ioRefundQueue(this);
+        }
         GLOBAL._bHatchery = null;
         super.RecycleC();
+    }
+
+    /**
+     * Inferno-only (14 October, QoL #437): recycling an Incubator (or the Incubation Control Station) gave back
+     * only the building's cost: the Magma already paid for the monster in production and for its queue was
+     * lost (a queue stalled on a full Compound can hold millions). It comes back in full, as taking monsters
+     * out of the queue does, over the storage cap.
+     */
+    public static ioRefundQueue(b: any): void {
+        let magma: number = 0;
+        if (b._inProduction && b._inProduction != "") {
+            magma += Number(CREATURES.GetProperty(as3.str(b._inProduction), "cResource")) || 0;
+            b._inProduction = "";
+        }
+        let q: any[] = b._monsterQueue || [];
+        for (let i: int = 0; i < q.length; i++) {
+            magma += (Number(CREATURES.GetProperty(as3.str(q[i][0]), "cResource")) || 0) * (Number(q[i][1]) || 0);
+        }
+        b._monsterQueue = [];
+        if (magma > 0) {
+            BASE.Fund(4, Math.ceil(magma), true);
+        }
     }
 
     public override Upgraded(): void {

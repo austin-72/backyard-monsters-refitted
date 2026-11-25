@@ -98,6 +98,7 @@ export class EventDispatcher extends ASObject {
     const first = !list || !list.some((l) => !l.capture);
     if (list?.some((l) => l.fn === listener && l.capture === !!useCapture)) return;
     const entry = { fn: listener, capture: !!useCapture, priority: priority | 0 };
+    if (entry.capture) captureCounts.set(type, (captureCounts.get(type) ?? 0) + 1);
     list = list ? list.slice() : [];
     let i = list.length;
     while (i > 0 && list[i - 1].priority < entry.priority) i--;
@@ -111,6 +112,7 @@ export class EventDispatcher extends ASObject {
     if (!list) return;
     const i = list.findIndex((l) => l.fn === listener && l.capture === !!useCapture);
     if (i < 0) return;
+    if (list[i].capture) captureCounts.set(type, Math.max(0, (captureCounts.get(type) ?? 0) - 1));
     const next = list.slice();
     next.splice(i, 1);
     if (next.length) this.$listeners!.set(type, next); else this.$listeners!.delete(type);
@@ -145,6 +147,15 @@ export class EventDispatcher extends ASObject {
 }
 flashClass(EventDispatcher, "flash.events.EventDispatcher");
 implement(EventDispatcher, [IEventDispatcher]);
+
+/**
+ * (21 October) Capture listeners anywhere, by event type: an event that doesn't bubble and no capture listener of its
+ * type anywhere reaches only its target's own listeners (the display list's stage events skip objects without any).
+ */
+const captureCounts = new Map<string, number>();
+export function anyCaptureListeners(type: string): boolean {
+  return (captureCounts.get(type) ?? 0) > 0;
+}
 
 function invoke(node: EventDispatcher, event: Event, phase: number, capture: boolean, currentTarget: any = node): void {
   const list = node.$listeners?.get(event.$type);

@@ -1,13 +1,28 @@
 import * as as3 from "as3";
 import { Vector, int } from "as3";
-import { Bitmap, BitmapData, DisplayObject } from "flash/display";
+import { Bitmap, BitmapData, DisplayObject, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { ACADEMY, ACADEMYPOPUP_CLIP, BASE, BFOUNDATION, BRESOURCE, BUILDING26, CREATURELOCKER, CREATURES, GLOBAL, ImageCache, InstanceManager, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, STORE, popup_monster } from "@game";
+import { TextField, TextFormat } from "flash/text";
+import { ACADEMY, ACADEMYPOPUP_CLIP, BASE, BFOUNDATION, BRESOURCE, BUILDING26, Button_CLIP, CREATURELOCKER, CREATURES, GLOBAL, ImageCache, InstanceManager, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, SOUNDS, STORE, popup_monster, IoSocial, IoShop } from "@game";
 
 export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
     static {
-        as3.fields(this, { _infernoFrameOffset: 6, _portraitImage: null, _guidePage: 1 });
+        as3.fields(this, { _infernoFrameOffset: 6, _portraitImage: null, _guidePage: 1, _ioGridBtn: null, _ioGrid: null, _ioGridRows: null, _ioGridOn: false });
     }
+
+    /** Inferno-only (QoL #351): the most damage per second of any monster, at its top level (the bars' full width). */
+    public static _ioMaxDps: number = 0;
+
+    /** Inferno-only (QoL #139): the button that shows the overview of every monster's training. */
+    private _ioGridBtn: Button_CLIP;
+
+    /** Inferno-only (QoL #139): that overview, over the stats and the training buttons while it is shown. */
+    private _ioGrid: Sprite;
+
+    /** Inferno-only (QoL #139): the overview's rows, by monster: {"lv": level, "st": can train, "tm": time}. */
+    private _ioGridRows: any;
+
+    private _ioGridOn: boolean;
 
     public static _page: int = 1;
 
@@ -86,9 +101,22 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
             if (CREATURES.GetProperty(_loc2_, "cStorage", 10) > ACADEMYPOPUP._maxStorage) {
                 ACADEMYPOPUP._maxStorage = CREATURES.GetProperty(_loc2_, "cStorage", 10);
             }
+            if (GLOBAL.INFERNO_ONLY) {
+                ACADEMYPOPUP._ioMaxDps = Math.max(ACADEMYPOPUP._ioMaxDps, Math.abs(CREATURELOCKER.ioDps(_loc2_, 10)));
+            }
         }
         if (ACADEMY._building._upgrading) {
             ACADEMYPOPUP._page = ACADEMYPOPUP.ioPageOf(String(ACADEMY._building._upgrading));
+        }
+        if (GLOBAL.INFERNO_ONLY && BASE.isInfernoMainYardOrOutpost) {
+            // (QoL #139: an overview of every monster's training, at the right of the stats' header row)
+            this._ioGridBtn = new Button_CLIP();
+            this._ioGridBtn.name = "ioMonAcadOverviewBtn";
+            this.addChild(this._ioGridBtn);
+            this._ioGridBtn.Setup(KEYS.Get("io_mon2_overview_btn"), false, 72, 22);
+            this._ioGridBtn.x = 240;
+            this._ioGridBtn.y = -50;
+            this._ioGridBtn.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ioToggleGrid));
         }
         this.Setup(ACADEMYPOPUP.pageID(ACADEMYPOPUP._page));
         this.speed_txt.htmlText = "<b>" + KEYS.Get("acad_att_speed") + "</b>";
@@ -100,6 +128,11 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
         }
         this.housing_txt.htmlText = "<b>" + KEYS.Get("acad_att_housing") + "</b>";
         this.time_txt.htmlText = "<b>" + KEYS.Get("acad_att_time") + "</b>";
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #351: damage per second where the hatching time was; every monster hatches in the same second here)
+            this.time_txt.htmlText = "<b>" + KEYS.Get("io_mon2_dps_long") + "</b>";
+            GLOBAL.ioFitText(this.time_txt, 8);
+        }
         this.before_txt.htmlText = "<b>" + KEYS.Get("acad_att_before") + "</b>";
         this.after_txt.htmlText = "<b>" + KEYS.Get("acad_att_after") + "</b>";
     }
@@ -198,7 +231,7 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
                 this.bB.mcR3.tValue.htmlText = "<b><font color=\"#" + (_loc4_[0] > GLOBAL._resources.r3.Get() ? "FF0000" : "000000") + "\">" + GLOBAL.FormatNumber(Number(_loc4_[0])) + "</font></b>";
                 this.bB.mcR4.visible = true;
                 this.bB.mcTime.visible = true;
-                this.bB.mcTime.tValue.htmlText = "<b>" + GLOBAL.ToTime(_loc4_[1] | 0) + "</b>";
+                this.bB.mcTime.tValue.htmlText = "<b>" + GLOBAL.ToTime((GLOBAL.INFERNO_ONLY ? IoShop.trainTime(Number(_loc4_[1])) : _loc4_[1]) | 0) + "</b>";
             } else if (_loc3_.status == KEYS.Get("acad_err_putty") || _loc3_.status == KEYS.Get("acad_err_sulfur")) {
                 this.bA.tDescription.visible = true;
                 this.bA.gArrow.visible = true;
@@ -210,7 +243,7 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
                 this.bB.mcR3.tValue.htmlText = "<b><font color=\"#" + (_loc4_[0] > GLOBAL._resources.r3.Get() ? "FF0000" : "000000") + "\">" + GLOBAL.FormatNumber(Number(_loc4_[0])) + "</font></b>";
                 this.bB.mcR4.visible = true;
                 this.bB.mcTime.visible = true;
-                this.bB.mcTime.tValue.htmlText = "<b>" + GLOBAL.ToTime(_loc4_[1] | 0) + "</b>";
+                this.bB.mcTime.tValue.htmlText = "<b>" + GLOBAL.ToTime((GLOBAL.INFERNO_ONLY ? IoShop.trainTime(Number(_loc4_[1])) : _loc4_[1]) | 0) + "</b>";
                 this.CalculateInstantCost();
                 this.bA.bAction.Setup(KEYS.Get("btn_useshiny", { "v1": ACADEMYPOPUP._instantUpgradeCost }));
                 this.bA.bAction.removeEventListener(MouseEvent.CLICK, as3.bind(this, this.InstantMonsterUpgrade));
@@ -237,6 +270,16 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
                 this.bA.bAction.Setup(_loc3_.errorMessage);
                 this.bA.bAction.Enabled = false;
                 this.bA.bAction.Highlight = false;
+                // (Inferno-only, QoL #354: the next training's cost and time, also when it can't start yet)
+                if (GLOBAL.INFERNO_ONLY && _loc4_ && _loc3_.ioCostShown) {
+                    this.bB.mcR1.visible = true;
+                    this.bB.mcR2.visible = true;
+                    this.bB.mcR3.visible = true;
+                    this.bB.mcR3.tValue.htmlText = "<b><font color=\"#" + (_loc4_[0] > GLOBAL._resources.r3.Get() ? "FF0000" : "000000") + "\">" + GLOBAL.FormatNumber(Number(_loc4_[0])) + "</font></b>";
+                    this.bB.mcR4.visible = true;
+                    this.bB.mcTime.visible = true;
+                    this.bB.mcTime.tValue.htmlText = "<b>" + GLOBAL.ToTime((GLOBAL.INFERNO_ONLY ? IoShop.trainTime(Number(_loc4_[1])) : _loc4_[1]) | 0) + "</b>";
+                }
                 this.bB.bAction.removeEventListener(MouseEvent.CLICK, as3.bind(this, this.StartMonsterUpgrade));
                 this.bB.bAction.removeEventListener(MouseEvent.CLICK, as3.bind(this, this.CancelMonsterUpgrade));
                 this.bB.bAction.visible = false;
@@ -246,6 +289,13 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
         }
         _loc5_ = (_loc5_ = (_loc5_ = "<b>" + KEYS.Get("acad_mon_name") + "</b> " + KEYS.Get(as3.str(CREATURELOCKER._creatures[ACADEMYPOPUP._monsterID].name)) + "<br>") + ("<b>" + KEYS.Get("acad_mon_status") + "</b> " + _loc3_.status)) + ("<br>" + KEYS.Get(as3.str(CREATURELOCKER._creatures[ACADEMYPOPUP._monsterID].description)));
         this.tName.htmlText = as3.str(_loc5_);
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #352: what it goes for, how it moves and its reach; QoL #356: the levels its abilities come at.
+            // Under the status, before the description; all of it drawn smaller when it runs long)
+            let ioAbilities: string = CREATURELOCKER.ioAbilitiesLine(ACADEMYPOPUP._monsterID);
+            this.tName.htmlText = "<b>" + KEYS.Get("acad_mon_name") + "</b> " + KEYS.Get(as3.str(CREATURELOCKER._creatures[ACADEMYPOPUP._monsterID].name)) + "<br><b>" + KEYS.Get("acad_mon_status") + "</b> " + _loc3_.status + "<br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(ACADEMYPOPUP._monsterID) + "</font>" + (ioAbilities ? "<br>" + ioAbilities : "") + "<br>" + KEYS.Get(as3.str(CREATURELOCKER._creatures[ACADEMYPOPUP._monsterID].description));
+            GLOBAL.ioFitHeight(this.tName, 9);
+        }
         let _loc6_: int = 0;
         if ((_loc6_ = CREATURES.GetProperty(ACADEMYPOPUP._monsterID, "damage") | 0) > 0) {
             _loc7_ = false;
@@ -338,6 +388,169 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
         } else {
             this.bTimeB.mcBar.gotoAndStop(1);
         }
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #351: damage per second, before and after this training, where the hatching time was)
+            let dpsA: number = Math.abs(CREATURELOCKER.ioDps(ACADEMYPOPUP._monsterID));
+            let dpsB: number = Math.abs(CREATURELOCKER.ioDps(ACADEMYPOPUP._monsterID, _loc8_));
+            let most: number = Math.max(ACADEMYPOPUP._ioMaxDps, dpsA, dpsB);
+            this.bTimeA.mcBar.width = most > 0 ? 100 / most * dpsA : 0;
+            this.bTimeB.mcBar.width = most > 0 ? 100 / most * dpsB : 0;
+            this.tTimeA.htmlText = CREATURELOCKER.ioDpsText(ACADEMYPOPUP._monsterID);
+            this.tTimeB.htmlText = CREATURELOCKER.ioDpsText(ACADEMYPOPUP._monsterID, _loc8_);
+            this.bTimeB.mcBar.gotoAndStop(Math.round(dpsA) != Math.round(dpsB) ? 2 : 1);
+        }
+        if (this._ioGridOn) {
+            this.ioDrawGrid();
+        }
+    }
+
+    /** Inferno-only (QoL #139): the highest level this monster can be trained to (as ioSkip counts it). */
+    private static ioTopLevel(param1: string): int {
+        let top: int = (CREATURELOCKER._creatures[param1].trainingCosts.length + 1) | 0;
+        if (BASE.isInfernoMainYardOrOutpost && !CREATURELOCKER.ioReachesLevel6(param1)) {
+            top = Math.min(top, 5) | 0;
+        }
+        return top;
+    }
+
+    /** Inferno-only (QoL #139): the overview shown or hidden (the button says which way it goes). */
+    private ioToggleGrid(param1: MouseEvent = null): void {
+        SOUNDS.Play("click1");
+        this.ioShowGrid(!this._ioGridOn);
+    }
+
+    private ioShowGrid(param1: boolean): void {
+        this._ioGridOn = param1;
+        if (this._ioGridBtn) {
+            this._ioGridBtn.Setup(KEYS.Get(param1 ? "io_mon2_overview_back" : "io_mon2_overview_btn"));
+        }
+        if (param1) {
+            this.ioDrawGrid();
+        }
+        if (this._ioGrid) {
+            this._ioGrid.visible = param1;
+        }
+        if (this._ioGridBtn) {
+            // the button above the overview
+            this.setChildIndex(this._ioGridBtn, this.numChildren - 1);
+        }
+    }
+
+    private ioGridField(param1: Sprite, param2: number, param3: number, param4: number, param5: boolean = false): TextField {
+        let t: TextField = new TextField();
+        t.defaultTextFormat = new TextFormat("Verdana", 10, 3355443, param5);
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.x = param2;
+        t.y = param3;
+        t.width = param4;
+        t.height = 17;
+        param1.addChild(t);
+        return t;
+    }
+
+    /**
+     * Inferno-only (QoL #139): every monster the Academy trains, in two columns over the stats and the buttons
+     * below them: its level of its last, whether a training can start now (or why not: short of sulfur, the
+     * Academy's level, the Academy busy, locked, trained all the way) and how long its next level takes (the time
+     * left while it trains). A row opens that monster's page. Made once, its texts set again on each Update.
+     */
+    private ioDrawGrid(): void {
+        let roster: any[] = ACADEMYPOPUP.ioRoster();
+        let perColumn: int = Math.max(1, Math.ceil(roster.length / 2)) | 0;
+        let top: number = -50;
+        let rowH: number = Math.min(22, Math.floor((236 - 22) / perColumn));
+        if (!this._ioGrid) {
+            this._ioGrid = new Sprite();
+            this._ioGrid.name = "ioMonAcadOverview";
+            this._ioGrid.graphics.lineStyle(1, 6710886);
+            this._ioGrid.graphics.beginFill(16777215, 1);
+            this._ioGrid.graphics.drawRoundRect(-205, top - 2, 525, 240, 8, 8);
+            this._ioGrid.graphics.endFill();
+            this._ioGridRows = {};
+            for (let column: int = 0; column < 2; column++) {
+                let x: number = -200 + column * 262;
+                this.ioGridField(this._ioGrid, x, top + 2, 104, true).text = KEYS.Get("io_mon2_grid_monster");
+                this.ioGridField(this._ioGrid, x + 104, top + 2, 40, true).text = KEYS.Get("io_mon2_grid_level");
+                this.ioGridField(this._ioGrid, x + 144, top + 2, 66, true).text = KEYS.Get("io_mon2_grid_train");
+                this.ioGridField(this._ioGrid, x + 210, top + 2, 52, true).text = KEYS.Get("io_mon2_grid_time");
+            }
+            for (let i: int = 0; i < roster.length; i++) {
+                let id: string = as3.str(roster[i]);
+                let row: Sprite = new Sprite();
+                row.name = "ioMonAcadRow_" + id;
+                row.x = -200 + ((i / perColumn) | 0) * 262;
+                row.y = top + 22 + (i % perColumn) * rowH;
+                row.graphics.beginFill(i % 2 == 0 ? 15329769 : 16777215, 1);
+                row.graphics.drawRect(-3, 0, 260, rowH - 1);
+                row.graphics.endFill();
+                row.buttonMode = true;
+                row.mouseChildren = false;
+                this.ioGridField(row, 0, 1, 104).text = KEYS.Get(CREATURELOCKER.getShortCreatureName(id));
+                this._ioGridRows[id] = { "lv": this.ioGridField(row, 104, 1, 40), "st": this.ioGridField(row, 144, 1, 66), "tm": this.ioGridField(row, 210, 1, 52) };
+                row.addEventListener(MouseEvent.CLICK, this.ioGridOpen(id));
+                this._ioGrid.addChild(row);
+            }
+            this.addChild(this._ioGrid);
+        }
+        let now: int = GLOBAL.Timestamp();
+        for (const $value of as3.values(roster)) {
+            let id: string = as3.str($value);
+            let fields: any = this._ioGridRows[id];
+            if (!fields || !CREATURELOCKER._creatures[id]) {
+                continue;
+            }
+            let up: any = GLOBAL.player.m_upgrades[id];
+            let level: int = up ? up.level | 0 : 1;
+            let most: int = ACADEMYPOPUP.ioTopLevel(id);
+            let unlocked: boolean = Boolean(CREATURELOCKER._lockerData[id]) && CREATURELOCKER._lockerData[id].t == 2;
+            let status: string = null;
+            let color: string = "#333333";
+            let time: string = "-";
+            if (up && up.time) {
+                status = KEYS.Get("io_mon2_grid_training");
+                color = "#B05A00";
+                time = GLOBAL.ioDuration(up.time.Get() - now);
+            } else if (!unlocked) {
+                status = KEYS.Get("io_mon2_grid_locked");
+                color = "#888888";
+            } else if (level >= most) {
+                status = KEYS.Get("io_mon2_grid_max");
+                color = "#888888";
+            } else {
+                let check: any = ACADEMY.StartMonsterUpgrade(id, true);
+                let costs: any[] = as3.as(CREATURELOCKER._creatures[id].trainingCosts[level - 1], Array);
+                // (22 October: a fifth less with an Academy Scholarship running: IoShop)
+                time = costs ? GLOBAL.ioDuration(IoShop.trainTime(Number(costs[1]))) : "-";
+                if (!check.error) {
+                    status = KEYS.Get("io_mon2_grid_ready");
+                    color = "#1E7A12";
+                } else if (check.status == KEYS.Get("acad_err_sulfur") || check.status == KEYS.Get("acad_err_putty")) {
+                    status = KEYS.Get("io_mon2_grid_sulfur");
+                    color = "#CC0000";
+                } else if (ACADEMY._building && level > ACADEMY._building._lvl.Get()) {
+                    status = KEYS.Get("io_mon2_grid_academy", { "v1": level });
+                    color = "#CC0000";
+                } else {
+                    status = KEYS.Get("io_mon2_grid_busy");
+                    color = "#B05A00";
+                }
+            }
+            (fields.lv as TextField).text = level + "/" + most;
+            (fields.st as TextField).htmlText = "<font color=\"" + color + "\"><b>" + status + "</b></font>";
+            (fields.tm as TextField).text = time;
+            GLOBAL.ioFitText(fields.st as TextField, 7);
+        }
+    }
+
+    /** Inferno-only (QoL #139): a row of the overview opens that monster's page. */
+    private ioGridOpen(param1: string): Function {
+        return (param1b: MouseEvent = null): void => {
+            SOUNDS.Play("click1");
+            ACADEMYPOPUP._page = ACADEMYPOPUP.ioPageOf(param1);
+            this.ioShowGrid(false);
+            this.Setup(param1);
+        };
     }
 
     public StartMonsterUpgrade(param1: MouseEvent): void {
@@ -363,10 +576,10 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
             return;
         }
         if (BASE._credits.Get() < ACADEMYPOPUP._instantUpgradeCost) {
-            POPUPS.DisplayGetShiny();
+            POPUPS.ioShinyNeed(ACADEMYPOPUP._instantUpgradeCost);
             return;
         }
-        if (!GLOBAL.ioConfirmShiny(ACADEMYPOPUP._instantUpgradeCost, "to finish this training now", (): void => {
+        if (!GLOBAL.ioConfirmShiny(ACADEMYPOPUP._instantUpgradeCost, KEYS.Get("io_t3k_for_train_now"), (): void => {
             this.InstantMonsterUpgrade(e);
         })) {
             return;
@@ -405,10 +618,15 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
             }
             popupMC = new popup_monster();
             popupMC.tText.htmlText = KEYS.Get("acad_pop_complete", { "v1": monsterName });
-            popupMC.bAction.SetupKey("btn_warnyourfriends");
-            popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
-            popupMC.bAction.Highlight = true;
-            popupMC.bSpeedup.visible = false;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #140: Train next level and Share in chat; "Warn your friends" posted to a page there isn't)
+                IoSocial.ioWarnTrained(popupMC, ACADEMYPOPUP._monsterID, monsterName, GLOBAL.player.m_upgrades[ACADEMYPOPUP._monsterID].level | 0);
+            } else {
+                popupMC.bAction.SetupKey("btn_warnyourfriends");
+                popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
+                popupMC.bAction.Highlight = true;
+                popupMC.bSpeedup.visible = false;
+            }
             POPUPS.Push(popupMC, null, null, null, "" + ACADEMYPOPUP._monsterID + "-150.png");
         }
         BASE.Purchase("ITR", ACADEMYPOPUP._instantUpgradeCost, "academy");
@@ -439,7 +657,53 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
         STORE.SpeedUp("SP4");
     }
 
+    /**
+     * Inferno-only (QoL #357): a monster the arrows pass over: not unlocked yet, or trained as far as it goes
+     * (the Academy's level aside). When every one is, the arrows go through them all as before.
+     */
+    private ioSkip(id: string): boolean {
+        if (this.CheckMonsterLock(id)) {
+            return true;
+        }
+        let data: any = CREATURELOCKER._lockerData[id];
+        if (!data || data.t != 2) {
+            return true;
+        }
+        let up: any = GLOBAL.player.m_upgrades[id];
+        let level: int = up ? up.level | 0 : 1;
+        let top: int = (CREATURELOCKER._creatures[id].trainingCosts.length + 1) | 0;
+        if (BASE.isInfernoMainYardOrOutpost && !CREATURELOCKER.ioReachesLevel6(id)) {
+            top = Math.min(top, 5) | 0;
+        }
+        return level >= top && !(up && up.time);
+    }
+
+    /** Inferno-only (QoL #357): the next monster that can be trained, `step` 1 or -1; false when there is none. */
+    private ioStep(step: int): boolean {
+        let page: int = ACADEMYPOPUP._page;
+        for (let n: int = 0; n < ACADEMYPOPUP._maxMonsters; n++) {
+            page = (page + step) | 0;
+            if (page == 0) {
+                page = ACADEMYPOPUP._maxMonsters;
+            }
+            if (page > ACADEMYPOPUP._maxMonsters) {
+                page = 1;
+            }
+            let id: string = ACADEMYPOPUP.pageID(page);
+            if (id && CREATURELOCKER._creatures[id] && !this.ioSkip(id)) {
+                ACADEMYPOPUP._page = page;
+                this.Setup(id);
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Previous(param1: MouseEvent = null): void {
+        if (GLOBAL.INFERNO_ONLY && this.ioStep(-1)) {
+            ACADEMYPOPUP.lastAction = -1;
+            return;
+        }
         ACADEMYPOPUP.lastAction = -1;
         do {
             --ACADEMYPOPUP._page;
@@ -460,6 +724,10 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
     }
 
     public Next(param1: MouseEvent = null): void {
+        if (GLOBAL.INFERNO_ONLY && this.ioStep(1)) {
+            ACADEMYPOPUP.lastAction = 1;
+            return;
+        }
         ACADEMYPOPUP.lastAction = 1;
         do {
             ++ACADEMYPOPUP._page;
@@ -490,7 +758,7 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
         if (CREATURELOCKER._creatures[CREATURELOCKER.REZGHUL_ID] && !CREATURELOCKER._creatures[CREATURELOCKER.REZGHUL_ID].blocked) {
             roster.splice(roster.indexOf("IC8") + 1, 0, CREATURELOCKER.REZGHUL_ID);
         }
-        for (const $value of as3.values([CREATURELOCKER.KORATH_ID, CREATURELOCKER.DRULL_ID, CREATURELOCKER.ASHKARR_ID, CREATURELOCKER.RIMEGRAVE_ID])) {
+        for (const $value of as3.values([CREATURELOCKER.KORATH_ID, CREATURELOCKER.DRULL_ID, CREATURELOCKER.ASHKARR_ID, CREATURELOCKER.RIMEGRAVE_ID, CREATURELOCKER.BASILISK_ID])) {
             id = as3.str($value);
             if (CREATURELOCKER._creatures[id] && !CREATURELOCKER._creatures[id].blocked) {
                 roster.push(id);
@@ -529,6 +797,13 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
             this._guidePage = 1;
         }
         this.gotoAndStop(this._guidePage);
+        if (this._ioGridBtn) {
+            // (QoL #139: the overview and its button belong to the stats page, not the guide's)
+            if (this._guidePage > 1) {
+                this.ioShowGrid(false);
+            }
+            this._ioGridBtn.visible = this._guidePage == 1;
+        }
         if (this._guidePage > 1) {
             this.txtGuide.htmlText = KEYS.Get("acad_tut_" + (this._guidePage - 1));
             if (this._guidePage == 2) {

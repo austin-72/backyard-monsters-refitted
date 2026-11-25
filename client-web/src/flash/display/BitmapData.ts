@@ -5,6 +5,7 @@
 import { ASObject, iface, implement } from "as3";
 import { flashClass, argumentError, unimplemented, context2d } from "../_internal";
 import { Rectangle, Point, type Matrix, type ColorTransform } from "../geom";
+import { perlinArgs, perlinCached, perlinHere } from "../_perlin";
 
 /** flash.display.IBitmapDrawable: implemented by BitmapData and DisplayObject. */
 export const IBitmapDrawable = iface("flash.display::IBitmapDrawable", []);
@@ -13,6 +14,10 @@ export interface IBitmapDrawable {}
 /** Installed by the display list: renders a display object into a context. */
 export const drawHooks = {
   drawObject: (_ctx: CanvasRenderingContext2D, _obj: any, _m: Matrix | null, _ct: ColorTransform | null) => {},
+  /** Where drawing a display object can put pixels (bitmap space, with room for filters); null when unsure. */
+  drawnBounds: (_obj: any, _m: Matrix | null): Rectangle | null => null,
+  /** pixels changed: marks the bitmaps that show it for the next drawing (display/core.ts, touch) */
+  changed: (_bd: any): void => {},
 };
 
 /** Images for [Embed(source=...)] BitmapData classes, preloaded by the player before game code runs. */
@@ -52,6 +57,8 @@ export class BitmapData extends ASObject {
   declare $pixels: ImageData | null;
   declare $disposed: boolean;
   declare $version: number;
+  /** the Bitmaps that showed it at their last comparison (display/core.ts noteShown), marked when it changes */
+  declare $shown: Set<any> | null;
   /**
    * Big bitmaps shown on screen (the yard) log which rectangles each change touched, so the screen is
    * drawn again only there (redrawRegions): [version, x0, y0, x1, y1] per change, x0 = -1 for "all".
@@ -94,6 +101,7 @@ export class BitmapData extends ASObject {
     this.$logFloor = 0;
     this.$quiet = false;
     this.$swept = null;
+    this.$shown = null;
     this.$uid = ++bitmapUid;
     const c = fillColor >>> 0;
     const a = transparent ? (c >>> 24) / 255 : 1;
@@ -114,17 +122,20 @@ export class BitmapData extends ASObject {
   private check(): void {
     if (this.$disposed) throw argumentError(2015, "Invalid BitmapData.");
   }
-  $touch(): void { this.$pixels = null; this.$version++; if (this.$track && !this.$quiet) this.$logChange(-1, 0, 0, 0); }
+  $touch(): void { this.$pixels = null; this.$version++; if (this.$shown) drawHooks.changed(this); if (this.$track && !this.$quiet) this.$logChange(-1, 0, 0, 0); }
   /** Changed only inside (x, y, w, h). */
   $touchRect(x: number, y: number, w: number, h: number): void {
     this.$pixels = null;
     this.$version++;
+    if (this.$shown) drawHooks.changed(this);
     if (this.$track && !this.$quiet) this.$logChange(Math.floor(x), Math.floor(y), Math.ceil(x + w), Math.ceil(y + h));
   }
   private $logChange(x0: number, y0: number, x1: number, y1: number): void {
     const l = this.$log || (this.$log = []);
     l.push(this.$version, x0, y0, x1, y1);
-    if (l.length > 5 * 512) { l.splice(0, l.length - 5 * 256); this.$logFloor = l[0] - 1; }
+    // (room for a few frames of a busy yard's changes: on a slow machine several game frames come between two
+    // drawings, and an overflowing log counts as "changed all over", the whole screen drawn again)
+    if (l.length > 5 * 4096) { l.splice(0, l.length - 5 * 2048); this.$logFloor = l[0] - 1; }
   }
   /**
    * A strip drawn again quietly (the yard renderer's sweep: as it should already be, so not logged as a
@@ -133,6 +144,7 @@ export class BitmapData extends ASObject {
    */
   $noteSwept(x: number, y: number, w: number, h: number): void {
     const l = this.$swept || (this.$swept = []);
+    if (this.$shown) drawHooks.changed(this);
     if (l.length < 4 * 64) l.push(Math.floor(x), Math.floor(y), Math.ceil(x + w), Math.ceil(y + h));
   }
   /** Start logging changes (from now: anything older counts as "all changed"). */
@@ -161,6 +173,12 @@ export class BitmapData extends ASObject {
   data(): ImageData {
     if (!this.$pixels) this.$pixels = this.$ctx.getImageData(0, 0, this.$w, this.$h);
     return this.$pixels;
+  }
+  /** Pixels (all of them, as data() gave them, changed) put back. */
+  $putData(img: ImageData): void {
+    this.check();
+    this.$ctx.putImageData(img, 0, 0);
+    this.$touch();
   }
 
   get width(): number { this.check(); return this.$w; }
@@ -194,6 +212,7 @@ export class BitmapData extends ASObject {
     // (the version moves whether or not the pixels are cached: a drawn bitmap showed the change late)
     if (this.$pixels) { const i = (y * this.$w + x) * 4; this.$pixels.data.set(img.data, i); }
     this.$version++;
+    if (this.$shown) drawHooks.changed(this);
     if (this.$track && !this.$quiet) this.$logChange(x, y, x + 1, y + 1);
   }
   fillRect(rect: Rectangle, color: number): void {
@@ -269,6 +288,10 @@ export class BitmapData extends ASObject {
       const ys = [ty, b * source.$w + ty, d * source.$h + ty, b * source.$w + d * source.$h + ty];
       const x0 = Math.min(...xs) - 1, y0 = Math.min(...ys) - 1;
       box = new Rectangle(x0, y0, Math.max(...xs) + 1 - x0, Math.max(...ys) + 1 - y0);
+    } else {
+      // (a display object: its box, so a big bitmap, the yard's, that has a clip drawn into it isn't counted as
+      // changed all over: that redrew the whole screen every frame in a busy yard on a slow machine)
+      box = drawHooks.drawnBounds(source, matrix);
     }
     if (clipRect) box = box ? box.intersection(clipRect) : clipRect.clone();
     if (box) this.$touchRect(box.x, box.y, box.width, box.height);
@@ -349,6 +372,7 @@ export class BitmapData extends ASObject {
     this.$ctx.putImageData(img, x0, y0);
     if (x0 === 0 && y0 === 0 && img.width === this.$w && img.height === this.$h) {
       this.$pixels = img; this.$version++;
+      if (this.$shown) drawHooks.changed(this);
       // (all of it changed: a bitmap that logs its changes must say so, or the yard's partial redraw misses it)
       if (this.$track && !this.$quiet) this.$logChange(-1, 0, 0, 0);
     }
@@ -391,35 +415,18 @@ export class BitmapData extends ASObject {
     this.$putArgb(img, 0, 0);
   }
 
-  /** Perlin noise: the SVG 1.1 feTurbulence reference algorithm, which Flash's perlinNoise follows. */
+  /**
+   * Perlin noise: the SVG 1.1 feTurbulence reference algorithm, which Flash's perlinNoise follows (flash/_perlin.ts,
+   * one piece of code for this thread and the background ones). (21 October) Pixels worked out ahead in a background
+   * thread for the same arguments are taken from there (perlinCached): a yard's ground masks.
+   */
   perlinNoise(baseX: number, baseY: number, numOctaves: number, randomSeed: number, stitch: boolean, fractalNoise: boolean,
     channelOptions: number = 7, grayScale: boolean = false, offsets: any[] = null): void {
     this.check();
-    const t = new Turbulence(randomSeed | 0);
-    const fx = baseX ? 1 / baseX : 0, fy = baseY ? 1 / baseY : 0;
-    const octaves = Math.max(0, numOctaves | 0);
-    const offs: [number, number][] = [];
-    for (let i = 0; i < octaves; i++) { const p = offsets?.[i]; offs.push([p ? +p.x : 0, p ? +p.y : 0]); }
-    const img = this.$ctx.createImageData(this.$w, this.$h), d = img.data;
-    const chan = (c: number, x: number, y: number) => {
-      const n = t.turbulence(c, x, y, fx, fy, octaves, fractalNoise, stitch, 0, 0, this.$w, this.$h, offs);
-      const v = fractalNoise ? (n * 255 + 255) / 2 : n * 255;
-      return Math.max(0, Math.min(255, Math.trunc(v)));
-    };
-    for (let y = 0, i = 0; y < this.$h; y++) {
-      for (let x = 0; x < this.$w; x++, i += 4) {
-        let r = 0, g = 0, b = 0, a = 255;
-        if (grayScale) {
-          r = g = b = chan(0, x, y);
-        } else {
-          if (channelOptions & 1) r = chan(0, x, y);
-          if (channelOptions & 2) g = chan(1, x, y);
-          if (channelOptions & 4) b = chan(2, x, y);
-        }
-        if (channelOptions & 8) a = chan(3, x, y);
-        this.$storeArgb(d, i, a, r, g, b);
-      }
-    }
+    const args = perlinArgs(this.$w, this.$h, this.$transparent, baseX, baseY, numOctaves, randomSeed, stitch, fractalNoise, channelOptions, grayScale, offsets);
+    const px = perlinCached(args) ?? perlinHere(args);
+    const img = this.$ctx.createImageData(this.$w, this.$h);
+    img.data.set(px);
     this.$putArgb(img, 0, 0);
   }
 
@@ -523,93 +530,4 @@ const DRAW_BLEND: Record<string, GlobalCompositeOperation> = {
   add: "lighter", overlay: "overlay", hardlight: "hard-light", erase: "destination-out", alpha: "destination-in",
 };
 
-/** SVG 1.1 feTurbulence reference implementation (Perlin noise with a Park-Miller seeded lattice). */
-class Turbulence {
-  private lattice = new Int32Array(0x100 + 0x100 + 2);
-  private gradient: Float64Array[][] = [];
-  constructor(seed: number) {
-    const BSize = 0x100;
-    const RAND_m = 2147483647, RAND_a = 16807, RAND_q = 127773, RAND_r = 2836;
-    if (seed <= 0) seed = -(seed % (RAND_m - 1)) + 1;
-    if (seed > RAND_m - 1) seed = RAND_m - 1;
-    const random = () => {
-      let r = RAND_a * (seed % RAND_q) - RAND_r * Math.trunc(seed / RAND_q);
-      if (r <= 0) r += RAND_m;
-      seed = r;
-      return r;
-    };
-    for (let k = 0; k < 4; k++) {
-      const g: Float64Array[] = [];
-      for (let i = 0; i < BSize + BSize + 2; i++) g.push(new Float64Array(2));
-      this.gradient.push(g);
-    }
-    let i = 0;
-    for (let k = 0; k < 4; k++) {
-      for (i = 0; i < BSize; i++) {
-        this.lattice[i] = i;
-        const gv = this.gradient[k][i];
-        for (let j = 0; j < 2; j++) gv[j] = ((random() % (BSize + BSize)) - BSize) / BSize;
-        const s = Math.sqrt(gv[0] * gv[0] + gv[1] * gv[1]);
-        gv[0] /= s; gv[1] /= s;
-      }
-    }
-    while (--i) {
-      const k = this.lattice[i];
-      const j = random() % BSize;
-      this.lattice[i] = this.lattice[j];
-      this.lattice[j] = k;
-    }
-    for (i = 0; i < BSize + 2; i++) {
-      this.lattice[BSize + i] = this.lattice[i];
-      for (let k = 0; k < 4; k++) { this.gradient[k][BSize + i][0] = this.gradient[k][i][0]; this.gradient[k][BSize + i][1] = this.gradient[k][i][1]; }
-    }
-  }
-  private noise2(c: number, vx: number, vy: number, st: { w: number; h: number; wx: number; wy: number } | null): number {
-    const BM = 0xff, PerlinN = 0x1000;
-    let t = vx + PerlinN;
-    let bx0 = Math.trunc(t) & BM, bx1 = (bx0 + 1) & BM;
-    const rx0 = t - Math.trunc(t), rx1 = rx0 - 1;
-    t = vy + PerlinN;
-    let by0 = Math.trunc(t) & BM, by1 = (by0 + 1) & BM;
-    const ry0 = t - Math.trunc(t), ry1 = ry0 - 1;
-    if (st) {
-      if (bx0 >= st.wx) bx0 -= st.w;
-      if (bx1 >= st.wx) bx1 -= st.w;
-      if (by0 >= st.wy) by0 -= st.h;
-      if (by1 >= st.wy) by1 -= st.h;
-    }
-    bx0 &= BM; bx1 &= BM; by0 &= BM; by1 &= BM;
-    const L = this.lattice, G = this.gradient[c];
-    const i = L[bx0], j = L[bx1];
-    const b00 = L[i + by0], b10 = L[j + by0], b01 = L[i + by1], b11 = L[j + by1];
-    const sx = rx0 * rx0 * (3 - 2 * rx0), sy = ry0 * ry0 * (3 - 2 * ry0);
-    let q = G[b00]; let u = rx0 * q[0] + ry0 * q[1];
-    q = G[b10]; let v = rx1 * q[0] + ry0 * q[1];
-    const a = u + sx * (v - u);
-    q = G[b01]; u = rx0 * q[0] + ry1 * q[1];
-    q = G[b11]; v = rx1 * q[0] + ry1 * q[1];
-    const b = u + sx * (v - u);
-    return a + sy * (b - a);
-  }
-  turbulence(c: number, x: number, y: number, fx: number, fy: number, octaves: number, fractal: boolean, stitch: boolean,
-    tileX: number, tileY: number, tileW: number, tileH: number, offsets: [number, number][]): number {
-    const PerlinN = 0x1000;
-    let st: { w: number; h: number; wx: number; wy: number } | null = null;
-    if (stitch) {
-      if (fx !== 0) { const lo = Math.floor(tileW * fx) / tileW, hi = Math.ceil(tileW * fx) / tileW; fx = fx / lo < hi / fx ? lo : hi; }
-      if (fy !== 0) { const lo = Math.floor(tileH * fy) / tileH, hi = Math.ceil(tileH * fy) / tileH; fy = fy / lo < hi / fy ? lo : hi; }
-      const w = Math.trunc(tileW * fx + 0.5), h = Math.trunc(tileH * fy + 0.5);
-      st = { w, h, wx: Math.trunc(tileX * fx + PerlinN + w), wy: Math.trunc(tileY * fy + PerlinN + h) };
-    }
-    let sum = 0, ratio = 1, mul = 1;
-    for (let o = 0; o < octaves; o++) {
-      const vx = (x + offsets[o][0]) * fx * mul, vy = (y + offsets[o][1]) * fy * mul;
-      const n = this.noise2(c, vx, vy, st);
-      sum += (fractal ? n : Math.abs(n)) / ratio;
-      mul *= 2; ratio *= 2;
-      if (st) { st.w *= 2; st.wx = 2 * st.wx - PerlinN; st.h *= 2; st.wy = 2 * st.wy - PerlinN; }
-    }
-    return sum;
-  }
-}
 implement(BitmapData, [IBitmapDrawable]);

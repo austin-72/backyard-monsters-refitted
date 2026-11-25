@@ -6,7 +6,10 @@ import { ASObject } from "as3";
 import { EventDispatcher, Event, IOErrorEvent, ProgressEvent } from "../events";
 import { flashClass, unimplemented } from "../_internal";
 import { runtimeHooks } from "../_runtime";
-import { DisplayObject, type M6 } from "../display/core";
+import { DisplayObject, touch, redrawHooks, type M6 } from "../display/core";
+/** Videos with a stream: their picture changes unmarked, so they are compared at every drawing. */
+const playingVideos = new Set<DisplayObject>();
+redrawHooks.push(() => { for (const v of playingVideos) touch(v); });
 import { Rectangle } from "../geom";
 
 let ac: AudioContext | null = null;
@@ -82,14 +85,21 @@ export class SoundTransform extends ASObject {
 flashClass(SoundTransform, "flash.media.SoundTransform");
 const mixerTransform = { volume: 1, pan: 0 };
 const channels = new Set<SoundChannel>();
+/** Inferno-only (QoL #615): how many sound channels play now (32 at most), so the game can keep some for music. */
+export const ioChannelsPlaying = (): number => channels.size;
+/** Inferno-only (QoL #625): whether the browser lets sound play yet (it holds it back until the first click or key). */
+export const ioAudioRunning = (): boolean => !!ac && ac.state === "running";
 
 export class SoundChannel extends EventDispatcher {
   declare $src: AudioBufferSourceNode | null; declare $gain: GainNode | null; declare $pan: StereoPannerNode | null;
   declare $t0: number; declare $offset: number; declare $dur: number; declare $done: boolean; declare $transform: SoundTransform;
+  /** (Inferno-only, QoL #616) the sound's own level (Sound.ioLevel), under the volume the game sets; and whose channel it is (QoL #627) */
+  declare $level: number; declare $sound: Sound | null;
   $ctor(): void {
     super.$ctor();
     this.$src = null; this.$gain = null; this.$pan = null; this.$t0 = 0; this.$offset = 0; this.$dur = 0; this.$done = false;
     this.$transform = new SoundTransform();
+    this.$level = 1; this.$sound = null;
   }
   get position(): number {
     const ctx = audio();
@@ -101,7 +111,7 @@ export class SoundChannel extends EventDispatcher {
   set soundTransform(t: SoundTransform) {
     if (!t) return;
     this.$transform = new SoundTransform(t.volume, t.pan);
-    if (this.$gain) this.$gain.gain.value = t.volume;
+    if (this.$gain) this.$gain.gain.value = t.volume * this.$level;
     if (this.$pan) this.$pan.pan.value = Math.max(-1, Math.min(1, t.pan));
   }
   get leftPeak(): number { return 0; }
@@ -118,9 +128,11 @@ flashClass(SoundChannel, "flash.media.SoundChannel");
 export class Sound extends EventDispatcher {
   declare $buffer: AudioBuffer | null; declare $waiting: (() => void)[]; declare $url: string | null;
   declare $loaded: number; declare $total: number; declare $failed: boolean; declare $pending: SoundChannel[];
+  declare $level: number;
   $ctor(stream: any = null, context: any = null): void {
     super.$ctor();
     this.$buffer = null; this.$waiting = []; this.$url = null; this.$loaded = 0; this.$total = 0; this.$failed = false; this.$pending = [];
+    this.$level = 1;
     if (stream) this.load(stream, context);
     else {
       // An embedded sound: in Flash its data is in the SWF, ready at once. Here it is decoded now; a play()
@@ -173,6 +185,19 @@ export class Sound extends EventDispatcher {
   get bytesLoaded(): number { return this.$loaded; }
   get bytesTotal(): number { return this.$total; }
   get isBuffering(): boolean { return !this.$buffer && !this.$failed; }
+  /**
+   * Inferno-only (QoL #616): the file's own level, 0 to 1 (1: as recorded). Every channel of this sound plays at the
+   * volume the game gives it times this, and reads back the game's volume (the game's fades are unchanged). The
+   * game's SOUNDS sets it from a table measured on the files, so loud files don't drown the music.
+   */
+  get ioLevel(): number { return this.$level; }
+  set ioLevel(v: number) { this.$level = Math.max(0, Math.min(1, Number(v) || 0)); }
+  /** Inferno-only (QoL #627): how many channels of this sound play now (or wait for its file). */
+  get ioPlaying(): number {
+    let n = 0;
+    for (const ch of channels) if (ch.$sound === this && !ch.$done) n++;
+    return n;
+  }
   get id3(): any { return {}; }
   close(): void {}
   extract(): number { unimplemented("Sound.extract"); return 0; }
@@ -182,15 +207,24 @@ export class Sound extends EventDispatcher {
     // Nothing to play (failed to load, or neither a file nor embedded data): a silent channel that holds no slot.
     if (this.$failed || (!this.$buffer && !this.$url && !embeddedSoundFor(this.constructor))) { ch.$done = true; return ch; }
     channels.add(ch);
+    ch.$sound = this; ch.$level = this.$level;
     if (sndTransform) ch.$transform = new SoundTransform(sndTransform.volume, sndTransform.pan);
     ch.$offset = startTime;
     const start = () => {
       const ctx = audio();
       if (ch.$done || !this.$buffer || !ctx) return;
+      // (QoL #625: before the page's first click or key the browser holds the sound back; every effect asked for
+      // meanwhile would play at once on the first tap, using up the channels. Effects then are left out; music,
+      // which loops, waits for it.)
+      if (ctx.state === "suspended" && (loops | 0) <= 1) {
+        ch.$done = true;
+        channels.delete(ch);
+        return;
+      }
       const src = ctx.createBufferSource();
       src.buffer = this.$buffer;
       const gain = ctx.createGain();
-      gain.gain.value = ch.$transform.volume;
+      gain.gain.value = ch.$transform.volume * ch.$level;
       // Older Safari has no stereo panner: no panning there.
       const pan = typeof ctx.createStereoPanner === "function" ? ctx.createStereoPanner() : null;
       src.connect(gain);
@@ -247,9 +281,9 @@ export class Video extends DisplayObject {
   }
   get videoWidth(): number { return this.$stream?.$video?.videoWidth ?? 0; }
   get videoHeight(): number { return this.$stream?.$video?.videoHeight ?? 0; }
-  attachNetStream(ns: any): void { this.$stream = ns; }
+  attachNetStream(ns: any): void { this.$stream = ns; if (ns) playingVideos.add(this); else playingVideos.delete(this); touch(this); }
   attachCamera(_c: any): void {}
-  clear(): void { this.$stream = null; }
+  clear(): void { this.$stream = null; playingVideos.delete(this); touch(this); }
   /** changes every frame while playing (render caches compare it) */
   get $renderVersion(): number { return Math.round((this.$stream?.$video?.currentTime ?? 0) * 1000); }
   $selfBounds(): Rectangle { return new Rectangle(0, 0, this.$vw, this.$vh); }

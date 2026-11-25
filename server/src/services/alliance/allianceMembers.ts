@@ -4,7 +4,7 @@ import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { getCurrentDateTime } from "../../utils/getCurrentDateTime.js";
-import { getLastSeen } from "../maproom/getLastSeen.js";
+import { getLastSeenVisible as getLastSeen } from "../maproom/getLastSeen.js";
 import { ALLIANCE_MEMBER_FIELDS, toAllianceMember, type AllianceMember } from "./allianceMember.js";
 
 /**
@@ -39,6 +39,20 @@ export const getAllianceMembers = async (allianceId: number): Promise<AllianceMe
       m.empire = h?.empire ?? 0;
       // (Inferno ranks by empire value: the lists' "points" column shows it, and the roster is ordered by it)
       m.points = m.empire;
+    }
+    // (QoL #175: when each joined, for the Members tab's Joined column: user.alliance_joined_at, migration 20261020;
+    // left out where the column isn't there yet)
+    const joined = (await postgres.em
+      .getConnection()
+      .execute(
+        `SELECT userid, floor(extract(epoch FROM alliance_joined_at)) AS j FROM bym."user" WHERE alliance_id = ? AND alliance_joined_at IS NOT NULL`,
+        [allianceId]
+      )
+      .catch(() => [])) as { userid: number; j: string | number | null }[];
+    const joinedBy = new Map(joined.map((r) => [Number(r.userid), Number(r.j) || 0]));
+    for (const m of roster) {
+      const j = joinedBy.get(m.user_id);
+      if (j) m.joined = j;
     }
   }
 

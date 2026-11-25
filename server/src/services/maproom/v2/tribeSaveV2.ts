@@ -13,6 +13,7 @@ import { legionnaire } from "../../../game-data/tribes/v2/legionnaire.js";
 import { devilify } from "../../../game-data/tribes/devil/devilify.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
 import { getCurrentDateTime } from "../../../utils/getCurrentDateTime.js";
+import { generateBaseId } from "../../../utils/generateBaseId.js";
 import { tribeDefenders, tribeDesign, withStockDesign } from "../../admin/designStore.js";
 
 /**
@@ -30,7 +31,9 @@ export const tribeSaveV2 = (baseid: string, worldid: string | null | undefined) 
   const cellY = parseInt(baseid.slice(-3));
 
   // (a base id that is not one: a 400, not a crash in the territory maths)
-  if (!Number.isInteger(cellX) || !Number.isInteger(cellY)) {
+  // (13 October: and the id must be the cell's own: any digits ahead of the last six made a fresh, full-loot tribe
+  // yard for the same cell each time, and another map cell on it)
+  if (!Number.isInteger(cellX) || !Number.isInteger(cellY) || (worldid && baseid !== generateBaseId(worldid, cellX, cellY))) {
     throw new ClientSafeError({ message: "That yard does not exist.", status: Status.BAD_REQUEST, data: {}, isClientFriendly: true });
   }
 

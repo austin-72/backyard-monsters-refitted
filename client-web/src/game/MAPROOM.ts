@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
 import { MovieClip } from "flash/display";
 import { MouseEvent, ProgressEvent } from "flash/events";
-import { BASE, GLOBAL, HOUSING, KEYS, LOGGER, LOGIN, PLEASEWAIT, POPUPS, SOUNDS, TRIBES, TUTORIAL, URLLoaderApi, WMBASE, com_monsters_mailbox_Message as Message, com_monsters_maproom_MapRoom as MapRoom, popup_truce, popup_truce_accept, popup_truce_sent } from "@game";
+import { BASE, BUILDINGS, com_monsters_mailbox_Message as Message, com_monsters_maproom_MapRoom as MapRoom, GLOBAL, HOUSING, KEYS, LOGGER, LOGIN, PLEASEWAIT, popup_truce, popup_truce_accept, popup_truce_sent, POPUPS, SOUNDS, TRIBES, TUTORIAL, URLLoaderApi, WMBASE } from "@game";
 
 export class MAPROOM extends ASObject {
     public static readonly TYPE: uint = 11;
@@ -82,7 +82,7 @@ export class MAPROOM extends ASObject {
                         GLOBAL.Message(KEYS.Get("map_msg_damaged"));
                     }
                 } else {
-                    GLOBAL.Message(KEYS.Get("map_msg_notbuilt"));
+                    BUILDINGS.ioNeed(KEYS.Get("map_msg_notbuilt"), 11);
                 }
             } else {
                 GLOBAL.Message(KEYS.Get("map_msg_disabled"));

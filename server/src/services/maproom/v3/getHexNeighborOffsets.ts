@@ -1,4 +1,4 @@
-// ODD-R (odd-row) horizontal hexagon offsets - matches client logic in MapRoom3CellGraphic.as lines 562-603
+// ODD-R (odd-row) horizontal hexagon offsets - matches client logic in MapRoom3CellGraphic.ts lines 562-603
 // For EVEN rows (y % 2 == 0): left-aligned
 const HEX_OFFSETS_EVEN_ROW = [
   [+1,  0],  // E

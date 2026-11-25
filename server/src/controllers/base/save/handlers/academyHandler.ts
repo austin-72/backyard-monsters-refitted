@@ -17,7 +17,14 @@ export const academyHandler = (ctx: Context, save: Save) => {
   const saveData = body[SaveKeys.ACADEMY];
 
   if (saveData) {
-    const academyData: AcademyData = JSON.parse(saveData);
+    // (13 October: not JSON, or not an object ("null"): nothing, not a server error)
+    let academyData: AcademyData;
+    try {
+      academyData = JSON.parse(saveData);
+    } catch {
+      return;
+    }
+    if (!academyData || typeof academyData !== "object") return;
 
     for (const [monster, monsterData] of Object.entries(academyData)) {
       if (monsterData && typeof monsterData.level === "number") {

@@ -1,7 +1,7 @@
 import type { SaveData } from "../../../types/EntityData.js";
 import { TribeScale } from "../../../enums/Tribes.js";
 
-// Baseids match TRIBES.as K_IDS entries (11=NEW, 12=TH3, 13=TH4, 14=TH5, 15=HIGH)
+// Baseids match TRIBES.ts K_IDS entries (11=NEW, 12=TH3, 13=TH4, 14=TH5, 15=HIGH)
 export const kozu: Record<TribeScale, SaveData> = {
   [TribeScale.NEW]: {
     baseid: "11",

@@ -3,7 +3,7 @@ import { int, uint } from "as3";
 import { Loader, Sprite } from "flash/display";
 import { Event, IOErrorEvent, KeyboardEvent, MouseEvent } from "flash/events";
 import { URLRequest } from "flash/net";
-import { Contact, FriendPickerItem, FriendPicker_CLIP, GLOBAL, LOGIN, ScrollSet, TweenLite, URLLoaderApi, system_message } from "@game";
+import { Contact, FriendPickerItem, FriendPicker_CLIP, GLOBAL, KEYS, LOGIN, ScrollSet, TweenLite, URLLoaderApi, system_message } from "@game";
 
 export class FriendPicker extends FriendPicker_CLIP {
     static {
@@ -126,7 +126,7 @@ export class FriendPicker extends FriendPicker_CLIP {
             }
         }
         if (GLOBAL.INFERNO_ONLY && FriendPicker._contacts.length == 0) {
-            GLOBAL.Message("There is nobody else in your alliance to invite yet.");
+            GLOBAL.Message(KEYS.Get("io_t3m_mail_nobody"));
             return;
         }
         this._openMap2Friends();

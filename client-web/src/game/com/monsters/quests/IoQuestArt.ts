@@ -60,6 +60,90 @@ export class IoQuestArt extends ASObject {
         let i: int = 0;
         let a: number = NaN;
         switch (icon) {
+            case "secret":
+                // a sealed scroll: wax seal with a question mark
+                g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
+                g.beginFill(IoQuestArt.BONE, 1);
+                g.drawRoundRect(-10 * u, -7 * u, 20 * u, 14 * u, 4 * u, 4 * u);
+                g.endFill();
+                g.lineStyle(1.2 * u, 9075306, 1);
+                g.moveTo(-10 * u, -7 * u);
+                g.lineTo(0, 1 * u);
+                g.lineTo(10 * u, -7 * u);
+                g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
+                g.beginFill(8010416, 1);
+                g.drawCircle(0, 2 * u, 5.5 * u);
+                g.endFill();
+                g.lineStyle(1.6 * u, 15257855, 1);
+                g.moveTo(-1.8 * u, 0.2 * u);
+                g.curveTo(-1.8 * u, -2.2 * u, 0, -2.2 * u);
+                g.curveTo(2 * u, -2.2 * u, 2 * u, -0.4 * u);
+                g.curveTo(2 * u, 1 * u, 0, 1.8 * u);
+                g.lineTo(0, 3 * u);
+                g.lineStyle(0, 0, 0);
+                g.beginFill(15257855, 1);
+                g.drawCircle(0, 5 * u, 0.9 * u);
+                g.endFill();
+                break;
+            case "joystick":
+                // an arcade stick: base, shaft, ball, two buttons
+                g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
+                g.beginFill(4864566, 1);
+                g.drawRoundRect(-11 * u, 3 * u, 22 * u, 8 * u, 4 * u, 4 * u);
+                g.endFill();
+                g.lineStyle(2.4 * u, 9075312, 1);
+                g.moveTo(-3 * u, 5 * u);
+                g.lineTo(-3 * u, -4 * u);
+                g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
+                g.beginFill(IoQuestArt.EMBER, 1);
+                g.drawCircle(-3 * u, -6 * u, 4.5 * u);
+                g.endFill();
+                g.beginFill(IoQuestArt.GOLD, 1);
+                g.drawCircle(4 * u, 6.5 * u, 2 * u);
+                g.drawCircle(8.2 * u, 6.5 * u, 2 * u);
+                g.endFill();
+                break;
+            case "moon":
+                // a crescent moon with a star
+                g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
+                g.beginFill(IoQuestArt.GOLD, 1);
+                g.moveTo(2 * u, -10 * u);
+                g.curveTo(-12 * u, -9 * u, -9 * u, 3 * u);
+                g.curveTo(-5 * u, 12 * u, 6 * u, 8 * u);
+                g.curveTo(-5 * u, 6 * u, -3 * u, -3 * u);
+                g.curveTo(-1.5 * u, -8 * u, 2 * u, -10 * u);
+                g.endFill();
+                g.beginFill(IoQuestArt.BONE, 1);
+                g.drawCircle(6 * u, -4 * u, 1.8 * u);
+                g.endFill();
+                break;
+            case "pumpkin":
+                // (20 October: Trick or Treat) a jack-o'-lantern
+                g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
+                g.beginFill(0xE8641A, 1);
+                g.drawEllipse(-10 * u, -6 * u, 20 * u, 16 * u);
+                g.endFill();
+                g.lineStyle();
+                g.beginFill(0x3A6A1A, 1);
+                g.drawRect(-1.5 * u, -10 * u, 3 * u, 5 * u);
+                g.endFill();
+                g.beginFill(0xFFE040, 1);
+                g.moveTo(-6 * u, 0);
+                g.lineTo(-2 * u, 0);
+                g.lineTo(-4 * u, -3.5 * u);
+                g.lineTo(-6 * u, 0);
+                g.moveTo(2 * u, 0);
+                g.lineTo(6 * u, 0);
+                g.lineTo(4 * u, -3.5 * u);
+                g.lineTo(2 * u, 0);
+                g.moveTo(-6 * u, 3 * u);
+                g.lineTo(6 * u, 3 * u);
+                g.lineTo(3 * u, 6.5 * u);
+                g.lineTo(0, 4.5 * u);
+                g.lineTo(-3 * u, 6.5 * u);
+                g.lineTo(-6 * u, 3 * u);
+                g.endFill();
+                break;
             case "tower":
                 g.lineStyle(1.5 * u, IoQuestArt.DARK, 1);
                 g.beginFill(10128000, 1);

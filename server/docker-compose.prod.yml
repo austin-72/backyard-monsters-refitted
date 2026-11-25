@@ -7,9 +7,10 @@ services:
     environment:
       - ENV=production
 
-  # Don't expose db or redis ports to the host in production
+  # Don't expose db or redis ports to the host in production. (`!reset` empties the list: a plain `[]` is
+  # merged with the base file's ports, so it removed nothing. Compose 2.18 or newer.)
   db:
-    ports: []
+    ports: !reset []
 
   redis:
-    ports: []
+    ports: !reset []

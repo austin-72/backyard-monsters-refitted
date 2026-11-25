@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { Vector, int, uint } from "as3";
 import { TimerEvent } from "flash/events";
 import { Timer } from "flash/utils";
-import { BASE, BFOUNDATION, BTOWER, DROPZONE, IDurable, KEYS, SPRITES, SecNum, SiegeWeapon, SiegeWeaponProperty, SiegeWeapons } from "@game";
+import { BASE, BFOUNDATION, BTOWER, DROPZONE, GLOBAL, IDurable, KEYS, SPRITES, SecNum, SiegeWeapon, SiegeWeaponProperty, SiegeWeapons } from "@game";
 
 export class Jars extends SiegeWeapon implements IDurable {
     static {
@@ -39,6 +39,15 @@ export class Jars extends SiegeWeapon implements IDurable {
         this.addProperty(SiegeWeapon.DURATION, new SiegeWeaponProperty([0, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
         this.addProperty(SiegeWeapon.UPGRADE_COSTS, new SiegeWeaponProperty([{ "r1": 54788.2570728397, "r2": 73051.0094304529, "r3": 54788.2570728397, "r4": 0, "time": 8100 }, { "r1": 94981.5611740237, "r2": 126642.081565365, "r3": 94981.5611740237, "r4": 0, "time": 13500 }, { "r1": 164651.086038632, "r2": 219534.781384843, "r3": 164651.086038632, "r4": 0, "time": 19800 }, { "r1": 285371.258002827, "r2": 380495.010670437, "r3": 285371.258002827, "r4": 0, "time": 30600 }, { "r1": 494329.891507663, "r2": 659106.522010217, "r3": 494329.891507663, "r4": 0, "time": 51300 }, { "r1": 854888.169815886, "r2": 1139850.89308785, "r3": 854888.169815886, "r4": 0, "time": 86400 }, { "r1": 1471266.3489287, "r2": 1961688.46523827, "r3": 1471266.3489287, "r4": 0, "time": 216000 }, { "r1": 2497108.33129819, "r2": 3329477.77506425, "r3": 2497108.33129819, "r4": 0, "time": 302400 }, { "r1": 4086751.48181388, "r2": 5449001.97575184, "r3": 4086751.48181388, "r4": 0, "time": 345600 }, { "r1": 6188066.53345743, "r2": 8250755.37794324, "r3": 6188066.53345743, "r4": 0, "time": 388800 }]));
         this.addProperty(SiegeWeapon.BUILD_COSTS, new SiegeWeaponProperty([{ "r4": 0, "r1": 42971, "r2": 42971, "r3": 21486, "time": 3600 }, { "r4": 0, "r1": 74495, "r2": 74495, "r3": 37248, "time": 5400 }, { "r4": 0, "r1": 129138, "r2": 129138, "r3": 64569, "time": 8100 }, { "r4": 0, "r1": 223821, "r2": 223821, "r3": 111910, "time": 12600 }, { "r4": 0, "r1": 387710, "r2": 387710, "r3": 193855, "time": 18000 }, { "r4": 0, "r1": 670501, "r2": 670501, "r3": 335250, "time": 27000 }, { "r4": 0, "r1": 1153934, "r2": 1153934, "r3": 576967, "time": 41400 }, { "r4": 0, "r1": 1958516, "r2": 1958516, "r3": 979258, "time": 61200 }, { "r4": 0, "r1": 3205295, "r2": 3205295, "r3": 1602648, "time": 86400 }, { "r4": 0, "r1": 4853386, "r2": 4853386, "r3": 2426693, "time": 172800 }]));
+        // (Inferno-only, QoL #506: made at every login (SiegeWeapons' list): the jar's sheet (0.5 MB) loads when jars are
+        // dropped (ioDrop, onActivation) or a replay shows them, not then)
+        if (!GLOBAL.INFERNO_ONLY) {
+            SPRITES.SetupSprite(Jars.JAR_GRAPHIC);
+        }
+    }
+
+    /** Inferno-only (QoL #506): the jar's sheet asked for ahead (an attack where jars can be dropped). */
+    public ioWarm(): void {
         SPRITES.SetupSprite(Jars.JAR_GRAPHIC);
     }
 

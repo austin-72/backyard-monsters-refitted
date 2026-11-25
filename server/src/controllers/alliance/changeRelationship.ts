@@ -3,7 +3,7 @@ import { Alliance } from "../../database/models/alliance.model.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
 import { ChangeRelationshipSchema } from "../../schemas/AllianceSchemas.js";
-import { requireAllianceLeader } from "../../services/alliance/allianceAccess.js";
+import { requireAlliancePerm } from "../../services/alliance/ioOfficerPerms.js";
 import { setAllianceRelationship } from "../../services/alliance/relationships.js";
 import { cannotChangeRelationshipErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
@@ -17,13 +17,18 @@ import { questBump } from "../../services/quests/questProgress.js";
  * client warns before attacking an ally rather than preventing it - so nothing
  * here restricts what either alliance may do.
  *
+ * Inferno-only (QoL #176): the target is told, by a line in its own feed (services/alliance/relationships.ts), and
+ * sees the flag in Browse (searchalliances' `their_stance`). (QoL #174): an officer may set it too, when the leader
+ * allows it (services/alliance/ioOfficerPerms.ts).
+ *
  * @param {Context} ctx - Koa context.
  */
 export const changeRelationship: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
   const { target_alliance_id, relationship } = ChangeRelationshipSchema.parse(ctx.request.body);
 
-  const alliance = await requireAllianceLeader(user);
+  // (Inferno-only, QoL #174: the leader, or an officer the leader lets set them)
+  const alliance = await requireAlliancePerm(user, "relations");
 
   if (target_alliance_id === alliance.id) throw cannotChangeRelationshipErr();
 

@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { Event } from "flash/events";
-import { BasePlannerEvent, BasePlannerTransferConfirmation, BasePlannerTransferEvent, BasePlannerTransferPopup, BasePlannerTransferRow, KEYS, POPUPS, POPUPSETTINGS } from "@game";
+import { BASE, BasePlannerEvent, BasePlannerTransferConfirmation, BasePlannerTransferEvent, BasePlannerTransferPopup, BasePlannerTransferRow, GLOBAL, KEYS, POPUPS, POPUPSETTINGS } from "@game";
 
 export class BasePlannerSavePopup extends BasePlannerTransferPopup {
     static {
@@ -12,7 +12,8 @@ export class BasePlannerSavePopup extends BasePlannerTransferPopup {
 
     public $ctor(): void {
         super.$ctor();
-        this.tTitle.htmlText = KEYS.Get("basePlanner_savetitle");
+        // (Inferno-only, 12 November: the outposts share their 10 slots)
+        this.tTitle.htmlText = KEYS.Get(GLOBAL.INFERNO_ONLY && BASE.isOutpost ? "io_plan4_save_title" : "basePlanner_savetitle");
     }
 
     public override get name(): string {

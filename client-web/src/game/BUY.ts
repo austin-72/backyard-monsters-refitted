@@ -3,7 +3,7 @@ import { ASObject, int } from "as3";
 import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { ExternalInterface } from "flash/external";
-import { BASE, BFOUNDATION, BUILDINGOPTIONS, BYMDevConfig, FACEBOOK_NCP_CLIP, GLOBAL, ImageCache, InventoryManager, LOGGER, LOGIN, POPUPS, SALESPECIALSPOPUP, STORE, TUTORIAL, TweenLite, print } from "@game";
+import { BASE, BFOUNDATION, BUILDINGOPTIONS, BYMDevConfig, FACEBOOK_NCP_CLIP, GLOBAL, ImageCache, InventoryManager, LOGGER, LOGIN, POPUPS, SALESPECIALSPOPUP, STORE, TUTORIAL, TweenLite, print, IoAllianceBanner, IoChampionStatue } from "@game";
 
 export class BUY extends ASObject {
     public static forceNCP: boolean = false;
@@ -192,7 +192,8 @@ export class BUY extends ASObject {
             if (nextFortifyLevel > 4) {
                 nextFortifyLevel = 4;
             }
-            img = "fortifybuttons/" + "fort" + nextFortifyLevel + ".png";
+            // (Inferno-only, 12 November: fortifying is calcifying here, rings of bone: art/calcify)
+            img = "fortifybuttons/" + (GLOBAL.INFERNO_ONLY ? "calcify" : "fort") + nextFortifyLevel + ".png";
             ImageCache.GetImageWithCallBack(img, FortifyImageLoaded);
         } else if (buildingProps.upgradeImgData) {
             ImageLoaded = (param1: string, param2: BitmapData): void => {
@@ -268,7 +269,7 @@ export class BUY extends ASObject {
             } else if (Boolean(buildingProps.buildingbuttons) && buildingProps.buildingbuttons.length > 0) {
                 img = "buildingbuttons/" + buildingProps.buildingbuttons[0] + ".jpg";
             } else {
-                img = "buildingbuttons/" + _building._type + ".jpg";
+                img = IoChampionStatue.cardKey(_building._type, IoAllianceBanner.cardKey(_building._type, "buildingbuttons/" + _building._type + ".jpg"));
             }
             ImageCache.GetImageWithCallBack(img, DefaultImageLoaded);
         }

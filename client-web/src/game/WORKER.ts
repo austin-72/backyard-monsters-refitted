@@ -4,11 +4,11 @@ import { Bitmap, BitmapData, DisplayObject, DisplayObjectContainer, IBitmapDrawa
 import { TimerEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { Timer } from "flash/utils";
-import { BASE, BFOUNDATION, BYMConfig, Bounce, GLOBAL, ImageCache, MAP, PATHING, RasterData, SPRITES, Sine, TweenLite, WORKER_CLIP, workerMessage } from "@game";
+import { BASE, BFOUNDATION, BYMConfig, Bounce, GLOBAL, GRID, ImageCache, IoDave, IoPets, IoYardFx, MAP, PATHING, RasterData, SPRITES, Sine, TweenLite, WORKER_CLIP, workerMessage } from "@game";
 
 export class WORKER extends WORKER_CLIP {
     static {
-        as3.fields(this, { _behaviour: null, _middle: 0, _speed: NaN, _targetRotation: NaN, _targetPosition: null, _targetTask: null, _hasPath: false, _frameNumber: NaN, _scale: NaN, _targetBuilding: null, _id: 0, _size: NaN, _container: null, _graphic: null, _lastRotation: 400, _messageMC: null, frameCount: 0, showTimer: null, hideTimer: null, yd: 0, xd: 0, _mc: null, _waypoints: null, _waypointIndex: 0, _hasGraphic: false, configObject: null, _jumping: false, _jumpingUp: false, _graphicMC: null, _rasterData: null, _rasterPt: null });
+        as3.fields(this, { _behaviour: null, _middle: 0, _speed: NaN, _targetRotation: NaN, _targetPosition: null, _targetTask: null, _hasPath: false, _frameNumber: NaN, _scale: NaN, _targetBuilding: null, _id: 0, _size: NaN, _container: null, _graphic: null, _lastRotation: 400, _messageMC: null, frameCount: 0, showTimer: null, hideTimer: null, yd: 0, xd: 0, _mc: null, _waypoints: null, _waypointIndex: 0, _hasGraphic: false, configObject: null, _jumping: false, _jumpingUp: false, _graphicMC: null, _rasterData: null, _rasterPt: null, ioDance: 0, ioFollow: 0, _ioHop: 0, _ioBaseY: -36, _ioFronted: false });
     }
 
     public _behaviour: string;
@@ -42,6 +42,13 @@ export class WORKER extends WORKER_CLIP {
     private _graphicMC: DisplayObject;
     protected _rasterData: RasterData;
     protected _rasterPt: Point;
+    /** Inferno-only (10 October; IoWorkerFun): steps left of a dance, of following the pointer. */
+    public ioDance: int;
+    public ioFollow: int;
+    private _ioHop: number;
+    private _ioBaseY: number;
+    /** Gone round to the front of the building it works on (so it is seen: ioToFront). */
+    private _ioFronted: boolean;
 
     public $ctor(param1?: any, param2?: Point, param3?: number): void {
         super.$ctor();
@@ -62,7 +69,7 @@ export class WORKER extends WORKER_CLIP {
         this._speed = 0;
         this._size = 10;
         this._frameNumber = (Math.random() * 200) | 0;
-        if (!BASE.isInfernoMainYardOrOutpost) {
+        if (!BASE.isInfernoMainYardOrOutpost || IoDave.overworldWorkers) {
             this._graphic = new BitmapData(52, 50, true, 16777215);
         } else {
             this._graphic = new BitmapData(64, 55, true, 16777215);
@@ -78,6 +85,29 @@ export class WORKER extends WORKER_CLIP {
         ImageCache.GetImageWithCallBack("monsters/worker.png", as3.bind(this, this.onAssetLoaded));
         this.mouseEnabled = false;
         this.mouseChildren = false;
+    }
+
+    /** Inferno-only (10 October): drawn again from the sheet the yard's owner chose (the D.A.V.E. Club: IoDave). */
+    public ioReskin(): void {
+        let over: boolean = !BASE.isInfernoMainYardOrOutpost || IoDave.overworldWorkers;
+        this._graphic = over ? new BitmapData(52, 50, true, 16777215) : new BitmapData(64, 55, true, 16777215);
+        if (BYMConfig.instance.RENDERER_ON) {
+            if (this._rasterData) {
+                this._rasterData.clear();
+            }
+            this._graphicMC = new Bitmap(this._graphic);
+            this._rasterData = new RasterData(as3.cast(this._graphic, IBitmapDrawable), this._rasterPt, int.MAX_VALUE);
+        } else {
+            if (this._graphicMC && this._graphicMC.parent == this) {
+                this.removeChild(this._graphicMC);
+            }
+            this._graphicMC = as3.cast(this.addChild(new Bitmap(this._graphic)), DisplayObject);
+        }
+        this._graphicMC.x = -26;
+        this._graphicMC.y = -36;
+        this._hasGraphic = false;
+        SPRITES.SetupSprite("worker");
+        ImageCache.GetImageWithCallBack(String(SPRITES._sprites.worker.key), as3.bind(this, this.onAssetLoaded));
     }
 
     private onAssetLoaded(param1: string, param2: BitmapData): void {
@@ -98,7 +128,7 @@ export class WORKER extends WORKER_CLIP {
                 _loc2_ = this._middle;
             }
             this._rasterPt.x = this.x + this._graphicMC.x - _loc1_.x;
-            this._rasterPt.y = this.y + this._graphicMC.y - _loc1_.y;
+            this._rasterPt.y = this.y + this._graphicMC.y - this._ioHop - _loc1_.y;
             this._rasterData.depth = Math.max(MAP.DEPTH_SHADOW + 1, (this.y - _loc1_.y + _loc2_) * 1000 + this.x - _loc1_.x);
         }
     }
@@ -114,7 +144,9 @@ export class WORKER extends WORKER_CLIP {
     public Tick(): void {
         ++this._frameNumber;
         let _loc1_: int = (Math.random() * 600) | 0;
-        if (_loc1_ < 5 && !this._targetTask && this._speed == 0) {
+        if (GLOBAL.INFERNO_ONLY && this.ioPlay()) {
+            // (dancing or following the pointer: IoWorkerFun)
+        } else if (_loc1_ < 5 && !this._targetTask && this._speed == 0) {
             this.Wander();
         }
         this.Move();
@@ -125,6 +157,81 @@ export class WORKER extends WORKER_CLIP {
     }
 
     public Wander(): void {
+        if (!GLOBAL.INFERNO_ONLY || GLOBAL._catchup || this._targetTask || !MAP._BUILDINGTOPS) {
+            return;
+        }
+        // Inferno-only (10 October): an idle worker strolls to somewhere free nearby in the yard, so idle
+        // workers are seen about the yard (they used to stand where they were put, often out of the way).
+        let at: Point = GRID.FromISO(this.x, this.y);
+        for (let tries: int = 0; tries < 16; tries++) {
+            let a: number = Math.random() * Math.PI * 2;
+            let d: number = 60 + Math.random() * 200;
+            let x: number = at.x + Math.cos(a) * d;
+            let y: number = at.y + Math.sin(a) * d;
+            if (IoPets.free(x, y) && IoPets.free(x + 10, y + 10)) {
+                this.Target(GRID.ToISO(x, y, 0));
+                return;
+            }
+        }
+    }
+
+    /**
+     * Inferno-only: a step of what the player asked for (IoWorkerFun): a dance (spinning and hopping on the
+     * spot), or following the pointer. True while one goes on.
+     */
+    private ioPlay(): boolean {
+        if (this.ioDance > 0) {
+            this.ioDance--;
+            this.mcMarker.rotation += 24;
+            this._ioHop = Math.abs(Math.sin(this.ioDance / 12 * Math.PI)) * 10;
+            this._speed = 0;
+            this.Update(true);
+            if (this.ioDance % 18 == 0) {
+                IoYardFx.sparkle(this.x, this.y - 30, this.y);
+            }
+            if (this.ioDance == 0) {
+                this._ioHop = 0;
+            }
+            return true;
+        }
+        this._ioHop = 0;
+        if (this.ioFollow > 0) {
+            this.ioFollow--;
+            if (this._targetTask) {
+                this.ioFollow = 0;
+                return false;
+            }
+            if (this.ioFollow % 30 == 0) {
+                let mx: number = MAP._BUILDINGTOPS.mouseX;
+                let my: number = MAP._BUILDINGTOPS.mouseY;
+                let g: Point = GRID.FromISO(mx, my);
+                if (IoPets.free(g.x, g.y) && Point.distance(new Point(mx, my), new Point(this.x, this.y)) > 30) {
+                    this.Target(new Point(mx, my));
+                }
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Inferno-only: once at work on a building, a worker that arrived behind it (where the building hides it)
+     * walks round to its front, so a busy worker is always seen. Its job has started already.
+     */
+    private ioToFront(): void {
+        let b: BFOUNDATION = this._targetTask;
+        if (this._ioFronted || !b || !b._footprint || !b._footprint[0] || GLOBAL._catchup) {
+            return;
+        }
+        this._ioFronted = true;
+        let w: number = Number(b._footprint[0].width);
+        // (the footprint's front edges run from its right corner (w, w/2) and its left (-w, w/2) to its bottom
+        // (0, w), from the building's own point)
+        if (this.y > b._mc.y + w * 0.6) {
+            return;
+        }
+        let side: number = this.x >= b._mc.x ? 1 : -1;
+        this.Target(new Point(b._mc.x + side * w * 0.5 + side * 8, b._mc.y + w * 0.75 + 8));
     }
 
     /**
@@ -158,6 +265,9 @@ export class WORKER extends WORKER_CLIP {
 
     public Target(param1: Point, param2: BFOUNDATION = null): void {
         let _loc3_: Rectangle = null;
+        if (param2) {
+            this._ioFronted = false;
+        }
         if (!GLOBAL._catchup) {
             _loc3_ = new Rectangle(param1.x, param1.y, 10, 10);
             if (param2) {
@@ -212,6 +322,9 @@ export class WORKER extends WORKER_CLIP {
                     }
                     if (Boolean(this._targetTask) && !this._targetTask._hasWorker) {
                         this._targetTask.HasWorker();
+                        if (GLOBAL.INFERNO_ONLY) {
+                            this.ioToFront();
+                        }
                     }
                 }
             } else if (!this._targetTask) {

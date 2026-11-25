@@ -17,6 +17,7 @@ import { MOLOCH_INDEX, tribeForCell } from "../tribeForCell.js";
 import { getTerrainMap, lazyEncoding, type LazyEncoding } from "./terrainMap.js";
 import { portalsFor, underworldOn } from "../underworld.js";
 import { logger } from "../../../../utils/logger.js";
+import { liveAttacksOn } from "../../../replays/liveAttacks.js";
 
 /**
  * The Map Room 2 world snapshot: everything about a world's map that is the same for every viewer, in
@@ -65,6 +66,8 @@ export interface SnapshotPlayer {
 export interface SnapshotAlliance {
   name: string;
   image: number;
+  /** Inferno-only (14 October): its designed crest, when it has one. */
+  crest?: string;
   leader: number;
   members: number[];
   relationships: Record<number, AllianceStance>;
@@ -185,7 +188,8 @@ const buildSnapshot = async (worldid: string, nextAt: number): Promise<WorldSnap
       const online = (lastSeen.get(row.uid) ?? 0) >= now - 60;
       const lastAttack = Number(row.last_attack) || 0;
       const underAttack = row.attackid !== 0 && lastAttack > 0 && now - lastAttack < ATTACK_TIMEOUT;
-      if (online || underAttack) locked = 1;
+      // (18 October: with live attacks on, a player online can be attacked: services/replays/liveAttacks.ts)
+      if ((online && !liveAttacksOn()) || underAttack) locked = 1;
     }
     const level = isPlayer ? players[row.uid]?.level ?? 1 : tribeForCell(worldid, row.x, row.y).level;
     return [
@@ -199,11 +203,11 @@ const buildSnapshot = async (worldid: string, nextAt: number): Promise<WorldSnap
   const alliances: Record<number, SnapshotAlliance> = {};
   const allianceRows = await postgres.em
     .createQueryBuilder(Alliance, "a")
-    .select(["a.id", "a.name", "a.image", "a.leader_userid"])
+    .select(["a.id", "a.name", "a.image", "a.crest", "a.leader_userid"])
     .where({ world_id: worldid, map_version: MapRoomVersion.V2 })
-    .execute<{ id: number; name: string; image: number; leader_userid: number }[]>("all");
+    .execute<{ id: number; name: string; image: number; crest: string | null; leader_userid: number }[]>("all");
   for (const row of allianceRows) {
-    alliances[row.id] = { name: row.name, image: row.image, leader: row.leader_userid, members: [], relationships: {} };
+    alliances[row.id] = { name: row.name, image: row.image, ...(row.crest && { crest: row.crest }), leader: row.leader_userid, members: [], relationships: {} };
   }
   const allianceIds = allianceRows.map((row) => row.id);
   if (allianceIds.length) {

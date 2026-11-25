@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
-import { BaseBuff, BaseBuffLibrary, IPlayerHandler, Player, print } from "@game";
+import { BaseBuff, BaseBuffLibrary, GLOBAL, IPlayerHandler, Player, POWERUPS, print } from "@game";
 
 export class BaseBuffHandler extends ASObject implements IPlayerHandler {
     static {
@@ -107,6 +107,23 @@ export class BaseBuffHandler extends ASObject implements IPlayerHandler {
             this.m_buffs = new Vector<BaseBuff>(0, false, BaseBuff);
         }
         this.m_isInitialized = true;
+        // (Inferno-only, 26 October: the alliance's power-ups' buffs, now that the yard is built: POWERUPS.ioRebuff)
+        if (GLOBAL.INFERNO_ONLY) {
+            POWERUPS.ioRebuff();
+        }
+    }
+
+    /** Inferno-only (26 October): a buff taken off (cleared) if it is on. */
+    public ioRemoveBuffByID(id: uint): void {
+        if (!this.m_buffs) {
+            return;
+        }
+        for (let i: int = (this.m_buffs.length - 1) | 0; i >= 0; i--) {
+            if (as3.vget(this.m_buffs, i).id == id) {
+                as3.vget(this.m_buffs, i).clear();
+                this.m_buffs.splice(i, 1);
+            }
+        }
     }
 
     public get name(): string {

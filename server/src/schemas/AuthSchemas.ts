@@ -7,17 +7,19 @@ const passwordLengthError = "Password must be at least 8 characters long";
 const passwordSpecialError = "Password must contain at least one special character";
 
 /**
- * Schema to validate passwords.
+ * Schema to validate a new password (register, reset).
  * - Must be at least 8 characters long.
  * - Must contain at least one special character (any non-alphanumeric character).
+ * (13 October: required: it was optional, and register or reset with none hashed undefined, a 500)
  */
-const passwordSchema = z.preprocess(
-  (input) => (input === "" ? undefined : input),
+const requiredPasswordSchema = z.preprocess(
+  (input) => (input === "" || input === undefined || input === null ? "" : input),
   z.string()
     .trim()
     .min(8, passwordLengthError)
+    // (QoL #527: bcrypt reads the first 72 bytes only: a longer one would be cut without a word)
+    .refine((p) => Buffer.byteLength(p, "utf8") <= 72, "Password must be at most 72 characters long")
     .regex(/[^a-zA-Z0-9]/, passwordSpecialError)
-    .optional()
 );
 
 /**
@@ -35,7 +37,7 @@ const usernameLengthError = "Usernames must be between 2 and 12 characters";
  * - Must be 2 to 12 characters long.
  * - Letters, numbers and underscores only.
  */
-const usernameSchema = z
+export const usernameSchema = z
   .string()
   .trim()
   .min(2, usernameLengthError)
@@ -75,7 +77,7 @@ export const UserLoginSchema = z.object({
 export const UserRegistrationSchema = z.object({
   username: usernameSchema,
   email: emailSchema,
-  password: passwordSchema,
+  password: requiredPasswordSchema,
   /** Inferno-only: the invite code the game was started with (services/user/referrals.ts). */
   ref: z.string().max(32).optional(),
 });
@@ -100,8 +102,33 @@ export const UpdateSettingsSchema = z.object({
  * - Password must meet the password schema requirements.
  * - Token must be a string.
  */
+/** Inferno-only (QoL #198): a new password chosen while logged in, with the one it replaces. */
+export const ChangePasswordSchema = z.object({
+  oldPassword: z.string().trim().min(1, "Type your current password"), // (18 October: trimmed, as login does)
+  newPassword: requiredPasswordSchema,
+});
+
+/**
+ * Inferno-only (QoL #199): a new email chosen while logged in, with the current password. The email is checked as
+ * at registration (lowercased); the password is only compared, so any password that signs in is accepted.
+ */
+export const ChangeEmailSchema = z.object({
+  email: emailSchema,
+  password: z.string().trim().min(1, "Type your current password").max(256), // (18 October: trimmed, as login does)
+});
+
+/**
+ * Inferno-only (QoL #197): the Shiny lock. `above`: spending more than this many Shiny asks for the password
+ * (0 = off), set with the current password; or `check` the password before such a spend.
+ */
+export const ShinyLockSchema = z.object({
+  password: z.string().trim().min(1, "Type your password").max(256), // (18 October: trimmed, as login does)
+  above: z.coerce.number().int().min(0).max(1_000_000).optional(),
+  check: z.preprocess((v) => v === true || v === "1" || v === 1, z.boolean()).optional(),
+});
+
 export const ResetPasswordSchema = z.object({
-  password: passwordSchema,
+  password: requiredPasswordSchema,
   token: z.string(),
 });
 

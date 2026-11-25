@@ -3,9 +3,9 @@ import { ASObject, int, uint } from "as3";
 import { GradientType, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
-import { Matrix } from "flash/geom";
+import { Matrix, Rectangle } from "flash/geom";
 import { TextField, TextFormat, TextFormatAlign } from "flash/text";
-import { CasinoUI, GLOBAL, IoMapShare, IoMapSnapshot, IoQuests, KEYS, LOGIN, POPUPSETTINGS, SOUNDS, URLLoaderApi } from "@game";
+import { IoWin, IoPinchZoom, CasinoUI, Chat, GLOBAL, IoChatMenu, IoKit, IoMapShare, IoMapSnapshot, IoQuests, IoTextPrompt, KEYS, LOGIN, POPUPSETTINGS, SOUNDS, URLLoaderApi } from "@game";
 
 /**
  * Inferno-only: the leaderboards, opened by the top bar's button right of the Shiny (UI_TOP). Three tabs:
@@ -14,7 +14,8 @@ import { CasinoUI, GLOBAL, IoMapShare, IoMapSnapshot, IoQuests, KEYS, LOGIN, POP
  *               alliance and empire value (the main yard's and every outpost's together);
  *  - Alliances: every alliance, the highest empire value first, with its members' outposts; the arrow
  *               opens its members, each with their empire value and outposts, the highest first;
- *  - Gamblers:  everyone who has bet in the Brimstone Pit, the most gambled first, with the lifetime net.
+ *  - Gamblers:  everyone who has bet in the Brimstone Pit, the most gambled first, with the lifetime net;
+ *  (A fourth, Hellgate, was taken off on 20 October; the server still sends its list, "defenders".)
  *
  * Every world's players are listed, each with their world (named after the owner of its cell 0x0); the
  * World button keeps the list to one. Jump opens the map on a player's main yard when it is on the
@@ -104,7 +105,7 @@ export class IoLeaderboards extends ASObject {
             IoLeaderboards.ROW_W = (IoLeaderboards.LIST_W - IoLeaderboards.BAR_W - 6) | 0;
             IoLeaderboards.WHEEL_ROWS = 3;
             IoLeaderboards.JUMP_W = 52;
-            IoLeaderboards.COLUMNS = [[["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_player", 170, "left"], ["world", "lb_col_world", 130, "left"], ["alliance", "lb_col_alliance", 130, "left"], ["outposts", "lb_col_outposts", 76, "right"], ["empire", "lb_col_empire", 110, "right"]], [["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_alliance", 200, "left"], ["world", "lb_col_world", 130, "left"], ["members", "lb_col_members", 80, "right"], ["outposts", "lb_col_outposts", 80, "right"], ["empire", "lb_col_empire", 126, "right"]], [["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_player", 200, "left"], ["world", "lb_col_world", 130, "left"], ["bets", "lb_col_bets", 76, "right"], ["gambled", "lb_col_gambled", 104, "right"], ["net", "lb_col_net", 106, "right"]]];
+            IoLeaderboards.COLUMNS = [[["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_player", 170, "left"], ["world", "lb_col_world", 130, "left"], ["alliance", "lb_col_alliance", 130, "left"], ["outposts", "lb_col_outposts", 76, "right"], ["empire", "lb_col_empire", 110, "right"]], [["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_alliance", 200, "left"], ["world", "lb_col_world", 130, "left"], ["members", "lb_col_members", 80, "right"], ["outposts", "lb_col_outposts", 80, "right"], ["empire", "lb_col_empire", 126, "right"]], [["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_player", 200, "left"], ["world", "lb_col_world", 130, "left"], ["bets", "lb_col_bets", 76, "right"], ["gambled", "lb_col_gambled", 104, "right"], ["net", "lb_col_net", 106, "right"]], [["rank", "lb_col_rank", 46, "center"], ["name", "lb_col_player", 200, "left"], ["world", "lb_col_world", 130, "left"], ["waves", "lb_col_waves", 96, "right"], ["kills", "lb_col_kills", 100, "right"], ["runs", "lb_col_runs", 90, "right"]]];
             IoLeaderboards._data = null;
             IoLeaderboards._fetchedAt = 0;
             IoLeaderboards._nextAt = 0;
@@ -142,6 +143,9 @@ export class IoLeaderboards extends ASObject {
     private _flashUid: int;
     private _flashUntil: int;
 
+    /** The World button's width (156; 214 before Find came next to Find me, QoL #189). */
+    private static readonly WORLD_W: int = 156;
+
     public $ctor(): void {
         this._tabs = [];
         this._pool = [];
@@ -153,21 +157,28 @@ export class IoLeaderboards extends ASObject {
         let title: TextField = as3.as(this.mc.addChild(CasinoUI.title(KEYS.Get("lb_title"), 34, (IoLeaderboards.W - 200) | 0)), TextField);
         title.x = -IoLeaderboards.W / 2 + 100;
         title.y = -IoLeaderboards.H / 2 + 24;
+        // (20 October: no Hellgate tab any more; the other three keep their place)
         let names: any[] = ["lb_tab_outposts", "lb_tab_alliances", "lb_tab_gamblers"];
         for (let i: int = 0; i < names.length; i++) {
-            let tab: Sprite = CasinoUI.toggle(KEYS.Get(as3.str(names[i])), 128, 28, this.tabClick(i));
+            // (a little narrower since Hellgate Defense's tab, to leave Find me and World their room)
+            let tab: Sprite = CasinoUI.toggle(KEYS.Get(as3.str(names[i])), 98, 28, this.tabClick(i), "tab");
             tab.name = "ioLbTab" + i;
-            tab.x = IoLeaderboards.LIST_X + i * 136;
+            tab.x = IoLeaderboards.LIST_X + i * 104;
             tab.y = -IoLeaderboards.H / 2 + 110;
             this.mc.addChild(tab);
             this._tabs.push(tab);
         }
-        let me: Sprite = as3.as(this.mc.addChild(CasinoUI.button(KEYS.Get("lb_find_me"), 104, 28, as3.bind(this, this.findMe), true, 13)), Sprite);
+        // (QoL #189: Find, a player by name; the World button a little narrower for it)
+        let find: Sprite = as3.as(this.mc.addChild(CasinoUI.button(KEYS.Get("lb_find_name"), 62, 28, as3.bind(this, this.findAsk), true, 12)), Sprite);
+        find.name = "ioLbFind";
+        find.x = IoLeaderboards.W / 2 - 20 - IoLeaderboards.WORLD_W - 8 - 96 - 6 - 62;
+        find.y = -IoLeaderboards.H / 2 + 110;
+        let me: Sprite = as3.as(this.mc.addChild(CasinoUI.button(KEYS.Get("lb_find_me"), 96, 28, as3.bind(this, this.findMe), true, 13)), Sprite);
         me.name = "ioLbFindMe";
-        me.x = IoLeaderboards.W / 2 - 20 - 214 - 112;
+        me.x = IoLeaderboards.W / 2 - 20 - IoLeaderboards.WORLD_W - 8 - 96;
         me.y = -IoLeaderboards.H / 2 + 110;
         this._worldButton = as3.as(this.mc.addChild(this.worldButton()), Sprite);
-        this._worldButton.x = IoLeaderboards.W / 2 - 20 - 214;
+        this._worldButton.x = IoLeaderboards.W / 2 - 20 - IoLeaderboards.WORLD_W;
         this._worldButton.y = -IoLeaderboards.H / 2 + 110;
         this._heads = as3.as(this.mc.addChild(new Sprite()), Sprite);
         this._heads.x = IoLeaderboards.LIST_X;
@@ -186,6 +197,7 @@ export class IoLeaderboards extends ASObject {
         mask.graphics.endFill();
         this._rowsLayer.mask = mask;
         this._holder.addEventListener(MouseEvent.MOUSE_WHEEL, as3.bind(this, this.onWheel));
+        IoPinchZoom.swipe(this._holder, (d: number): void => { this._offset -= d; this.render(); }); // (QoL #545: a finger drags the list)
         let viewRows: int = ((Math.ceil((IoLeaderboards.LIST_H - 2) / IoLeaderboards.ROW_H) | 0) + 1) | 0;
         for (let r: int = 0; r < viewRows; r++) {
             this._pool.push(this.makeRow());
@@ -213,26 +225,20 @@ export class IoLeaderboards extends ASObject {
         this._count.x = IoLeaderboards.LIST_X + IoLeaderboards.LIST_W - 260;
         this._count.y = IoLeaderboards.LIST_TOP + IoLeaderboards.LIST_H + 8;
         // close
-        let x: Sprite = as3.as(this.mc.addChild(new Sprite()), Sprite);
-        x.name = "ioLbClose";
-        x.buttonMode = true;
-        x.mouseChildren = false;
-        x.graphics.lineStyle(2, 14708778, 1);
-        x.graphics.beginFill(2755078, 1);
-        x.graphics.drawCircle(0, 0, 14);
-        x.graphics.endFill();
-        x.graphics.lineStyle(3, 16766346, 1);
-        x.graphics.moveTo(-5, -5);
-        x.graphics.lineTo(5, 5);
-        x.graphics.moveTo(5, -5);
-        x.graphics.lineTo(-5, 5);
+        // (the kit's close button, 11 October)
+        let x: Sprite = as3.as(this.mc.addChild(IoKit.closeButton("ioLbClose", 14, (e: any): void => {})), Sprite);
         x.x = IoLeaderboards.W / 2 - 24;
         x.y = -IoLeaderboards.H / 2 + 24;
         x.addEventListener(MouseEvent.CLICK, as3.bind(this, this.close));
         this.mc.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.tick));
         GLOBAL.BlockerAdd(GLOBAL._layerTop);
+        // (QoL #464: a click on the backdrop closes it)
+        GLOBAL.ioBackdropCloses((): void => {
+            this.close();
+        });
         GLOBAL._layerTop.addChild(this.mc);
         POPUPSETTINGS.AlignToCenter(this.mc);
+        IoWin.fit(this.mc, IoLeaderboards.W, IoLeaderboards.H); // (QoL #466)
         POPUPSETTINGS.ScaleUp(this.mc);
         if (IoLeaderboards._world >= 0 && (!IoLeaderboards._data || IoLeaderboards._world >= (as3.as(IoLeaderboards._data.worlds, Array)).length)) {
             IoLeaderboards._world = -1;
@@ -278,6 +284,8 @@ export class IoLeaderboards extends ASObject {
         bg.graphics.drawRoundRect(-IoLeaderboards.W / 2, -IoLeaderboards.H / 2, IoLeaderboards.W, IoLeaderboards.H, 22, 22);
         bg.graphics.endFill();
         bg.filters = [new GlowFilter(0xFF4A00, 0.55, 18, 18, 2, 2)];
+        // (12 October: its inside is opaque, so a live yard under it is not drawn again under it: DisplayObject.ioOccludes)
+        this.mc.ioOccludes(new Rectangle(-IoLeaderboards.W / 2 + 12, -IoLeaderboards.H / 2 + 12, IoLeaderboards.W - 24, IoLeaderboards.H - 24));
         let art: Sprite = as3.as(this.mc.addChild(new Sprite()), Sprite);
         // (a holder each: the banner stays over the background whichever loads first)
         CasinoUI.picture(as3.as(art.addChild(new Sprite()), Sprite), "leaderboards/bg.jpg", -IoLeaderboards.W / 2 + 6, -IoLeaderboards.H / 2 + 6, IoLeaderboards.W - 12, IoLeaderboards.H - 12);
@@ -287,6 +295,8 @@ export class IoLeaderboards extends ASObject {
         mask.graphics.drawRoundRect(-IoLeaderboards.W / 2 + 6, -IoLeaderboards.H / 2 + 6, IoLeaderboards.W - 12, IoLeaderboards.H - 12, 18, 18);
         mask.graphics.endFill();
         art.mask = mask;
+        // (the kit's forged rim, 11 October)
+        IoKit.rim(this.mc, "ioLbRim", -IoLeaderboards.W / 2, -IoLeaderboards.H / 2, IoLeaderboards.W, IoLeaderboards.H, bg);
     }
 
     // ---- tabs, worlds
@@ -297,6 +307,9 @@ export class IoLeaderboards extends ASObject {
     }
 
     public selectTab(i: int): void {
+        if (i < 0 || i >= this._tabs.length) {
+            i = 0;
+        }
         IoLeaderboards._tab = i;
         for (let k: int = 0; k < this._tabs.length; k++) {
             CasinoUI.choose(as3.cast(this._tabs[k], Sprite), k == i);
@@ -307,7 +320,7 @@ export class IoLeaderboards extends ASObject {
     }
 
     private worldButton(): Sprite {
-        let b: Sprite = CasinoUI.button("", 214, 28, as3.bind(this, this.toggleWorlds), true, 13);
+        let b: Sprite = CasinoUI.button("", IoLeaderboards.WORLD_W, 28, as3.bind(this, this.toggleWorlds), true, 13);
         b.name = "ioLbWorld";
         this._worldLabel = as3.as(b.getChildAt(0), TextField);
         return b;
@@ -320,6 +333,7 @@ export class IoLeaderboards extends ASObject {
 
     private updateWorldButton(): void {
         this._worldLabel.text = KEYS.Get("lb_world_btn", { "v1": this.worldName(IoLeaderboards._world) }) + " ▾";
+        GLOBAL.ioFitText(this._worldLabel, 9);
     }
 
     private toggleWorlds(e: MouseEvent = null): void {
@@ -338,7 +352,7 @@ export class IoLeaderboards extends ASObject {
         let columns: int = Math.ceil(shown / 12) | 0;
         this._worldList = as3.as(this.mc.addChild(CasinoUI.panel((columns * 208 + 6) | 0, (rows * 26 + 8) | 0, 0.97)), Sprite);
         this._worldList.name = "ioLbWorldList";
-        this._worldList.x = this._worldButton.x + 214 - (columns * 208 + 6);
+        this._worldList.x = this._worldButton.x + IoLeaderboards.WORLD_W - (columns * 208 + 6);
         this._worldList.y = this._worldButton.y + 32;
         for (let n: int = 0; n < shown; n++) {
             let choice: Sprite = CasinoUI.toggle(this.worldName(entries[n] | 0), 202, 24, this.worldClick(entries[n] | 0));
@@ -365,14 +379,132 @@ export class IoLeaderboards extends ASObject {
         this._worldList = null;
     }
 
+    /** Inferno-only (QoL #191): the column the rows are sorted by ("" the board's own order), and which way. */
+    public static ioSortKey: string = "";
+
+    public static ioSortDesc: boolean = true;
+
+    /** A click on a heading: sorted by it (numbers biggest first, names A to Z); again, the other way; Rank, back. */
+    public ioSortBy(key: string): void {
+        if (key == "rank" || (key == IoLeaderboards.ioSortKey && IoLeaderboards.ioSortDesc != IoLeaderboards.ioNumeric(key))) {
+            IoLeaderboards.ioSortKey = "";
+        } else if (key == IoLeaderboards.ioSortKey) {
+            IoLeaderboards.ioSortDesc = !IoLeaderboards.ioSortDesc;
+        } else {
+            IoLeaderboards.ioSortKey = key;
+            IoLeaderboards.ioSortDesc = IoLeaderboards.ioNumeric(key);
+        }
+        SOUNDS.Play("click1");
+        this.drawHeads();
+        this.fill(true);
+    }
+
+    private static ioNumeric(key: string): boolean {
+        return key != "name" && key != "world" && key != "alliance";
+    }
+
+    /** What a row is sorted by, for a column. */
+    private ioSortValue(item: any, key: string): any {
+        let kind: string = as3.str(item.kind);
+        let g: any = item.g;
+        let p: any = item.p;
+        switch (key) {
+            case "name":
+                return String(kind == "alliance" ? item.a.name : (g ? g.name : p ? p.name : "")).toLowerCase();
+            case "world":
+                return this.worldName(kind == "alliance" ? item.a.w | 0 : (g ? g.w | 0 : p ? p.w | 0 : 0)).toLowerCase();
+            case "alliance":
+                let a: any = p ? IoLeaderboards._data.allianceById[String(p.alliance)] : null;
+                return a ? String(a.name).toLowerCase() : "~";
+            case "members":
+                return kind == "alliance" ? (as3.as(item.a.members, Array)).length : 0;
+            case "outposts":
+                return Number(kind == "alliance" ? item.a.outposts : (p ? p.outposts : 0));
+            case "empire":
+                return Number(kind == "alliance" ? item.a.empire : (p ? p.empire : 0));
+            case "bets":
+                return Number(g ? g.bets : 0);
+            case "gambled":
+                return Number(g ? g.wagered : 0);
+            case "net":
+                return Number(g ? g.net : 0);
+            case "waves":
+                return Number(g ? g.waves : 0);
+            case "kills":
+                return Number(g ? g.kills : 0);
+            case "runs":
+                return Number(g ? g.runs : 0);
+        }
+        return item.rank | 0;
+    }
+
+    /** The rows in the column's order (an alliance's members stay under it); the ranks are the board's own. */
+    private ioSorted(rows: any[]): any[] {
+        let key: string = IoLeaderboards.ioSortKey;
+        let known: boolean = false;
+        for (let column of as3.values(IoLeaderboards.COLUMNS[IoLeaderboards._tab])) {
+            if (column[0] == key) {
+                known = true;
+            }
+        }
+        if (!key || !known) {
+            return rows;
+        }
+        let groups: any[] = [];
+        for (let r of as3.values(rows)) {
+            if (r.kind == "member" && groups.length) {
+                groups[groups.length - 1].push(r);
+            } else {
+                groups.push([r]);
+            }
+        }
+        let desc: boolean = IoLeaderboards.ioSortDesc;
+        let values: any = new Map<any, any>();
+        for (let g0 of as3.values(groups)) {
+            values.set(g0, this.ioSortValue(g0[0], key));
+        }
+        groups.sort((x: any, y: any): number => {
+            let a: any = values.get(x);
+            let b: any = values.get(y);
+            if (a == b) {
+                return (x[0].rank | 0) - (y[0].rank | 0);
+            }
+            return (a < b ? -1 : 1) * (desc ? -1 : 1);
+        });
+        let out: any[] = [];
+        for (let g1 of as3.values(groups)) {
+            for (let r1 of as3.values(g1)) {
+                out.push(r1);
+            }
+        }
+        return out;
+    }
+
     private drawHeads(): void {
         CasinoUI.removeAll(this._heads);
         let x: int = 2;
         for (let column of as3.values(IoLeaderboards.COLUMNS[IoLeaderboards._tab])) {
-            let t: TextField = as3.as(this._heads.addChild(CasinoUI.label(KEYS.Get(as3.str(column[1])), 12, CasinoUI.GOLD, true, (column[2] - 8) | 0, as3.str(column[3]))), TextField);
+            let key: string = as3.str(column[0]);
+            let label: string = KEYS.Get(as3.str(column[1]));
+            if (GLOBAL.INFERNO_ONLY && key == IoLeaderboards.ioSortKey) {
+                label += IoLeaderboards.ioSortDesc ? " ▼" : " ▲";
+            }
+            let t: TextField = as3.as(this._heads.addChild(CasinoUI.label(label, 12, (GLOBAL.INFERNO_ONLY && key == IoLeaderboards.ioSortKey ? 0xFFFFFF : CasinoUI.GOLD) >>> 0, true, (column[2] - 8) | 0, as3.str(column[3]))), TextField);
             t.x = x + 4;
             t.y = 2;
             GLOBAL.ioFitText(t);
+            // (QoL #191: a click sorts by the column)
+            if (GLOBAL.INFERNO_ONLY) {
+                let hit: Sprite = as3.as(this._heads.addChild(new Sprite()), Sprite);
+                hit.name = "ioLbSort:" + key;
+                hit.graphics.beginFill(0, 0);
+                hit.graphics.drawRect(x, 0, column[2], 22);
+                hit.graphics.endFill();
+                hit.buttonMode = true;
+                hit.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                    this.ioSortBy(key);
+                });
+            }
             // ("Valeur de l'empire", "Avant-postes" were cut off)
             x = (x + column[2]) | 0;
         }
@@ -392,6 +524,15 @@ export class IoLeaderboards extends ASObject {
                 let id: string = IoLeaderboards.allianceKey(entry.item.a);
                 IoLeaderboards._expanded[id] = !IoLeaderboards._expanded[id];
                 this.fill(false);
+                return;
+            }
+            // (Inferno-only, QoL #190: a player's row opens the name menu, as a name in chat does: Message, Jump,
+            // Invite, Find…)
+            let who: any = entry.item ? (entry.item.kind == "gambler" || entry.item.kind == "defender" ? entry.item.g : entry.item.p) : null;
+            if (GLOBAL.INFERNO_ONLY && who && (who.uid | 0) > 0) {
+                SOUNDS.Play("click1");
+                let ignored: boolean = Chat._bymChat != null && Chat._bymChat.userIsIgnored(String(who.uid | 0));
+                IoChatMenu.Show(String(who.uid | 0), String(who.name), ignored, e.stageX, e.stageY, { "aid": who.alliance != null ? who.alliance | 0 : null });
             }
         });
         entry.line = line;
@@ -415,21 +556,21 @@ export class IoLeaderboards extends ASObject {
     /** Works the tab's list out again (back to the top when `top`). */
     private fill(top: boolean): void {
         this.updateWorldButton();
-        this._list = IoLeaderboards._data ? this.rowsFor(IoLeaderboards._tab) : [];
+        this._list = IoLeaderboards._data ? this.ioSorted(this.rowsFor(IoLeaderboards._tab)) : [];
         for (let entry of as3.values(this._pool)) {
             entry.index = -1;
         }
         if (top) {
             this._offset = 0;
         }
-        this._status.text = IoLeaderboards._data ? (this._list.length ? "" : KEYS.Get("lb_none")) : (IoLeaderboards._loading || !IoLeaderboards._failedAt ? KEYS.Get("lb_loading") : KEYS.Get("lb_failed"));
+        this._status.text = IoLeaderboards._data ? (this._list.length ? "" : KEYS.Get("lb_none")) : (IoLeaderboards._loading || !IoLeaderboards._failedAt ? IoWin.loadingText(KEYS.Get("lb_loading")) : KEYS.Get("lb_failed"));
         let counted: int = 0;
         for (let item of as3.values(this._list)) {
             if (item.kind != "member") {
                 counted++;
             }
         }
-        this._count.text = !IoLeaderboards._data ? "" : (counted == 1 ? KEYS.Get(as3.str(["lb_count_player", "lb_count_alliance", "lb_count_gambler"][IoLeaderboards._tab])) : KEYS.Get(as3.str(["lb_count_players", "lb_count_alliances", "lb_count_gamblers"][IoLeaderboards._tab]), { "v1": GLOBAL.FormatNumber(counted) }));
+        this._count.text = !IoLeaderboards._data ? "" : (counted == 1 ? KEYS.Get(as3.str(["lb_count_player", "lb_count_alliance", "lb_count_gambler", "lb_count_defender"][IoLeaderboards._tab])) : KEYS.Get(as3.str(["lb_count_players", "lb_count_alliances", "lb_count_gamblers", "lb_count_defenders"][IoLeaderboards._tab]), { "v1": GLOBAL.FormatNumber(counted) }));
         let viewH: int = (IoLeaderboards.LIST_H - 2) | 0;
         let total: number = this._list.length * IoLeaderboards.ROW_H;
         this._track.visible = this._thumb.visible = total > viewH;
@@ -469,10 +610,17 @@ export class IoLeaderboards extends ASObject {
                     }
                 }
             }
-        } else {
+        } else if (tab == 2) {
             for (let g of as3.values(as3.sort((as3.as(IoLeaderboards._data.gamblers, Array)), IoLeaderboards.byGambled))) {
                 if (IoLeaderboards._world < 0 || g.w == IoLeaderboards._world) {
                     out.push({ "kind": "gambler", "rank": ++rank, "g": g, "p": IoLeaderboards._data.byUid[String(g.uid)] || null });
+                }
+            }
+        } else {
+            // (a defender is listed like a gambler: by its own row, "g")
+            for (let d of as3.values(as3.sort((as3.as(IoLeaderboards._data.defenders, Array)), IoLeaderboards.byWaves))) {
+                if (IoLeaderboards._world < 0 || d.w == IoLeaderboards._world) {
+                    out.push({ "kind": "defender", "rank": ++rank, "g": d, "p": IoLeaderboards._data.byUid[String(d.uid)] || null });
                 }
             }
         }
@@ -518,6 +666,17 @@ export class IoLeaderboards extends ASObject {
         return IoLeaderboards.byName(a, b);
     }
 
+    /** The most waves survived first; ties: more kills that run, then the name. */
+    private static byWaves(a: any, b: any): int {
+        if (a.waves != b.waves) {
+            return a.waves > b.waves ? -1 : 1;
+        }
+        if (a.kills != b.kills) {
+            return a.kills > b.kills ? -1 : 1;
+        }
+        return IoLeaderboards.byName(a, b);
+    }
+
     /** Puts the rows at the scroll position into the rows on screen. */
     private render(): void {
         let viewH: int = (IoLeaderboards.LIST_H - 2) | 0;
@@ -554,7 +713,7 @@ export class IoLeaderboards extends ASObject {
             line.graphics.beginFill((flash ? 0xA05A14 : fillColour) >>> 0, mine || flash ? 0.95 : 0.85);
             line.graphics.drawRect(0, 0, IoLeaderboards.ROW_W, IoLeaderboards.ROW_H - 1);
             line.graphics.endFill();
-            line.buttonMode = item.kind == "alliance";
+            line.buttonMode = item.kind == "alliance" || GLOBAL.INFERNO_ONLY;
             let x: int = 0;
             let columns: any[] = as3.cast(IoLeaderboards.COLUMNS[IoLeaderboards._tab], Array);
             for (let c: int = 0; c < 6; c++) {
@@ -597,9 +756,9 @@ export class IoLeaderboards extends ASObject {
                 if (kind == "member") {
                     return "    " + String(p.name);
                 }
-                return String(kind == "gambler" ? item.g.name : p.name);
+                return String(kind == "gambler" || kind == "defender" ? item.g.name : p.name);
             case "world":
-                return this.worldName(kind == "alliance" ? item.a.w | 0 : (kind == "gambler" ? item.g.w | 0 : p.w | 0));
+                return this.worldName(kind == "alliance" ? item.a.w | 0 : (kind == "gambler" || kind == "defender" ? item.g.w | 0 : p.w | 0));
             case "alliance":
                 let a: any = IoLeaderboards._data.allianceById[String(p.alliance)];
                 return a ? String(a.name) : "";
@@ -616,6 +775,12 @@ export class IoLeaderboards extends ASObject {
             case "net":
                 let net: number = Number(item.g.net);
                 return (net > 0 ? "+" : (net < 0 ? "-" : "")) + GLOBAL.FormatNumber(Math.abs(net));
+            case "waves":
+                return GLOBAL.FormatNumber(Number(item.g.waves));
+            case "kills":
+                return GLOBAL.FormatNumber(Number(item.g.kills));
+            case "runs":
+                return GLOBAL.FormatNumber(Number(item.g.runs));
         }
         return "";
     }
@@ -669,6 +834,47 @@ export class IoLeaderboards extends ASObject {
     }
 
     /** Scrolls to the player's own row (opening their alliance on the Alliances tab), and lights it up. */
+    /** QoL #189: a player found by name (any capitals; the whole name, or else the only name containing it). */
+    private findAsk(e: MouseEvent = null): void {
+        SOUNDS.Play("click1");
+        IoTextPrompt.Show(KEYS.Get("lb_find_title"), KEYS.Get("lb_find_text"), "", 30, KEYS.Get("lb_find_name"), (typed: string): void => {
+            this.findName(String(typed || ""));
+        });
+    }
+
+    public findName(typed: string): void {
+        let want: string = typed.replace(/^\s+|\s+$/g, "").toLowerCase();
+        if (!want || !IoLeaderboards._data) {
+            return;
+        }
+        let exact: any = null;
+        let some: any[] = [];
+        for (let p of as3.values(IoLeaderboards._data.players)) {
+            let name: string = String(p.name).toLowerCase();
+            if (name == want) {
+                exact = p;
+                break;
+            }
+            if (name.indexOf(want) >= 0) {
+                some.push(p);
+            }
+        }
+        let hit: any = exact || (some.length == 1 ? some[0] : null);
+        if (!hit) {
+            GLOBAL.Message(some.length ? KEYS.Get("lb_find_many", { "v1": some.length, "v2": typed, "v3": some.slice(0, 8).map((p: any): string => String(p.name)).join(", ") }) : KEYS.Get("lb_find_none", { "v1": typed }));
+            return;
+        }
+        if (IoLeaderboards._tab > 1) {
+            this.selectTab(0);
+        }
+        if (IoLeaderboards._world >= 0 && (hit.w | 0) != IoLeaderboards._world) {
+            IoLeaderboards._world = -1;
+            this.updateWorldButton();
+            this.fill(false);
+        }
+        this.findUid(hit.uid | 0, String(hit.name));
+    }
+
     private findMe(e: MouseEvent = null): void {
         IoQuests.once("lb_findme");
         // (the quest book)
@@ -696,7 +902,7 @@ export class IoLeaderboards extends ASObject {
     public static JumpToPlayer(param1: int, param2: string): void {
         let go: Function = (): void => {
             let p: any = IoLeaderboards._data ? IoLeaderboards._data.byUid[String(param1)] : null;
-            let who: string = param2 ? param2 : "That player";
+            let who: string = param2 ? param2 : KEYS.Get("io_t3m_lb_that_player");
             if (!p || (p.x | 0) < 0) {
                 GLOBAL.Message(KEYS.Get("lb_no_yard", { "v1": who }));
                 return;
@@ -758,7 +964,7 @@ export class IoLeaderboards extends ASObject {
                 return;
             }
         }
-        GLOBAL.Message(param1 == LOGIN._playerID ? KEYS.Get("lb_not_listed") : KEYS.Get("lb_not_listed_other", { "v1": param2 ? param2 : "That player" }));
+        GLOBAL.Message(param1 == LOGIN._playerID ? KEYS.Get("lb_not_listed") : KEYS.Get("lb_not_listed_other", { "v1": param2 ? param2 : KEYS.Get("io_t3m_lb_that_player") }));
     }
 
     // ---- scrolling
@@ -905,7 +1111,7 @@ export class IoLeaderboards extends ASObject {
 
     /** The server's rows as objects; alliances with their members and totals; players by uid. */
     private static parse(r: any): any {
-        let out: any = { "generatedAt": r.generatedAt | 0, "worlds": [], "players": [], "alliances": [], "gamblers": [], "byUid": {}, "allianceById": {} };
+        let out: any = { "generatedAt": r.generatedAt | 0, "worlds": [], "players": [], "alliances": [], "gamblers": [], "defenders": [], "byUid": {}, "allianceById": {} };
         let row: any[] = null;
         for (row of as3.values(as3.as(r.worlds, Array) || [])) {
             out.worlds.push({ "id": String(row[0]), "name": String(row[1]) });
@@ -932,6 +1138,9 @@ export class IoLeaderboards extends ASObject {
         }
         for (row of as3.values(as3.as(r.gamblers, Array) || [])) {
             out.gamblers.push({ "uid": row[0] | 0, "name": String(row[1]), "w": row[2] | 0, "wagered": Number(row[3]), "net": Number(row[4]), "bets": Number(row[5]) });
+        }
+        for (row of as3.values(as3.as(r.defenders, Array) || [])) {
+            out.defenders.push({ "uid": row[0] | 0, "name": String(row[1]), "w": row[2] | 0, "waves": Number(row[3]), "kills": Number(row[4]), "runs": Number(row[5]) });
         }
         return out;
     }

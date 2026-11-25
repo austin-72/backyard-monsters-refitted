@@ -23,20 +23,28 @@ export const findOrCreateThread = async (threadId: number, targetId: number, use
     return thread;
   }
 
-  // Otherwise, create a new thread
-  const [lastThread] = await postgres.em.find(
-    Thread,
-    {},
-    { orderBy: { threadid: "DESC" }, limit: 1 }
-  );
+  // Otherwise, create a new thread. (18 October, SUSPECTED-BUGS.md: its id was the highest + 1, read and written
+  // apart, so two threads made at the same moment got the same id and one failed: a letter lost. Now made in a
+  // transaction that holds a lock for thread ids, then read into this request.)
+  const threadid = await postgres.em.fork().transactional(async (em) => {
+    const ctx = em.getTransactionContext();
+    await em.getConnection().execute(`SELECT pg_advisory_xact_lock(?)`, [THREAD_ID_LOCK], "all", ctx);
+    const rows = (await em.getConnection().execute(`SELECT COALESCE(MAX(threadid), 0) + 1 AS id FROM bym.thread`, [], "all", ctx)) as { id: number | string }[];
+    const next = Number(rows[0]?.id ?? 1) || 1;
+    const fresh = new Thread();
+    fresh.userid = userId;
+    fresh.targetid = targetId;
+    fresh.threadid = next;
+    fresh.messagecount = 0;
+    em.persist(fresh);
+    await em.flush();
+    return next;
+  });
 
-  const newThread = new Thread();
-  newThread.userid = userId;
-  newThread.targetid = targetId;
-  newThread.threadid = lastThread ? lastThread.threadid + 1 : 1;
-  newThread.messagecount = 0;
-
-  postgres.em.persist(newThread);
-  await postgres.em.flush();
-  return newThread;
+  const created = await postgres.em.findOne(Thread, { threadid });
+  if (!created) throw mailboxErr();
+  return created;
 };
+
+/** The advisory lock new thread ids are taken under. */
+const THREAD_ID_LOCK = 1410901;

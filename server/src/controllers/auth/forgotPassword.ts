@@ -10,6 +10,7 @@ import { User } from "../../database/models/user.model.js";
 import { authFailureErr } from "../../errors/errors.js";
 import { ForgotPasswordSchema } from "../../schemas/AuthSchemas.js";
 import { transporter } from "../../config/MailConfig.js";
+import { resetLinkExpiry, storedResetToken } from "../../services/user/passwordReset.js";
 /**
  * Controller to handle forgot password functionality.
  *
@@ -39,9 +40,12 @@ export const forgotPassword: KoaController = async (ctx) => {
       throw authFailureErr();
     }
 
-    user.resetToken = token;
-    postgres.em.persist(user);
-    await postgres.em.flush();
+    // (18 October, SUSPECTED-BUGS.md: anyone who knew the email could cancel the 24-hour link an admin gave the
+    // player, since a request stored its own token first; with no mail set up, that token reached nobody) no mail
+    // set up: nothing changes; a link from the admin panel still good for more than this one's 20 minutes is kept
+    if (!process.env.SMTP_HOST) throw new Error("mail isn't set up on this server");
+    const kept = resetLinkExpiry(user.resetToken);
+    if (kept && kept > Date.now() + 20 * 60_000) throw new Error("an admin's reset link is still good");
 
     // Read the HTML template
     const templatePath = path.resolve(
@@ -61,8 +65,12 @@ export const forgotPassword: KoaController = async (ctx) => {
       html: emailHtml,
     };
 
-    // Send the email
+    // Send the email; the token is stored once it is on its way
     await transporter.sendMail(mailOptions);
+    // (16 October, QoL #244: kept as a hash with its time limit, as the admin panel's links are; resetPassword checks it)
+    user.resetToken = storedResetToken(token, Date.now() + 20 * 60_000);
+    postgres.em.persist(user);
+    await postgres.em.flush();
 
     ctx.status = Status.OK;
     ctx.body = { message: "Password reset email sent successfully." };

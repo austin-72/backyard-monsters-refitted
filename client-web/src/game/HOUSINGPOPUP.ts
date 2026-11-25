@@ -3,7 +3,7 @@ import { Vector, int } from "as3";
 import { Bitmap, BitmapData, DisplayObject, MovieClip, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { BASE, BFOUNDATION, BUILDING15, CREATURELOCKER, CREATURES, GLOBAL, HOUSING, HOUSINGBUNKER, HOUSINGPOPUP_CLIP, HousingPopupMonster_CLIP, INFERNOPORTAL, ImageCache, InstanceManager, IoLockIcon, KEYS, MAP, MAPROOM_DESCENT, MonsterBase, POPUPSETTINGS, SOUNDS, ScrollSet } from "@game";
+import { BASE, BFOUNDATION, BUILDING15, Button_CLIP, CREATURELOCKER, CREATURES, GLOBAL, HOUSING, HOUSINGBUNKER, HOUSINGPOPUP_CLIP, HousingPopupMonster_CLIP, INFERNOPORTAL, ImageCache, InstanceManager, IoLockIcon, IoSkins, KEYS, MAP, MAPROOM_DESCENT, MonsterBase, POPUPSETTINGS, SOUNDS, ScrollSet } from "@game";
 
 export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
     static {
@@ -29,7 +29,7 @@ export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
             this.gotoAndStop(2);
             this.bJuice.SetupKey("mh_nomonsters_btn");
             this.bJuice.Enabled = false;
-            this.bJuice.addEventListener(MouseEvent.CLICK, as3.bind(this, this.Juice));
+            this.bJuice.addEventListener(MouseEvent.CLICK, as3.bind(this, this.JuiceAsk));
             this.bAll.SetupKey("mh_selectall_btn");
             this.bAll.addEventListener(MouseEvent.CLICK, as3.bind(this, this.SelectAll));
             this.bCancel.SetupKey("mh_cancel_btn");
@@ -102,6 +102,11 @@ export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
         }
         if (GLOBAL._bJuicer) {
             this.juicefooter_desc_txt.htmlText = KEYS.Get("mh_juicefooter_desc");
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #359: what the Juicer gives back at its level, and the clicks)
+                this.juicefooter_desc_txt.htmlText = "<b>" + KEYS.Get("io_mon2_juice_rate", { "v1": GLOBAL._bJuicer._lvl.Get(), "v2": Math.round(HOUSINGPOPUP.ioJuiceRate() * 100) }) + "</b> " + KEYS.Get("io_mon2_juice_help");
+                GLOBAL.ioFitHeight(this.juicefooter_desc_txt, 8);
+            }
         } else {
             this.footer_desc_txt.htmlText = KEYS.Get(BASE.isInfernoMainYardOrOutpost ? "hb_footer_desc" : "mh_footer_desc");
         }
@@ -110,7 +115,34 @@ export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
         } else {
             this.ascend_desc_txt.htmlText = KEYS.Get("mh_ascension_noinf");
         }
+        // (Inferno-only, QoL #29: Refill army, where the Ascend button is (the Inferno yard has none))
+        if (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD) && !this.bAscend.visible) {
+            this.ioRefillSetup();
+        }
         this.Update();
+    }
+
+    /**
+     * Inferno-only (QoL #29): the Refill army button (in the Ascend button's place) and, beside it (in its text's), the
+     * last full Compound it brings back; the button says what's missing and what it costs before queueing it
+     * (HOUSING.ioRefillAsk).
+     */
+    private ioRefillSetup(): void {
+        let b: Button_CLIP = new Button_CLIP();
+        b.name = "ioRefillArmyBtn";
+        this.addChild(b);
+        b.Setup(KEYS.Get("io_yin_refill_btn"), false, 185, 30);
+        b.x = this.bAscend.x;
+        b.y = this.bAscend.y;
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            HOUSING.ioRefillAsk();
+        });
+        let army: any = HOUSING.ioArmy();
+        b.Highlight = army != null;
+        this.ascend_desc_txt.visible = true;
+        this.ascend_desc_txt.htmlText = army ? KEYS.Get("io_yin_refill_kept", { "v1": HOUSING.ioArmyNames(army.m) }) : KEYS.Get("io_yin_refill_desc_none");
+        GLOBAL.ioFitHeight(this.ascend_desc_txt, 8);
     }
 
     public GetHousableCreatures(): any[] {
@@ -302,6 +334,30 @@ export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
             }
             if (GLOBAL._bJuicer._countdownUpgrade.Get() == 0) {
                 if (GLOBAL._bJuicer.health > GLOBAL._bJuicer.maxHealth * 0.5) {
+                    if (GLOBAL.INFERNO_ONLY && param1 && (param1.shiftKey || param1.ctrlKey || param1.altKey)) {
+                        // (QoL #359: Shift-click: every one of this kind; Ctrl-click (or Alt-click, as Ctrl-click on a
+                        // Mac is a right click): one less)
+                        let housed: int = GLOBAL.player.monsterListByID(n) ? GLOBAL.player.monsterListByID(n).numCreeps | 0 : 0;
+                        let chosen: int = param1.shiftKey ? housed : Math.max(0, (this._juiceList[n] | 0) - 1) | 0;
+                        if (chosen > 0) {
+                            this._juiceList[n] = chosen;
+                        } else {
+                            delete this._juiceList[n];
+                        }
+                        let left: boolean = false;
+                        for (let k in this._juiceList) {
+                            if ((this._juiceList[k] | 0) > 0) {
+                                left = true;
+                            }
+                        }
+                        if (left) {
+                            this.Update();
+                        } else {
+                            // none left: the Juice button back to "no monsters", as Cancel does
+                            this.SelectNone();
+                        }
+                        return;
+                    }
                     if (Boolean(GLOBAL.player.monsterListByID(n)) && GLOBAL.player.monsterListByID(n).numCreeps - (this._juiceList[n] | 0) > 0) {
                         this._juiceList[n] = (this._juiceList[n] | 0) + 1;
                     }
@@ -313,6 +369,44 @@ export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
                 GLOBAL.Message(KEYS.Get("msg_juicerupgrading"));
             }
         };
+    }
+
+    /** Inferno-only (QoL #359): the share of a monster's hatching Magma the Juicer gives back (as Update counts it: 60%, 80% at level 2, all of it from 3). */
+    public static ioJuiceRate(): number {
+        return !GLOBAL._bJuicer ? 0.6 : GLOBAL._bJuicer._lvl.Get() >= 3 ? 1 : GLOBAL._bJuicer._lvl.Get() == 2 ? 0.8 : 0.6;
+    }
+
+    /** Inferno-only (QoL #281): the champions, left out of Select All (they take days to unlock). */
+    public static ioIsChampion(id: string): boolean {
+        return IoSkins.CHAMPIONS.some((c: any[]): boolean => c[0] == id);
+    }
+
+    /**
+     * Inferno-only (14 October, QoL #281 / #282): juicing asks first, naming the monsters and the Magma ("up
+     * to": a wounded monster gives less, its share of health), because it can't be undone.
+     */
+    public JuiceAsk(param1: MouseEvent = null): void {
+        if (!GLOBAL.INFERNO_ONLY) {
+            this.Juice();
+            return;
+        }
+        let names: string[] = [];
+        let magma: number = 0;
+        let rate: number = !GLOBAL._bJuicer ? 0.6 : GLOBAL._bJuicer._lvl.Get() >= 3 ? 1 : GLOBAL._bJuicer._lvl.Get() == 2 ? 0.8 : 0.6;
+        for (let id in this._juiceList) {
+            let n: int = this._juiceList[id] | 0;
+            if (n <= 0) {
+                continue;
+            }
+            names.push(n + " " + KEYS.Get(as3.str(CREATURELOCKER._creatures[id] ? CREATURELOCKER._creatures[id].name : id)));
+            magma += Math.ceil(CREATURES.GetProperty(id, "cResource") * rate) * n;
+        }
+        if (!names.length) {
+            return;
+        }
+        GLOBAL.Message(KEYS.Get("io_juice_confirm", { "v1": names.join(", "), "v2": GLOBAL.FormatNumber(magma) }), KEYS.Get("io_juice_yes"), (): void => {
+            this.Juice();
+        }, null, KEYS.Get("io_juice_no"), null);
     }
 
     public Juice(param1: MouseEvent = null): void {
@@ -362,6 +456,10 @@ export class HOUSINGPOPUP extends HOUSINGPOPUP_CLIP {
             while (_loc4_ < _loc2_) {
                 _loc3_ = as3.vget(GLOBAL.player.monsterList, _loc4_).m_creatureID;
                 _loc5_ = _loc3_.substring(0, 2) == "IC" && !BASE.isInfernoMainYardOrOutpost;
+                // (Inferno-only, QoL #281: Select All leaves the champions out; Shift-click to include them)
+                if (GLOBAL.INFERNO_ONLY && HOUSINGPOPUP.ioIsChampion(_loc3_) && !(param1 && param1.shiftKey)) {
+                    _loc5_ = true;
+                }
                 if (as3.vget(GLOBAL.player.monsterList, _loc4_).numCreeps > 0 && !_loc5_) {
                     this._juiceList[_loc3_] = as3.vget(GLOBAL.player.monsterList, _loc4_).numCreeps;
                 }

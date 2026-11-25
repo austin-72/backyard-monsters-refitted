@@ -15,6 +15,11 @@ export class Particles extends ASObject {
 
     private static _pool: Vector<ParticlesObject> = new Vector<ParticlesObject>(0, false, ParticlesObject);
 
+    /** Inferno-only (7 October, performance): one scratch picture for every snapshot, not a new one (a new canvas) each. */
+    private static _ioScratch: BitmapData = null;
+    /** Inferno-only (21 October): splats as drawn, by frame, size and dot height (SnapShot). */
+    private static _ioStamps: Map<string, BitmapData> = new Map<string, BitmapData>();
+
     public $ctor(): void {
         super.$ctor();
     }
@@ -105,7 +110,34 @@ export class Particles extends ASObject {
             _loc6_ = new Matrix();
             _loc7_ = 26;
             _loc8_ = 26;
-            _loc5_ = new BitmapData(_loc7_, _loc8_, true, 0);
+            // (Inferno-only, 21 October: a splat landed is drawn once for each look (its frame, its size to a 32nd) and
+            // then copied: a battle drew every one of hundreds as a vector clip)
+            let stampKey: string = GLOBAL.INFERNO_ONLY ? param4.currentFrame + "|" + Math.round(param3 * 32) + "|" + Math.round(param4.mcDot ? param4.mcDot.y : 0) : null;
+            let stamp: BitmapData = stampKey ? Particles._ioStamps.get(stampKey) : null;
+            if (stamp) {
+                MAP.effectsBMD.copyPixels(stamp, stamp.rect, new Point(param1 + MAP.effectsBMD.width * 0.5 - _loc7_ / 2, param2 + MAP.effectsBMD.height * 0.5 - _loc8_ * 0.5), null, null, true);
+                return;
+            }
+            if (stampKey && Particles._ioStamps.size < 96) {
+                stamp = new BitmapData(_loc7_, _loc8_, true, 0);
+                _loc6_.scale(Math.round(param3 * 32) / 32, Math.round(param3 * 32) / 32);
+                _loc6_.tx = _loc7_ * 0.5;
+                _loc6_.ty = _loc8_ * 0.5;
+                stamp.draw(as3.cast(param4, IBitmapDrawable), _loc6_);
+                Particles._ioStamps.set(stampKey, stamp);
+                MAP.effectsBMD.copyPixels(stamp, stamp.rect, new Point(param1 + MAP.effectsBMD.width * 0.5 - _loc7_ / 2, param2 + MAP.effectsBMD.height * 0.5 - _loc8_ * 0.5), null, null, true);
+                return;
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                if (!Particles._ioScratch) {
+                    Particles._ioScratch = new BitmapData(_loc7_, _loc8_, true, 0);
+                } else {
+                    Particles._ioScratch.fillRect(Particles._ioScratch.rect, 0);
+                }
+                _loc5_ = Particles._ioScratch;
+            } else {
+                _loc5_ = new BitmapData(_loc7_, _loc8_, true, 0);
+            }
             _loc6_.scale(param3, param3);
             _loc6_.tx = _loc7_ * 0.5;
             _loc6_.ty = _loc8_ * 0.5;

@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { int } from "as3";
 import { Point } from "flash/geom";
-import { ATTACK, BTRAP, EFFECTS, GIBLETS, GLOBAL, KEYS, MonsterBase, SOUNDS, Targeting } from "@game";
+import { ATTACK, BTRAP, EFFECTS, GIBLETS, GLOBAL, IoTilt, KEYS, MonsterBase, SOUNDS, Targeting } from "@game";
 
 export class BHEAVYTRAP extends BTRAP {
     public $ctor(): void {
@@ -25,6 +25,17 @@ export class BHEAVYTRAP extends BTRAP {
             _loc2_ = as3.cast(_loc1_.creep, MonsterBase);
             _loc4_ = Number(_loc1_.dist);
             _loc5_ = as3.cast(_loc1_.pos, Point);
+            // Inferno-only (21 November, the user's): a heavy trap is set off by a champion stepping on it, and nothing
+            // else (the champions of the cage, Korath, Drull, Ashkarr, Rimegrave, the Basilisk: IoTilt.isChampion). Its
+            // blast (Explode) hurts every monster in it, as before.
+            if (GLOBAL.INFERNO_ONLY) {
+                if (_loc2_.health > 0 && IoTilt.isChampion(_loc2_._creatureID)) {
+                    this._targetCreeps.push({ "creep": _loc2_, "dist": _loc4_, "position": _loc5_ });
+                    this._hasTargets = true;
+                    return;
+                }
+                continue;
+            }
             _loc8_ = _loc2_._creatureID.substr(0, 1);
             _loc9_ = Number(_loc2_._creatureID.substring(_loc2_._creatureID.indexOf("C") + 1)) | 0;
             if (!(_loc8_ == "C" && (_loc9_ < 10 || _loc9_ > 12))) {
@@ -54,7 +65,7 @@ export class BHEAVYTRAP extends BTRAP {
                 _loc8_++;
                 _loc4_ = Number(_loc1_.dist);
                 _loc5_ = as3.cast(_loc1_.pos, Point);
-                _loc2_.modifyHealth(-(this._buildingProps.damage[0] / this._buildingProps.size * (this._buildingProps.size - _loc4_ * 0.5)));
+                _loc2_.modifyHealth(-(this.damage / this._buildingProps.size * (this._buildingProps.size - _loc4_ * 0.5)));
                 if (_loc2_.health <= 0) {
                     _loc9_++;
                     GIBLETS.Create(new Point(this._mc.x, this._mc.y + 3), 0.8, 75, 2);
@@ -69,7 +80,7 @@ export class BHEAVYTRAP extends BTRAP {
                 _loc8_++;
                 _loc4_ = Number(_loc1_.dist);
                 _loc5_ = as3.cast(_loc1_.pos, Point);
-                _loc2_.modifyHealth(-(this._buildingProps.damage[0] * 0.5 / this._buildingProps.size * (this._buildingProps.size - _loc4_ * 0.5)));
+                _loc2_.modifyHealth(-(this.damage * 0.5 / this._buildingProps.size * (this._buildingProps.size - _loc4_ * 0.5)));
                 if (_loc2_.health <= 0) {
                     _loc9_++;
                     GIBLETS.Create(new Point(this._mc.x, this._mc.y + 3), 0.8, 75, 2);

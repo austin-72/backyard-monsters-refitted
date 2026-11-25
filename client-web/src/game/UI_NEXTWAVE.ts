@@ -16,6 +16,10 @@ export class UI_NEXTWAVE extends NEXTWAVEBAR_CLIP {
     }
 
     public static ShouldDisplay(): boolean {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return false;
+        }
         if (GLOBAL.mode !== GLOBAL.e_BASE_MODE.BUILD) {
             return false;
         }

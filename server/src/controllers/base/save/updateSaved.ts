@@ -20,6 +20,9 @@ import { runningPowerups } from "../../../services/alliance/powerups.js";
 import { visibleCredits } from "../../../services/user/shinyLock.js";
 import { isDesignBaseId, parseDesignBaseId } from "../../../services/admin/designs.js";
 import { isAdmin } from "../../../services/admin/admin.js";
+import { isTdBaseId, parseTdBaseId } from "../../../services/td/hellgate.js";
+import { isSiegeBaseId, parseSiegeBaseId } from "../../../services/arcade/siege.js";
+import { liveAttacksOn, liveWatchFor } from "../../../services/replays/liveAttacks.js";
 
 const UpdateSavedSchema = z.object({
   type: z.string(),
@@ -42,7 +45,26 @@ export const updateSaved: KoaController = async (ctx) => {
 
   const userSave = user.save!;
   const worldid = user.save?.worldid;
-  const { baseid, type, mapversion } = UpdateSavedSchema.parse(ctx.request.body);
+  const body = UpdateSavedSchema.parse(ctx.request.body);
+  const { mapversion } = body;
+  let { baseid, type } = body;
+
+  // A Hellgate Defense run's yard or a Siege yard (made for one run, deleted when it is recorded): only its
+  // player pages it, and gets their own main yard's page (the arena's numbers are the game's own; its yard may
+  // be gone by the last page: bug report #77, a 500 after the run ended).
+  const runOwner = isTdBaseId(baseid) ? parseTdBaseId(baseid)!.userid : isSiegeBaseId(baseid) ? parseSiegeBaseId(baseid)!.userid : null;
+  if (runOwner !== null) {
+    if (runOwner !== user.userid || !userSave.baseid) throw saveFailureErr();
+    baseid = String(userSave.baseid);
+    type = BaseMode.BUILD;
+  }
+
+  // (QoL #416: the Designer's "Try it", a practice attack on the admin's own draft, pages as an attack ("attack"):
+  // it gets the admin's own main yard's page, as a Siege does above; nothing of the draft is read or written)
+  if (isDesignBaseId(baseid) && type === BaseMode.ATTACK && isAdmin(user) && parseDesignBaseId(baseid)!.userid === user.userid && userSave.baseid) {
+    baseid = String(userSave.baseid);
+    type = BaseMode.BUILD;
+  }
 
   // A Designer draft (services/admin/designs.ts) is its admin's alone, and only in build mode.
   if (isDesignBaseId(baseid) && (type !== BaseMode.BUILD || !isAdmin(user) || parseDesignBaseId(baseid)!.userid !== user.userid))
@@ -94,9 +116,14 @@ export const updateSaved: KoaController = async (ctx) => {
   const alliance = isOwnMainYard ? await getAllianceData(user) : null;
   const powerups = isOwnMainYard ? await runningPowerups(user.alliance_id) : null;
 
+  // (18 October, the user's) the player's own yard under another player's attack: its game shows the attack
+  // (services/replays/liveAttacks.ts)
+  const watch = type === BaseMode.BUILD && liveAttacksOn() ? await liveWatchFor(user, baseSave) : null;
+
   ctx.status = Status.OK;
   ctx.body = {
     error: 0,
+    ...(watch && { io_watch: watch }),
     flags,
     ...pickKeys(filteredSave as Record<string, unknown>, PAGE_REPLY_KEYS),
     credits,

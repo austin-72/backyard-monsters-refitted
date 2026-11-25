@@ -1,12 +1,12 @@
 import * as as3 from "as3";
 import { int } from "as3";
-import { Bitmap, DisplayObject, MovieClip } from "flash/display";
+import { Bitmap, DisplayObject, MovieClip, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
-import { BASE, GLOBAL, POPUPS, frame2_background, frame2_bottom_left, frame2_bottom_right, frame2_filler_bottom, frame2_filler_left, frame2_filler_right, frame2_filler_top, frame2_top_left, frame2_top_right, frame3_background, frame3_bottom_left, frame3_bottom_right, frame3_filler_bottom, frame3_filler_left, frame3_filler_right, frame3_filler_top, frame3_top_left, frame3_top_right, frame_button_close, frame_button_help } from "@game";
+import { BASE, GLOBAL, IoKit, IoWin, MESSAGE, POPUPS, frame2_background, frame2_bottom_left, frame2_bottom_right, frame2_filler_bottom, frame2_filler_left, frame2_filler_right, frame2_filler_top, frame2_top_left, frame2_top_right, frame3_background, frame3_bottom_left, frame3_bottom_right, frame3_filler_bottom, frame3_filler_left, frame3_filler_right, frame3_filler_top, frame3_top_left, frame3_top_right, frame_button_close, frame_button_help } from "@game";
 
 export class frame extends MovieClip {
     static {
-        as3.fields(this, { _customCloseFunction: null, _bottomLeft: null, _bottomRight: null, _topLeft: null, _topRight: null, _fillerLeft: null, _fillerRight: null, _fillerTop: null, _fillerBottom: null, _buttonClose: null, _buttonHelp: null, _background: null, _frameMC: null, _frameDO: null, _backgroundMC: null, _backgroundDO: null });
+        as3.fields(this, { _customCloseFunction: null, _bottomLeft: null, _bottomRight: null, _topLeft: null, _topRight: null, _fillerLeft: null, _fillerRight: null, _fillerTop: null, _fillerBottom: null, _buttonClose: null, _buttonHelp: null, _background: null, _frameMC: null, _frameDO: null, _backgroundMC: null, _backgroundDO: null, _ioCloseKit: null, _ioHowTo: null, _ioBack: null, _ioArgs: null, _ioResizing: false });
     }
 
     public _customCloseFunction: Function;
@@ -25,6 +25,12 @@ export class frame extends MovieClip {
     private _frameDO: DisplayObject;
     private _backgroundMC: MovieClip;
     private _backgroundDO: DisplayObject;
+    /** Inferno-only (QoL #465): the kit's round X, drawn where the stock X is (which stays, unseen, for its place). */
+    private _ioCloseKit: Sprite;
+    /** Inferno-only (QoL #481): the how-to the "?" shows (IoWin.howToFor the window), or null: no "?". */
+    private _ioHowTo: string;
+    /** Inferno-only (QoL #467): the window this one was opened from (IoWin.takeBack), where its X goes back. */
+    private _ioBack: any;
 
     public $ctor(param1: boolean = true): void {
         super.$ctor();
@@ -33,12 +39,51 @@ export class frame extends MovieClip {
         }
     }
 
+    /** Inferno-only (23 October): Setup's arguments, for ioResize. */
+    private _ioArgs: any[];
+
+    private _ioResizing: boolean;
+
+    /**
+     * Inferno-only (23 October, the user's: "buttons outside of where they should be"): the frame drawn again at a new
+     * size (its place stays where it is unless x, y given), its X and "?" with it. (Setting width or height alone
+     * changes only the hidden placeholder: the frame is drawn by Setup.)
+     */
+    public ioResize(w: number, h: number, x: number = NaN, y: number = NaN): void {
+        if (!isNaN(x)) {
+            this.x = x;
+        }
+        if (!isNaN(y)) {
+            this.y = y;
+        }
+        if (Math.abs(this.width - w) < 0.5 && Math.abs(this.height - h) < 0.5 && this._frameMC && isNaN(x) && isNaN(y)) {
+            return;
+        }
+        this.width = w;
+        this.height = h;
+        let args: any[] = this._ioArgs || [true, null];
+        this._ioResizing = true;
+        try {
+            this.Setup(Boolean(args[0]), as3.as(args[1], Function));
+        } finally {
+            this._ioResizing = false;
+        }
+    }
+
     public Setup(param1: boolean = true, param2: Function = null): void {
         let _loc4_: MovieClip = null;
         let _loc5_: int = 0;
+        this._ioArgs = [param1, param2];
         this.Clear();
         this._customCloseFunction = param2;
         let _loc3_: boolean = false;
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #481: the "?" beside the X, switched on for the windows with a short how-to)
+            this._ioHowTo = param1 ? IoWin.howToFor(this.parent) : null;
+            _loc3_ = this._ioHowTo != null;
+            this._buttonHelp = null;
+            this._ioCloseKit = null;
+        }
         if (_loc3_) {
             this._buttonHelp = new Bitmap(new frame_button_help(0, 0));
         }
@@ -84,6 +129,14 @@ export class frame extends MovieClip {
         this._frameMC.addChild(this._topRight);
         if (param1) {
             (_loc4_ = new MovieClip()).addChild(this._buttonClose);
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #465: one close button: the kit's round X every Inferno window has, the same size, in the stock
+                // X's place)
+                this._buttonClose.visible = false;
+                this._ioCloseKit = IoKit.closeButton("ioFrameCloseX", IoWin.CLOSE_R, (e: any): void => {});
+                _loc4_.addChild(this._ioCloseKit);
+                _loc4_.name = "ioFrameClose";
+            }
             _loc4_.addEventListener(MouseEvent.CLICK, as3.bind(this, this.BtnClose));
             _loc4_.buttonMode = true;
             this._frameMC.addChild(_loc4_);
@@ -92,7 +145,21 @@ export class frame extends MovieClip {
             (_loc4_ = new MovieClip()).addChild(this._buttonHelp);
             _loc4_.addEventListener(MouseEvent.CLICK, as3.bind(this, this.BtnHelp));
             _loc4_.buttonMode = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                _loc4_.name = "ioFrameHelp";
+            }
             this._frameMC.addChild(_loc4_);
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioPlaceButtons();
+            // (QoL #467: opened from another window (IoWin.openFrom): "◀ Quest Book" over its top-left corner, and
+            // its X goes back there; a message over it is not the window it opened)
+            if (param1 && !this._ioBack && !this._ioResizing && !(this.parent instanceof MESSAGE)) {
+                this._ioBack = IoWin.takeBack();
+            }
+            if (param1 && this._ioBack) {
+                IoWin.backLink(this._frameMC, this.x + 8, this.y - 50, this._ioBack, as3.bind(this, this.BtnClose));
+            }
         }
         if (this.parent) {
             this._frameDO = this.parent.addChild(this._frameMC);
@@ -158,6 +225,8 @@ export class frame extends MovieClip {
     }
 
     private BtnClose(param1: MouseEvent = null): void {
+        let ioBack: any = this._ioBack;
+        this._ioBack = null;
         if ("Hide" in this.parent) {
             (as3.as(this.parent, Object)).Hide();
         } else if (Boolean(this._customCloseFunction)) {
@@ -167,6 +236,10 @@ export class frame extends MovieClip {
         }
         if (this.parent) {
             this.parent.dispatchEvent(new Event(Event.CLOSE));
+        }
+        // (Inferno-only, QoL #467: back to the window it was opened from)
+        if (ioBack) {
+            IoWin.goBack(ioBack);
         }
     }
 
@@ -238,6 +311,26 @@ export class frame extends MovieClip {
             this._fillerBottom.y = this.y + this.height - 11;
             this._fillerBottom.width = this.width - 90;
         }
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioPlaceButtons();
+        }
+    }
+
+    /** Inferno-only (QoL #465, #481): the kit's X centred on the stock X's place; the "?" just left of it. */
+    private ioPlaceButtons(): void {
+        if (!this._buttonClose) {
+            return;
+        }
+        let cx: number = this._buttonClose.x + this._buttonClose.width / 2;
+        let cy: number = this._buttonClose.y + this._buttonClose.height / 2;
+        if (this._ioCloseKit) {
+            this._ioCloseKit.x = cx;
+            this._ioCloseKit.y = cy;
+        }
+        if (this._buttonHelp && this._ioHowTo) {
+            this._buttonHelp.x = cx - IoWin.CLOSE_R - 6 - this._buttonHelp.width;
+            this._buttonHelp.y = cy - this._buttonHelp.height / 2;
+        }
     }
 
     /**
@@ -254,6 +347,11 @@ export class frame extends MovieClip {
     }
 
     private BtnHelp(param1: MouseEvent = null): void {
+        // (Inferno-only, QoL #481: its how-to; the stock guide pages were the old game's)
+        if (GLOBAL.INFERNO_ONLY && this._ioHowTo) {
+            IoWin.showHowTo(this._ioHowTo);
+            return;
+        }
         if ("Help" in this.parent) {
             (as3.as(this.parent, MovieClip)).Help();
         }

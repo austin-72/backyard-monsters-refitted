@@ -3,7 +3,7 @@ import { int } from "as3";
 import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { TextFormatAlign } from "flash/text";
-import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, AllianceTabBase, BASE, Button_CLIP, EnumYardType, GLOBAL, ImageCache, InviteDialogPopup, KEYS, MapRoomManager, PLEASEWAIT, SOUNDS, ScrollSetV } from "@game";
+import { AllianceConstants, ALLIANCES, AllianceTabBase, ALLIANCEWINDOW, BASE, Button_CLIP, EnumYardType, GLOBAL, ImageCache, InviteDialogPopup, IoCrest, KEYS, MapRoomManager, PLEASEWAIT, ScrollSetV, SOUNDS } from "@game";
 
 /**
  * Invites tab — the player's alliance inbox, in both directions.
@@ -130,7 +130,7 @@ export class InvitesTab extends AllianceTabBase {
             let isPending: boolean = String(item.status) == AllianceConstants.INVITE_PENDING;
             let fromAlliance: boolean = isPending ? isInvite : !isInvite;
 
-            out.push({ invite_id: item.invite_id | 0, type: String(item.type), status: String(item.status), alliance_name: String(item.alliance_name), alliance_image: item.alliance_image | 0, leader_name: String(item.leader_name), user_id: item.user_id | 0, user_name: String(item.user_name), base_id: Number(item.base_id), from: fromAlliance ? String(item.alliance_name) : String(item.user_name), shield: fromAlliance ? item.alliance_image | 0 : 0, subject: this._subjectFor(item, isInvite, isPending), date: String(item.update_at_formatted), checked: false });
+            out.push({ invite_id: item.invite_id | 0, type: String(item.type), status: String(item.status), alliance_name: String(item.alliance_name), alliance_image: item.alliance_image | 0, leader_name: String(item.leader_name), user_id: item.user_id | 0, user_name: String(item.user_name), base_id: Number(item.base_id), from: fromAlliance ? String(item.alliance_name) : String(item.user_name), shield: fromAlliance ? item.alliance_image | 0 : 0, crest: fromAlliance ? item.alliance_crest || null : null, subject: this._subjectFor(item, isInvite, isPending), date: String(item.update_at_formatted), checked: false, message: item.message ? String(item.message) : "", asker: item.user_level != null ? { "level": item.user_level | 0, "world": String(item.user_world || ""), "outposts": item.user_outposts | 0, "seen": Number(item.user_last_seen) || 0 } : null });
             i++;
         }
         return out;
@@ -237,7 +237,7 @@ export class InvitesTab extends AllianceTabBase {
             flag.mouseEnabled = false;
             flag.x = InvitesTab.C_FROM_X + 6;
             flag.y = rowBaseY + (((InvitesTab.ROW_H - InvitesTab.FLAG_SIZE) / 2) | 0);
-            this._loadShield(flag, rowData.shield | 0);
+            this._loadShield(flag, rowData.shield | 0, rowData.crest);
 
             const fromX: int = (InvitesTab.C_FROM_X + 6 + InvitesTab.FLAG_SIZE + 6) | 0;
             this._addLabel(tableMC, String(rowData.from), fromX, rowBaseY, (InvitesTab.C_FROM_X + InvitesTab.C_FROM_W - fromX - 6) | 0, InvitesTab.ROW_H, false, TextFormatAlign.LEFT);
@@ -277,7 +277,11 @@ export class InvitesTab extends AllianceTabBase {
      * @param {MovieClip} container - The From swatch.
      * @param {int} id - Shield id 1-41, or 0 for none.
      */
-    private _loadShield(container: MovieClip, id: int): void {
+    private _loadShield(container: MovieClip, id: int, crest: any = null): void {
+        // (14 October: its own crest, when it has one)
+        if (IoCrest.fit(container, crest, InvitesTab.FLAG_SIZE)) {
+            return;
+        }
         if (id <= 0) {
             return;
         }

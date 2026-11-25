@@ -4,7 +4,7 @@ import { MouseEvent } from "flash/events";
 import { ImageCache, KEYS, POPUPS, WMIEXTENSIONPOPUP_CLIP } from "@game";
 
 /*
- * This is the original WMIEXTENSIONPOPUP.as class for Wild Monster Invasion 1.
+ * This is the original WMIEXTENSIONPOPUP.ts class for Wild Monster Invasion 1.
  * The original developers rewrote this class when Wild Monster Invasion 2 was released
  * instead of creating a new class.
  *

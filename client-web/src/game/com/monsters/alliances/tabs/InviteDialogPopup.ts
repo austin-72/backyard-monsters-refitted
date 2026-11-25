@@ -102,6 +102,16 @@ export class InviteDialogPopup extends ASObject {
             body = isAccepted ? KEYS.Get("alliance_request_accepted_body", { "v1": leaderName, "v2": allianceName }) : KEYS.Get("alliance_request_declined_body", { "v1": allianceName });
         }
 
+        // (Inferno-only, QoL #169: a join request says who is asking, and their few words)
+        if (GLOBAL.INFERNO_ONLY && isPending && !isInvite && rowData.asker) {
+            let a: any = rowData.asker;
+            let ago: int = a.seen > 0 ? (GLOBAL.Timestamp() - a.seen) | 0 : -1;
+            let seen: string = ago < 0 ? "" : (ago < 300 ? KEYS.Get("io_alliance_asker_online") : KEYS.Get("io_alliance_asker_seen", { "v1": GLOBAL.ioDuration(ago) }));
+            body += "<br><br>" + KEYS.Get("io_alliance_asker", { "v1": a.level | 0, "v2": a.world || "?", "v3": a.outposts | 0 }) + (seen ? " · " + seen : "");
+            if (rowData.message) {
+                body += "<br><br><i>\u201C" + String(rowData.message).replace(/&/g, "&amp;").replace(/</g, "&lt;") + "\u201D</i>";
+            }
+        }
         let tBody: TextField = new TextField();
         tBody.wordWrap = true;
         tBody.multiline = true;

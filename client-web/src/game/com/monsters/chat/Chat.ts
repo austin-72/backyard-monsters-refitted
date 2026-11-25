@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { DisplayObjectContainer, StageDisplayState } from "flash/display";
-import { BASE, BYMChat, ChatBox, GLOBAL, LOGIN, MapRoomManager, TUTORIAL } from "@game";
+import { IoSocial, BASE, BYMChat, ChatBox, GLOBAL, KEYS, LOGIN, MapRoomManager, TUTORIAL } from "@game";
 
 export class Chat extends ASObject {
     public static _bymChat: BYMChat = null;
@@ -69,9 +69,10 @@ export class Chat extends ASObject {
         Chat._chatServer = as3.str(Chat._chatServers[0]);
         if (Chat._bymChat == null) {
             Chat._bymChat = new BYMChat(new ChatBox(), Chat._chatServer);
-            Chat._bymChat.system_message("Connecting to chat");
+            Chat._bymChat.system_message(KEYS.Get("io_t3m_ch_connecting"));
             Chat._chatInited = true;
             GLOBAL._layerUI.addChild(Chat._bymChat);
+            IoSocial.ioWatch(); // (QoL #195, #469: the hidden-tab notification checks, and the chat over the reading windows)
         }
         Chat._bymChat.init();
         if (!Chat.chatUserIsInABTest()) {
@@ -205,7 +206,7 @@ export class Chat extends ASObject {
         if (GLOBAL._flags.chat != 2) {
             return false;
         }
-        if (MapRoomManager.instance.isInMapRoom2 && MapRoomManager.instance.isOpen && GLOBAL._ROOT.stage.displayState == StageDisplayState.FULL_SCREEN) {
+        if (!GLOBAL.INFERNO_ONLY && MapRoomManager.instance.isInMapRoom2 && MapRoomManager.instance.isOpen && GLOBAL._ROOT.stage.displayState == StageDisplayState.FULL_SCREEN) {
             return false;
         }
         return true;

@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, Vector, int } from "as3";
 import { IOErrorEvent } from "flash/events";
 import { Dictionary } from "flash/utils";
-import { ALLIANCES, BASE, CModifiableProperty, GLOBAL, IMapRoom, IMapRoomCell, INFERNO_DESCENT_POPUPS, KEYS, LOGGER, MONSTERBAITER, MapRoom3, MapRoom3Cell, PLEASEWAIT, SingletonLock, URLLoaderApi, WMATTACK, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { ALLIANCES, BASE, BUILDINGS, CModifiableProperty, com_monsters_maproom_advanced_MapRoom as MapRoom, GLOBAL, IMapRoom, IMapRoomCell, INFERNO_DESCENT_POPUPS, KEYS, LOGGER, MapRoom3, MapRoom3Cell, MONSTERBAITER, PLEASEWAIT, SingletonLock, URLLoaderApi, WMATTACK } from "@game";
 
 export class MapRoomManager extends ASObject {
     static {
@@ -130,6 +130,19 @@ export class MapRoomManager extends ASObject {
         this.Show();
     }
 
+    /**
+     * Inferno-only (QoL #677): Open Map from a yard you were looking at: the map, with that yard's window open
+     * again (its Attack, Take over, Message), not the map alone.
+     */
+    public ioSetupAndShowYard(): void {
+        this.m_CurrentMapRoom.Setup();
+        let cell: any = GLOBAL._currentCell;
+        if (this.isInMapRoom2 && cell && !cell._mine) {
+            MapRoom.showEnemyWait = true;
+        }
+        this.Show();
+    }
+
     public Show(): void {
         if (GLOBAL.mode === "build") {
             GLOBAL.m_mapRoomFunctional = true;
@@ -145,7 +158,8 @@ export class MapRoomManager extends ASObject {
             GLOBAL.Message(KEYS.Get("map_msg_disabled"));
             return;
         }
-        if ((!BASE.isMainYard || GLOBAL._bMap && GLOBAL._bMap._canFunction || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) && (GLOBAL.mode == "help" || !this.isOpen)) {
+        // (Inferno-only, 18 October, the user's: a wrecked Map Room still opens the map: GLOBAL.ioMapRoomWorks)
+        if ((!BASE.isMainYard || GLOBAL.ioMapRoomWorks() || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) && (GLOBAL.mode == "help" || !this.isOpen)) {
             PLEASEWAIT.Show(KEYS.Get("newmap_opening"));
             if (this.isOpen) {
                 this.Hide();
@@ -154,7 +168,7 @@ export class MapRoomManager extends ASObject {
             return;
         }
         if (!GLOBAL._bMap) {
-            GLOBAL.Message(KEYS.Get("map_msg_notbuilt"));
+            BUILDINGS.ioNeed(KEYS.Get("map_msg_notbuilt"), 11);
             return;
         }
         if (!GLOBAL._bMap._canFunction) {

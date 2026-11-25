@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, Graphics, Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { BUILDING5, GLOBAL, IoMapFilters, IoMapSnapshot, IoMapUi, IoUnderworld, LOGIN, POWERUPS, SOUNDS, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { IoWin, GLOBAL, IoFormat, IoMapFilters, IoMapSnapshot, IoMapUi, IoUnderworld, KEYS, LOGIN, SOUNDS, TRIBES, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
 
 /**
  * Inferno-only: the world map, the map room's three widest zoom steps (MapRoomPopup: World, World 2x,
@@ -19,14 +19,22 @@ import { BUILDING5, GLOBAL, IoMapFilters, IoMapSnapshot, IoMapUi, IoUnderworld, 
  * The map is dragged to move around, its edges as far as the middle of the view. Hovering a dot names
  * the player; a click goes to the map there. Everything comes from the world snapshot (IoMapSnapshot): nothing is asked of the
  * server for it.
+ *
+ * (QoL #72, 15 October) Damaged tribe yards are small orange diamonds, those ready to take over red ones (the
+ * snapshot has every damaged or destroyed camp); hovering one says how damaged it is. The Filters can hide them.
  */
 export class IoMapLod extends Sprite {
     static {
-        as3.fields(this, { _viewW: 0, _viewH: 0, _mapH: 0, _focus: null, _spanX: 0, _spanY: 0, _onPick: null, _zoom: 1, _cx: 200, _cy: 200, _fit: 1, _scale: 1, _clip: null, _world: null, _bitmap: null, _range: null, _rangeData: null, _rangeVersion: -1, _dots: null, _marks: null, _portals: null, _pins: null, _hover: null, _tip: null, _tipText: null, _loading: null, _legend: null, _drawnKey: null, _byKey: null, _pressing: false, _dragging: false, _pressX: 0, _pressY: 0, _pressCx: 0, _pressCy: 0, onViewChanged: null, onPointer: null, onHover: null });
+        as3.fields(this, { _viewW: 0, _viewH: 0, _mapH: 0, _focus: null, _spanX: 0, _spanY: 0, _onPick: null, _zoom: 1, _cx: 200, _cy: 200, _fit: 1, _scale: 1, _clip: null, _world: null, _bitmap: null, _range: null, _rangeData: null, _rangeVersion: -1, _dots: null, _camps: null, _campsByKey: null, _marks: null, _portals: null, _pins: null, _hover: null, _tip: null, _tipText: null, _loading: null, _legend: null, _ioLegendCb: false, _drawnKey: null, _byKey: null, _pressing: false, _dragging: false, _pressX: 0, _pressY: 0, _pressCx: 0, _pressCy: 0, onViewChanged: null, onPointer: null, onHover: null });
     }
 
-    /** Room at the bottom for the legend (two lines), above the window frame's bottom border. */
-    public static readonly LEGEND_H: int = 44;
+    /** Room at the bottom for the legend (three lines: QoL #72 added the tribe yards), above the window frame's bottom border. */
+    public static readonly LEGEND_H: int = 58;
+
+    /** (QoL #72) a damaged tribe yard: orange; one ready to take over: red (both with a light edge). */
+    public static readonly CAMP_DAMAGED: uint = 15769648;
+
+    public static readonly CAMP_READY: uint = 15022389;
 
     private static readonly PAD: int = 6;
 
@@ -35,7 +43,7 @@ export class IoMapLod extends Sprite {
 
     public static readonly PORTAL_RING: uint = 4858992;
 
-    /** Your flinger range on the map: your blue, see-through. */
+    /** Your flinger range on the map: your blue, see-through (the same as IoMapFilters.RANGE_ARGB, which draws it). */
     private static readonly RANGE_ARGB: uint = 1714980839;
 
     /** The terrain picture of the last world drawn (a world's terrain never changes). */
@@ -63,6 +71,9 @@ export class IoMapLod extends Sprite {
     private _rangeData: BitmapData;
     private _rangeVersion: int;
     private _dots: Shape;
+    /** (QoL #72) the damaged tribe yards, and the ones drawn, by x * 10000 + y (for hovering). */
+    private _camps: Shape;
+    private _campsByKey: any;
     private _marks: Shape;
     private _portals: Shape;
     private _pins: Sprite;
@@ -71,6 +82,8 @@ export class IoMapLod extends Sprite {
     private _tipText: TextField;
     private _loading: TextField;
     private _legend: Sprite;
+    /** (QoL #228) whether the legend was drawn with the colour-blind colours. */
+    private _ioLegendCb: boolean;
     /** What the dots were drawn for: the snapshot, the filters, the zoom, the bookmarks. */
     private _drawnKey: string;
     /** Player yards by x * 10000 + y, for hovering (only the ones shown). */
@@ -90,6 +103,7 @@ export class IoMapLod extends Sprite {
 
     public $ctor(viewW?: int, viewH?: int, focus?: Point, spanX?: int, spanY?: int, onPick?: Function, zoom: int = 1, centre: Point = null): void {
         this._byKey = {};
+        this._campsByKey = {};
         super.$ctor();
         this._viewW = viewW;
         this._viewH = viewH;
@@ -120,6 +134,10 @@ export class IoMapLod extends Sprite {
         this._world.addChild(this._bitmap);
         this._range = new Bitmap();
         this._world.addChild(this._range);
+        // (QoL #72: under the players' dots)
+        this._camps = new Shape();
+        this._camps.name = "ioMap3Camps";
+        this._world.addChild(this._camps);
         this._dots = new Shape();
         this._world.addChild(this._dots);
         this._marks = new Shape();
@@ -130,10 +148,12 @@ export class IoMapLod extends Sprite {
         this._world.addChild(this._pins);
         this._hover = new Shape();
         this._world.addChild(this._hover);
-        this._loading = IoMapUi.label("Loading the world map...", 14, 16769216, true, viewW, TextFormatAlign.CENTER);
+        this._loading = IoMapUi.label(GLOBAL.INFERNO_ONLY ? IoFormat.text("io_fmt_map_loading", "Loading the world map...") : "Loading the world map...", 14, 16769216, true, viewW, TextFormatAlign.CENTER);
+        IoWin.watchLoading(this._loading); // (QoL #447: says so when the server can't be reached)
         this._loading.y = (this._mapH * 0.5 - 10) | 0;
         this.addChild(this._loading);
         this._legend = this.makeLegend();
+        this._ioLegendCb = IoFormat.colourBlind;
         this._legend.x = 0;
         this._legend.y = this._mapH + 3;
         this.addChild(this._legend);
@@ -224,6 +244,13 @@ export class IoMapLod extends Sprite {
     }
 
     /** The cell at a point of this view, or null off the world. */
+    /** Inferno-only (QoL #41): the view moved by some pixels of the screen (the arrow keys). */
+    public panBy(px: number, py: number): void {
+        this._cx += px / this._scale;
+        this._cy += py / this._scale;
+        this.place();
+    }
+
     public cellAt(localX: number, localY: number): Point {
         if (!IoMapSnapshot.ready || this._scale <= 0 || localY >= this._mapH) {
             return null;
@@ -261,14 +288,17 @@ export class IoMapLod extends Sprite {
     }
 
     private drawKey(): string {
-        return IoMapSnapshot.version + "/" + IoMapFilters.version + "/" + this._zoom + "/" + MapRoom._bookmarks.length + "/" + IoMapLod.ioBookmarkStamp() + "/" + IoUnderworld.portals.length;
+        // (QoL #228: and the colour-blind setting)
+        return IoMapSnapshot.version + "/" + IoMapFilters.version + "/" + this._zoom + "/" + MapRoom._bookmarks.length + "/" + IoMapLod.ioBookmarkStamp() + "/" + IoUnderworld.portals.length + "/" + (IoFormat.colourBlind ? 1 : 0);
     }
 
     /** Changes when a bookmark is added, renamed, moved or removed. */
     private static ioBookmarkStamp(): string {
         let stamp: string = "";
-        for (let bookmark of as3.values(MapRoom._bookmarks)) {
-            stamp += bookmark.name + bookmark.location.x + "," + bookmark.location.y + ";";
+        for (let i: int = 0; i < MapRoom._bookmarks.length; i++) {
+            let bookmark: any = MapRoom._bookmarks[i];
+            // (QoL #76: and its colour tag)
+            stamp += bookmark.name + bookmark.location.x + "," + bookmark.location.y + "/" + MapRoom.ioBookmarkColour(i) + ";";
         }
         return stamp;
     }
@@ -282,10 +312,21 @@ export class IoMapLod extends Sprite {
         }
         this._loading.visible = false;
         this._drawnKey = this.drawKey();
+        // (Inferno-only, QoL #228: the colour-blind setting changed: the legend's colours too)
+        if (GLOBAL.INFERNO_ONLY && this._ioLegendCb != IoFormat.colourBlind && this._legend) {
+            let at: int = this.getChildIndex(this._legend);
+            this.removeChild(this._legend);
+            this._legend = this.makeLegend();
+            this._ioLegendCb = IoFormat.colourBlind;
+            this._legend.x = 0;
+            this._legend.y = this._mapH + 3;
+            this.addChildAt(this._legend, at);
+        }
         this._fit = Math.min((this._viewW - IoMapLod.PAD * 2) / w, (this._mapH - IoMapLod.PAD * 2) / h);
         this._scale = this._fit * this._zoom;
         this.drawTerrain(w, h);
         this.drawRange(w, h);
+        this.drawCamps();
         this.drawDots();
         this.drawMarks();
         this.drawPortals();
@@ -394,31 +435,16 @@ export class IoMapLod extends Sprite {
      */
     private drawRange(w: int, h: int): void {
         let pixels: Vector<uint> = null;
-        let cell: any[] = null;
-        let main: boolean = false;
-        let level: int = 0;
-        let range: int = 0;
         this._range.visible = IoMapFilters.range;
         if (!IoMapFilters.range) {
             return;
         }
         if (this._rangeVersion != IoMapSnapshot.version || !this._rangeData) {
             this._rangeVersion = IoMapSnapshot.version;
-            pixels = new Vector<uint>(w * h, true, uint);
-            for (cell of as3.values(IoMapSnapshot.cells)) {
-                if ((cell[2] | 0) < 2 || (cell[3] | 0) != LOGIN._playerID) {
-                    continue;
-                }
-                main = (cell[2] | 0) == 2;
-                level = cell[6] | 0;
-                if (main && GLOBAL._playerFlingerLevel) {
-                    level = Math.max(level, GLOBAL._playerFlingerLevel.Get()) | 0;
-                }
-                if (level <= 0) {
-                    continue;
-                }
-                range = POWERUPS.Apply(POWERUPS.ALLIANCE_DECLAREWAR, [BUILDING5.getFlingerRange(level, main)]) | 0;
-                IoMapLod.markRange(pixels, w, h, cell[0] | 0, cell[1] | 0, range);
+            // (QoL #73: worked out by IoMapFilters, which the "only in my flinger range" filter reads too)
+            pixels = IoMapFilters.rangePixels();
+            if (!pixels || pixels.length != w * h) {
+                pixels = new Vector<uint>(w * h, true, uint);
             }
             if (!this._rangeData || this._rangeData.width != w || this._rangeData.height != h) {
                 if (this._rangeData) {
@@ -431,28 +457,6 @@ export class IoMapLod extends Sprite {
         }
         this._range.smoothing = false;
         this._range.scaleX = this._range.scaleY = this._scale;
-    }
-
-    /** The cells within a hex distance of a cell (odd-q offset rows, as the map; the world wraps). */
-    private static markRange(pixels: Vector<uint>, w: int, h: int, fromX: int, fromY: int, range: int): void {
-        let q: int = fromX;
-        let r: int = (fromY - (fromX - (fromX & 1)) / 2) | 0;
-        let dq: int = (-range) | 0;
-        let dr: int = 0;
-        let x: int = 0;
-        let y: int = 0;
-        while (dq <= range) {
-            dr = Math.max(-range, -dq - range) | 0;
-            while (dr <= Math.min(range, -dq + range)) {
-                x = (q + dq) | 0;
-                y = (r + dr + (x - (x & 1)) / 2) | 0;
-                x = ((x % w + w) % w) | 0;
-                y = ((y % h + h) % h) | 0;
-                as3.vset(pixels, y * w + x, IoMapLod.RANGE_ARGB);
-                dr++;
-            }
-            dq++;
-        }
     }
 
     private mainRadius(): number {
@@ -475,6 +479,9 @@ export class IoMapLod extends Sprite {
         let g: Graphics = this._dots.graphics;
         let mainR: number = this.mainRadius();
         let outpostR: number = this.outpostRadius();
+        let now: int = GLOBAL.Timestamp();
+        let alpha: number = 1;
+        let letters: boolean = GLOBAL.INFERNO_ONLY && IoFormat.colourBlind;
         g.clear();
         this._byKey = {};
         // outposts first, then main yards, then the player's own on top
@@ -493,16 +500,106 @@ export class IoMapLod extends Sprite {
                 if (!IoMapFilters.shows(relation, main)) {
                     continue;
                 }
+                // (QoL #73: the target filters: level, protected, locked, in your flinger range; a yard they leave
+                // out is faint, or not drawn with Hide)
+                alpha = 1;
+                if (!IoMapFilters.targetOk((player.level | 0) || (cell[11] | 0), (cell[9] | 0) > now, (cell[12] | 0) != 0, cell[0] | 0, cell[1] | 0, mine)) {
+                    if (!IoMapFilters.dim) {
+                        continue;
+                    }
+                    alpha = IoMapFilters.FAINT;
+                }
                 px = ((cell[0] | 0) + 0.5) * this._scale;
                 py = ((cell[1] | 0) + 0.5) * this._scale;
-                g.lineStyle(Number(main ? 1 : 0.5), 0, 0.9);
-                g.beginFill(IoMapUi.relationColour(relation), 1);
+                g.lineStyle(Number(main ? 1 : 0.5), 0, 0.9 * alpha);
+                g.beginFill(IoMapUi.relationColour(relation), alpha);
                 g.drawCircle(px, py, main ? mainR : outpostR);
                 g.endFill();
+                // (Inferno-only, QoL #228: with the colour-blind setting, F / H / A in the dots big enough for it)
+                if (letters && (main ? mainR : outpostR) >= 4.5) {
+                    IoFormat.drawLetter(g, IoMapUi.relationStance(relation), px, py, (main ? mainR : outpostR) * 1.2, 0);
+                }
                 this._byKey[(cell[0] | 0) * 10000 + (cell[1] | 0)] = cell;
             }
             pass++;
         }
+    }
+
+    /**
+     * (QoL #72) The damaged tribe yards (orange) and the ones ready to take over (red), as small diamonds: the
+     * snapshot lists every camp that is damaged or destroyed. The target filters fade or hide them as they do yards.
+     */
+    private drawCamps(): void {
+        let g: Graphics = this._camps.graphics;
+        let cell: any[] = null;
+        let state: int = 0;
+        let alpha: number = 1;
+        let r: number = Math.max(2.2, this.outpostRadius() * 1.1);
+        let px: number = NaN;
+        let py: number = NaN;
+        g.clear();
+        this._campsByKey = {};
+        if (!GLOBAL.INFERNO_ONLY || !IoMapFilters.camps) {
+            return;
+        }
+        // the damaged ones first, the ones ready to take over on top
+        for (let pass: int = 1; pass <= 2; pass++) {
+            for (cell of as3.values(IoMapSnapshot.cells)) {
+                state = IoMapSnapshot.CampState(cell);
+                if (state != pass || IoUnderworld.isUnder(cell[0] | 0, cell[1] | 0)) {
+                    continue;
+                }
+                alpha = 1;
+                if (!IoMapFilters.targetOk(cell[11] | 0, false, false, cell[0] | 0, cell[1] | 0, false)) {
+                    if (!IoMapFilters.dim) {
+                        continue;
+                    }
+                    alpha = IoMapFilters.FAINT;
+                }
+                px = ((cell[0] | 0) + 0.5) * this._scale;
+                py = ((cell[1] | 0) + 0.5) * this._scale;
+                g.lineStyle(state == 2 ? 1.2 : 0.8, state == 2 ? 16777215 : 3811856, 0.9 * alpha);
+                g.beginFill(state == 2 ? IoMapLod.CAMP_READY : IoMapLod.CAMP_DAMAGED, alpha);
+                IoMapLod.diamond(g, px, py, state == 2 ? r * 1.25 : r);
+                g.endFill();
+                this._campsByKey[(cell[0] | 0) * 10000 + (cell[1] | 0)] = cell;
+            }
+        }
+        g.lineStyle();
+    }
+
+    /** (QoL #72) A diamond round a point (the tribe yards' mark: the players' are round). */
+    public static diamond(g: Graphics, x: number, y: number, r: number): void {
+        g.moveTo(x, y - r);
+        g.lineTo(x + r, y);
+        g.lineTo(x, y + r);
+        g.lineTo(x - r, y);
+        g.lineTo(x, y - r);
+    }
+
+    /** (QoL #72) The damaged tribe yard on (or next to) the mouse, or null. */
+    private campNear(at: Point): any[] {
+        let best: any[] = null;
+        let bestDistance: number = Number.MAX_VALUE;
+        let reach: int = Math.max(1, Math.ceil(5 / this._scale)) | 0;
+        let fx: number = (this.mouseX - this._world.x) / this._scale - 0.5;
+        let fy: number = (this.mouseY - this._world.y) / this._scale - 0.5;
+        for (let dx: int = (-reach) | 0; dx <= reach; dx++) {
+            for (let dy: int = (-reach) | 0; dy <= reach; dy++) {
+                let cell: any[] = as3.as(this._campsByKey[(at.x + dx) * 10000 + (at.y + dy)], Array);
+                if (cell) {
+                    let distance: number = ((cell[0] | 0) - fx) * ((cell[0] | 0) - fx) + ((cell[1] | 0) - fy) * ((cell[1] | 0) - fy);
+                    if (distance < bestDistance) {
+                        bestDistance = distance;
+                        best = cell;
+                    }
+                }
+            }
+        }
+        if (best && Math.sqrt(bestDistance) * this._scale > this.outpostRadius() * 1.4 + 5) {
+            return null;
+        }
+        return best;
     }
 
     private portalRadius(): number {
@@ -573,10 +670,12 @@ export class IoMapLod extends Sprite {
         if (!IoMapFilters.bookmarks) {
             return;
         }
-        for (bookmark of as3.values(MapRoom._bookmarks)) {
+        for (let index: int = 0; index < MapRoom._bookmarks.length; index++) {
+            bookmark = MapRoom._bookmarks[index];
             px = ((bookmark.location.x | 0) + 0.5) * this._scale;
             py = ((bookmark.location.y | 0) + 0.5) * this._scale;
-            IoMapUi.pin(this._pins.graphics, px, py, IoMapUi.GOLD, size);
+            // (QoL #76: in its colour tag's colour)
+            IoMapUi.pin(this._pins.graphics, px, py, GLOBAL.INFERNO_ONLY ? MapRoom.ioBookmarkTint(index) : IoMapUi.GOLD, size);
             if (this._zoom >= 2) {
                 name = IoMapUi.label(String(bookmark.name), 10, 16773320, true, 160);
                 name.width = name.textWidth + 8;
@@ -635,6 +734,8 @@ export class IoMapLod extends Sprite {
         let at: Point = this.cellAt(this.mouseX, this.mouseY);
         let portal: any[] = at ? this.portalNear() : null;
         let yard: any[] = at && !portal ? this.yardNear(at) : null;
+        // (QoL #72: a damaged tribe yard, when no player's yard is there)
+        let camp: any[] = at && !portal && !yard ? this.campNear(at) : null;
         let player: any = null;
         let alliance: any = null;
         let text: string = null;
@@ -653,6 +754,10 @@ export class IoMapLod extends Sprite {
         }
         if (portal) {
             text = "<b>Portal to the " + IoUnderworld.NAME + "</b><br>" + IoMapUi.coord(portal[0] | 0, portal[1] | 0) + "<br>Click to go down";
+            // (Inferno-only, QoL #235: in the player's language)
+            if (GLOBAL.INFERNO_ONLY) {
+                text = "<b>" + IoFormat.text("io_fmt_map_portal", "Portal to the #v1#", { "v1": IoUnderworld.NAME }) + "</b><br>" + IoMapUi.coord(portal[0] | 0, portal[1] | 0) + "<br>" + IoFormat.text("io_fmt_map_go_down", "Click to go down");
+            }
             g.lineStyle(2, 16777215, 1);
             g.drawCircle(((portal[0] | 0) + 0.5) * this._scale, ((portal[1] | 0) + 0.5) * this._scale, this.portalRadius() + 1.5);
         } else if (yard) {
@@ -660,10 +765,20 @@ export class IoMapLod extends Sprite {
             alliance = player.alliance | 0 ? IoMapSnapshot.AllianceInfo(player.alliance | 0) : null;
             relation = IoMapUi.relation(yard[3] | 0, player.alliance | 0);
             text = "<b>" + IoMapUi.escape(String(player.name || "?")) + "</b>  level " + (player.level | 0 || yard[11] | 0) + "<br>" + ((yard[2] | 0) == 2 ? "Main yard" : "Outpost") + " at " + IoMapUi.coord(yard[0] | 0, yard[1] | 0) + (alliance ? "<br>" + IoMapUi.escape(String(alliance.name)) + (relation == IoMapUi.YOU ? "" : " · " + IoMapUi.RELATION_NAMES[relation].toLowerCase()) : "");
+            // (Inferno-only, QoL #235: in the player's language)
+            if (GLOBAL.INFERNO_ONLY) {
+                let kind: string = (yard[2] | 0) == 2 ? IoFormat.text("al_yard_main", "Main yard") : IoFormat.text("al_yard_outpost", "Outpost");
+                text = "<b>" + IoMapUi.escape(String(player.name || "?")) + "</b>  " + IoFormat.text("io_fmt_map_level", "level #v1#", { "v1": player.level | 0 || yard[11] | 0 }) + "<br>" + IoFormat.text("io_fmt_map_at", "#v1# at #v2#", { "v1": kind, "v2": IoMapUi.coord(yard[0] | 0, yard[1] | 0) }) + (alliance ? "<br>" + IoMapUi.escape(String(alliance.name)) + (relation == IoMapUi.YOU ? "" : " · " + IoMapUi.relationName(relation).toLowerCase()) : "");
+            }
             g.lineStyle(2, 16777215, 1);
             g.drawCircle(((yard[0] | 0) + 0.5) * this._scale, ((yard[1] | 0) + 0.5) * this._scale, this.mainRadius() + 1.5);
+        } else if (camp) {
+            // (QoL #72)
+            text = "<b>" + IoMapUi.escape(IoMapLod.campName(camp)) + "</b><br>" + (IoMapSnapshot.CampState(camp) == 2 ? "<font color=\"#FF8A80\">" + KEYS.Get("io_map3_camp_ready") + "</font>" : KEYS.Get("io_map3_camp_damaged", { "v1": camp[8] | 0 })) + "<br>" + IoMapUi.coord(camp[0] | 0, camp[1] | 0);
+            g.lineStyle(2, 16777215, 1);
+            IoMapLod.diamond(g, ((camp[0] | 0) + 0.5) * this._scale, ((camp[1] | 0) + 0.5) * this._scale, Math.max(2.2, this.outpostRadius() * 1.1) * 1.25 + 2);
         } else {
-            text = IoMapUi.coord(at.x | 0, at.y | 0) + "<br>Click to go there";
+            text = IoMapUi.coord(at.x | 0, at.y | 0) + "<br>" + (GLOBAL.INFERNO_ONLY ? IoFormat.text("io_fmt_map_go_there", "Click to go there") : "Click to go there");
         }
         this._tipText.htmlText = text;
         this._tipText.height = this._tipText.textHeight + 6;
@@ -754,12 +869,18 @@ export class IoMapLod extends Sprite {
         }
         if (yard) {
             at = new Point(yard[0] | 0, yard[1] | 0);
+        } else {
+            // (QoL #72: a click on a tribe yard's mark goes to that yard)
+            let camp: any[] = this.campNear(at);
+            if (camp) {
+                at = new Point(camp[0] | 0, camp[1] | 0);
+            }
         }
         this._onPick(at.x, at.y);
     }
 
     // ---- legend
-    /** Two lines, each in the middle: who (the colours), and what (the marks). */
+    /** Two lines, each in the middle: who (the colours), and what (the marks); (QoL #72) a third, the tribe yards. */
     private makeLegend(): Sprite {
         let legend: Sprite = new Sprite();
         let who: Sprite = new Sprite();
@@ -772,14 +893,21 @@ export class IoMapLod extends Sprite {
         legend.mouseChildren = false;
         legend.addChild(who);
         legend.addChild(what);
+        // (Inferno-only, QoL #228: with the colour-blind setting, the dots a little bigger with their letters)
+        let letters: boolean = GLOBAL.INFERNO_ONLY && IoFormat.colourBlind;
+        let dotR: number = letters ? 5 : 4;
         while (i < IoMapUi.RELATION_NAMES.length) {
             g.lineStyle(1, 0, 0.9);
             g.beginFill(IoMapUi.relationColour(i), 1);
-            g.drawCircle(x + 4, 8, 4);
+            g.drawCircle(x + dotR, 8, dotR);
             g.endFill();
-            text = IoMapLod.legendText(as3.str(IoMapUi.RELATION_NAMES[i]), x + 9, 0);
+            if (letters) {
+                IoFormat.drawLetter(g, IoMapUi.relationStance(i), x + dotR, 8, 6, 0);
+            }
+            // (QoL #235: the names in the player's language)
+            text = IoMapLod.legendText(GLOBAL.INFERNO_ONLY ? IoMapUi.relationName(i) : as3.str(IoMapUi.RELATION_NAMES[i]), x + dotR * 2 + 1, 0);
             who.addChild(text);
-            x += 9 + text.width + 6;
+            x += dotR * 2 + 1 + text.width + 6;
             i++;
         }
         who.x = Math.round((this._viewW - (x - 6)) * 0.5);
@@ -789,25 +917,25 @@ export class IoMapLod extends Sprite {
         g.beginFill(16777215, 1);
         g.drawCircle(x + 5, 23, 5);
         g.endFill();
-        text = IoMapLod.legendText("Main yard", x + 13, 15);
+        text = IoMapLod.legendText(GLOBAL.INFERNO_ONLY ? IoFormat.text("al_yard_main", "Main yard") : "Main yard", x + 13, 15);
         what.addChild(text);
         x += 13 + text.width + 8;
         g.lineStyle(0.5, 0, 0.9);
         g.beginFill(16777215, 1);
         g.drawCircle(x + 3, 23, 2.5);
         g.endFill();
-        text = IoMapLod.legendText("Outpost", x + 8, 15);
+        text = IoMapLod.legendText(GLOBAL.INFERNO_ONLY ? IoFormat.text("al_yard_outpost", "Outpost") : "Outpost", x + 8, 15);
         what.addChild(text);
         x += 8 + text.width + 8;
         g.lineStyle();
         g.beginFill((IoMapLod.RANGE_ARGB & 0xFFFFFF) >>> 0, 0.55);
         g.drawRect(x, 18, 12, 10);
         g.endFill();
-        text = IoMapLod.legendText("Your flinger range", x + 16, 15);
+        text = IoMapLod.legendText(GLOBAL.INFERNO_ONLY ? IoFormat.text("io_fmt_map_range", "Your flinger range") : "Your flinger range", x + 16, 15);
         what.addChild(text);
         x += 16 + text.width + 8;
         IoMapUi.pin(g, x + 5, 29, IoMapUi.GOLD, 12);
-        text = IoMapLod.legendText("Bookmark", x + 12, 15);
+        text = IoMapLod.legendText(GLOBAL.INFERNO_ONLY ? IoFormat.text("io_visit_bookmark", "Bookmark") : "Bookmark", x + 12, 15);
         what.addChild(text);
         x += 12 + text.width + 8;
         if (GLOBAL.INFERNO_ONLY) {
@@ -815,12 +943,45 @@ export class IoMapLod extends Sprite {
             g.beginFill(IoMapLod.PORTAL_COLOUR, 1);
             g.drawCircle(x + 4, 23, 4);
             g.endFill();
-            text = IoMapLod.legendText("Portal to the " + IoUnderworld.NAME, x + 11, 15);
+            text = IoMapLod.legendText(IoFormat.text("io_fmt_map_portal", "Portal to the #v1#", { "v1": IoUnderworld.NAME }), x + 11, 15);
             what.addChild(text);
             x += 11 + text.width;
         }
         what.x = Math.round((this._viewW - x) * 0.5);
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #72: a third line, the tribe yards)
+            let camps: Sprite = new Sprite();
+            camps.name = "ioMap3CampLegend";
+            legend.addChild(camps);
+            g = camps.graphics;
+            x = 0;
+            text = IoMapLod.legendText(KEYS.Get("io_map3_legend_camps"), x, 29);
+            camps.addChild(text);
+            x += text.width + 4;
+            g.lineStyle(0.8, 3811856, 0.9);
+            g.beginFill(IoMapLod.CAMP_DAMAGED, 1);
+            IoMapLod.diamond(g, x + 5, 37, 4.5);
+            g.endFill();
+            text = IoMapLod.legendText(KEYS.Get("io_map3_legend_damaged"), x + 12, 29);
+            camps.addChild(text);
+            x += 12 + text.width + 8;
+            g.lineStyle(1.2, 16777215, 0.9);
+            g.beginFill(IoMapLod.CAMP_READY, 1);
+            IoMapLod.diamond(g, x + 5, 37, 5);
+            g.endFill();
+            text = IoMapLod.legendText(KEYS.Get("io_map3_legend_ready"), x + 12, 29);
+            camps.addChild(text);
+            x += 12 + text.width;
+            g.lineStyle();
+            camps.x = Math.round((this._viewW - x) * 0.5);
+        }
         return legend;
+    }
+
+    /** (QoL #72) A tribe yard's name as the map says it: its tribe and level ("Tribe 34"). */
+    public static campName(cell: any[]): string {
+        let wild: any = IoMapSnapshot.WildAt(cell[0] | 0, cell[1] | 0);
+        return (wild && wild.tribe ? TRIBES.DisplayName(String(wild.tribe)) + " " : "") + (cell[11] | 0);
     }
 
     private static legendText(value: string, x: number, y: number): TextField {

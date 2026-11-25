@@ -8,6 +8,22 @@ import { EntityManager, PostgreSqlDriver } from "@mikro-orm/postgresql";
 import { postgres } from "../../../server.js";
 import { invalidateWorldsCache } from "../knownWorlds.js";
 import { findFreeCell } from "./findFreeCell.js";
+import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
+import { ioInviteReferred } from "../../alliance/ioReferralInvite.js";
+
+/**
+ * Inferno-only (QoL #193): where the player who invited this one has their main yard on the map (Map Room 2), or null.
+ */
+const inviterHome = async (inviterId: number, em: EntityManager<PostgreSqlDriver>) => {
+  const rows = (await em
+    .getConnection()
+    .execute(
+      `SELECT world_id, x, y FROM bym.world_map_cell WHERE uid = ? AND base_type = ? AND map_version = ? AND destroyed_at IS NULL LIMIT 1`,
+      [inviterId, MapRoomCell.HOMECELL, MapRoomVersion.V2]
+    )
+    .catch(() => [])) as { world_id: string; x: number; y: number }[];
+  return rows[0] ? { worldid: String(rows[0].world_id), x: Number(rows[0].x), y: Number(rows[0].y) } : null;
+};
 
 /**
  * Assigns a user to a world by either joining an existing one with available space
@@ -38,9 +54,21 @@ export const joinOrCreateWorld = async (
 
   const shuffledWorlds = availableWorlds.sort(() => Math.random() - 0.5);
 
+  // (Inferno-only, QoL #193: a friend someone invited goes to the inviter's world when it has room, near their yard)
+  let near: { x: number; y: number } | null = null;
+  if (infernoOnlyConfig.enabled && !relocate && user.referred_by) {
+    const home = await inviterHome(user.referred_by, em);
+    const theirs = home ? shuffledWorlds.find((w) => w.uuid === home.worldid) : undefined;
+    if (home && theirs) {
+      shuffledWorlds.splice(shuffledWorlds.indexOf(theirs), 1);
+      shuffledWorlds.unshift(theirs);
+      near = { x: home.x, y: home.y };
+    }
+  }
+
   if (shuffledWorlds.length > 0) {
     world = shuffledWorlds[0];
-    logger.info(`User assigned to existing world: ${world.name}`);
+    logger.info(`User assigned to existing world: ${world.name}${near ? " (their inviter's)" : ""}`);
   } else {
     world = em.create(World, {});
     world.name = "New World";
@@ -59,7 +87,7 @@ export const joinOrCreateWorld = async (
   save.worldid = world.uuid;
 
   // Find an available cell for the user
-  const { x, y, terrainHeight } = await findFreeCell(world, em);
+  const { x, y, terrainHeight } = await findFreeCell(world, em, near);
 
   if (relocate)
     logger.info(
@@ -81,4 +109,9 @@ export const joinOrCreateWorld = async (
   await em.flush();
 
   await invalidateWorldsCache();
+
+  // (Inferno-only, QoL #193: and an invite into the inviter's alliance, when they lead it or are its officer)
+  if (infernoOnlyConfig.enabled && !relocate && user.referred_by) {
+    await ioInviteReferred(user).catch((err) => logger.warn(`No alliance invite for ${user.username}: ${err}`));
+  }
 };

@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { BitmapData } from "flash/display";
-import { BASE, Decoy, GLOBAL, ImageCache, Jars, ResurrectProjectile, STORE, SpriteData, SpurtzCannon, print } from "@game";
+import { BASE, Decoy, GLOBAL, ImageCache, IoDave, Jars, ResurrectProjectile, STORE, SpriteData, SpurtzCannon, print, IoGlowCache } from "@game";
 
 export class SPRITES extends ASObject {
     public static _sprites: any = null;
@@ -12,11 +12,7 @@ export class SPRITES extends ASObject {
 
     public static Setup(): void {
         SPRITES._sprites = {};
-        if (!BASE.isInfernoMainYardOrOutpost) {
-            SPRITES._sprites.worker = new SpriteData("monsters/worker.png", 27, 27, 9, 19);
-        } else {
-            SPRITES._sprites.worker = new SpriteData("monsters/inferno_worker.v2.png", 64, 55, 32, 36);
-        }
+        SPRITES.ioWorkerSprite();
         SPRITES._sprites.C1 = new SpriteData("monsters/sprite.1.v1.png", 24, 21, 8, 14);
         SPRITES._sprites.C2 = new SpriteData("monsters/octoooze.png", 39, 28, 19, 15);
         SPRITES._sprites.C3 = new SpriteData("monsters/sprite.3.v2.png", 30, 28, 7, 20);
@@ -53,11 +49,11 @@ export class SPRITES extends ASObject {
         SPRITES._sprites.IC14 = new SpriteData("monsters/flickerfiend.png", 44, 51, 22, 26);
         // Inferno-only Fusebug (IC15) and Emberghoul (IC20): 30 facings; row 0 standing, 1-8 walk (and the
         // Emberghoul's 9-16 attack). The Fusebug's feet (26, 28) go on the spot in the usual canvas; the
-        // Emberghoul draws on a canvas of its own (Emberghoul.as), hence no offset for it here.
+        // Emberghoul draws on a canvas of its own (Emberghoul.ts), hence no offset for it here.
         SPRITES._sprites.IC15 = new SpriteData("monsters/fusebug.png", 52, 38, 26, 28);
         SPRITES._sprites.IC20 = new SpriteData("monsters/emberghoul.png", 66, 45, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         // Inferno-only Ashkarr (IC24): 188 x 128 frames copied whole onto her own canvas, which she places
-        // with her feet (94, 102) on the spot (creeps/inferno/Ashkarr.as), hence no offset here.
+        // with her feet (94, 102) on the spot (creeps/inferno/Ashkarr.ts), hence no offset here.
         SPRITES._sprites.IC24 = new SpriteData("monsters/ashkarr.png", 188, 128, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         SPRITES._sprites.G1_1 = new SpriteData("monsters/ape_1.png", 96, 69, 26, 36);
         SPRITES._sprites.G1_2 = new SpriteData("monsters/ape_2.png", 89, 73, 26, 36);
@@ -92,6 +88,14 @@ export class SPRITES extends ASObject {
         // every creep asks for one when it is made (CreepSkinManager.SetupSkins).
         SPRITES._sprites.IC9 = SPRITES._sprites.G4_4;
         SPRITES._sprites.IC10 = SPRITES._sprites.G2_4;
+        // Inferno-only (10 October): Korath's and Drull's frozen looks (the D.A.V.E. Club: IoDave), the same sheets
+        // turned to ice (tools/trophy-art/frost.py); "G4_5F" is Korath's level 5 art frozen
+        for (let n: int = 1; n <= 6; n++) {
+            let k: SpriteData = as3.cast(SPRITES._sprites["G4_" + n], SpriteData);
+            let d: SpriteData = as3.cast(SPRITES._sprites["G2_" + n], SpriteData);
+            SPRITES._sprites["G4_" + n + "F"] = new SpriteData("monsters/korath_" + n + ".frozen.png", k.rect.width, k.rect.height, k.middle.x, k.middle.y);
+            SPRITES._sprites["G2_" + n + "F"] = new SpriteData("monsters/dragon_" + n + ".frozen.png", d.rect.width, d.rect.height, d.middle.x, d.middle.y);
+        }
         SPRITES._sprites.shadow = new SpriteData("monsters/flyingshadow.png", 31, 20, 15, 10);
         SPRITES._sprites.bigshadow = new SpriteData("monsters/zafreeti-shadow.png", 48, 32, 24, 16);
         SPRITES._sprites.rocket = new SpriteData("monsters/daverocket.png", 16, 16, 26, 36);
@@ -117,6 +121,8 @@ export class SPRITES extends ASObject {
         SPRITES._sprites.IC25_5 = new SpriteData("monsters/rimegrave_5.png", 148, 166, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         SPRITES._sprites.IC25_6 = new SpriteData("monsters/rimegrave_6.png", 164, 182, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         SPRITES._sprites.IC25 = SPRITES._sprites.IC25_1;
+        // the Basilisk draws himself from his pieces (Basilisk.ts): 16 headings x 4 rows of 96 x 96
+        SPRITES._sprites.IC32 = new SpriteData("monsters/basilisk.png", 96, 96, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         SPRITES._sprites.hailstone = new SpriteData("hfo/extras/hailstone.png", 34, 28, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         SPRITES._sprites.iceorb = new SpriteData("hfo/extras/iceorb.png", 22, 22, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
         SPRITES._sprites.frost = new SpriteData("effects/frost_icon.png", 16, 20, SpriteData.FUBAR_X, SpriteData.FUBAR_Y);
@@ -131,6 +137,19 @@ export class SPRITES extends ASObject {
 
     public static Clear(): void {
         SPRITES._sprites = null;
+    }
+
+    /** The workers' sheet for the loaded yard: the Inferno's imps, or the overworld's builders (outside the Inferno,
+     *  or chosen in the D.A.V.E. Club: IoDave). */
+    public static ioWorkerSprite(): void {
+        if (!SPRITES._sprites) {
+            return;
+        }
+        if (!BASE.isInfernoMainYardOrOutpost || IoDave.overworldWorkers) {
+            SPRITES._sprites.worker = new SpriteData("monsters/worker.png", 27, 27, 9, 19);
+        } else {
+            SPRITES._sprites.worker = new SpriteData("monsters/inferno_worker.v2.png", 64, 55, 32, 36);
+        }
     }
 
     public static SetupSprite(param1: string): void {
@@ -160,6 +179,22 @@ export class SPRITES extends ASObject {
         }
         if (param4 < 0) {
             param4 = (360 + param4) | 0;
+        }
+        // (Inferno-only, 26 October, the user's: "Check in on all monster and champion animations": the cases below skip
+        // the copy when the facing is the one asked for last, telling it by the column alone: facing a whole number of
+        // columns (a Malphus heading 0, 12, 24... degrees; a Spurtz 0, 45, 90...) its walk stood still, and a picture
+        // wiped since (healed to full) stayed empty. GetFrame keeps the frame a picture holds and skips the same copy
+        // itself, so here every call copies)
+        if (GLOBAL.INFERNO_ONLY && SPRITES.ioSameFrame) {
+            param6 = -2;
+        }
+        // (Inferno-only, 21 October: a sheet none of the cases below is for (a Zagnoid's, most monsters'): straight to the
+        // last case, without comparing its name with every other's, a thousand times a step in a big battle)
+        if (GLOBAL.INFERNO_ONLY && SPRITES.ioPlain(param2)) {
+            if (param6 != param4 / 12) {
+                SPRITES.GetFrame(param1, as3.cast(SPRITES._sprites[param2], SpriteData), (param4 / 12) | 0);
+            }
+            return (param4 / 12) | 0;
         }
         if (param2 == "worker") {
             if (STORE._storeData.BST) {
@@ -242,10 +277,13 @@ export class SPRITES extends ASObject {
             return (param4 / 11.25) | 0;
         }
         if (param2 == "IC1" || param2 == "IC1s") {
-            if (param6 != param4 / 11.25) {
-                SPRITES.GetFrame(param1, as3.cast(SPRITES._sprites[param2], SpriteData), (param4 / 11.25) | 0, (param5 / 8 % 2 + 1) | 0);
+            // (Inferno-only, 26 October: the Spurtz's sheets have 30 facings, 12 degrees each, read as 32 (11.25): facing
+            // 337.5 to 360 it was drawn from past the sheet's edge, nothing, in a battle and in the compound)
+            let per: number = GLOBAL.INFERNO_ONLY ? 12 : 11.25;
+            if (param6 != param4 / per) {
+                SPRITES.GetFrame(param1, as3.cast(SPRITES._sprites[param2], SpriteData), ((param4 / per) | 0) % (GLOBAL.INFERNO_ONLY ? 30 : 32), (param5 / 8 % 2 + 1) | 0);
             }
-            return (param4 / 11.25) | 0;
+            return (param4 / per) | 0;
         }
         if (param2 == "IC3") {
             if (param6 != param4 / 12) {
@@ -282,6 +320,22 @@ export class SPRITES extends ASObject {
             return _loc9_;
         }
         if (param2 == "IC5") {
+            if (GLOBAL.INFERNO_ONLY) {
+                // (Inferno-only, 26 October, the user's: "Sometimes balthazar ... during an attack will jolt forward and
+                // backward whilst moving in one direction (his shadow stays at the same spot)": his flight's six frames
+                // sink him 6 pixels as his wings rise, and from the last back to the first he jumped back up at once.
+                // Played there and back (1 to 6, then 5 to 2) he sinks and rises smoothly with his wingbeat. And the
+                // frame he holds is told by his facing and his frame together: a facing a whole number of columns (0,
+                // 180 degrees) froze his wings)
+                let k: int = (((param5 / 8) | 0) % 10) | 0;
+                let row: int = (1 + (k <= 5 ? k : 10 - k)) | 0;
+                let col: int = ((param4 / 12) | 0) % 30;
+                let id: int = (col + row * 30) | 0;
+                if (param6 != id) {
+                    SPRITES.GetFrame(param1, as3.cast(SPRITES._sprites.IC5, SpriteData), col, row);
+                }
+                return id;
+            }
             if (param6 != param4 / 12) {
                 SPRITES.GetFrame(param1, as3.cast(SPRITES._sprites.IC5, SpriteData), (param4 / 12) | 0, (param5 / 8 % 6 + 1) | 0);
             }
@@ -341,7 +395,9 @@ export class SPRITES extends ASObject {
                         _loc10_ = 8;
                         break;
                     case 3:
-                        _loc9_ = 10;
+                        // (Inferno-only, 26 October: his level 3 sheet has 18 rows: the strike's tenth frame, row 18, was
+                        // past its end, nothing drawn; nine frames, 9 to 17)
+                        _loc9_ = GLOBAL.INFERNO_ONLY ? 9 : 10;
                         _loc10_ = 9;
                         break;
                     case 4:
@@ -433,12 +489,120 @@ export class SPRITES extends ASObject {
         return 0;
     }
 
+    /** Inferno-only (21 October): the sheets GetSprite has no case of its own for, by name (true: the last case's). */
+    private static _ioPlain: Map<string, boolean> = new Map<string, boolean>();
+
+    /** The names GetSprite has a case for (besides those starting G1-G5). */
+    private static readonly IO_CASES: string[] = ["worker", "C9", "C12", "C13", "C14", "C16", "C19", "C15", "IC1", "IC1s", "IC3", "IC24", "IC12", "IC14", "IC15", "IC20", "IC5", "shadow", "bigshadow", "C200", "rocket", "iceorb", "hailstone"];
+
+    /** Inferno-only (21 October): true when GetSprite's last case is the one for this sheet (it is loaded, no case of its own). */
+    public static ioPlain(name: string): boolean {
+        let known: boolean = SPRITES._ioPlain.get(name);
+        if (known === undefined) {
+            if (!SPRITES._sprites || !SPRITES._sprites[name]) {
+                // (not loaded yet: asked again next time)
+                return false;
+            }
+            let g: string = String(name).substr(0, 2);
+            known = SPRITES.IO_CASES.indexOf(name) < 0 && name != SpurtzCannon.SPURTZ_PROJECTILE && g != "G1" && g != "G2" && g != "G3" && g != "G4" && g != "G5";
+            SPRITES._ioPlain.set(name, known);
+        }
+        return known && Boolean(SPRITES._sprites[name]);
+    }
+
+    /** Inferno-only (19 October): a frame already on a picture isn't copied again (GetFrame, ioOverlay); false: always (tests). */
+    public static ioSameFrame: boolean = true;
+
+    /**
+     * Inferno-only (19 October): something drawn over the frame GetFrame left on a picture (a monster's health bar):
+     * drawn again only when the picture changed since, or it differs (key); null: nothing is to be over it now
+     * (healed), so the frame is copied again. The picture then still counts as holding its frame (GetFrame).
+     */
+    public static ioOverlay(bmd: BitmapData, key: string, draw: () => void): void {
+        let held: any = bmd ? Object(bmd) : null;
+        if (!held || !GLOBAL.INFERNO_ONLY || !SPRITES.ioSameFrame || !("$version" in held)) {
+            if (draw != null) {
+                draw();
+            }
+            return;
+        }
+        let known: boolean = held["$ioGfKey"] != null && held["$ioGfVer"] === held["$version"];
+        if (key == null) {
+            if (held["$ioGfOver"] != null) {
+                held["$ioGfKey"] = null;
+                held["$ioGfOver"] = null;
+            }
+            return;
+        }
+        if (known && held["$ioGfOver"] === key) {
+            return;
+        }
+        // (another bar over an old one covers it, as before)
+        draw();
+        if (known) {
+            held["$ioGfVer"] = held["$version"];
+            held["$ioGfOver"] = key;
+        } else {
+            held["$ioGfOver"] = null;
+        }
+    }
+
     public static GetFrame(param1: BitmapData, param2: SpriteData, param3: int, param4: int = 0): void {
         if (Boolean(param2) && Boolean(param2.image)) {
+            // (Inferno-only, 26 October: a frame asked for past the sheet's edge drew nothing (the monster vanished for
+            // it): the facing taken round the sheet's columns, the row kept to its last)
+            if (GLOBAL.INFERNO_ONLY) {
+                let cols: int = Math.max(1, Math.round(param2.image.width / param2.rect.width)) | 0;
+                let rows: int = Math.max(1, Math.round(param2.image.height / param2.rect.height)) | 0;
+                if (param3 >= cols || param3 < 0) {
+                    param3 = (((param3 % cols) + cols) % cols) | 0;
+                }
+                if (param4 >= rows) {
+                    param4 = (rows - 1) | 0;
+                } else if (param4 < 0) {
+                    param4 = 0;
+                }
+            }
             param2.rect.x = param2.rect.width * param3;
             param2.rect.y = param2.rect.height * param4;
             if (param1) {
+                // (Inferno-only, 19 October: the picture already holds that frame, nothing drawn on it since: not copied
+                // again. Most monsters asked for their frame every game step (a shadow too, its one frame), and every
+                // copy counted as a change: the yard's renderer drew each standing monster again every frame; 500 of
+                // them a thousand copies a step)
+                let fk: string = null;
+                if (GLOBAL.INFERNO_ONLY && SPRITES.ioSameFrame && "$version" in param1) {
+                    // (21 October: the same sheet, the same part of it, to the same place, the picture and the sheet as
+                    // they were: told by numbers, before any key is put together)
+                    let was: any = Object(param1);
+                    let r0: any[] = was["$ioGfR"];
+                    if (r0 && was["$ioGfSd"] === param2 && was["$ioGfKey"] != null && r0[0] === param2.rect.x && r0[1] === param2.rect.y && r0[2] === param2.rect.width && r0[3] === param2.rect.height && r0[4] === param2.offset.x && r0[5] === param2.offset.y && was["$ioGfVer"] === was["$version"] && was["$ioGfImg"] === param2.image && was["$ioGfImgVer"] === Object(param2.image)["$version"]) {
+                        return;
+                    }
+                    fk = param2.key + "|" + param2.rect.x + "|" + param2.rect.y + "|" + param2.rect.width + "|" + param2.rect.height + "|" + param2.offset.x + "|" + param2.offset.y;
+                    let held: any = Object(param1);
+                    if (held["$ioGfKey"] === fk && held["$ioGfVer"] === held["$version"] && held["$ioGfImg"] === param2.image && held["$ioGfImgVer"] === Object(param2.image)["$version"]) {
+                        return;
+                    }
+                }
                 param1.copyPixels(param2.image, param2.rect, param2.offset);
+                if (fk != null) {
+                    let held2: any = Object(param1);
+                    held2["$ioGfKey"] = fk;
+                    held2["$ioGfVer"] = held2["$version"];
+                    held2["$ioGfImg"] = param2.image;
+                    held2["$ioGfImgVer"] = Object(param2.image)["$version"];
+                    held2["$ioGfOver"] = null;
+                    // (21 October: where in the sheet, and where on the picture: the yard drawn by the graphics card
+                    // draws the frame straight from the sheet, Renderer.ioGlEntry)
+                    held2["$ioGfR"] = [param2.rect.x, param2.rect.y, param2.rect.width, param2.rect.height, param2.offset.x, param2.offset.y];
+                    held2["$ioGfSd"] = param2;
+                }
+                // (Inferno-only, 16 October: which frame it holds now, so a glowing monster's picture is made once
+                // for every monster showing the frame: IoGlowCache)
+                if (GLOBAL.INFERNO_ONLY) {
+                    IoGlowCache.tag(param1, param2.key + "@" + param2.rect.x + "," + param2.rect.y + "," + param2.rect.width + "," + param2.rect.height + "@" + param2.offset.x + "," + param2.offset.y);
+                }
             } else {
                 print("passed in a null canvas", true);
             }

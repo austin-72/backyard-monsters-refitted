@@ -1,9 +1,10 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
-import { Bitmap, BitmapData, MovieClip, Sprite } from "flash/display";
+import { Bitmap, BitmapData, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
-import { ACADEMY, BASE, BFOUNDATION, BUILDINGS, BWALL, BYMConfig, Bunker, Button, ButtonBrown, CREATURELOCKER, CREATURES, GLOBAL, ImageCache, InstanceManager, KEYS, LOGGER, LOGIN, MAP, MAPROOM_DESCENT, MONSTERLAB, MapRoomManager, MonsterBase, MovieClipUtils, PLANNER, PLEASEWAIT, POPUPS, Player, QUESTS, QUEUE, SOUNDS, STOREITEM, STOREPOPUP, STREAMLINESPEEDUP_CLIP, ScrollSet, SecNum, TUTORIAL, UI2, popup_purchase } from "@game";
+import { TextField, TextFormat, TextFormatAlign } from "flash/text";
+import { ACADEMY, ALLIANCEWINDOW, BASE, BFOUNDATION, BUILDINGS, BWALL, BYMConfig, Bunker, Button, Button_CLIP, ButtonBrown, CREATURELOCKER, CREATURES, GLOBAL, ImageCache, InstanceManager, IoCrest, IoEmotes, IoTerrainPopup, KEYS, LOGGER, LOGIN, MAP, MAPROOM_DESCENT, MONSTERLAB, MapRoomManager, MonsterBase, MovieClipUtils, PLANNER, PLEASEWAIT, POPUPS, Player, QUESTS, QUEUE, SOUNDS, STOREITEM, STOREPOPUP, STREAMLINESPEEDUP_CLIP, ScrollSet, SecNum, TUTORIAL, UI2, popup_purchase, BUILDINGSPOPUP, IoShop, ButtonBrown_CLIP, IoDevil, IoWallUpgrade } from "@game";
 
 export class STORE extends ASObject {
     public static _storeTabs: any[] = null;
@@ -44,6 +45,11 @@ export class STORE extends ASObject {
 
     public static _tab: int = 0;
 
+    /** (Inferno-only, QoL #468) the Store's tab when last closed after opening from the bar; opened from the bar */
+    public static ioLastTab: int = 0;
+
+    public static ioFromBar: boolean = false;
+
     public static _page: number = NaN;
 
     public static _open: boolean = false;
@@ -61,6 +67,11 @@ export class STORE extends ASObject {
     public static _customPage: any[] = [];
 
     public static _zazzleMC: MovieClip = null;
+
+    /** (Inferno-only, QoL #476) the Store window whose Looks tab button listens already (once a window). */
+    private static _ioLooksFor: any = null;
+
+    /** (Inferno-only, 22 October) The Extras tab's page shown (0 or 1: IoShop's items, six to a page). */
 
     public static m_tutorialBlock: boolean = false;
 
@@ -107,6 +118,19 @@ export class STORE extends ASObject {
         return JSON.stringify(_loc1_);
     }
 
+    /**
+     * How many of a store item the player has, for its price and its "sold out" (its store record's q). Inferno-only (26
+     * October, the user's: "Make sure that ... everything you can buy in the shop actually works"): protection (PRO1-3)
+     * counts none: bought once, it was "already had" until its days were up, even after an attack of the player's took
+     * the protection away, and with no price to buy more (the server adds the days onto any protection left).
+     */
+    public static ioOwned(code: string): int {
+        if (GLOBAL.INFERNO_ONLY && /^PRO[123]$/.test(code)) {
+            return 0;
+        }
+        return STORE._storeData && STORE._storeData[code] ? STORE._storeData[code].q | 0 : 0;
+    }
+
     public static GetHealAllShinyCost(): int {
         let _loc4_: string = null;
         let _loc7_: Vector<any> = null;
@@ -138,6 +162,11 @@ export class STORE extends ASObject {
         let _loc4_: int = 0;
         _loc3_ = GLOBAL.getShinyCostFromResourceAmt(GLOBAL.player.getResourceCostByID(param1) - GLOBAL.player.getResourceCostByID(param1, true));
         _loc4_ = _loc2_.getSecsTillDoneByID(param1, true);
+        // Inferno-only (14 October, QoL #275): the Inferno's time price is never 0 (a flat price for the first
+        // hour), so "Heal All Monsters" charged 10 Shiny for every kind of monster, healthy ones too.
+        if (GLOBAL.INFERNO_ONLY && _loc4_ <= 0 && _loc3_ <= 0) {
+            return 0;
+        }
         return (_loc3_ + STORE.GetTimeCost(_loc4_, false) * GLOBAL.ABTestHealingTimeShinyMod()) | 0;
     }
 
@@ -171,9 +200,15 @@ export class STORE extends ASObject {
         }
         if (seconds < 60 * 60) {
             let minutes: int = Math.ceil(seconds / 60) | 0;
-            return Math.max(1, Math.min(9, 1 + Math.floor((minutes - 11) / 6))) | 0;
+            return STORE.ioSpeedupMul(Math.max(1, Math.min(9, 1 + Math.floor((minutes - 11) / 6))) | 0);
         }
         return STORE.GetTimeCost(seconds);
+    }
+
+    /** Inferno-only (13 November): a Shiny speed-up's price with the Devil's Contract (Merchant's Due's price), rounded up. */
+    public static ioSpeedupMul(shiny: int): int {
+        let m: number = GLOBAL.INFERNO_ONLY ? IoDevil.mul("speedups") : 1;
+        return m != 1 && shiny > 0 ? Math.ceil(shiny * m) | 0 : shiny;
     }
 
     public static GetTimeCost(param1: int, param2: boolean = true): int {
@@ -184,7 +219,7 @@ export class STORE extends ASObject {
         }
         if (GLOBAL.INFERNO_ONLY) {
             // A flat price for the first hour left, then so much per further hour, pro rata.
-            return Math.ceil(GLOBAL.ioPrice("finish_first", 10) + GLOBAL.ioPrice("finish_hour", 7.5) * Math.max(0, param1 / 3600 - 1)) | 0;
+            return STORE.ioSpeedupMul(Math.ceil(GLOBAL.ioPrice("finish_first", 10) + GLOBAL.ioPrice("finish_hour", 7.5) * Math.max(0, param1 / 3600 - 1)) | 0);
         }
         _loc3_ = Math.ceil(param1 * 20 / 60 / 60) | 0;
         _loc4_ = Math.sqrt(param1 * 0.8) | 0;
@@ -223,7 +258,7 @@ export class STORE extends ASObject {
             // Main yard: the original Inferno store, minus the Incubator Overdrives: monsters hatch in
             // one second here, so they could never be bought and sat greyed out. Outposts: the same
             // minus yard expansion.
-            STORE._grouping = [[BASE.isOutpost ? ["BLK2I", "BLK3I"] : ["ENLI", "BLK2I", "BLK3I"]], [["BR11I", "BR12I", "BR13I", "BR21I", "BR22I", "BR23I", "BR31I", "BR32I", "BR33I", "BR41I", "BR42I", "BR43I", "BIP"]], [["SP1", "SP2", "SP3", "SP4", "FIX"]], [["PRO1", "PRO2", "PRO3", "EXHI", "TODI"]]];
+            STORE._grouping = [[BASE.isOutpost ? ["BLK2I", "BLK3I", "BLK4I", "BLK5I"] : ["ENLI", "BLK2I", "BLK3I", "BLK4I", "BLK5I"]], [["BR11I", "BR12I", "BR13I", "BR21I", "BR22I", "BR23I", "BR31I", "BR32I", "BR33I", "BR41I", "BR42I", "BR43I", "BIP"]], [["SP1", "SP2", "SP3", "SP4", "FIX"]], [["PRO1", "PRO2", "PRO3", "EXHI", "TODI"]]];
         } else if (BASE.isOutpost) {
             STORE._grouping = [[MapRoomManager.instance.isInMapRoom3 ? [] : ["BST", "BLK2", "BLK3", "BLK4", "BLK5"]], [MapRoomManager.instance.isInMapRoom3 ? [] : ["BR11", "BR12", "BR13", "BR21", "BR22", "BR23", "BR31", "BR32", "BR33", "BR41", "BR42", "BR43"]], [MapRoomManager.instance.isInMapRoom3 ? ["SP1", "SP2", "SP3", "SP4", "FIX"] : ["SP1", "SP2", "SP3", "SP4", "POD", "FIX", "HOD", "HOD2", "HOD3"]], [MapRoomManager.instance.isInMapRoom3 ? [] : ["PRO1", "PRO2", "PRO3", "TOD", "EXH"]]];
         } else if (BASE.isMainYard) {
@@ -233,7 +268,7 @@ export class STORE extends ASObject {
                 STORE._grouping = [[["BEW", "BST", "ENL", "BLK2", "BLK3", "BLK4", "BLK5"]], [["BR11", "BR12", "BR13", "BR21", "BR22", "BR23", "BR31", "BR32", "BR33", "BR41", "BR42", "BR43", "BIP"]], [["SP1", "SP2", "SP3", "SP4", "POD", "FIX", "HOD", "HOD2", "HOD3"]], [MapRoomManager.instance.isInMapRoom3 ? ["PRO1", "PRO2", "PRO3", "MOD", "MDOD", "MSOD", "TOD"] : ["PRO1", "PRO2", "PRO3", "MOD", "MDOD", "MSOD", "EXH", "TOD"]]];
             }
         } else {
-            STORE._grouping = [[["ENLI", "BLK2I", "BLK3I"]], [["BR11I", "BR12I", "BR13I", "BR21I", "BR22I", "BR23I", "BR31I", "BR32I", "BR33I", "BR41I", "BR42I", "BR43I", "BIP"]], [["SP1", "SP2", "SP3", "SP4", "FIX", "HODI", "HOD2I", "HOD3I"]], [MapRoomManager.instance.isInMapRoom3 ? ["PRO1", "PRO2", "PRO3", "TODI"] : ["PRO1", "PRO2", "PRO3", "EXHI", "TODI"]]];
+            STORE._grouping = [[["ENLI", "BLK2I", "BLK3I", "BLK4I", "BLK5I"]], [["BR11I", "BR12I", "BR13I", "BR21I", "BR22I", "BR23I", "BR31I", "BR32I", "BR33I", "BR41I", "BR42I", "BR43I", "BIP"]], [["SP1", "SP2", "SP3", "SP4", "FIX", "HODI", "HOD2I", "HOD3I"]], [MapRoomManager.instance.isInMapRoom3 ? ["PRO1", "PRO2", "PRO3", "TODI"] : ["PRO1", "PRO2", "PRO3", "EXHI", "TODI"]]];
         }
         let resourceIndex: int = 1;
         while (resourceIndex <= 4) {
@@ -370,12 +405,13 @@ export class STORE extends ASObject {
             }
         }
         STORE._storeItems.FIX.c = [GLOBAL.INFERNO_ONLY ? (_loc5_ > 0 ? GLOBAL.ioPrice("repair", 25) | 0 : 0) : STORE.GetTimeCost(_loc4_) + _loc5_ * 10];
-        STORE._storeItems.FIX.d = KEYS.Get("desc_repairbdgs", { "v1": STORE._repairCount });
+        // (Inferno-only, QoL #306: the free time as it is, not "5 minutes"; healing has no free time at all)
+        STORE._storeItems.FIX.d = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_repair_desc", { "v1": STORE._repairCount, "v2": GLOBAL.ioDuration(GLOBAL.ioCloseEnough) }) : KEYS.Get("desc_repairbdgs", { "v1": STORE._repairCount });
         STORE._storeItems.FIX.t = KEYS.Get("str_repairbdgs");
         _loc8_ = GLOBAL.player.getNumDamagedCreeps();
         if (_loc8_) {
             STORE._storeItems.HAMS.t = KEYS.Get("str_healmons");
-            STORE._storeItems.HAMS.d = KEYS.Get("str_healmons_desc", { "v1": _loc8_ });
+            STORE._storeItems.HAMS.d = KEYS.Get(GLOBAL.INFERNO_ONLY ? "io_heal_desc" : "str_healmons_desc", { "v1": _loc8_ });
             STORE._storeItems.HAMS.c = [STORE.GetHealAllShinyCost()];
         }
         let _loc9_: int = 0;
@@ -395,9 +431,18 @@ export class STORE extends ASObject {
             }
         }
         if (BASE.isInfernoMainYardOrOutpost) {
-            STORE._storeItems.BLK2I.c = [_loc10_];
-            STORE._storeItems.BLK2I.d = KEYS.Get("bi_wall_2_str_desc", { "v1": _loc12_, "v2": GLOBAL.FormatNumber(_loc11_) });
-            STORE._storeItems.BLK2I.t = KEYS.Get("#bi_wall_2#");
+            // (22 November: every level from IoWallUpgrade.shinyCost: each wall's steps from the level it has paid for,
+            // to 4 and 5 too (BLK4I, BLK5I: Studded Iron, Fireblack), the resources saved from the walls' own costs)
+            for (let ioTo: int = 2; ioTo <= 5; ioTo++) {
+                let ioItem: any = STORE._storeItems["BLK" + ioTo + "I"];
+                if (!ioItem) {
+                    continue;
+                }
+                let ioC: any = IoWallUpgrade.shinyCost(ioTo);
+                ioItem.c = [ioC.c];
+                ioItem.d = KEYS.Get(ioTo <= 3 ? "bi_wall_" + ioTo + "_str_desc" : "io_bi_wall_" + ioTo + "_str_desc", { "v1": ioC.n, "v2": GLOBAL.FormatNumber(ioC.saved) });
+                ioItem.t = KEYS.Get(ioTo <= 3 ? "#bi_wall_" + ioTo + "#" : "io_bi_wall_" + ioTo);
+            }
         } else {
             STORE._storeItems.BLK2.c = [_loc10_];
             STORE._storeItems.BLK2.d = KEYS.Get("desc_stonewalls", { "v1": _loc12_, "v2": GLOBAL.FormatNumber(_loc11_) });
@@ -419,9 +464,7 @@ export class STORE extends ASObject {
             }
         }
         if (BASE.isInfernoMainYardOrOutpost) {
-            STORE._storeItems.BLK3I.c = [_loc10_];
-            STORE._storeItems.BLK3I.d = KEYS.Get("bi_wall_3_str_desc", { "v1": _loc12_, "v2": GLOBAL.FormatNumber(_loc11_) });
-            STORE._storeItems.BLK3I.t = KEYS.Get("#bi_wall_3#");
+            // (22 November: set above, with the rest)
         } else {
             STORE._storeItems.BLK3.c = [_loc10_];
             STORE._storeItems.BLK3.d = KEYS.Get("desc_metalwalls", { "v1": _loc12_, "v2": GLOBAL.FormatNumber(_loc11_) });
@@ -480,12 +523,13 @@ export class STORE extends ASObject {
             STORE._storeItems.BLK5.d = KEYS.Get("desc_blackwalls", { "v1": _loc12_, "v2": GLOBAL.FormatNumber(_loc11_) });
             STORE._storeItems.BLK5.t = KEYS.Get("str_blackwalls");
         }
+        // (Inferno-only, QoL #235: in the player's language)
         if (BASE.isInfernoMainYardOrOutpost) {
-            STORE._storeItems.HODI.d = "Speed up all harvester production for 12 hours.";
-            STORE._storeItems.HODI.t = "Harvester Overdrive";
+            STORE._storeItems.HODI.d = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_hod_desc") : "Speed up all harvester production for 12 hours.";
+            STORE._storeItems.HODI.t = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_hod_title") : "Harvester Overdrive";
         } else {
-            STORE._storeItems.HOD.d = "Speed up all harvester production for 12 hours.";
-            STORE._storeItems.HOD.t = "Harvester Overdrive";
+            STORE._storeItems.HOD.d = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_hod_desc") : "Speed up all harvester production for 12 hours.";
+            STORE._storeItems.HOD.t = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_t3k_hod_title") : "Harvester Overdrive";
             STORE._storeItems.POD.d = KEYS.Get("store_pod_desc");
             STORE._storeItems.POD.t = KEYS.Get("store_pod_title");
         }
@@ -577,9 +621,8 @@ export class STORE extends ASObject {
                         STORE._mc.ScaleUp();
                         GLOBAL.BlockerAdd();
                         GLOBAL._layerWindows.addChild(STORE._mc);
-                        if (GLOBAL._newBuilding) {
-                            GLOBAL._newBuilding.Cancel();
-                        }
+                        // (QoL #470: kept, out of sight, until the Store closes)
+                        GLOBAL.ioHoldPut();
                         if (BUILDINGS._open) {
                             BUILDINGS.Hide();
                         }
@@ -587,6 +630,11 @@ export class STORE extends ASObject {
                     STORE._customPage = param3;
                     if (TUTORIAL._stage < 200) {
                         STORE._mc.tShinyBalance.visible = false;
+                        STORE._mc.bAdd.visible = false;
+                    } else if (GLOBAL.INFERNO_ONLY) {
+                        // (QoL #293: Shiny can't be bought here, so no Add Shiny button: the top bar already hides
+                        // it; here it lit up at 250 Shiny or less and only said it couldn't)
+                        STORE._mc.tShinyBalance.visible = true;
                         STORE._mc.bAdd.visible = false;
                     } else {
                         STORE._mc.tShinyBalance.visible = true;
@@ -607,7 +655,22 @@ export class STORE extends ASObject {
                     STORE._mc.b3.addEventListener(MouseEvent.CLICK, STORE.SwitchClick(3, 0, true));
                     STORE._mc.b4.SetupKey("str_protection", false, 0, 0, "#ECBF88");
                     STORE._mc.b4.addEventListener(MouseEvent.CLICK, STORE.SwitchClick(4, 0, true));
-                    if (!GLOBAL._flags.viximo && !GLOBAL._flags.kongregate) {
+                    if (GLOBAL.INFERNO_ONLY) {
+                        // (QoL #294: the Social tab was an old merchandise advert for a shop long gone)
+                        // (QoL #476: in its place, Looks: the skins, emotes, crests and animated decorations, and where
+                        // each is had: ioLookCard)
+                        STORE._mc.b5.visible = true;
+                        STORE._mc.b5.SetupKey("io_club2_store_looks", false, 0, 0, "#ECBF88");
+                        if (STORE._ioLooksFor != STORE._mc) {
+                            STORE._ioLooksFor = STORE._mc;
+                            STORE._mc.b5.addEventListener(MouseEvent.CLICK, STORE.SwitchClick(5, 0, true));
+                        }
+                        // (23 October, the user's: "make sure we have things in the correct categories": the Extras
+                        // tab (22 October) is gone, each of its items in the tab it belongs to: IoShop.TAB_ITEMS)
+                        if (STORE._mc.b6) {
+                            STORE._mc.b6.visible = false;
+                        }
+                    } else if (!GLOBAL._flags.viximo && !GLOBAL._flags.kongregate) {
                         STORE._mc.b5.SetupKey("str_zazzle", false, 0, 0, "#ECBF88");
                         STORE._mc.b5.addEventListener(MouseEvent.CLICK, STORE.SwitchClick(5, 0, true));
                     } else {
@@ -618,7 +681,7 @@ export class STORE extends ASObject {
                     GLOBAL.Message(KEYS.Get("str_damaged"));
                 }
             } else {
-                GLOBAL.Message(KEYS.Get("str_notbuilt"));
+                BUILDINGS.ioNeed(KEYS.Get("str_notbuilt"), 12);
             }
         }
         STORE.Update();
@@ -764,7 +827,7 @@ export class STORE extends ASObject {
                 POPUPS.DisplayGetShiny(param1);
                 return;
             }
-            if (!GLOBAL.ioConfirmShiny(STORE._streamline_cost | 0, "to finish this now", (): void => {
+            if (!GLOBAL.ioConfirmShiny(STORE._streamline_cost | 0, KEYS.Get("io_t3k_for_finish_now"), (): void => {
                 STORE.StreamlineBuy(param1);
             })) {
                 return;
@@ -943,7 +1006,7 @@ export class STORE extends ASObject {
         _loc4_ = 0;
         _loc5_ = _loc10_.c.length | 0;
         if (_loc11_) {
-            _loc4_ = _loc11_.q | 0;
+            _loc4_ = STORE.ioOwned(_loc9_);
         }
         if (_loc10_.i) {
             _loc4_ = 0;
@@ -1173,13 +1236,19 @@ export class STORE extends ASObject {
         STORE._tab = param1;
         STORE._page = param2;
         let _loc5_: int = 1;
-        while (_loc5_ <= 5) {
-            (as3.as(STORE._mc["b" + _loc5_], ButtonBrown)).Highlight = false;
+        while (_loc5_ <= 6) {
+            // (Inferno-only, 22 October: the sixth, Extras, when it is there)
+            if (STORE._mc["b" + _loc5_]) {
+                (as3.as(STORE._mc["b" + _loc5_], ButtonBrown)).Highlight = false;
+            }
             _loc5_++;
+        }
+        if (param1 == 6 && (!STORE._mc.b6 || !STORE._mc.b6.visible)) {
+            param1 = STORE._tab = 1;
         }
         if (!STORE._customPage) {
             (as3.as(STORE._mc["b" + STORE._tab], ButtonBrown)).Highlight = true;
-            STORE._mc.window.gotoAndStop(STORE._tab);
+            STORE._mc.window.gotoAndStop(STORE._tab == 6 ? 5 : STORE._tab);
         } else {
             STORE._mc.window.gotoAndStop(6);
         }
@@ -1209,7 +1278,12 @@ export class STORE extends ASObject {
             groupArray = STORE._customPage;
         } else if (param1 == 5) {
             groupArray = [];
-            STORE.ZazzleAdd();
+            // (Inferno-only, QoL #476: the Looks tab; 23 October: stock cards in the grid, below)
+            if (GLOBAL.INFERNO_ONLY) {
+                STORE.ZazzleClear();
+            } else {
+                STORE.ZazzleAdd();
+            }
         } else {
             groupArray = as3.cast(STORE._grouping[STORE._tab - 1][0], Array);
         }
@@ -1420,7 +1494,7 @@ export class STORE extends ASObject {
             _loc6_ = 0;
             _loc7_ = storeItemObject.c.length | 0;
             if (_loc22_) {
-                _loc6_ = _loc22_.q | 0;
+                _loc6_ = STORE.ioOwned(item);
             }
             if (storeItemObject.i) {
                 _loc6_ = 0;
@@ -1602,7 +1676,9 @@ export class STORE extends ASObject {
                         }
                         _loc9_ = _loc33_;
                         if (storeItemObject.du > 0) {
-                            _loc10_ = "<font color=\"#0000CC\">" + KEYS.Get("str_buy_cooldown", { "v1": GLOBAL.ToTime(storeItemObject.du | 0) }) + "</font>";
+                            // (Inferno-only, 24 October: "1d" in the language's short units: the stock time ran its words together,
+                            // "1day 0hrs 0mins", "1Dia 0hora 0minuto", and cut off the card's last line)
+                            _loc10_ = "<font color=\"#0000CC\">" + KEYS.Get("str_buy_cooldown", { "v1": GLOBAL.INFERNO_ONLY ? GLOBAL.ioDuration(storeItemObject.du | 0) : GLOBAL.ToTime(storeItemObject.du | 0) }) + "</font>";
                         } else if (storeItemObject.i) {
                             _loc10_ = "<font color=\"#0000CC\">" + KEYS.Get("str_buyoften") + "</font>";
                         } else {
@@ -1624,6 +1700,11 @@ export class STORE extends ASObject {
             _loc23_.tA.htmlText = _loc8_ + " ";
             _loc23_.tB.htmlText = as3.str(_loc9_);
             _loc23_.tC.htmlText = _loc10_ + " ";
+            if (GLOBAL.INFERNO_ONLY) {
+                // (24 October: a long description (Portuguese and Spanish ones most) drawn smaller to fit its card)
+                GLOBAL.ioFitHeight(_loc23_.tA, 8);
+                GLOBAL.ioFitHeight(_loc23_.tC, 8);
+            }
             if ((_loc31_ = item).substr(0, 2) == "SP") {
                 _loc31_ = _loc31_.substr(0, 3);
             }
@@ -1635,7 +1716,11 @@ export class STORE extends ASObject {
             if (_loc23_.bBuy.Enabled) {
                 _loc23_.bBuy.addEventListener(MouseEvent.MOUSE_DOWN, STORE.Buy(item));
             }
-            if (item.substr(0, 2) == "SP") {
+            if (GLOBAL.INFERNO_ONLY && (item == "BLK4I" || item == "BLK5I")) {
+                // (22 November: no picture of their own in the store's: the wall's own button, Studded Iron or Fireblack)
+                _loc23_.mcIcon.gotoAndStop(0);
+                STORE.ioWallIcon(_loc23_, item == "BLK4I" ? "studded_wall.v3.jpg" : "fireblack_wall.v3.jpg");
+            } else if (item.substr(0, 2) == "SP") {
                 _loc23_.mcIcon.gotoAndStop(item.substr(0, 3));
             } else if (MovieClipUtils.validateFrameLabel(_loc23_.mcIcon, item)) {
                 _loc23_.mcIcon.gotoAndStop(item);
@@ -1648,6 +1733,22 @@ export class STORE extends ASObject {
             _loc12_ = (_loc16_ % _loc15_ * 220 + _loc16_ % _loc15_ * _loc17_) | 0;
             _loc11_ = (_loc14_ * 150 + _loc14_ * _loc18_) | 0;
             index++;
+        }
+        // (Inferno-only, 22 October: IoShop's items sold in this tab: stock cards, in the grid after the stock ones.
+        // 23 October: every one of them so (IoShop.TAB_ITEMS); in Looks, the looks had elsewhere too ("@skins": a card
+        // whose button goes there))
+        if (GLOBAL.INFERNO_ONLY && !STORE._customPage && IoShop.TAB_ITEMS[STORE._tab]) {
+            for (let ioId of as3.values(IoShop.TAB_ITEMS[STORE._tab])) {
+                let what: string = String(ioId);
+                if (what.charAt(0) != "@" && !IoShop.data) {
+                    continue;
+                }
+                let card: MovieClip = what.charAt(0) == "@" ? STORE.ioLookCard(what.substr(1)) : STORE.ioTabItem(what);
+                card.x = (_loc16_ % _loc15_) * 220 + (_loc16_ % _loc15_) * _loc17_;
+                card.y = Math.floor(_loc16_ / _loc15_) * 150 + Math.floor(_loc16_ / _loc15_) * _loc18_;
+                STORE._items.addChild(card);
+                _loc16_++;
+            }
         }
         STORE._mc.window.content.mask = STORE._mc.window.msk;
         if (STORE._scrollUpdate) {
@@ -1673,7 +1774,13 @@ export class STORE extends ASObject {
             GLOBAL.BlockerRemove();
             SOUNDS.Play("close");
             STORE._open = false;
+            GLOBAL.ioHoldBack();
             GLOBAL._layerWindows.removeChild(STORE._mc);
+            // (Inferno-only, QoL #468: the tab it was on, when opened from the bar)
+            if (STORE.ioFromBar && STORE._tab > 0) {
+                STORE.ioLastTab = STORE._tab;
+            }
+            STORE.ioFromBar = false;
             STORE._tab = 0;
             STORE._page = 0;
             STORE._mc = null;
@@ -1701,7 +1808,7 @@ export class STORE extends ASObject {
                 }
                 _loc3_ = _loc4_[0];
                 if (Boolean(STORE._storeData[itemCode]) && !_loc2_.i) {
-                    _loc3_ = _loc4_[STORE._storeData[itemCode].q];
+                    _loc3_ = _loc4_[STORE.ioOwned(itemCode)];
                 }
                 if (_loc5_) {
                     STORE.FacebookCreditPurchase(itemCode);
@@ -1717,7 +1824,7 @@ export class STORE extends ASObject {
                         STORE.BuyB(itemCode, true);
                     } else if (BASE._credits.Get() >= _loc3_) {
                         buyAgain = param1;
-                        if (!GLOBAL.ioConfirmShiny(_loc3_ | 0, "on this", (): void => {
+                        if (!GLOBAL.ioConfirmShiny(_loc3_ | 0, KEYS.Get("io_t3k_for_on_this"), (): void => {
                             STORE.Buy(itemCode)(buyAgain);
                         })) {
                             return;
@@ -1748,6 +1855,11 @@ export class STORE extends ASObject {
         let _loc20_: Vector<any> = null;
         let _loc21_: BFOUNDATION = null;
         let _loc3_: any = STORE._storeItems[param1];
+        // Inferno-only (QoL #1): workers are never sold here; the server ignores the purchase and takes the
+        // worker back on the next save, so the Shiny shown as spent would only come back after a reload.
+        if (GLOBAL.INFERNO_ONLY && param1.substr(0, 3) == "BEW") {
+            return;
+        }
         let _loc6_: number = Number(_loc3_.quantity);
         if (param2) {
             _loc7_ = false;
@@ -1761,9 +1873,9 @@ export class STORE extends ASObject {
         }
         _loc4_ = _loc5_[0] | 0;
         if (Boolean(STORE._storeData[param1]) && !_loc3_.i) {
-            _loc4_ = _loc5_[STORE._storeData[param1].q] | 0;
+            _loc4_ = _loc5_[STORE.ioOwned(param1)] | 0;
         }
-        if (STORE._storeData[param1] && STORE._storeData[param1].q >= _loc3_.c.length && !_loc3_.i) {
+        if (STORE._storeData[param1] && STORE.ioOwned(param1) >= _loc3_.c.length && !_loc3_.i) {
             GLOBAL.Message(KEYS.Get("str_prob_alreadyhave"));
             return;
         }
@@ -1782,7 +1894,17 @@ export class STORE extends ASObject {
         if (param1.substr(0, 3) == "BEW") {
             QUEUE.Spawn(1);
         }
-        if (param1.substr(0, 3) == "BLK") {
+        if (param1.substr(0, 3) == "BLK" && BASE.isInfernoMainYardOrOutpost) {
+            // (Inferno-only, 22 November: every wall that can go to that level taken there, levels 4 and 5 too; a wall kind
+            // with fewer levels left as it is: IoWallUpgrade.raiseAll)
+            _loc13_ = Number(param1.substr(3, 1)) | 0;
+            IoWallUpgrade.raiseAll(_loc13_);
+            _loc11_ = _loc4_;
+            let ioMsg: string = ["", "", "msg_wallsgranite", "msg_wallsforgedsteel", "io_msg_walls_studded", "io_msg_walls_fireblack"][_loc13_] || "";
+            if (ioMsg) {
+                GLOBAL.Message("<b>" + KEYS.Get(ioMsg) + "</b>");
+            }
+        } else if (param1.substr(0, 3) == "BLK") {
             _loc13_ = Number(param1.substr(3, 1)) | 0;
             _loc14_ = InstanceManager.getInstancesByClass(BWALL);
             for (_loc12_ of (_loc14_ ?? [])) {
@@ -2202,6 +2324,11 @@ export class STORE extends ASObject {
             if (Boolean(STORE._storeData.EXH) && STORE._storeData.EXH.e < GLOBAL.Timestamp()) {
                 delete STORE._storeData.EXH;
             }
+            // (Inferno-only, 26 October: the Inferno's Housing Expansion too, once over, as Tower Overdrive's below: it
+            // stayed "bought" until the next load, and could not be bought again)
+            if (GLOBAL.INFERNO_ONLY && Boolean(STORE._storeData.EXHI) && STORE._storeData.EXHI.e < GLOBAL.Timestamp()) {
+                delete STORE._storeData.EXHI;
+            }
             GLOBAL._extraHousingPower.Set(0);
             if (STORE._storeData.EXH && STORE._storeData.EXH.e > GLOBAL.Timestamp() && !BASE.isInfernoMainYardOrOutpost) {
                 GLOBAL._extraHousing = STORE._storeData.EXH.e | 0;
@@ -2369,6 +2496,209 @@ export class STORE extends ASObject {
         STORE._mc.window.addChild(STORE._zazzleMC);
         img = "popups/" + "ZAZZLE_AD.v2" + ".jpg";
         ImageCache.GetImageWithCallBack(img, ZazzleImageLoaded);
+    }
+
+    /** (QoL #476) Where each look is had: the Looks tab's cards' buttons (ioLookCard). */
+    private static ioLookGo(id: string): void {
+        if (id == "skins") {
+            IoTerrainPopup.ShowTab("champions");
+        } else if (id == "emotes") {
+            IoTerrainPopup.ShowTab("emotes");
+        } else if (id == "crests") {
+            ALLIANCEWINDOW.Show();
+        } else {
+            BUILDINGS._buildingID = 0;
+            BUILDINGS._menuA = 4;
+            BUILDINGS._menuB = BUILDINGSPOPUP.IO_TAB_ANIMATED;
+            BUILDINGS.Show();
+            try {
+                BUILDINGS._mc.SwitchB(4, BUILDINGSPOPUP.IO_TAB_ANIMATED, 0);
+            } catch (err) {
+            }
+        }
+    }
+
+    /**
+     * Inferno-only (QoL #476): the Looks tab, in the old Social tab's place, its looks had elsewhere: the champions'
+     * skins and the chat's emotes (the D.A.V.E. Club's tabs), the alliance's crest (the alliance window) and the animated
+     * decorations (the build menu's Decorations, Animated). 23 October: each a stock card (as ioTabItem), its button
+     * going there, among the looks sold here (the Champion Statue, the pets' Golden Coat, Name Tag and Treats).
+     */
+    public static ioLookCard(id: string): MovieClip {
+        let c: any = new STOREITEM();
+        c.gotoAndStop(1);
+        c.name = "ioStoreLook:" + id;
+        c.tA.htmlText = "<b>" + KEYS.Get("io_club2_look_" + id) + "</b><br>" + KEYS.Get("io_store_look_" + id + "_desc") + " ";
+        GLOBAL.ioFitHeight(c.tA, 8);
+        c.tB.text = "";
+        c.tB.visible = false;
+        c.tC.htmlText = " ";
+        c.mcScreen.visible = false;
+        // (no price: the coin beside it hidden too)
+        for (let k: int = 0; k < c.numChildren; k++) {
+            let ch: any = c.getChildAt(k);
+            if (ch instanceof Shape && ch.width < 40) {
+                ch.visible = false;
+            }
+        }
+        c.bBuy.SetupKey("io_store_look_" + id + "_go");
+        c.bBuy.name = "ioStoreLookGo:" + id;
+        c.bBuy.Highlight = true;
+        c.bBuy.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            STORE.Hide();
+            STORE.ioLookGo(id);
+        });
+        c.mcIcon.gotoAndStop(0);
+        let box: Rectangle = c.mcIcon.getBounds(c);
+        let pic: Sprite = new Sprite();
+        pic.mouseEnabled = false;
+        pic.mouseChildren = false;
+        let side: number = Math.max(20, Math.min(box.width, box.height) - 2);
+        pic.scaleX = pic.scaleY = side / 100;
+        pic.x = box.x + (box.width - side) / 2;
+        pic.y = box.y + (box.height - side) / 2;
+        c.addChild(pic);
+        STORE.ioLookPicture(id, pic);
+        return c as MovieClip;
+    }
+
+    /** (Inferno-only, 22 November) A wall's button picture in a store card's icon box (BLK4I, BLK5I). */
+    public static ioWallIcon(c: any, file: string): void {
+        let box: Rectangle = c.mcIcon.getBounds(c);
+        let pic: Sprite = new Sprite();
+        pic.name = "ioWallIcon";
+        pic.mouseEnabled = false;
+        pic.mouseChildren = false;
+        c.addChild(pic);
+        ImageCache.GetImageWithCallBack("buildingbuttons/" + file, (key: string, bmd: BitmapData): void => {
+            if (!bmd) {
+                return;
+            }
+            let b: Bitmap = new Bitmap(bmd);
+            b.smoothing = true;
+            let h: number = Math.max(20, (box.height > 10 ? box.height : 90) - 4);
+            let sc: number = h / bmd.height;
+            b.scaleX = b.scaleY = sc;
+            b.x = (box.width > 10 ? box.x + (box.width - bmd.width * sc) / 2 : 10);
+            b.y = (box.height > 10 ? box.y + 2 : 20);
+            pic.addChild(b);
+        });
+    }
+
+    /** (Inferno-only, 22 October) The Extras tab redrawn (IoShop: after a purchase). */
+    public static ioExtrasRefresh(): void {
+        if (STORE._open && STORE._mc && IoShop.TAB_ITEMS[STORE._tab]) {
+            // (22 October: an item sold in a stock tab: the tab drawn again)
+            STORE.Switch(STORE._tab, STORE._page);
+        }
+    }
+
+    /**
+     * (Inferno-only, 22 October) One of IoShop's items as a stock card (STOREITEM), for the Store's own tabs: its name and
+     * what it does, its price, how it stands, and Buy (asked first, with Gift Wrap offered); the Scout Report's says
+     * how it's had (from the map).
+     */
+    public static ioTabItem(id: string): MovieClip {
+        let c: any = new STOREITEM();
+        c.gotoAndStop(1);
+        c.name = "ioStoreTabItem:" + id;
+        c.tA.htmlText = "<b>" + IoShop.title(id) + "</b><br>" + KEYS.Get("io_shop_" + id + "_desc") + " ";
+        // (24 October: a long one (Short Hop's, and the other languages') drawn smaller to fit, not cut off at the bottom)
+        GLOBAL.ioFitHeight(c.tA, 8);
+        c.tB.htmlText = GLOBAL.FormatNumber(IoShop.price(id));
+        let status: string = IoShop.statusOf(id);
+        // (as a stock card that can't be bought now (the Apprentice working, or its next not due yet): screened, its
+        // button off, why in red; else open, its button lit)
+        let off: boolean = id == "apprentice" && !IoShop.canHireApprentice();
+        c.tC.htmlText = status ? "<font color=\"" + (off ? "#CC0000" : "#0000CC") + "\">" + status + "</font> " : " ";
+        c.mcScreen.visible = off;
+        c.mcScreen.enabled = off;
+        c.bBuy.SetupKey(id == "scout" ? "io_shop_btn_how" : "btn_buy");
+        c.bBuy.name = "ioStoreTabBuy:" + id;
+        if (off) {
+            c.bBuy.Enabled = false;
+        } else if (id != "scout") {
+            c.bBuy.Highlight = true;
+        }
+        c.bBuy.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            if (off) {
+                return;
+            }
+            SOUNDS.Play("click1");
+            if (id == "scout") {
+                GLOBAL.Message(KEYS.Get("io_shop_scout_how", { "v1": GLOBAL.FormatNumber(IoShop.price("scout")) }));
+                return;
+            }
+            IoShop.tabBuyAsk(id);
+        });
+        // (its picture where the stock ones go, filling the icon's box as theirs do)
+        c.mcIcon.gotoAndStop(0);
+        let box: Rectangle = c.mcIcon.getBounds(c);
+        let pic: Sprite = new Sprite();
+        pic.mouseEnabled = false;
+        c.addChild(pic);
+        ImageCache.GetImageWithCallBack("shop/" + id + ".png", (key: string, bmd: BitmapData, args: any[] = null): void => {
+            if (!bmd) {
+                return;
+            }
+            let bm: Bitmap = new Bitmap(bmd);
+            bm.smoothing = true;
+            let side: number = Math.max(20, Math.min(box.width, box.height) - 2);
+            let k: number = Math.min(side / bmd.width, side / bmd.height);
+            bm.scaleX = bm.scaleY = k;
+            bm.x = box.x + (box.width - bmd.width * k) / 2;
+            bm.y = box.y + (box.height - bmd.height * k) / 2;
+            pic.addChild(bm);
+        });
+        return c as MovieClip;
+    }
+
+    /** (QoL #476) A Looks card's picture, 100 x 100. */
+    private static ioLookPicture(id: string, pic: Sprite): void {
+        if (id == "emotes") {
+            let four: any[] = ["grin", "lol", "cool", "love"];
+            for (let k: int = 0; k < four.length; k++) {
+                let e: Sprite = IoEmotes.make(String(four[k]), 44);
+                e.x = 4 + (k % 2) * 48;
+                e.y = 4 + ((k / 2) | 0) * 48;
+                pic.addChild(e);
+            }
+            return;
+        }
+        if (id == "crests") {
+            IoCrest.fit(pic, IoCrest.DEFAULT, 92, 4, 4);
+            return;
+        }
+        let url: string = id == "skins" ? "monsters/IC9-medium.jpg" : "buildingbuttons/157.jpg";
+        ImageCache.GetImageWithCallBack(url, (key: string, bmd: BitmapData, args: any[] = null): void => {
+            if (!bmd || !pic.parent) {
+                return;
+            }
+            let bm: Bitmap = new Bitmap(bmd);
+            bm.smoothing = true;
+            let scale: number = Math.min(100 / bmd.width, 100 / bmd.height);
+            bm.scaleX = bm.scaleY = scale;
+            bm.x = (100 - bmd.width * scale) / 2;
+            bm.y = (100 - bmd.height * scale) / 2;
+            pic.addChild(bm);
+        });
+    }
+
+    /** (QoL #476) A plain label. */
+    private static ioLabel(text: string, size: int, color: uint, bold: boolean, width: int, x: number, y: number, height: int): TextField {
+        let t: TextField = new TextField();
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.width = width;
+        t.height = height;
+        t.x = x;
+        t.y = y;
+        let f: TextFormat = new TextFormat("Verdana", size, color, bold);
+        f.align = TextFormatAlign.LEFT;
+        t.defaultTextFormat = f;
+        t.text = text;
+        return t;
     }
 
     public static ZazzleClear(): void {

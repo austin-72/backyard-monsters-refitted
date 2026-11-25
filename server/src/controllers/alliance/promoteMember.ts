@@ -1,3 +1,4 @@
+import { questPromoted } from "../../services/quests/questHooks.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { User } from "../../database/models/user.model.js";
 import { postgres } from "../../server.js";
@@ -27,6 +28,7 @@ export const promoteMember: KoaController = async (ctx) => {
   if (!member || member.alliance_id !== alliance.id) throw cannotPromoteErr();
 
   await promoteAllianceMember(user, member, alliance);
+  void questPromoted(user.userid, member.userid);
 
   ctx.status = Status.OK;
   ctx.body = { error: 0 };

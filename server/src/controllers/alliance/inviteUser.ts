@@ -14,6 +14,10 @@ import {
   userAlreadyInAllianceErr,
 } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { ClientSafeError } from "../../middleware/clientSafeError.js";
+
+/** A name as an ILIKE pattern matching only itself. */
+const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => "\\" + c);
 import { questInviteSent } from "../../services/quests/questProgress.js";
 
 const INVITE_FIELDS = ["userid", "username", "alliance_id", "save.worldid"] as const;
@@ -36,7 +40,7 @@ const INVITE_FIELDS = ["userid", "username", "alliance_id", "save.worldid"] as c
  */
 export const inviteUser: KoaController = async (ctx) => {
   const user: User = ctx.authUser;
-  const { userid } = InviteUserSchema.parse(ctx.request.body);
+  const { userid, username } = InviteUserSchema.parse(ctx.request.body);
 
   const alliance = await requireAllianceMember(user);
 
@@ -45,7 +49,14 @@ export const inviteUser: KoaController = async (ctx) => {
   // (Inferno-only: officers invite too)
   if (user.alliance_role !== AllianceRole.LEADER && !(infernoOnlyConfig.enabled && user.alliance_role === AllianceRole.OFFICER)) throw inviteLeaderOnlyErr();
 
-  const player = await postgres.em.findOne(User, { userid }, { fields: INVITE_FIELDS });
+  const findPlayer = async () => {
+    if (userid !== undefined) return postgres.em.findOne(User, { userid }, { fields: INVITE_FIELDS });
+    // (by name, any capitals; exactly one account with it)
+    const found = await postgres.em.find(User, { username: { $ilike: escapeLike(username!) } }, { fields: INVITE_FIELDS, limit: 2 });
+    if (found.length !== 1) throw new ClientSafeError({ message: `There's no player named ${username}.`, status: Status.NOT_FOUND, data: {}, isClientFriendly: true });
+    return found[0];
+  };
+  const player = await findPlayer();
   if (!player) throw permissionErr();
 
   if (player.alliance_id) throw userAlreadyInAllianceErr();
@@ -58,7 +69,7 @@ export const inviteUser: KoaController = async (ctx) => {
 
   if (!sameMapVersion) throw inviteMapVersionErr(player.username);
 
-  const invite = await openInvite(alliance, player.userid, AllianceInviteType.INVITE);
+  const invite = await openInvite(alliance, player.userid, AllianceInviteType.INVITE, null, user.userid);
   void questInviteSent(invite.id, user.userid);
 
   ctx.status = Status.OK;

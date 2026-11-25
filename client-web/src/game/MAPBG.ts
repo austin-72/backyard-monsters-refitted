@@ -3,11 +3,77 @@ import { ASObject, int } from "as3";
 import { Bitmap, BitmapData, BitmapDataChannel, IBitmapDrawable } from "flash/display";
 import { Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BASE, LOGGER, hell_land1_1, hell_land1_2, hell_land1_3, hell_land1_4, hell_land2_1, hell_land2_2, hell_land2_3, hell_land2_4, hell_land3_1, hell_land3_2, hell_land3_3, hell_land3_4, hell_land4_1, hell_land4_2, hell_land4_3, hell_land4_4, hell_land5_1, hell_land5_2, hell_land5_3, hell_land5_4, hell_land6_1, hell_land6_2, hell_land6_3, hell_land6_4, hell_sand1_big, hell_sand2_big, hfo_frozen1, hfo_frozen2, hfo_frozen3, hfo_frozen4, inferno_lava1, inferno_lava2, inferno_lava3, inferno_lava4, isocrater1, isograss1, isograss2, isograss3, isograss4, isograss5, isograss6, isograss7, isorock1, isorock2, isorock3, isosand1, isosand2, isosand3, isosand4 } from "@game";
+import { perlinArgs, perlinForget, perlinHave, perlinPrefetch, perlinStats, perlinWorkersAvailable } from "flash/_perlin";
+import { BASE, LOGGER, io_ashfall_big, io_obsidian_big, io_soulfire_big, hell_land1_1, hell_land1_2, hell_land1_3, hell_land1_4, hell_land2_1, hell_land2_2, hell_land2_3, hell_land2_4, hell_land3_1, hell_land3_2, hell_land3_3, hell_land3_4, hell_land4_1, hell_land4_2, hell_land4_3, hell_land4_4, hell_land5_1, hell_land5_2, hell_land5_3, hell_land5_4, hell_land6_1, hell_land6_2, hell_land6_3, hell_land6_4, hell_sand1_big, hell_sand2_big, hfo_frozen1, hfo_frozen2, hfo_frozen3, hfo_frozen4, inferno_lava1, inferno_lava2, inferno_lava3, inferno_lava4, isocrater1, isograss1, isograss2, isograss3, isograss4, isograss5, isograss6, isograss7, isorock1, isorock2, isorock3, isosand1, isosand2, isosand3, isosand4 } from "@game";
 
 export class MAPBG extends ASObject {
     public $ctor(): void {
         super.$ctor();
+    }
+
+    /**
+     * Inferno-only (21 October): how many layers a ground is blended from (MakeTile: each past the first through a
+     * Perlin noise mask); 0 for a ground drawn as one sheet.
+     */
+    public static ioLayers(texture: string): int {
+        switch (texture) {
+            case "hfo_frozen":
+            case "lava":
+            case "sand":
+            case "hell_land1":
+            case "hell_land2":
+            case "hell_land3":
+            case "hell_land4":
+            case "hell_land5":
+            case "hell_land6":
+                return 4;
+            case "rock":
+                return 5;
+            case "grass":
+                return 7;
+            default:
+                return 0;
+        }
+    }
+
+    /** Inferno-only (21 October): the ground masks' perlinNoise arguments for a yard's seed (MakeTile's, layer 2 on). */
+    public static ioMaskArgs(seed: int, layers: int): any[][] {
+        let out: any[][] = [];
+        for (let tile: int = 2; tile <= layers; tile++) {
+            out.push(perlinArgs(1000, 500, true, 50 * tile, 25 * tile, 2, (seed + 1 + tile) | 0, true, false, BitmapDataChannel.ALPHA, true, null));
+        }
+        return out;
+    }
+
+    /**
+     * Inferno-only (21 October, the user's: more of the game on other threads): a yard's ground masks worked out in
+     * background threads for its seed, then go() (at most `waitMs` later, ready or not: MakeTile works out any not
+     * ready itself). False, and go() not called, when there is nothing to work out (all kept already, a ground of
+     * one sheet) or no background threads: the caller goes on at once.
+     */
+    public static ioPrefetch(seed: int, texture: string, waitMs: int, go: Function): boolean {
+        let layers: int = MAPBG.ioLayers(texture);
+        if (layers < 2 || !perlinWorkersAvailable()) {
+            return false;
+        }
+        let list: any[][] = MAPBG.ioMaskArgs(seed, layers);
+        let missing: any[][] = list.filter((args: any[]): boolean => !perlinHave(args));
+        if (!missing.length) {
+            return false;
+        }
+        perlinPrefetch(missing, waitMs).then((): void => {
+            go();
+        });
+        return true;
+    }
+
+    /** For tests (21 October): the ground masks worked out in the background, and forgetting them. */
+    public static get ioPerlinStats(): any {
+        return perlinStats;
+    }
+
+    public static ioPerlinForget(): void {
+        perlinForget();
     }
 
     public static MakeTile(param1: string = "grass"): BitmapData {
@@ -33,6 +99,16 @@ export class MAPBG extends ASObject {
             }
             if (texture == "hell_sand2") {
                 return new hell_sand2_big(0, 0);
+            }
+            // Inferno-only (12 October): the invite grounds, one sheet each too
+            if (texture == "io_ashfall") {
+                return new io_ashfall_big(0, 0);
+            }
+            if (texture == "io_obsidian") {
+                return new io_obsidian_big(0, 0);
+            }
+            if (texture == "io_soulfire") {
+                return new io_soulfire_big(0, 0);
             }
             if (texture == "hfo_frozen") {
                 // Hell Freezes Over: the lava ground frozen over (the same four tiles, iced)

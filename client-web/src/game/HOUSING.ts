@@ -3,7 +3,7 @@ import { ASObject, Vector, int } from "as3";
 import { MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, BUILDING15, CREATURELOCKER, CREATURES, GLOBAL, GRID, HOUSINGBUNKER, HOUSINGPOPUP, HousingPersistentPopup, InstanceManager, LOGGER, MAP, MAPROOM_DESCENT, MapRoomManager, MonsterBase, MonsterData, SOUNDS, SecNum, TRIBES } from "@game";
+import { BASE, BFOUNDATION, BUILDING13, BUILDING15, CREATURELOCKER, CREATURES, GLOBAL, GRID, HATCHERY, HATCHERYCC, HATCHERYCCPOPUP, HATCHERYPOPUP, HOUSINGBUNKER, HOUSINGPOPUP, HousingPersistentPopup, InstanceManager, IoToast, LOGGER, LOGIN, MAP, MAPROOM_DESCENT, MapRoomManager, MonsterBase, MonsterData, KEYS, SOUNDS, SecNum, TRIBES, IoDevil } from "@game";
 
 export class HOUSING extends ASObject {
     public static _housingPopup: MovieClip = null;
@@ -71,6 +71,10 @@ export class HOUSING extends ASObject {
                 HOUSING._housingBuildingUpgrading = true;
             }
         }
+        // (Inferno-only, 13 November: the Devil's Contract's Thin the Ranks; the player's own yards)
+        if (GLOBAL.INFERNO_ONLY && IoDevil.ownYard() && IoDevil.mul("housing") != 1) {
+            HOUSING._housingCapacity.Set(Math.floor(HOUSING._housingCapacity.Get() * IoDevil.mul("housing")));
+        }
         // Admin test mode: the Compound holds any number of monsters.
         if (GLOBAL.ioTestMode()) {
             HOUSING._housingCapacity.Set(HOUSING.IO_TEST_CAPACITY);
@@ -82,9 +86,284 @@ export class HOUSING extends ASObject {
             _loc5_++;
         }
         HOUSING._housingSpace.Set(HOUSING._housingCapacity.Get() - HOUSING._housingUsed.Get());
+        // (Inferno-only, QoL #29: a full Compound is remembered, for Refill army)
+        if (GLOBAL.INFERNO_ONLY) {
+            HOUSING.ioNoteArmy();
+        }
+    }
+
+    // ---------------------------------------------------------------------------------------------
+    // Inferno-only (QoL #29): Refill army
+    // ---------------------------------------------------------------------------------------------
+    /**
+     * The last full Compound of each yard (its monsters and how many of each) is kept in this browser, written
+     * whenever the Compound is full in the player's own yard (no room left for the smallest monster in it). The
+     * Compound's Refill army (HOUSINGPOPUP) works out what's missing to get back to it (less what is housed,
+     * queued and hatching, as far as the room allows, monsters unlocked only), says what it costs, and queues it
+     * with the incubators' own queueing (HATCHERYPOPUP.ioQueueInto; the Incubation Control Station's,
+     * HATCHERYCCPOPUP.ioQueueOne, when there is one), until the Magma or the queues run out.
+     */
+    public static readonly IO_ARMY_KEY: string = "bymr-army";
+
+    /** What was last written (yard and army), so a Compound still full writes nothing more. */
+    private static _ioArmyKept: string = null;
+
+    /** This yard (player and yard): each yard has its own. */
+    private static ioArmyYard(): string {
+        return LOGIN._playerID + ":" + BASE._baseID;
+    }
+
+    private static ioArmyAll(): any {
+        try {
+            let raw: string = window.localStorage.getItem(HOUSING.IO_ARMY_KEY);
+            let all: any = raw ? JSON.parse(raw) : null;
+            return all && typeof all == "object" ? all : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    /** This yard's last full Compound: {"m": {monster: count}, "h": housing used, "t": when}, or null. */
+    public static ioArmy(): any {
+        let a: any = HOUSING.ioArmyAll()[HOUSING.ioArmyYard()];
+        return a && a.m && typeof a.m == "object" ? a : null;
+    }
+
+    private static ioNoteArmy(): void {
+        if ((GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD && GLOBAL.mode != GLOBAL.e_BASE_MODE.IBUILD) || BASE._loading || !GLOBAL.player || !GLOBAL.player.monsterList || GLOBAL.ioTestMode()) {
+            return;
+        }
+        let cap: number = Number(HOUSING._housingCapacity.Get());
+        let used: number = Number(HOUSING._housingUsed.Get());
+        if (!(cap > 0) || !(used > 0)) {
+            return;
+        }
+        let m: any = {};
+        let smallest: number = 0;
+        let n: int = GLOBAL.player.monsterList.length | 0;
+        for (let i: int = 0; i < n; i++) {
+            let md: MonsterData = as3.vget(GLOBAL.player.monsterList, i);
+            if (!md || md.numCreeps <= 0) {
+                continue;
+            }
+            m[md.m_creatureID] = md.numCreeps | 0;
+            let size: number = CREATURES.GetProperty(md.m_creatureID, "cStorage", 0, true);
+            if (size > 0 && (smallest <= 0 || size < smallest)) {
+                smallest = size;
+            }
+        }
+        if (smallest <= 0 || cap - used >= smallest) {
+            return;
+        }
+        let yard: string = HOUSING.ioArmyYard();
+        let key: string = yard + JSON.stringify(m);
+        if (key == HOUSING._ioArmyKept) {
+            return;
+        }
+        HOUSING._ioArmyKept = key;
+        try {
+            let all: any = HOUSING.ioArmyAll();
+            all[yard] = { "m": m, "h": used, "t": GLOBAL.Timestamp() };
+            window.localStorage.setItem(HOUSING.IO_ARMY_KEY, JSON.stringify(all));
+        } catch (e) {
+        }
+    }
+
+    /** The remembered army as a list: "40 Fangs, 12 Brains". */
+    public static ioArmyNames(param1: any): string {
+        let out: string[] = [];
+        for (let id in param1) {
+            let c: any = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[id] : null;
+            out.push((param1[id] | 0) + " " + KEYS.Get(as3.str(c ? c.name : id)));
+        }
+        return out.join(", ");
+    }
+
+    /** Monsters on their way: queued in the incubators (and the Station) and hatching now, by kind. */
+    private static ioOnTheWay(): any {
+        let have: any = {};
+        let add = (id: any, n: number): void => {
+            if (id) {
+                have[String(id)] = (have[String(id)] | 0) + (n | 0);
+            }
+        };
+        for (let h of (InstanceManager.getInstancesByClass(BUILDING13) ?? [])) {
+            for (let e of as3.values(as3.as(h._monsterQueue, Array) || [])) {
+                add(e[0], e[1]);
+            }
+            if (h._inProduction) {
+                add(h._inProduction, 1);
+            }
+        }
+        if (GLOBAL._bHatcheryCC && GLOBAL._bHatcheryCC._monsterQueue) {
+            for (let e of as3.values(as3.as(GLOBAL._bHatcheryCC._monsterQueue, Array) || [])) {
+                add(e[0], e[1]);
+            }
+        }
+        return have;
+    }
+
+    /**
+     * What's missing to get back to this yard's last full Compound: {"list": [[monster, count], ...], "cost": Magma},
+     * as far as the Compound's room (less what's on its way) allows; unlocked monsters only. null with none kept.
+     */
+    public static ioArmyMissing(): any {
+        let a: any = HOUSING.ioArmy();
+        if (!a) {
+            return null;
+        }
+        HOUSING.HousingSpace();
+        let coming: any = HOUSING.ioOnTheWay();
+        let room: number = Number(HOUSING._housingSpace.Get());
+        for (let id in coming) {
+            room -= CREATURES.GetProperty(id, "cStorage", 0, true) * (coming[id] | 0);
+        }
+        let housed: any = {};
+        let n: int = GLOBAL.player.monsterList.length | 0;
+        for (let i: int = 0; i < n; i++) {
+            let md: MonsterData = as3.vget(GLOBAL.player.monsterList, i);
+            if (md) {
+                housed[md.m_creatureID] = (housed[md.m_creatureID] | 0) + (md.numCreeps | 0);
+            }
+        }
+        let list: any[] = [];
+        let cost: number = 0;
+        for (let id in a.m) {
+            if (!CREATURELOCKER._creatures || !CREATURELOCKER._creatures[id] || !(CREATURELOCKER._lockerData[id] && CREATURELOCKER._lockerData[id].t == 2)) {
+                continue;
+            }
+            let want: int = ((a.m[id] | 0) - (housed[id] | 0) - (coming[id] | 0)) | 0;
+            let size: number = CREATURES.GetProperty(id, "cStorage", 0, true);
+            if (size > 0) {
+                want = Math.min(want, Math.floor(room / size)) | 0;
+            }
+            if (want <= 0) {
+                continue;
+            }
+            room -= want * size;
+            cost += want * CREATURES.GetProperty(id, "cResource");
+            list.push([id, want]);
+        }
+        return { "list": list, "cost": cost };
+    }
+
+    /** Refill army's button: what's missing and its cost first, then queued on Yes. */
+    public static ioRefillAsk(): void {
+        let miss: any = HOUSING.ioArmyMissing();
+        if (!miss) {
+            GLOBAL.Message(KEYS.Get("io_yin_refill_none"));
+            return;
+        }
+        if (miss.list.length == 0) {
+            GLOBAL.Message(KEYS.Get("io_yin_refill_nothing"));
+            return;
+        }
+        let hatcheries: any[] = HOUSING.ioHatcheries();
+        if (!GLOBAL._bHatcheryCC && hatcheries.length == 0) {
+            GLOBAL.Message(KEYS.Get("io_yin_refill_noinc"));
+            return;
+        }
+        let names: string[] = [];
+        for (let e of miss.list) {
+            let c: any = CREATURELOCKER._creatures[e[0]];
+            names.push((e[1] | 0) + " " + KEYS.Get(as3.str(c ? c.name : e[0])));
+        }
+        let have: number = Number(BASE._resources.r4.Get());
+        let text: string = KEYS.Get("io_yin_refill_ask", { "v1": names.join(", "), "v2": GLOBAL.FormatNumber(Math.ceil(miss.cost)), "v3": GLOBAL.FormatNumber(have), "v4": KEYS.Get(as3.str(GLOBAL._resourceNames[3])) });
+        if (have < miss.cost) {
+            text += "<br><br>" + KEYS.Get("io_yin_refill_short");
+        }
+        GLOBAL.Message(text, KEYS.Get("io_yin_refill_yes"), (): void => {
+            HOUSING.ioRefill(miss.list);
+        }, null, KEYS.Get("io_yin_refill_no"), null);
+    }
+
+    /** The incubators that can take a queue (built, not being built). */
+    private static ioHatcheries(): any[] {
+        let out: any[] = [];
+        for (let h of (InstanceManager.getInstancesByClass(BUILDING13) ?? [])) {
+            if (h instanceof BUILDING13 && h._countdownBuild.Get() <= 0 && h._lvl.Get() > 0) {
+                out.push(h);
+            }
+        }
+        return out;
+    }
+
+    /** Queues `param1` ([[monster, count], ...]) as far as the Magma and the queues go; says how it went. */
+    public static ioRefill(param1: any[]): void {
+        let queued: int = 0;
+        let wanted: int = 0;
+        let stop: boolean = false;
+        let hatcheries: any[] = HOUSING.ioHatcheries();
+        for (let e of param1) {
+            let id: string = String(e[0]);
+            wanted += e[1] | 0;
+            for (let k: int = 0; k < (e[1] | 0) && !stop; k++) {
+                if (BASE._resources.r4.Get() < CREATURES.GetProperty(id, "cResource")) {
+                    stop = true;
+                    break;
+                }
+                let ok: boolean = false;
+                if (GLOBAL._bHatcheryCC) {
+                    ok = HATCHERYCCPOPUP.ioQueueOne(id);
+                } else {
+                    // (spread over the incubators: the one with the least queued that has room)
+                    let best: any = null;
+                    let bestN: int = 0;
+                    for (let h of hatcheries) {
+                        if (!HATCHERYPOPUP.ioRoomFor(h, id)) {
+                            continue;
+                        }
+                        let n: int = 0;
+                        for (let q of as3.values(as3.as(h._monsterQueue, Array) || [])) {
+                            n += q[1] | 0;
+                        }
+                        if (!best || n < bestN) {
+                            best = h;
+                            bestN = n;
+                        }
+                    }
+                    ok = best != null && HATCHERYPOPUP.ioQueueInto(best, id);
+                }
+                if (!ok) {
+                    break;
+                }
+                queued++;
+            }
+            if (stop) {
+                break;
+            }
+        }
+        if (queued > 0) {
+            if (GLOBAL._bHatcheryCC) {
+                GLOBAL._bHatcheryCC.Tick(1);
+            }
+            BASE.Save();
+            SOUNDS.Play("click1");
+        } else {
+            SOUNDS.Play("error1");
+        }
+        if (HATCHERY._mc) {
+            HATCHERY._mc.Update();
+        }
+        if (HATCHERYCC._mc) {
+            HATCHERYCC._mc.Update();
+        }
+        HOUSING.Update();
+        let text: string = KEYS.Get("io_yin_refill_done", { "v1": queued, "v2": wanted });
+        if (queued < wanted) {
+            text += " " + KEYS.Get(stop ? "io_yin_refill_stop_magma" : "io_yin_refill_stop_queue");
+        }
+        IoToast.Show(text, 5000);
     }
 
     private static addHousingCapacityMultiplier(param1: int): int {
+        // (Inferno-only, 26 October, the user's: "Make sure that ... everything you can buy in the shop actually works":
+        // Housing Expansion's 25%. Its power is kept in a SecNum, which keeps whole numbers: 1.25 came back 1, and the
+        // Expansion added no room at all)
+        if (GLOBAL.INFERNO_ONLY) {
+            return Math.floor(param1 * 1.25) | 0;
+        }
         return (param1 * GLOBAL._extraHousingPower.Get()) | 0;
     }
 
@@ -117,6 +396,12 @@ export class HOUSING extends ASObject {
                     return false;
                 }
                 GLOBAL.player.addMonster(param1, _loc8_);
+                // Inferno-only (10 October): a monster housed is saved soon (BASE.Save: within a couple of
+                // seconds, many at once in one save). The map reads the yard's monsters from the last save, so
+                // without this the monsters hatched since were missing from the map and from attacks.
+                if (GLOBAL.INFERNO_ONLY && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD)) {
+                    BASE.Save();
+                }
             }
         }
         return true;
@@ -171,6 +456,10 @@ export class HOUSING extends ASObject {
                 HOUSING._housingCapacity.Add(_loc6_);
             }
         }
+        // (Inferno-only, 13 November: the Devil's Contract's Thin the Ranks; the player's own yards)
+        if (GLOBAL.INFERNO_ONLY && IoDevil.ownYard() && IoDevil.mul("housing") != 1) {
+            HOUSING._housingCapacity.Set(Math.floor(HOUSING._housingCapacity.Get() * IoDevil.mul("housing")));
+        }
         // Admin test mode: the Compound holds any number of monsters.
         if (GLOBAL.ioTestMode()) {
             HOUSING._housingCapacity.Set(HOUSING.IO_TEST_CAPACITY);
@@ -182,6 +471,38 @@ export class HOUSING extends ASObject {
                 HOUSING._housingUsed.Add(CREATURES.GetProperty(as3.vget(GLOBAL.player.monsterList, _loc5_).m_creatureID, "cStorage", 0, true) * as3.vget(GLOBAL.player.monsterList, _loc5_).numCreeps);
             }
             _loc5_++;
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #283, 14 October: one at a time from the kind there are most of, and said. One of each kind per
+            // pass took a lone champion every time, and nothing was said.)
+            let gone: any = {};
+            let names: any[] = [];
+            let guard: int = 0;
+            while (HOUSING._housingUsed.Get() > HOUSING._housingCapacity.Get() && guard++ < 100000) {
+                let most: MonsterData = null;
+                for (let k: int = 0; k < _loc4_; k++) {
+                    let md: MonsterData = as3.vget(GLOBAL.player.monsterList, k);
+                    if (md.numCreeps > 0 && (!most || md.numCreeps > most.numCreeps)) {
+                        most = md;
+                    }
+                }
+                if (!most) {
+                    break;
+                }
+                most.add(-1, null, true);
+                HOUSING._housingUsed.Add(-CREATURES.GetProperty(most.m_creatureID, "cStorage", 0, true));
+                if (!gone[most.m_creatureID]) {
+                    gone[most.m_creatureID] = 0;
+                    names.push(most.m_creatureID);
+                }
+                gone[most.m_creatureID]++;
+            }
+            if (names.length) {
+                let list: string = names.map((id: string): string => gone[id] + " " + KEYS.Get(String(CREATURELOCKER._creatures[id] ? CREATURELOCKER._creatures[id].name : id))).join(", ");
+                GLOBAL.Message(KEYS.Get("io_exh_culled", { "v1": list }));
+            }
+            HOUSING.HousingSpace();
+            return;
         }
         while (HOUSING._housingUsed.Get() > HOUSING._housingCapacity.Get()) {
             HOUSING._housingUsed.Set(0);
@@ -235,7 +556,35 @@ export class HOUSING extends ASObject {
 
     public static PointInHouse(param1: Point): Point {
         let _loc2_: Rectangle = new Rectangle(40, 40, 80, 80);
+        // (Inferno-only, 16 October, bug report #91: a monster pacing in its pen with no pen to pace in (its point gone:
+        // the pen moved or was sold, a monster sent home some other way) stopped the game; now the yard's pen, or
+        // nowhere new (null: the caller leaves it where it is))
+        if (param1 == null) {
+            if (!GLOBAL.INFERNO_ONLY) {
+                return GRID.ToISO(param1.x, param1.y, 0);
+            }
+            param1 = HOUSING.ioHouseCenter();
+            if (param1 == null) {
+                return null;
+            }
+        }
         return GRID.ToISO(param1.x + (_loc2_.x + Math.random() * _loc2_.width), param1.y + (_loc2_.y + Math.random() * _loc2_.height), 0);
+    }
+
+    /** (Inferno-only, bug report #91) a pen of the yard's: its grid point (as a monster's target), or null. */
+    public static ioHouseCenter(): Point {
+        let houses: any[] = [];
+        let found: any = InstanceManager.getInstancesByClass(BASE.isInfernoMainYardOrOutpost ? HOUSINGBUNKER : BUILDING15);
+        for (let h of (found ?? [])) {
+            if (h && h.health > 0) {
+                houses.push(h);
+            }
+        }
+        let b: any = houses.length > 0 ? houses[(Math.random() * houses.length) | 0] : GLOBAL._bHousing;
+        if (!b) {
+            return null;
+        }
+        return GRID.FromISO(Number(b.x), Number(b.y));
     }
 
     public static Update(): void {

@@ -3,7 +3,7 @@ import { Vector, int } from "as3";
 import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, BUILDINGBUTTON_CLIP, GLOBAL, ImageCache, InstanceManager, InventoryManager, IoMenuArt, KEYS, SOUNDS, STORE } from "@game";
+import { BASE, BFOUNDATION, BUILDINGBUTTON_CLIP, GLOBAL, ImageCache, InstanceManager, InventoryManager, IoMenuArt, KEYS, SOUNDS, STORE, IoAllianceBanner, IoChampionStatue, IoShop } from "@game";
 
 export class BUILDINGBUTTON extends BUILDINGBUTTON_CLIP {
     static {
@@ -60,10 +60,25 @@ export class BUILDINGBUTTON extends BUILDINGBUTTON_CLIP {
             if ((_loc10_ = InventoryManager.buildingStorageCount(this._id)) > 0) {
                 this.tQuantity.htmlText = "<font color=\"#0000CC\"><b>" + KEYS.Get("bdg_numinstorage", { "v1": _loc10_ }) + "</b></font>";
             } else {
-                this.tQuantity.htmlText = "<font color=\"#333333\"><b>" + STORE._storeItems["BUILDING" + this._id].c[0] + " " + KEYS.Get("#r_shiny#") + "</b></font>";
+                // (Inferno-only, 10 October: a free one says so; one with no price, a trophy placed, says nothing)
+                let ioItem: any = STORE._storeItems["BUILDING" + this._id];
+                if (GLOBAL.INFERNO_ONLY && IoChampionStatue.Is(this._id) && IoShop.tokens("statue") > 0) {
+                    // (22 October: Champion Statues kept for the player: bought ahead in the Extras, or gifts)
+                    this.tQuantity.htmlText = "<font color=\"#2E7D1E\"><b>" + KEYS.Get("io_shop_statue_kept", { "v1": IoShop.tokens("statue") }) + "</b></font>";
+                } else if (GLOBAL.INFERNO_ONLY && (!ioItem || !(ioItem.c[0] > 0))) {
+                    this.tQuantity.htmlText = ioItem ? "<font color=\"#2E7D1E\"><b>" + KEYS.Get("io_bb_free") + "</b></font>" : "";
+                } else {
+                    this.tQuantity.htmlText = "<font color=\"#333333\"><b>" + STORE._storeItems["BUILDING" + this._id].c[0] + " " + KEYS.Get("#r_shiny#") + "</b></font>";
+                }
             }
         } else if (_loc5_ >= _loc4_) {
             this.tQuantity.htmlText = "<b><font color=\"#CC0000\">" + _loc5_ + " / " + _loc4_ + "</font></b>";
+            // (Inferno-only, QoL #51: at the limit, when the hall's next levels allow more: "+1 at Under Hall 5")
+            let more: any = GLOBAL.INFERNO_ONLY ? BUILDINGBUTTON.ioMoreAt(this._buildingProps.quantity, _loc3_) : null;
+            if (more) {
+                this.tQuantity.htmlText = "<b><font color=\"#CC0000\">" + _loc5_ + "/" + _loc4_ + "</font></b> <font color=\"#555555\">" + KEYS.Get("io_bb_more", { "v1": more.n - _loc4_, "v2": KEYS.Get("#bi_townhall#"), "v3": more.level }) + "</font>";
+                GLOBAL.ioFitText(this.tQuantity);
+            }
         } else {
             this.tQuantity.htmlText = "<b>" + _loc5_ + " / " + _loc4_ + "</b>";
         }
@@ -84,7 +99,8 @@ export class BUILDINGBUTTON extends BUILDINGBUTTON_CLIP {
             } else if (Boolean(this._buildingProps.buildingbuttons) && this._buildingProps.buildingbuttons.length > 0) {
                 _loc8_ = "buildingbuttons/" + this._buildingProps.buildingbuttons[0] + ".jpg";
             } else {
-                _loc8_ = "buildingbuttons/" + this._id + ".jpg";
+                // (Inferno-only, 16 October: the Alliance Banner's card has the player's shield on it: IoAllianceBanner)
+                _loc8_ = IoChampionStatue.cardKey(this._id, IoAllianceBanner.cardKey(this._id, "buildingbuttons/" + this._id + ".jpg"));
             }
         }
         let _loc9_: int = Math.max.apply(Math, this._buildingProps.quantity) | 0;
@@ -115,6 +131,20 @@ export class BUILDINGBUTTON extends BUILDINGBUTTON_CLIP {
                 ImageCache.GetImageWithCallBack(as3.str(this._buildingProps["lockedButtonOverlay"]), as3.bind(this, this.OnLockedOverlayLoaded));
             }
         }
+    }
+
+    /** QoL #51: the first hall level above `level` that allows more than now ({level, n}), or null. */
+    public static ioMoreAt(quantity: any[], level: int): any {
+        if (!quantity) {
+            return null;
+        }
+        let now: int = level < quantity.length ? quantity[level] | 0 : quantity[quantity.length - 1] | 0;
+        for (let i: int = (level + 1) | 0; i < quantity.length; i++) {
+            if ((quantity[i] | 0) > now) {
+                return { "level": i, "n": quantity[i] | 0 };
+            }
+        }
+        return null;
     }
 
     public ImageLoaded(param1: string, param2: BitmapData): void {

@@ -1,3 +1,4 @@
+import { questAttackEnded, questPlayerAttackEnded } from "../quests/questHooks.js";
 import { AttackLogs } from "../../database/models/attacklogs.model.js";
 import { Save } from "../../database/models/save.model.js";
 import { User } from "../../database/models/user.model.js";
@@ -25,15 +26,22 @@ export const tribeLogName = (save: Save) => {
 /** Walls and traps are not counted as buildings destroyed. */
 const NOT_COUNTED = new Set([17, 24, 117]);
 
-/** The buildings at 0 health in the yard's health data (only damaged ones are in it), walls and traps aside. */
+/**
+ * The buildings at 0 health in the yard's health data (only damaged ones are in it), walls and traps aside. (24 October,
+ * SUSPECTED-BUGS.md: only the yard's own buildings: any id at 0 in the health data the attack's save sent counted, so
+ * one save with thousands of made-up ids was thousands of buildings destroyed.)
+ */
 const destroyedCount = (save: Save) => {
   const health = (save.buildinghealthdata ?? {}) as Record<string, unknown>;
   const data = (save.buildingdata ?? {}) as Record<string, { t?: number } | undefined>;
   let n = 0;
   for (const [id, hp] of Object.entries(health)) {
     if (Number(hp) > 0) continue;
-    const t = Number(data[id]?.t);
-    if (!NOT_COUNTED.has(t)) n++;
+    const b = data[id];
+    if (!b || typeof b !== "object") continue;
+    const t = Number(b.t);
+    if (!Number.isFinite(t) || NOT_COUNTED.has(t)) continue;
+    n++;
   }
   return n;
 };
@@ -87,6 +95,15 @@ export const createAttackLog = async (attacker: User, defender: User | null, sav
 
 const lootKeys = ["r1", "r2", "r3", "r4"] as const;
 
+/** What an attack save's attackloot gained (its positive r1-r4: a catapult's spending is negative), at most 2e9. */
+export const gainsOf = (attackloot: unknown): number => {
+  const o = parseObject(attackloot);
+  if (!o) return 0;
+  let n = 0;
+  for (const key of lootKeys) n += Math.max(0, Number(o[key]) || 0);
+  return Number.isFinite(n) ? Math.min(2e9, Math.floor(n)) : 0;
+};
+
 /** The longest report kept (the client's text; a big yard's log of walls knocked down is long). */
 const REPORT_MAX = 40000;
 
@@ -123,7 +140,7 @@ const parseObject = (value: unknown): Record<string, unknown> | null => {
  * log the client writes, ATTACK.LogRead) and, with the last save (`over`), that it ended. A save with no open
  * log (one started before logs were kept, or practice) changes nothing. It never fails the save.
  */
-export const updateAttackLog = async (attacker: User, save: Save, data: { over?: unknown; lootreport?: unknown }) => {
+export const updateAttackLog = async (attacker: User, save: Save, data: { over?: unknown; lootreport?: unknown; paid?: number }) => {
   if (!infernoOnlyConfig.enabled || !save.baseid) return;
   try {
     const log = await postgres.em.findOne(
@@ -153,6 +170,13 @@ export const updateAttackLog = async (attacker: User, save: Save, data: { over?:
       log.loot = loot;
     }
 
+    // (18 October) the loot paid so far, as the server checked it (the quest book counts this, not the report)
+    const paid = Math.max(0, Math.floor(Number(data.paid) || 0));
+    if (paid > 0) {
+      const ar = (log.attackreport ?? {}) as Record<string, unknown>;
+      log.attackreport = { ...ar, paid: Math.min(1e13, (Number(ar.paid) || 0) + paid) } as typeof log.attackreport;
+    }
+
     const html = save.attackreport as unknown;
     if (typeof html === "string" && html.length) {
       log.attackreport = { ...(log.attackreport ?? {}), html: capReport(html) };
@@ -167,6 +191,11 @@ export const updateAttackLog = async (attacker: User, save: Save, data: { over?:
 
     postgres.em.persist(log);
     await postgres.em.flush();
+    // (the quest book: a player's attack on a player's yard or outpost, ended)
+    if (data.over && log.defender_userid) void questPlayerAttackEnded(log);
+    // (18 October: wins, loot and buildings destroyed, counted from the log for every attack that ended, a tribe's
+    // too; the game reported them itself, so any number could be sent)
+    if (data.over) void questAttackEnded(log);
   } catch (e) {
     logger.error(`Attack log ${attacker.userid} / ${save.baseid}: not updated: ${e}`);
   }

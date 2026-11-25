@@ -6,11 +6,11 @@ import { Point, Rectangle } from "flash/geom";
 import { URLRequest } from "flash/net";
 import { TextField } from "flash/text";
 import { getTimer } from "flash/utils";
-import { AllyInfo, BASE, BUILDING5, Button_CLIP, CellData, EnumYardType, GLOBAL, ImageCache, InfernoMapTheme, IoMapFiltersPopup, IoMapLod, IoMapMinimap, IoMapShare, IoMapSidebar, IoMapSnapshot, IoMapUi, IoMapZoomControl, IoQuests, IoRelocate, IoUnderworld, KEYS, LOGGER, LOGIN, MapRoomBookmark, MapRoomCell, MapRoomManager, MapRoomPopupJump, MapRoomPopup_CLIP, POWERUPS, PopupAttackA, PopupInfoEnemy, PopupInfoMine, PopupInfoViewOnly, PopupMonstersA, PopupMonstersB, PopupNewBookmark, PopupRelocateMe, SOUNDS, TRIBES, Tutorial, TweenLite, UI_TOP_CLIP, bubblepopup3, bubblepopupBuff, com_monsters_maproom_advanced_MapRoom as MapRoom, frame_CLIP, ui_buffIcon_CLIP } from "@game";
+import { AllyInfo, BASE, BUILDING5, Button_CLIP, CellData, EnumYardType, GLOBAL, ImageCache, InfernoMapTheme, IoMapFilters, IoMapFiltersPopup, IoMapHistory, IoMapLod, IoMapMinimap, IoMapShare, IoMapSidebar, IoMapSnapshot, IoMapTargets, IoMapUi, IoMapZoomControl, IoQuests, IoRelocate, IoUnderworld, KEYS, LOGGER, LOGIN, MapRoomBookmark, MapRoomCell, MapRoomManager, MapRoomPopupJump, MapRoomPopup_CLIP, POWERUPS, PopupAttackA, PopupInfoEnemy, PopupInfoMine, PopupInfoViewOnly, PopupMonstersA, PopupMonstersB, PopupNewBookmark, PopupRelocateMe, SOUNDS, TRIBES, Tutorial, TweenLite, UI_TOP_CLIP, bubblepopup3, bubblepopupBuff, com_monsters_maproom_advanced_MapRoom as MapRoom, frame_CLIP, ui_buffIcon_CLIP, IoShop } from "@game";
 
 export class MapRoomPopup extends MapRoomPopup_CLIP {
     static {
-        as3.fields(this, { mapOffset: null, _cellContainer: null, _cells: null, _mouseClickPoint: null, _containerClickPoint: null, _containerStartPoint: null, _tempMovePoint: null, _sortArray: null, _cellCountX: 0, _cellCountY: 0, _cellLookup: null, _bubble: null, _cellWidth: 150, _cellHeight: 75, _popupBookmarkAdd: null, _popupRelocateMe: null, _popupInfoMine: null, _popupInfoEnemy: null, _popupMonsters: null, _popupInfoViewOnly: null, _popupBuff: null, _popupBookmarkMenu: null, _menuShown: false, _fullScreen: false, _fallbackHomeCell: null, _popupAttackA: null, _dragged: false, _popupMonstersB: null, _lastBuffCount: -1, _onHomeClick: null, _onViewOnlyBookmarkClick: null, _ioLod: null, _ioLastDragUpdate: 0, _ioNewUi: false, _ioZoom: null, _ioSidebar: null, _ioRelocate: null, _ioMinimap: null, _ioCoords: null, _ioCoordsText: null, _ioPointer: null, _ioSpot: null, _ioLastWheel: 0, _ioRight: null, _ioInfoMore: null, _ioInfoType: null, _ioInfoRelation: null, _ioInfoHeight: 0, _ioFilters: null, _ioInfoYard: -1, _ioFsShift: 0, _ioLodFocus: null, _ioUnderBanner: null, _ioOffscreen: null, ioOffscreenPending: false });
+        as3.fields(this, { mapOffset: null, _cellContainer: null, _cells: null, _mouseClickPoint: null, _containerClickPoint: null, _containerStartPoint: null, _tempMovePoint: null, _sortArray: null, _cellCountX: 0, _cellCountY: 0, _cellLookup: null, _bubble: null, _cellWidth: 150, _cellHeight: 75, _popupBookmarkAdd: null, _popupRelocateMe: null, _popupInfoMine: null, _popupInfoEnemy: null, _popupMonsters: null, _popupInfoViewOnly: null, _popupBuff: null, _popupBookmarkMenu: null, _menuShown: false, _fullScreen: false, _fallbackHomeCell: null, _popupAttackA: null, _dragged: false, _popupMonstersB: null, _lastBuffCount: -1, _onHomeClick: null, _onViewOnlyBookmarkClick: null, _ioLod: null, _ioLastDragUpdate: 0, _ioPanBounds: null, _ioViewport: null, _ioNewUi: false, _ioZoom: null, _ioSidebar: null, _ioRelocate: null, _ioMinimap: null, _ioCoords: null, _ioCoordsText: null, _ioPointer: null, _ioSpot: null, _ioLastWheel: 0, _ioRight: null, _ioInfoMore: null, _ioInfoType: null, _ioInfoRelation: null, _ioInfoHeight: 0, _ioFilters: null, _ioInfoYard: -1, _ioFsShift: 0, _ioLodFocus: null, _ioUnderBanner: null, _ioOffscreen: null, ioOffscreenPending: false, _ioHistory: null, _ioNoHistory: false, _ioDepths: null, _ioTargets: null, _ioWide: false, _ioBuiltW: 0, _ioBuiltH: 0 });
     }
 
     public static s_Instance: MapRoomPopup = null;
@@ -72,6 +72,14 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
     private _ioLod: IoMapLod;
     private _ioLastDragUpdate: int;
     /**
+     * Inferno-only (8 October, from the base game's pull request #293): where the cell layer can be dragged to
+     * with no cell to recycle (worked out by Update): a drag inside it only moves the layer, shows the cells
+     * now on screen and hides those off it, without the walk over every cell.
+     */
+    private _ioPanBounds: Rectangle;
+    /** Cells hidden for being off screen (the renderer skips them). */
+    private _ioViewport: Rectangle;
+    /**
      * Inferno-only, not when only viewing an invitation's place: the sidebar (find a player, bookmarks,
      * alliance, filters), the minimap, the coordinates and sharing places in chat.
      */
@@ -128,6 +136,22 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
     private _ioOffscreen: any;
     /** Inferno-only: a cell asked for (GetCellsInRange) was in a zone not loaded yet; set until asked again. */
     public ioOffscreenPending: boolean;
+    /** Inferno-only (QoL #77): Back and Recent, left of the Filters button (IoMapHistory). */
+    private _ioHistory: IoMapHistory;
+    /** (QoL #77) the next JumpTo is not a jump Back comes back from (a zoom, or Back itself). */
+    private _ioNoHistory: boolean;
+    /** Inferno-only (QoL #340): Depths, under Home and Jump: the map goes down to the Depths of Hell. */
+    private _ioDepths: MovieClip;
+    /** Inferno-only (QoL #74): Targets, left of Back and Recent: every yard within reach (IoMapTargets). */
+    private _ioTargets: IoMapTargets;
+    /**
+     * Inferno-only (QoL #310): a big window that isn't full screen: the map room is laid out as full screen lays it out,
+     * filling the window above the chat and quest dock (ioWideArea). Small windows keep the stock frame.
+     */
+    private _ioWide: boolean;
+    /** (QoL #310) the stage size the window was laid out for (a resize lays it out again when that matters). */
+    private _ioBuiltW: int;
+    private _ioBuiltH: int;
 
     public $ctor(): void {
         this._ioOffscreen = {};
@@ -137,17 +161,28 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         let i: int = 0;
         this._sortArray = [];
         super.$ctor();
+        // (Inferno-only, QoL #310: a big window is laid out as full screen is, in the room above the chat and quest dock)
+        let ioWideArea: Rectangle = MapRoomPopup.ioWideArea();
+        this._ioWide = ioWideArea != null;
+        this._ioBuiltW = GLOBAL._ROOT.stage.stageWidth;
+        this._ioBuiltH = GLOBAL.GetGameHeight();
         w = GLOBAL._ROOT.stage.stageWidth;
         h = GLOBAL.GetGameHeight();
-        if (w > 1024 && !(GLOBAL.isFullScreen && GLOBAL.INFERNO_ONLY && !MapRoom._viewOnly)) {
+        if (w > 1024 && !(this.ioFull && GLOBAL.INFERNO_ONLY && !MapRoom._viewOnly)) {
             w = 1024;
         }
         if (h > 768) {
             h = 768;
         }
         r = new Rectangle(0 - (w - 760) / 2, 0 - (h - 720) / 2, w, h);
-        if (GLOBAL.isFullScreen) {
-            this._fullScreen = true;
+        if (this._ioWide) {
+            r = ioWideArea;
+            w = ioWideArea.width | 0;
+            h = ioWideArea.height | 0;
+        }
+        if (this.ioFull) {
+            // (QoL #310: only full screen itself is "full screen" for Update's check)
+            this._fullScreen = GLOBAL.isFullScreen;
             this.mcFrame.x = r.x + 175;
             this.mcFrame.y = r.y + 20;
             this.mcFrame.width = w - 195;
@@ -182,7 +217,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             // A panel as wide as the sidebar goes right of the map (IoBuildUi): the map is narrower (full
             // screen) or everything moves left by half of it (the window keeps its middle).
             let ioSide: number = this.mcFrame.x - this.mcFrame2.x;
-            if (GLOBAL.isFullScreen) {
+            if (this.ioFull) {
                 this.mcFrame.width -= ioSide;
                 this.mcMask.mcMask.width = this.mcFrame.width;
                 // the grid is laid out for the stock 829 wide map: its middle moves to this one's
@@ -281,7 +316,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         }
         this._cellContainer.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ContainerClick));
         GLOBAL._ROOT.stage.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
-        // The same release from places the mouse-up is known to reach on every setup (see MAP.as).
+        // The same release from places the mouse-up is known to reach on every setup (see MAP.ts).
         this._cellContainer.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
         this._cellContainer.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ContainerRelease));
         GLOBAL._ROOT.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
@@ -464,7 +499,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
                 this.mcInfo.tStatus.htmlText = "<font color=\"#FF0000\">" + KEYS.Get("newmap_inf_damaged", { "v1": param1._damage }) + "</font>";
             }
             if (!param1._damage) {
-                this.mcInfo.tStatus.htmlText = "Fine";
+                // (Inferno-only, QoL #235: in the player's language)
+                this.mcInfo.tStatus.htmlText = GLOBAL.INFERNO_ONLY ? KEYS.Get("io_tr_map_fine") : "Fine";
             }
             if (!param1._damage && param1._base < 1) {
                 this.mcInfo.tStatus.htmlText = KEYS.Get("newmap_re");
@@ -701,10 +737,6 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             }
             this.bJump.removeEventListener(MouseEvent.CLICK, as3.bind(this, this.JumpPopupShow));
             this.bBookmarks.removeEventListener(MouseEvent.CLICK, as3.bind(this, this.ShowBookmarkMenu));
-            if (this._ioRelocate) {
-                this._ioRelocate.removeEventListener(MouseEvent.CLICK, as3.bind(this, this.ioRelocateClick));
-                this._ioRelocate = null;
-            }
         } else {
             if (this._onViewOnlyBookmarkClick != null) {
                 this.bBookmarks.removeEventListener(MouseEvent.CLICK, this._onViewOnlyBookmarkClick);
@@ -744,8 +776,42 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         }
     }
 
+    /**
+     * Inferno-only (21 October): the map about to open at the yard you're in (MapRoom.ShowDelayed): as JumpTo left it,
+     * not zoomed out.
+     */
+    public static ioOpenAtCell(): void {
+        MapRoomPopup.s_ioLod = false;
+    }
+
+    /**
+     * Inferno-only (21 October): opened at the yard you're in, its cells made there by the constructor: what JumpTo did
+     * after (Back to where the map was, home; the cells brought up to date; the view's numbers and Back's button).
+     */
+    public ioOpenedAt(from: Point): void {
+        if (this._ioHistory && from) {
+            let at: Point = this.ioViewCentre();
+            if (at && (Math.abs(from.x - at.x) > 2 || Math.abs(from.y - at.y) > 2)) {
+                IoMapHistory.push(from);
+            }
+        }
+        this.Update();
+        this.ioViewChanged();
+        if (this._ioHistory) {
+            this._ioHistory.update();
+        }
+    }
+
     public JumpTo(param1: Point): void {
         this.ioHideTransient();
+        // (Inferno-only, QoL #77: Back comes to where the map was before a jump; a zoom or Back itself is no jump)
+        if (this._ioHistory && !this._ioNoHistory && this._cellContainer && param1) {
+            let from: Point = this.ioViewCentre();
+            if (from && (Math.abs(from.x - param1.x) > 2 || Math.abs(from.y - param1.y) > 2)) {
+                IoMapHistory.push(from);
+            }
+        }
+        this._ioNoHistory = false;
         if (MapRoomPopup.s_ioLod) {
             this.ioLeaveLod();
         }
@@ -761,7 +827,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         }
         this._cellContainer.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ContainerClick));
         GLOBAL._ROOT.stage.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
-        // The same release from places the mouse-up is known to reach on every setup (see MAP.as).
+        // The same release from places the mouse-up is known to reach on every setup (see MAP.ts).
         this._cellContainer.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
         this._cellContainer.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ContainerRelease));
         GLOBAL._ROOT.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
@@ -769,9 +835,13 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this.mcMask.mcBG.addChild(this._cellContainer);
         this.Update();
         this.ioViewChanged();
+        if (this._ioHistory) {
+            this._ioHistory.update();
+        }
     }
 
     private GenerateCells(param1: Point): void {
+        this._ioPanBounds = null;
         if (GLOBAL.INFERNO_ONLY) {
             // the layer the cell is on: the underworld or the overworld (IoUnderworld)
             IoUnderworld.modeFor(param1);
@@ -815,7 +885,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this._cellContainer = new MovieClip();
         this._sortArray = [];
         this._cellLookup = {};
-        if (GLOBAL.isFullScreen) {
+        if (this.ioFull) {
             this._cellCountX = this.ioFullColumns();
             this._cellCountY = 15;
         } else {
@@ -850,7 +920,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
                 mapRoomCell.depth = (mapRoomCell.y * 1000 + mapRoomCell.x) | 0;
                 this._sortArray.push(mapRoomCell);
                 this._cellContainer.addChild(mapRoomCell);
-                if (GLOBAL.isFullScreen) {
+                if (this.ioFull) {
                     mapRoomCell.Y = (mapRoomCell.Y + (param1.y - 8)) | 0;
                     if (param1.x % 2) {
                         mapRoomCell.X = (mapRoomCell.X + (param1.x - 8)) | 0;
@@ -883,7 +953,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this._fallbackHomeCell.Y = GLOBAL._mapHome.y | 0;
         this._cellContainer.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ContainerClick));
         GLOBAL._ROOT.stage.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
-        // The same release from places the mouse-up is known to reach on every setup (see MAP.as).
+        // The same release from places the mouse-up is known to reach on every setup (see MAP.ts).
         this._cellContainer.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
         this._cellContainer.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ContainerRelease));
         GLOBAL._ROOT.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ContainerRelease));
@@ -968,7 +1038,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         let cell: MapRoomCell = null;
         let scale: number = MapRoomPopup.IO_ZOOM_SCALE;
         let columnWidth: number = this._cellWidth * 0.75;
-        let full: boolean = GLOBAL.isFullScreen;
+        let full: boolean = this.ioFull;
         // Where the stock view shows the centre of the focused cell, in the mask's coordinates.
         let centreX: number = full ? 402 - this._ioFsShift : 288.5;
         let centreY: number = full ? 317.5 : 227.5;
@@ -1026,8 +1096,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         let dx: number = NaN;
         let dy: number = NaN;
         let scale: number = this._cellContainer.scaleX;
-        let centreX: number = GLOBAL.isFullScreen ? 402 - this._ioFsShift : 288.5;
-        let centreY: number = GLOBAL.isFullScreen ? 317.5 : 227.5;
+        let centreX: number = this.ioFull ? 402 - this._ioFsShift : 288.5;
+        let centreY: number = this.ioFull ? 317.5 : 227.5;
         for (cell of as3.values(this._cells)) {
             dx = this._cellContainer.x + scale * (cell.x + this._cellWidth * 0.5) - centreX;
             dy = this._cellContainer.y + scale * (cell.y + this._cellHeight * 0.5) - centreY;
@@ -1096,6 +1166,48 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         return this._ioLod ? this._ioLod.mapHeight : this.mcMask.mcMask.height | 0;
     }
 
+    /**
+     * Inferno-only (QoL #310): laid out as full screen lays the map room out: full screen itself, or a big window
+     * (ioWideArea). Every place that put the map's grid where full screen puts it asks this.
+     */
+    private get ioFull(): boolean {
+        return GLOBAL.isFullScreen || this._ioWide;
+    }
+
+    /**
+     * Inferno-only (QoL #310): in a big window that isn't full screen, the rectangle the full screen layout is worked out
+     * from (as the constructor's for full screen: the left panel at its left, the map's frame 20 below its top and 20 above
+     * its bottom), so that the whole window is used: from 6 px inside the screen's left and right edges, 14 below its top,
+     * down to the chat and quest dock (where the game's HUD starts: _SCREENHUD), at most 768 high and a map 1500 wide.
+     * Null when that would be no bigger than the stock frame (a map at least 640 x 520), full screen, or only viewing.
+     */
+    private static ioWideArea(): Rectangle {
+        let screen: Rectangle = GLOBAL._SCREEN;
+        if (!GLOBAL.INFERNO_ONLY || MapRoom._viewOnly || GLOBAL.isFullScreen || !screen || !(screen.width > 0) || !(screen.height > 0)) {
+            return null;
+        }
+        let bottom: number = screen.y + screen.height;
+        let hud: number = Math.min(GLOBAL._SCREENHUD ? GLOBAL._SCREENHUD.y : bottom, GLOBAL._SCREENHUDLEFT ? GLOBAL._SCREENHUDLEFT.y : bottom);
+        let reserve: number = Math.max(34, Math.min(220, bottom - hud));
+        let x: number = screen.x + 6;
+        let y: number = screen.y - 6;
+        let w: number = screen.width + 8;
+        let h: number = screen.height - reserve + 26;
+        // the map is the window less the two panels (175 each) and the frame's margins (20)
+        if (w - 370 < 640 || h - 40 < 520) {
+            return null;
+        }
+        if (h > 768) {
+            y += Math.round((h - 768) * 0.5);
+            h = 768;
+        }
+        if (w - 370 > 1500) {
+            x += Math.round((w - 370 - 1500) * 0.5);
+            w = 1870;
+        }
+        return new Rectangle(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+    }
+
     /** Where the map puts the middle of the cell it is centred on (mask coordinates; see GenerateCells). */
     /** Full screen: columns enough for the map's width (18 for the stock 829 pixels), an even number. */
     private ioFullColumns(): int {
@@ -1104,7 +1216,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
     }
 
     private ioGridMiddle(): Point {
-        return GLOBAL.isFullScreen ? new Point(402 - this._ioFsShift, 317.5) : new Point(288.5, 227.5);
+        return this.ioFull ? new Point(402 - this._ioFsShift, 317.5) : new Point(288.5, 227.5);
     }
 
     private ioZoomTo(to: int, anchor: Point): void {
@@ -1146,6 +1258,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         target = new Point(Math.floor(cellX - (at.x - middle.x) / (this._cellWidth * 0.75 * scale)), Math.floor(cellY - (at.y - middle.y) / (this._cellHeight * scale)));
         target.x = (target.x % MapRoom._mapWidth + MapRoom._mapWidth) % MapRoom._mapWidth;
         target.y = (target.y % MapRoom._mapHeight + MapRoom._mapHeight) % MapRoom._mapHeight;
+        // (QoL #77: a zoom is not a jump for Back)
+        this._ioNoHistory = true;
         this.JumpTo(target);
     }
 
@@ -1231,11 +1345,21 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         if (this._ioLod) {
             this._ioLod.Redraw();
         }
+        // (QoL #340: the portals may have arrived)
+        this.ioDepthsLook();
         if (this._ioMinimap) {
             this._ioMinimap.Redraw();
         }
         if (this._ioSidebar) {
             this._ioSidebar.Refresh();
+        }
+        // (QoL #73: "only in my flinger range" knows the range once the snapshot is here)
+        if (IoMapFilters.inRangeOnly) {
+            for (let cell of as3.values(this._cells)) {
+                if (cell) {
+                    (cell as MapRoomCell).ioFilterLook();
+                }
+            }
         }
     }
 
@@ -1248,11 +1372,6 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
     // The map room's own panels (Inferno-only): the zoom control, the sidebar, the minimap and the
     // coordinates; sharing and bookmarking a clicked place.
     // ---------------------------------------------------------------------------------------------
-    private ioRelocateClick(e: MouseEvent): void {
-        this.HideBookmarkMenu();
-        IoRelocate.Ask();
-    }
-
     private ioBuildUi(): void {
         let frame2H: int = this.mcFrame2.height | 0;
         let sideX: int = ((this.mcFrame2.x | 0) + 12) | 0;
@@ -1278,6 +1397,18 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             this._ioFilters.x = (this._ioZoom.x - 26 - 6) | 0;
             this._ioFilters.y = this._ioZoom.y;
             this.addChild(this._ioFilters);
+            // (QoL #77: Back and Recent, left of the Filters button)
+            this._ioHistory = new IoMapHistory(as3.bind(this, this.ioBack), as3.bind(this, this.ioGoTo));
+            this._ioHistory.x = (this._ioFilters.x - 10 - IoMapHistory.WIDTH) | 0;
+            this._ioHistory.y = (this._ioZoom.y + 2) | 0;
+            this.addChild(this._ioHistory);
+            // (QoL #74: Targets, left of Back and Recent; its list opens over the map)
+            this._ioTargets = new IoMapTargets(as3.bind(this, this.ioGoTo), as3.bind(this, this.ioAttackAt), (): Rectangle => {
+                return this.ioMapArea();
+            });
+            this._ioTargets.x = (this._ioHistory.x - 8 - IoMapTargets.WIDTH) | 0;
+            this._ioTargets.y = this._ioHistory.y;
+            this.addChild(this._ioTargets);
         }
         this.addEventListener(MouseEvent.MOUSE_WHEEL, as3.bind(this, this.ioOnWheel));
         if (!this._ioNewUi) {
@@ -1291,16 +1422,15 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this.bHome.y = (this.mcOutposts.y + 36) | 0;
         this.bJump.x = (this.bHome.x + this.bHome.width + 8) | 0;
         this.bJump.y = this.bHome.y;
-        // Relocate: a new place on the map for the main yard, at the price of its resources and every
-        // outpost (IoRelocate asks first).
-        this._ioRelocate = new Button_CLIP();
-        this._ioRelocate.Setup("Relocate", false, (this.bJump.x + this.bJump.width - this.bHome.x) | 0, this.bHome.height | 0);
-        this._ioRelocate.name = "ioRelocate";
-        this._ioRelocate.x = this.bHome.x;
-        this._ioRelocate.y = (this.bHome.y + this.bHome.height + 6) | 0;
-        this._ioRelocate.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ioRelocateClick));
-        this.addChild(this._ioRelocate);
-        sideTop = (this._ioRelocate.y + this._ioRelocate.height + 8) | 0;
+        // (Relocate is on the Map Room building's menu, 10 October: BUILDINGINFO, IoRelocate)
+        // (QoL #340: Depths under Home and Jump, as wide as both; greyed while the world has no portals known)
+        this._ioDepths = IoMapUi.button(KEYS.Get("io_op2_depths"), Math.max(60, this.bJump.x + this.bJump.width - this.bHome.x) | 0, 20, as3.bind(this, this.ioGoDepths), "grey", 10);
+        this._ioDepths.name = "ioMap2Depths";
+        this._ioDepths.x = this.bHome.x;
+        this._ioDepths.y = (this.bHome.y + this.bHome.height + 5) | 0;
+        this.addChild(this._ioDepths);
+        this.ioDepthsLook();
+        sideTop = (this._ioDepths.y + 20 + 8) | 0;
         this._ioSidebar = new IoMapSidebar(this, sideW, (((this.mcFrame2.y + frame2H - 18) | 0) - sideTop) | 0);
         this._ioSidebar.x = sideX;
         this._ioSidebar.y = sideTop;
@@ -1351,6 +1481,12 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         if (this._ioFilters) {
             this.addChild(this._ioFilters);
         }
+        if (this._ioHistory) {
+            this.addChild(this._ioHistory);
+        }
+        if (this._ioTargets) {
+            this.addChild(this._ioTargets);
+        }
         this._ioCoords = new Sprite();
         this._ioCoords.mouseEnabled = false;
         this._ioCoords.mouseChildren = false;
@@ -1365,7 +1501,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         // With the panel the window is wider than the game's own 760: on a narrower screen it is made
         // smaller to fit, around its middle.
         need = this.mcFrame2.width + gap + this.mcFrame.width + gap + this.mcFrame2.width + 2 * 55;
-        if (!GLOBAL.isFullScreen && GLOBAL._ROOT.stage.stageWidth < need) {
+        if (!this.ioFull && GLOBAL._ROOT.stage.stageWidth < need) {
             fit = Math.max(0.5, GLOBAL._ROOT.stage.stageWidth / need);
             this.scaleX = this.scaleY = fit;
             this.x = Math.round(380 * (1 - fit));
@@ -1382,7 +1518,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this.mcInfo.tUserId.visible = false;
         this.mcInfo.mcAlliancePic.visible = false;
         this.ioInfoExtras("", "");
-        this._ioInfoMore.htmlText = "<font color=\"#555555\">Point at a place on the map to see what is there.</font>";
+        // (QoL #235: this panel's words in the player's language, io_tr_map_*)
+        this._ioInfoMore.htmlText = "<font color=\"#555555\">" + KEYS.Get("io_tr_map_point") + "</font>";
         this.ioLayoutInfo();
         this.mcInfo.visible = true;
     }
@@ -1441,14 +1578,15 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
     /** The type of a place, as the cell information says it. */
     private static ioTypeName(base: int, water: boolean): string {
         if (water) {
-            return "Lava";
+            return KEYS.Get("io_tr_map_type_lava");
         }
-        return base == 0 ? "Open Ground" : (base == 1 ? "Wild Monsters" : (base == 2 ? "Main Yard" : "Outpost"));
+        return KEYS.Get(base == 0 ? "io_tr_map_type_open" : (base == 1 ? "io_tr_map_type_wild" : (base == 2 ? "io_tr_map_type_main" : "io_tr_map_type_outpost")));
     }
 
     /** How you stand with a yard's alliance, under the alliance's name. */
     private static ioRelationName(relation: int): string {
-        return as3.str(relation == IoMapUi.YOU ? IoMapUi.RELATION_NAMES[IoMapUi.ALLY] : IoMapUi.RELATION_NAMES[relation]);
+        // (QoL #235: in the player's language)
+        return IoMapUi.relationName(relation == IoMapUi.YOU ? IoMapUi.ALLY : relation);
     }
 
     /** The cell under the pointer (the map): the lines the stock panel does not have. */
@@ -1464,7 +1602,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         }
         this.ioInfoExtras(MapRoomPopup.ioTypeName(cell._base, cell._water), relation);
         if (cell._base >= 2 && cell._locked != 0 && cell._locked != LOGIN._playerID) {
-            lines.push(["Now", "Being played or attacked"]);
+            lines.push([KEYS.Get("io_tr_map_now"), KEYS.Get("io_tr_map_busy")]);
         }
         this.ioInfoLines(lines);
         this.ioLayoutInfo();
@@ -1506,13 +1644,13 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this.mcInfo.tOwner.htmlText = IoMapUi.escape(String(player.name || "?")) + " (" + (player.level | 0 || yard[11] | 0) + ")";
         this.mcInfo.tUserId.text = KEYS.Get("label_userid", { "v1": uid });
         this.mcInfo.tUserId.visible = true;
-        this.mcInfo.tAlliance.htmlText = alliance ? IoMapUi.escape(String(alliance.name)) : "No alliance";
-        this.mcInfo.tStatus.htmlText = (yard[8] | 0) > 0 ? "<font color=\"#FF0000\">" + KEYS.Get("newmap_inf_damaged", { "v1": yard[8] | 0 }) + "</font>" : "Fine";
+        this.mcInfo.tAlliance.htmlText = alliance ? IoMapUi.escape(String(alliance.name)) : KEYS.Get("io_tr_map_no_alliance");
+        this.mcInfo.tStatus.htmlText = (yard[8] | 0) > 0 ? "<font color=\"#FF0000\">" + KEYS.Get("newmap_inf_damaged", { "v1": yard[8] | 0 }) + "</font>" : KEYS.Get("io_tr_map_fine");
         this.mcInfo.tLocation.htmlText = IoMapUi.location(yard[0] | 0, yard[1] | 0);
         this.mcInfo.visible = true;
-        this.ioInfoExtras((yard[2] | 0) == 2 ? "Main Yard" : "Outpost", alliance ? MapRoomPopup.ioRelationName(relation) : "");
+        this.ioInfoExtras(KEYS.Get((yard[2] | 0) == 2 ? "io_tr_map_type_main" : "io_tr_map_type_outpost"), alliance ? MapRoomPopup.ioRelationName(relation) : "");
         if ((yard[12] | 0) != 0 && (yard[3] | 0) != LOGIN._playerID) {
-            lines.push(["Now", "Being played or attacked"]);
+            lines.push([KEYS.Get("io_tr_map_now"), KEYS.Get("io_tr_map_busy")]);
         }
         this.ioInfoLines(lines);
         this.ioLayoutInfo();
@@ -1530,10 +1668,22 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             this._ioFilters.Cleanup();
             this._ioFilters = null;
         }
+        if (this._ioHistory) {
+            this._ioHistory.Cleanup();
+            this._ioHistory = null;
+        }
+        if (this._ioTargets) {
+            this._ioTargets.Cleanup();
+            this._ioTargets = null;
+        }
         if (this._ioSidebar) {
             this._ioSidebar.Cleanup();
             this._ioSidebar = null;
         }
+        if (this._ioDepths && this._ioDepths.parent) {
+            this._ioDepths.parent.removeChild(this._ioDepths);
+        }
+        this._ioDepths = null;
         if (this._ioMinimap) {
             this._ioMinimap.Cleanup();
             this._ioMinimap = null;
@@ -1576,7 +1726,9 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
     private ioUnderBanner(): void {
         let text: TextField = null;
         if (this._ioMinimap) {
-            this._ioMinimap.visible = !IoUnderworld.under;
+            // (QoL #341: in the Depths the minimap is theirs; it was hidden there)
+            this._ioMinimap.visible = true;
+            this._ioMinimap.setDepths(IoUnderworld.under);
         }
         if (!IoUnderworld.under) {
             if (this._ioUnderBanner && this._ioUnderBanner.parent) {
@@ -1592,14 +1744,15 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             this._ioUnderBanner.mouseChildren = false;
             text = IoMapUi.label("", 13, IoMapUi.LIGHT, false, 300, "center");
             text.multiline = true;
-            text.htmlText = "<b>THE DEPTHS OF HELL</b><br><font size=\"10\" color=\"#D9C49A\">Portals lead back up. Home returns to your yard.</font>";
+            text.htmlText = "<b>" + KEYS.Get("io_tr_map_depths_banner") + "</b><br><font size=\"10\" color=\"#D9C49A\">" + KEYS.Get("io_tr_map_depths_hint") + "</font>";
             text.height = 40;
             text.y = 4;
             this._ioUnderBanner.addChild(text);
             IoMapUi.roundBox(this._ioUnderBanner.graphics, 0, 0, 300, 46, IoMapUi.DARK, 0.9, 0xC0542A, 10, 2);
         }
         this._ioUnderBanner.x = (this.mcMask.x + (this.mcMask.mcMask.width - 300) * 0.5) | 0;
-        this._ioUnderBanner.y = (this.mcMask.y + 8) | 0;
+        // (16 October: under the buttons along the map's top edge; it covered Targets)
+        this._ioUnderBanner.y = (this.mcMask.y + 20) | 0;
         this.addChild(this._ioUnderBanner);
     }
 
@@ -1689,6 +1842,12 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         if (this._ioFilters) {
             this._ioFilters.ioStageDown(target);
         }
+        if (this._ioHistory) {
+            this._ioHistory.ioStageDown(target);
+        }
+        if (this._ioTargets) {
+            this._ioTargets.ioStageDown(target);
+        }
         if (this._ioSpot && target && !this._ioSpot.contains(target)) {
             this.ioHideSpot();
         }
@@ -1746,13 +1905,15 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             return;
         }
         this.ioHideTransient();
+        // (QoL #77)
+        this.ioViewed(cell);
         IoMapUi.glass(bubble.graphics, w, h, 9);
         title = IoMapUi.label("", 12, IoMapUi.LIGHT, false, (w - 20) | 0);
-        title.htmlText = "<b>" + (cell._water ? "Lava" : "Open ground") + "</b> <font color=\"#D9C49A\">at " + IoMapUi.coord(cellX, cellY) + "</font>";
+        title.htmlText = "<b>" + KEYS.Get(cell._water ? "io_tr_map_type_lava" : "io_tr_map_spot_open") + "</b> <font color=\"#D9C49A\">" + KEYS.Get("io_tr_map_spot_at", { "v1": IoMapUi.coord(cellX, cellY) }) + "</font>";
         title.x = 10;
         title.y = 8;
         bubble.addChild(title);
-        share = IoMapUi.button("Share in chat", 108, 26, (e: MouseEvent): void => {
+        share = IoMapUi.button(KEYS.Get("io_tr_map_share"), 108, 26, (e: MouseEvent): void => {
             let p: Point = self.globalToLocal(share.localToGlobal(new Point(54, 0)));
             self.ioHideSpot();
             IoMapShare.ShowChooser(self, p.x, p.y + 8, area, cellX, cellY);
@@ -1760,7 +1921,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         share.x = 10;
         share.y = 36;
         bubble.addChild(share);
-        mark = IoMapUi.button("Bookmark", 80, 26, (e: MouseEvent): void => {
+        mark = IoMapUi.button(KEYS.Get("io_tr_map_bookmark"), 80, 26, (e: MouseEvent): void => {
             self.ioHideSpot();
             self.ShowBookmarkAddPopup(cell);
         }, "grey", 10);
@@ -1798,6 +1959,10 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         toY = below ? portal[2] | 0 : portal[4] | 0;
         // Anyone can go through to look (the user's rule, 4 October); attacking there still needs the range
         let reach: boolean = below || IoUnderworld.entryOpen(index) || IoUnderworld.hasOutpostBelow();
+        if (!reach) {
+            // (room for what it would take: QoL #339)
+            h = 128;
+        }
         cellX = cell.X;
         cellY = cell.Y;
         area = this.ioMapArea();
@@ -1809,19 +1974,19 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this.ioHideTransient();
         IoMapUi.glass(bubble.graphics, w, h, 9);
         title = IoMapUi.label("", 12, IoMapUi.LIGHT, false, (w - 20) | 0);
-        title.htmlText = "<b>" + (below ? "Portal to the Inferno" : "Portal to the " + IoUnderworld.NAME) + "</b>";
+        title.htmlText = "<b>" + KEYS.Get(below ? "io_tr_map_portal_up" : "io_tr_map_portal_down") + "</b>";
         title.x = 10;
         title.y = 8;
         bubble.addChild(title);
         text = IoMapUi.label("", 11, IoMapUi.LIGHT_MUTED, false, (w - 20) | 0);
-        text.htmlText = below ? "Comes out at " + IoMapUi.coord(toX, toY) + ". Next to it, your outposts attack up to " + IoUnderworld.exitRange + " cells from there." : "Comes out at " + IoMapUi.coord(toX, toY) + "." + (reach ? "" : " To attack down there, one of your yards needs this portal in its Flinger range.");
+        text.htmlText = below ? KEYS.Get("io_tr_map_portal_out_below", { "v1": IoMapUi.coord(toX, toY), "v2": IoUnderworld.exitRange }) : KEYS.Get("io_tr_map_portal_out", { "v1": IoMapUi.coord(toX, toY) }) + (reach ? "" : " " + MapRoomPopup.ioPortalNeeds(index));
         text.wordWrap = true;
         text.multiline = true;
-        text.height = 40;
+        text.height = h - 72;
         text.x = 10;
         text.y = 28;
         bubble.addChild(text);
-        go = IoMapUi.button(below ? "Go up" : "Enter the " + IoUnderworld.NAME, 170, 26, (e: MouseEvent): void => {
+        go = IoMapUi.button(KEYS.Get(below ? "io_tr_map_portal_go_up" : "io_tr_map_portal_enter"), 170, 26, (e: MouseEvent): void => {
             SOUNDS.Play("click1");
             self.ioGoTo(toX, toY);
         }, "gold", 10);
@@ -1829,7 +1994,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         go.x = 10;
         go.y = h - 34;
         bubble.addChild(go);
-        share = IoMapUi.button("Share in chat", 100, 26, (e: MouseEvent): void => {
+        share = IoMapUi.button(KEYS.Get("io_tr_map_share"), 100, 26, (e: MouseEvent): void => {
             let p: Point = self.globalToLocal(share.localToGlobal(new Point(50, 0)));
             self.ioHideSpot();
             IoMapShare.ShowChooser(self, p.x, p.y + 8, area, cellX, cellY);
@@ -1843,6 +2008,24 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         bubble.y = Math.round(Math.max(area.y + 4, Math.min(area.bottom - h - 4, at.y - h - 24)));
         this.addChild(bubble);
         this._ioSpot = bubble;
+    }
+
+    /**
+     * Inferno-only (QoL #339): what attacking through an unopened portal would take, by the player's nearest yard:
+     * where it is, how far, and the Flinger range it has and needs.
+     */
+    public static ioPortalNeeds(index: int): string {
+        let near: any[] = IoUnderworld.nearest(index);
+        if (!near || near.length < 4) {
+            return KEYS.Get("io_portal_needs_range");
+        }
+        let d: int = near[2] | 0;
+        let range: int = near[3] | 0;
+        let where: string = IoMapUi.coord(near[0] | 0, near[1] | 0);
+        if (range <= 0) {
+            return KEYS.Get("io_portal_nearest_noflinger", { "v1": where, "v2": d });
+        }
+        return KEYS.Get("io_portal_nearest", { "v1": where, "v2": d, "v3": range });
     }
 
     /** Inferno-only: ioreach came (IoUnderworld): range drawn again, an open enemy popup worked out again. */
@@ -1884,17 +2067,152 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             popup.removeChild(old);
         }
         bounds = popup.getBounds(popup);
-        button = IoMapUi.button("Share this place in chat", 180, 26, (e: MouseEvent): void => {
+        button = IoMapUi.button(KEYS.Get("io_tr_map_share_place"), 180, 26, (e: MouseEvent): void => {
             let p: Point = self.globalToLocal(button.localToGlobal(new Point(90, 0)));
             IoMapShare.ShowChooser(self, p.x, p.y, area, cellX, cellY);
         }, "gold", 10);
         button.name = "ioShare";
-        button.x = Math.round(bounds.x + (bounds.width - 180) * 0.5);
-        button.y = Math.round(bounds.bottom + 6);
-        if (popup.y + button.y + 30 > area.bottom + 30) {
-            button.y = Math.round(bounds.y - 32);
+        // (23 October, the user's: "within the box not under it": at the frame's foot, the frame made taller to
+        // hold it (ioFitFrame, after Short Hop or Guard is put beside it))
+        let foot: number = this.ioFrameFoot(popup);
+        let loot: DisplayObject = popup.getChildByName("ioBat2EnemyLoot");
+        if (loot) {
+            foot = Math.max(foot, loot.y + loot.height + 6);
         }
+        button.x = Math.round(bounds.x + (bounds.width - 180) * 0.5);
+        button.y = Math.round(foot);
         popup.addChild(button);
+        this.ioFitFrame(popup);
+    }
+
+    /**
+     * (Inferno-only, 23 October) Where the map's own buttons go in a cell's window: inside its frame, under what is
+     * there (the frame at its own height first: the window is used again for the next cell).
+     */
+    private ioFrameFoot(popup: Sprite): number {
+        let fr: any = popup.getChildByName("mcFrame");
+        if (!fr) {
+            return popup.getBounds(popup).bottom + 6;
+        }
+        if (fr.ioH0 == null) {
+            fr.ioH0 = fr.height;
+        }
+        if (Math.abs(fr.height - fr.ioH0) > 0.5) {
+            fr.height = fr.ioH0;
+        }
+        let bottom: number = fr.y + fr.ioH0 - 14;
+        for (let i: int = 0; i < popup.numChildren; i++) {
+            let c: DisplayObject = popup.getChildAt(i);
+            if (c == fr || !c.visible || c.name == "ioShare" || c.name == "ioShopAction" || c.name == "ioShopAction2" || c.name == "ioBat2EnemyLoot" || c.y < fr.y || c.width >= fr.width - 2) {
+                continue;
+            }
+            let r: Rectangle = c.getBounds(popup);
+            if (r.height > 0 && r.bottom > bottom - 8) {
+                bottom = Math.max(bottom, r.bottom + 8);
+            }
+        }
+        return bottom;
+    }
+
+    /** (Inferno-only, 23 October) A cell's window's frame made tall enough for everything in it, and the window kept on the screen. */
+    private ioFitFrame(popup: Sprite): void {
+        let fr: any = popup.getChildByName("mcFrame");
+        if (!fr) {
+            return;
+        }
+        if (fr.ioH0 == null) {
+            fr.ioH0 = fr.height;
+        }
+        let bottom: number = fr.y + fr.ioH0;
+        for (let n of ["ioShare", "ioShopAction", "ioShopAction2", "ioBat2EnemyLoot"]) {
+            let c: DisplayObject = popup.getChildByName(n);
+            if (c && c.visible) {
+                bottom = Math.max(bottom, c.y + c.height + 16);
+            }
+        }
+        // (drawn again at that size: frame.ioResize)
+        if (fr.ioResize) {
+            fr.ioResize(fr.width, bottom - fr.y);
+        } else {
+            fr.height = bottom - fr.y;
+        }
+        // (kept on the screen: a taller window near the map's foot moved up)
+        let area: Rectangle = this.ioMapArea();
+        if (popup.parent && area) {
+            let r: Rectangle = fr.getBounds(popup.parent);
+            if (r.bottom > area.bottom) {
+                popup.y -= Math.min(r.bottom - area.bottom, Math.max(0, r.top - area.top));
+            }
+        }
+    }
+
+    /**
+     * Inferno-only (22 October: IoShop's items on the map): in a cell's window, beside its Share button: one of the
+     * player's own outposts: "Guard", and within a Short Hop of the main yard "Short Hop here" (23 October: only onto
+     * an outpost of theirs, the user's); another player's yard: "Scout". Inside the frame (ioFitFrame).
+     */
+    private ioAttachShop(popup: Sprite, cell: MapRoomCell): void {
+        if (!this._ioNewUi || !popup || !GLOBAL.INFERNO_ONLY) {
+            return;
+        }
+        for (let n of ["ioShopAction", "ioShopAction2"]) {
+            let old: DisplayObject = popup.getChildByName(n);
+            if (old) {
+                popup.removeChild(old);
+            }
+        }
+        if (!cell || !IoShop.data) {
+            this.ioFitFrame(popup);
+            return;
+        }
+        let actions: any[] = [];
+        let cellX: int = cell.X, cellY: int = cell.Y;
+        if (cell._base == 3 && cell._mine && cell._baseID) {
+            let baseid: string = String(cell._baseID);
+            if (IoShop.canHopTo(cellX, cellY)) {
+                actions.push([KEYS.Get("io_shop_map_hop", { "v1": IoShop.tokens("hop") > 0 ? KEYS.Get("io_shop_kept") : GLOBAL.FormatNumber(IoShop.price("hop")) }), (): void => {
+                    IoShop.hopAsk(baseid, cellX, cellY);
+                }]);
+            }
+            actions.push([KEYS.Get("io_shop_map_guard", { "v1": IoShop.tokens("guard") > 0 ? KEYS.Get("io_shop_kept") : GLOBAL.FormatNumber(IoShop.price("guard")) }), (): void => {
+                IoShop.guardAsk(baseid, cellX, cellY);
+            }]);
+        } else if ((cell._base == 2 || cell._base == 3) && !cell._mine && cell._baseID && (cell._userID | 0) > 0) {
+            // (22 October: a Scout Report of another player's yard, free again the same day)
+            let sid: string = String(cell._baseID);
+            let who: string = String(cell._name ?? "");
+            actions.push([IoShop.scoutedToday(sid) ? KEYS.Get("io_shop_map_scout_again") : KEYS.Get("io_shop_map_scout", { "v1": GLOBAL.FormatNumber(IoShop.price("scout")) }), (): void => {
+                IoShop.scoutAsk(sid, who);
+            }]);
+        }
+        if (!actions.length) {
+            this.ioFitFrame(popup);
+            return;
+        }
+        let share: DisplayObject = popup.getChildByName("ioShare");
+        let fr: DisplayObject = popup.getChildByName("mcFrame");
+        let bounds: Rectangle = popup.getBounds(popup);
+        let mid: number = fr ? fr.x + fr.width * 0.5 : bounds.x + bounds.width * 0.5;
+        let row: any[] = share ? [share] : [];
+        for (let k: int = 0; k < actions.length; k++) {
+            let go: Function = actions[k][1];
+            let button: MovieClip = IoMapUi.button(String(actions[k][0]), 180, 26, (e: MouseEvent): void => {
+                go();
+            }, "dark", 10);
+            button.name = k == 0 ? "ioShopAction" : "ioShopAction2";
+            popup.addChild(button);
+            row.push(button);
+        }
+        // (side by side, centred in the frame; a row too wide for a narrow window goes on two)
+        let per: int = fr && row.length * 186 - 6 > fr.width - 24 ? 2 : row.length;
+        let y0: number = share ? share.y : this.ioFrameFoot(popup);
+        for (let i: int = 0; i < row.length; i++) {
+            let inRow: int = Math.min(per, row.length - ((i / per) | 0) * per) | 0;
+            let b: DisplayObject = row[i];
+            b.x = Math.round(mid - (inRow * 186 - 6) / 2 + (i % per) * 186);
+            b.y = Math.round(y0 + ((i / per) | 0) * 32);
+        }
+        this.ioFitFrame(popup);
     }
 
     /** Marks a place for a moment (after going there from a search, a bookmark or chat). */
@@ -1930,6 +2248,144 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         this.ioHideTransient();
         this.JumpTo(new Point(cellX, cellY));
         this.ioMarkSpot(cellX, cellY);
+        // (QoL #77: a place gone to is one looked at)
+        this.ioViewedAt(cellX, cellY);
+    }
+
+    /**
+     * Inferno-only (QoL #74): the Targets list's Attack: the map goes to the yard, and its window opens as a click on
+     * the map opens it (once its zone's data is here) and presses its Attack or Take over when it can (MapRoom.ioAttackCell).
+     */
+    public ioAttackAt(cellX: int, cellY: int): void {
+        this.ioGoTo(cellX, cellY);
+        MapRoom.ioAttackCell(this.ioCellAt(cellX, cellY));
+    }
+
+    /** Inferno-only (QoL #77): Back: the map goes to where it was before the last jump. */
+    private ioBack(to: Point): void {
+        this.ioHideTransient();
+        this.HideBubble();
+        this._ioNoHistory = true;
+        this.JumpTo(to);
+    }
+
+    /** (QoL #77) A yard or place looked at (its popup or bubble opened): Recent keeps it. */
+    private ioViewed(cell: MapRoomCell): void {
+        if (!this._ioHistory || !cell) {
+            return;
+        }
+        IoMapHistory.viewed(cell.X, cell.Y, this.ioPlaceName(cell));
+        this._ioHistory.update();
+    }
+
+    /** (QoL #77) The same for a place gone to, named from its cell on the map or the world snapshot. */
+    private ioViewedAt(cellX: int, cellY: int): void {
+        let cell: MapRoomCell = this.ioCellAt(cellX, cellY);
+        let snap: any = null;
+        let name: string = null;
+        if (!this._ioHistory) {
+            return;
+        }
+        if (cell && cell._updated && cell._name) {
+            name = this.ioPlaceName(cell);
+        } else {
+            snap = IoMapSnapshot.CellAt(cellX, cellY);
+            if (snap && (snap.b | 0) >= 2 && snap.n) {
+                name = String(snap.n);
+            } else if (snap && (snap.b | 0) == 1 && snap.n) {
+                name = TRIBES.DisplayName(String(snap.n)) + " " + (snap.l | 0);
+            }
+        }
+        IoMapHistory.viewed(cellX, cellY, name || IoMapUi.coord(cellX, cellY));
+        this._ioHistory.update();
+    }
+
+    /**
+     * Inferno-only (QoL #41): the map's keys (IoHotkeys): the arrows or W A S D move the view, + and - zoom, H goes
+     * home, B bookmarks the place in the middle, F goes to Find. False for a key that isn't the map's.
+     */
+    public ioKey(code: int): boolean {
+        if (!this._ioNewUi || !this._cellContainer || this._popupBookmarkAdd && this._popupBookmarkAdd.parent) {
+            return false;
+        }
+        let dx: int = 0;
+        let dy: int = 0;
+        switch (code) {
+            case 37:
+            case 65:
+                dx = -1;
+                break;
+            case 39:
+            case 68:
+                dx = 1;
+                break;
+            case 38:
+            case 87:
+                dy = -1;
+                break;
+            case 40:
+            case 83:
+                dy = 1;
+                break;
+            case 187:
+            case 107:
+            case 61:
+                this.ioZoomStep(1);
+                return true;
+            case 189:
+            case 109:
+            case 173:
+                this.ioZoomStep(-1);
+                return true;
+            case 72:
+                this.ioGoHome();
+                return true;
+            case 66: {
+                let cell: MapRoomCell = MapRoomPopup.s_ioLod ? null : this.ioCentreMapCell();
+                if (cell) {
+                    this.ShowBookmarkAddPopup(cell);
+                }
+                return true;
+            }
+            case 70:
+                return this._ioSidebar ? this._ioSidebar.ioFocusFind() : false;
+            default:
+                return false;
+        }
+        this.ioKeyPan(dx, dy);
+        return true;
+    }
+
+    /** One arrow press: the view moved about a third of a cell's width (the world map: 120 px). */
+    public ioKeyPan(dx: int, dy: int): void {
+        this.HideBubble();
+        this.ioHideTransient();
+        if (MapRoomPopup.s_ioLod) {
+            if (this._ioLod) {
+                this._ioLod.panBy(dx * 120, dy * 90);
+            }
+            return;
+        }
+        this._cellContainer.x = (this._cellContainer.x - dx * 120) | 0;
+        this._cellContainer.y = (this._cellContainer.y - dy * 90) | 0;
+        if (this._ioPanBounds && this._ioPanBounds.contains(this._cellContainer.x, this._cellContainer.y)) {
+            this.ioCull();
+            this.ioPopupsUpdate();
+            this.ioLodMoved();
+            return;
+        }
+        this.Update();
+    }
+
+    /** The map cell nearest the middle of the window, itself. */
+    private ioCentreMapCell(): MapRoomCell {
+        let at: Point = this.ioCentreCell();
+        for (let cell of as3.values(this._cells)) {
+            if (cell && (cell as MapRoomCell).X == at.x && (cell as MapRoomCell).Y == at.y) {
+                return cell as MapRoomCell;
+            }
+        }
+        return null;
     }
 
     public ioGoHome(): void {
@@ -1937,9 +2393,57 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         MapRoom.JumpTo(GLOBAL._mapHome);
     }
 
+    /**
+     * Inferno-only (QoL #340): Depths: the map goes down to the Depths of Hell (IoUnderworld), to the player's first
+     * outpost there, or the middle of the island. Home comes back up.
+     */
+    public ioGoDepths(e: MouseEvent = null): void {
+        if (!GLOBAL.INFERNO_ONLY || IoUnderworld.portals.length == 0) {
+            return;
+        }
+        let to: Point = new Point(IoUnderworld.origin + ((IoUnderworld.size / 2) | 0), IoUnderworld.origin + ((IoUnderworld.size / 2) | 0));
+        for (let p of as3.values(GLOBAL._mapOutpost)) {
+            if (p && IoUnderworld.isUnder(p.x | 0, p.y | 0)) {
+                to = new Point(p.x | 0, p.y | 0);
+                break;
+            }
+        }
+        this.HideBookmarkMenu();
+        this.ioHideTransient();
+        this.JumpTo(to);
+        this.ioViewedAt(to.x | 0, to.y | 0);
+    }
+
+    /** (QoL #340) Depths can be used once the world's portals are known (getarea's io_under, ioreach). */
+    private ioDepthsLook(): void {
+        if (this._ioDepths) {
+            this._ioDepths.setEnabled(IoUnderworld.portals.length > 0);
+        }
+    }
+
+    /** Inferno-only (QoL #331): the enemy yard's popup closed, when it is open (its blocker goes with it). */
+    public ioHideInfoEnemyIfOpen(): void {
+        if (this._popupInfoEnemy && this._popupInfoEnemy.parent) {
+            this.HideInfoEnemy();
+        }
+    }
+
+    /** Inferno-only (QoL #331): the resources and the outposts' count beside the map, shown again (after a takeover). */
+    public ioRefreshResources(): void {
+        if (!MapRoom._viewOnly && this._ioNewUi) {
+            this.UpdateResourceDisplay();
+        }
+    }
+
     public ioFiltersChanged(): void {
         if (this._ioLod) {
             this._ioLod.Tick();
+        }
+        // (QoL #73: the target filters fade yards on the map too)
+        for (let cell of as3.values(this._cells)) {
+            if (cell) {
+                (cell as MapRoomCell).ioFilterLook();
+            }
         }
     }
 
@@ -1976,6 +2480,13 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             this.HideBubble();
             this.ioHideTransient();
         }
+        // Inside the pan bounds no cell needs recycling: only the cells on screen change.
+        if (this._dragged && this._ioPanBounds && this._ioPanBounds.contains(this._cellContainer.x, this._cellContainer.y) && !MapRoomPopup.s_ioLod) {
+            this.ioCull();
+            this.ioPopupsUpdate();
+            this.ioLodMoved();
+            return;
+        }
         // The mouse can report many moves per frame, and Update() walks every cell (480 when zoomed
         // out). The layer itself has already moved above; recycling cells can wait for the next
         // 25 ms slot, and the release handler runs a final pass so nothing is left unrecycled.
@@ -2007,6 +2518,10 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         }
         if (this._ioMinimap) {
             this._ioMinimap.Redraw();
+        }
+        if (this._ioTargets) {
+            // (QoL #74: the open list follows a new snapshot)
+            this._ioTargets.Tick();
         }
         if (MapRoomPopup.s_ioLod) {
             // The world map: nothing on the cell grid is shown or asked for.
@@ -2075,6 +2590,10 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         if (checkRange) {
             cellsWithRange = new Vector<MapRoomCell>(0, false, MapRoomCell);
         }
+        let panLeft: number = Number.NEGATIVE_INFINITY;
+        let panRight: number = Number.POSITIVE_INFINITY;
+        let panTop: number = Number.NEGATIVE_INFINITY;
+        let panBottom: number = Number.POSITIVE_INFINITY;
 
         for (cell of as3.values(this._cells)) {
             cellMoved = false;
@@ -2171,6 +2690,11 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             }
             cell.depth = (cell.y * 1000 + cell.x) | 0;
             this._sortArray.push(cell);
+            // (how far the layer can go before this cell would be recycled)
+            panLeft = Math.max(panLeft, leftBound - cell.x * viewScale);
+            panRight = Math.min(panRight, rightBound - cell.x * viewScale);
+            panTop = Math.max(panTop, topBound - cell.y * viewScale);
+            panBottom = Math.min(panBottom, bottomBound - cell.y * viewScale);
 
             if (notDragged) {
                 // Only when it changes: a property write invalidates the cell's cached bitmap.
@@ -2198,12 +2722,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
                 i++;
             }
         }
-        if (Boolean(this._popupInfoMine) && Boolean(this._popupInfoMine.parent)) {
-            this._popupInfoMine.Update();
-        }
-        if (Boolean(this._popupAttackA) && Boolean(this._popupAttackA.parent)) {
-            this._popupAttackA.Update();
-        }
+        this._ioPanBounds = panRight >= panLeft && panBottom >= panTop ? new Rectangle(panLeft, panTop, panRight - panLeft, panBottom - panTop) : null;
+        this.ioPopupsUpdate();
 
         // Process collected range cells
         if (checkRange) {
@@ -2254,7 +2774,40 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
 
         this.bBookmarks.Enabled = MapRoom._bookmarks.length > 0 || MapRoom._viewOnly;
         this.DisplayBuffs();
+        this.ioCull();
         this.ioLodMoved();
+    }
+
+    private ioPopupsUpdate(): void {
+        if (Boolean(this._popupInfoMine) && Boolean(this._popupInfoMine.parent)) {
+            this._popupInfoMine.Update();
+        }
+        if (Boolean(this._popupAttackA) && Boolean(this._popupAttackA.parent)) {
+            this._popupAttackA.Update();
+        }
+    }
+
+    /**
+     * Hides the cells outside the map's window (with room for art that reaches beyond a cell: its name flag
+     * above, mountains), shows the rest. Inferno-only (from the base game's pull request #293).
+     */
+    private ioCull(): void {
+        if (!this._cellContainer || !this.mcMask || !this.mcMask.mcMask) {
+            return;
+        }
+        let view: Rectangle = as3.cast(this.mcMask.mcMask.getBounds(this._cellContainer), Rectangle);
+        let padX: number = this._cellWidth;
+        let left: number = view.left - padX;
+        let right: number = view.right + padX;
+        let top: number = view.top - this._cellHeight * 2;
+        let bottom: number = view.bottom + this._cellHeight;
+        let cell: MapRoomCell = null;
+        for (cell of as3.values(this._cells)) {
+            let shown: boolean = cell.x <= right && cell.x + this._cellWidth >= left && cell.y <= bottom && cell.y + this._cellHeight >= top;
+            if (cell.visible != shown) {
+                cell.visible = shown;
+            }
+        }
     }
 
     public ShowBubble(param1: MapRoomCell): void {
@@ -2424,6 +2977,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             GLOBAL.BlockerAdd(this);
             this.addChild(this._popupInfoMine);
             this.ioAttachShare(this._popupInfoMine, param1);
+            this.ioAttachShop(this._popupInfoMine, param1);
+            this.ioViewed(param1);
         }
         this._dragged = false;
     }
@@ -2436,6 +2991,11 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
         SOUNDS.Play("close");
     }
 
+    /** (Inferno-only, QoL #86) */
+    public get ioInfoEnemy(): any {
+        return this._popupInfoEnemy;
+    }
+
     public ShowInfoEnemy(param1: MapRoomCell, param2: boolean = false): void {
         this.HideBookmarkMenu();
         if (!this._dragged) {
@@ -2445,6 +3005,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             GLOBAL.BlockerAdd(this);
             this.addChild(this._popupInfoEnemy);
             this.ioAttachShare(this._popupInfoEnemy, param1);
+            this.ioAttachShop(this._popupInfoEnemy, param1);
+            this.ioViewed(param1);
         }
         this._dragged = false;
     }
@@ -2485,6 +3047,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             GLOBAL.BlockerAdd(this);
             this.addChild(this._popupInfoEnemy);
             this.ioAttachShare(this._popupInfoEnemy, param1);
+            this.ioAttachShop(this._popupInfoEnemy, param1);
+            this.ioViewed(param1);
         }
         this._dragged = false;
     }
@@ -2533,7 +3097,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             GLOBAL.BlockerAdd(this);
             this.addChild(this._popupAttackA);
         } else if (param1._protected) {
-            GLOBAL.Message(KEYS.Get("newmap_dp"));
+            GLOBAL.Message(param1.ioProtectedText());
         } else if (Boolean(param1._truce) && param1._truce > GLOBAL.Timestamp()) {
             GLOBAL.Message(KEYS.Get("newmap_truce"));
         }
@@ -2755,7 +3319,7 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
                         continue;
                     }
                 }
-                (_loc13_ = new ui_buffIcon_CLIP()).gotoAndStop(_loc12_);
+                _loc13_ = POWERUPS.ioBuffIcon(_loc12_);
                 _loc13_.name = _loc12_;
                 _loc13_.x = _loc9_ * _loc5_;
                 _loc13_.y = _loc10_ * _loc6_;
@@ -2844,6 +3408,12 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             }
         } else if (this._fullScreen != false) {
             _loc1_ = true;
+        } else if (GLOBAL.INFERNO_ONLY && !MapRoom._viewOnly) {
+            // (QoL #310: the window became big enough for the wide layout, or too small for it, or a wide one changed size)
+            let wide: boolean = MapRoomPopup.ioWideArea() != null;
+            if (wide != this._ioWide || wide && (Math.abs(GLOBAL._ROOT.stage.stageWidth - this._ioBuiltW) > 40 || Math.abs(GLOBAL.GetGameHeight() - this._ioBuiltH) > 40)) {
+                _loc1_ = true;
+            }
         }
         if (_loc1_) {
             MapRoomManager.instance.ResizeHandler();

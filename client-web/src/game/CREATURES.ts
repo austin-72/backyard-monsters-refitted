@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int } from "as3";
 import { Point } from "flash/geom";
-import { BFOUNDATION, BYMConfig, CHAMPIONCAGE, CREATURELOCKER, ChampionBase, CreepBase, CreepEvent, GLOBAL, MAP, MonsterBase, SPECIALEVENT } from "@game";
+import { BFOUNDATION, BYMConfig, CHAMPIONCAGE, CREATURELOCKER, ChampionBase, CreepBase, CreepEvent, GLOBAL, MAP, MonsterBase, SPECIALEVENT, IoDevil } from "@game";
 
 export class CREATURES extends ASObject {
     public static _creatures: any = null;
@@ -75,6 +75,13 @@ export class CREATURES extends ASObject {
                     level = stat.length | 0;
                 }
             } catch (e) {
+            }
+            // (Inferno-only, 13 November: making monsters with the Devil's Contract's Thin the Ranks)
+            if (GLOBAL.INFERNO_ONLY && statID == "cResource" && friendly) {
+                let ioMul: number = IoDevil.mul("monsterCost");
+                if (ioMul != 1) {
+                    return Math.ceil(Number(stat[level - 1]) * ioMul);
+                }
             }
             return Number(stat[level - 1]);
         } catch (e) {

@@ -74,7 +74,7 @@ export class ERRORMESSAGE extends ERRORMESSAGE_CLIP {
                 (as3.as(this._mc.mcFrame, frame)).Setup(false);
                 if (KEYS._setup) {
                     // Inferno-only: an expected stop is not "something broke".
-                    this._mc.tA.htmlText = "<b>" + (ioQuiet ? "Please reload" : KEYS.Get("pop_oops_title")) + "</b>";
+                    this._mc.tA.htmlText = "<b>" + (ioQuiet ? KEYS.Get("io_t3k_please_reload") : KEYS.Get("pop_oops_title")) + "</b>";
                     this._mc.tB.htmlText = KEYS.Get("pop_oops_body");
                     this._mc.tB.htmlText = KEYS.Get(_message);
                 }
@@ -83,7 +83,8 @@ export class ERRORMESSAGE extends ERRORMESSAGE_CLIP {
                 this._blocker.y = GLOBAL._SCREENCENTER.y - 1400;
                 this._blocker.width = 2800;
                 this._blocker.height = 2800;
-                this._mc.bAction.Setup("Reload");
+                // (Inferno-only, QoL #235: in the player's language once the language file is in)
+                this._mc.bAction.Setup(GLOBAL.INFERNO_ONLY && KEYS.languageFileJson != null ? KEYS.Get("io_maint_reload") : "Reload");
                 this._mc.bAction.addEventListener(MouseEvent.CLICK, Resume);
             }
         }

@@ -2,9 +2,29 @@ import * as as3 from "as3";
 import { int, uint } from "as3";
 import { MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { ATTACK, BASE, BFOUNDATION, CModifiableProperty, GLOBAL, ILootable, IMapRoomCell, IoQuests, KEYS, LOGGER, MapRoomManager, POPUPS, QUESTS, ResourcePackages, SecNum, TUTORIAL, mc_buildingalerticon, popup_building } from "@game";
+import { ATTACK, BASE, BFOUNDATION, CModifiableProperty, GLOBAL, ILootable, IMapRoomCell, IoQuests, KEYS, LOGGER, MapRoomManager, POPUPS, QUESTS, ResourcePackages, SecNum, TUTORIAL, mc_buildingalerticon, popup_building, InstanceManager } from "@game";
 
 export class BRESOURCE extends BFOUNDATION implements ILootable {
+    /**
+     * Inferno-only (QoL #21, 14 October): banks every harvester of one resource (1-4), or of all (0), as the
+     * harvester panel's Bank All does (finished, unhurt harvesters). From the top bar's resource bars and the C key.
+     * How many were banked.
+     */
+    public static ioBankAll(resource: int = 0): int {
+        if (GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYardOrInfernoMainYard) {
+            return 0;
+        }
+        let n: int = 0;
+        for (let b of (InstanceManager.getInstancesByClass(BRESOURCE) ?? [])) {
+            let r: BRESOURCE = b as BRESOURCE;
+            if (r._class === "resource" && (resource == 0 || r._type == resource) && r._countdownUpgrade.Get() === 0 && r._countdownBuild.Get() === 0 && r._countdownFortify.Get() === 0 && r.health === r.maxHealth && r._stored && r._stored.Get() > 0) {
+                r.Bank();
+                n++;
+            }
+        }
+        return n;
+    }
+
     static {
         as3.implement(this, [ILootable]);
         as3.fields(this, { productionRateProperty: null, productionCapacityProperty: null });
@@ -100,15 +120,23 @@ export class BRESOURCE extends BFOUNDATION implements ILootable {
             this._stored.Add((-_loc2_) | 0);
             ATTACK.Loot(this._type, _loc2_, this._mc.x | 0, this._mc.y | 0, 0, this);
             if (BASE.isOutpost) {
-                if (_loc2_ > 0) {
-                    BASE._resources["r" + this._type].Add(-_loc2_);
-                    BASE._hpResources["r" + this._type] -= _loc2_;
+                // Inferno-only (9 October, bug reports 79 and 80: "Negative twigs reset: -93537" attacking an outpost):
+                // what a harvester holds was taken from the outpost's resources in full, though a save's answer during
+                // the attack had already set them to what the server has (less what was looted so far): the outpost went
+                // below nothing. Only what the outpost still has is taken from it (the attacker still gets the harvester's).
+                let fromYard: int = _loc2_;
+                if (GLOBAL.INFERNO_ONLY) {
+                    fromYard = Math.max(0, Math.min(_loc2_, Number(BASE._resources["r" + this._type].Get()))) | 0;
+                }
+                if (fromYard > 0) {
+                    BASE._resources["r" + this._type].Add(-fromYard);
+                    BASE._hpResources["r" + this._type] -= fromYard;
                     if (BASE._deltaResources["r" + this._type]) {
-                        BASE._deltaResources["r" + this._type].Add(-_loc2_);
-                        BASE._hpDeltaResources["r" + this._type] -= _loc2_;
+                        BASE._deltaResources["r" + this._type].Add(-fromYard);
+                        BASE._hpDeltaResources["r" + this._type] -= fromYard;
                     } else {
-                        BASE._deltaResources["r" + this._type] = new SecNum(-_loc2_);
-                        BASE._hpDeltaResources["r" + this._type] = -_loc2_;
+                        BASE._deltaResources["r" + this._type] = new SecNum(-fromYard);
+                        BASE._hpDeltaResources["r" + this._type] = -fromYard;
                     }
                     BASE._deltaResources.dirty = true;
                     BASE._hpDeltaResources.dirty = true;
@@ -128,6 +156,18 @@ export class BRESOURCE extends BFOUNDATION implements ILootable {
             this.Loot(this._stored.Get() | 0);
         }
         super.Destroyed(param1);
+    }
+
+    /**
+     * Inferno-only (14 October, QoL #436): recycling a harvester threw away what it held. It is banked first
+     * (over the storage cap, like the refund).
+     */
+    public override RecycleC(): void {
+        if (GLOBAL.INFERNO_ONLY && this._stored.Get() > 0 && (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD || GLOBAL.mode == GLOBAL.e_BASE_MODE.IBUILD)) {
+            BASE.Fund(this._type, this._stored.Get() | 0, true);
+            this._stored.Set(0);
+        }
+        super.RecycleC();
     }
 
     public override Constructed(): void {
@@ -391,8 +431,11 @@ export class BRESOURCE extends BFOUNDATION implements ILootable {
         if (BASE.isOutpost) {
             _loc1_ = BRESOURCE.AdjustProduction(GLOBAL._currentCell, _loc1_);
         }
-        if (GLOBAL._harvesterOverdrive >= GLOBAL.Timestamp() && GLOBAL._harvesterOverdrivePower.Get() > 0) {
-            _loc1_ = (_loc1_ * GLOBAL._harvesterOverdrivePower.Get()) | 0;
+        // (Inferno-only, 22 October: Production Overdrive or the alliance's Harvest Moon, the stronger: GLOBAL.ioHarvestMul)
+        // (13 November: and the Devil's Contract, per resource: GLOBAL.ioHarvestMulFor)
+        let mul: number = GLOBAL.ioHarvestMulFor(this._type);
+        if (mul != 1) {
+            _loc1_ = (_loc1_ * mul) | 0;
         }
         _loc1_ = this.ApplyTerrainBonus(_loc1_);
         this.productionRateProperty.value = _loc1_;

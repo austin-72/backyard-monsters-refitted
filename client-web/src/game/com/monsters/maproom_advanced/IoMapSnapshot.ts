@@ -184,7 +184,7 @@ export class IoMapSnapshot extends ASObject {
         IoMapSnapshot._nextAt = ((serverData.nextAt | 0) > 0 ? serverData.nextAt | 0 : IoMapSnapshot._fetchedAt + IoMapSnapshot.MIN_GAP) | 0;
         IoMapSnapshot._dueAt = (Math.max(IoMapSnapshot._nextAt, IoMapSnapshot._fetchedAt + IoMapSnapshot.MIN_GAP) + 3 + ((Math.random() * 18) | 0)) | 0;
         for (id in IoMapSnapshot._alliances) {
-            alliances.push({ "alliance_id": Number(id) | 0, "name": IoMapSnapshot._alliances[id].name, "image": IoMapSnapshot._alliances[id].image, "relationships": IoMapSnapshot._alliances[id].relationships || {} });
+            alliances.push({ "alliance_id": Number(id) | 0, "name": IoMapSnapshot._alliances[id].name, "image": IoMapSnapshot._alliances[id].image, "crest": IoMapSnapshot._alliances[id].crest || null, "relationships": IoMapSnapshot._alliances[id].relationships || {} });
         }
         if (alliances.length > 0) {
             ALLIANCES.ProcessAlliances(alliances);
@@ -259,6 +259,40 @@ export class IoMapSnapshot extends ASObject {
     /** An alliance of the world ({ name, image, leader, members, relationships }), or null. */
     public static AllianceInfo(id: int): any {
         return IoMapSnapshot._alliances[id] || null;
+    }
+
+    /**
+     * (QoL #76, #341) The snapshot's own entry for a cell (see `cells`), or null: a player yard or outpost, or a damaged
+     * camp. Also for the Depths of Hell, which CellAt doesn't make (the world's layers are only the world above).
+     */
+    public static EntryAt(cellX: int, cellY: int): any[] {
+        if (!IoMapSnapshot.ready) {
+            return null;
+        }
+        return as3.as(IoMapSnapshot._cells[(cellX * 10000 + cellY) | 0], Array);
+    }
+
+    /**
+     * (QoL #72) Is a snapshot entry a damaged tribe yard (1), one ready to take over (2: destroyed), or neither (0)?
+     * The world map and the minimap mark them.
+     */
+    public static CampState(cell: any[]): int {
+        if (!cell || (cell[2] | 0) >= 2) {
+            return 0;
+        }
+        if ((cell[10] | 0) != 0) {
+            return 2;
+        }
+        return ((cell[8] | 0) > 0 ? 1 : 0) | 0;
+    }
+
+    /** (QoL #72, #74) The tribe and level of a land cell of the world above ({ tribe, level }), or null (lava, off the world). */
+    public static WildAt(cellX: int, cellY: int): any {
+        if (IoMapSnapshot._wild == null || IoMapSnapshot.HeightAt(cellX, cellY) <= 99) {
+            return null;
+        }
+        let code: int = (IoMapSnapshot._wild.charCodeAt(cellX * IoMapSnapshot._height + cellY) - IoMapSnapshot.CODE_BASE) | 0;
+        return { "tribe": String(IoMapSnapshot._tribes[code >> 7] || ""), "level": code & 127 };
     }
 
     /** A cell in the shape getarea sends it, from the snapshot; null while there is none. The same object until the next snapshot. */

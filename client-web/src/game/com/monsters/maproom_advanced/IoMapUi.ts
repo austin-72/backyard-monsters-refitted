@@ -2,7 +2,7 @@ import { ASObject, int, uint } from "as3";
 import { Graphics, MovieClip } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { TextField, TextFormat, TextFormatAlign } from "flash/text";
-import { ALLIANCES, AllyInfo, GLOBAL, IoUnderworld, LOGIN, SOUNDS } from "@game";
+import { ALLIANCES, AllyInfo, GLOBAL, IoFormat, IoKit, IoUnderworld, LOGIN, SOUNDS } from "@game";
 
 /**
  * Inferno-only: the small pieces the map room's own panels are drawn with (the sidebar, the zoom control,
@@ -85,7 +85,10 @@ export class IoMapUi extends ASObject {
         return IoMapUi.NONE;
     }
 
-    /** The colour of the name bar the map gives a relation (AllyInfo._picURLs). */
+    /**
+     * The colour of the name bar the map gives a relation (AllyInfo._picURLs). (Inferno-only, QoL #228: with the
+     * colour-blind setting, friendly blue and hostile orange: IoFormat.relColour)
+     */
     public static relationColour(key: int): uint {
         switch (key) {
             case IoMapUi.YOU:
@@ -93,13 +96,47 @@ export class IoMapUi extends ASObject {
             case IoMapUi.ALLY:
                 return AllyInfo._picURLs.allyHex >>> 0;
             case IoMapUi.FRIENDLY:
-                return AllyInfo._picURLs.friendlyHex >>> 0;
+                return IoFormat.relColour(1, AllyInfo._picURLs.friendlyHex >>> 0, true);
             case IoMapUi.HOSTILE:
-                return AllyInfo._picURLs.hostileHex >>> 0;
+                return IoFormat.relColour(-1, AllyInfo._picURLs.hostileHex >>> 0, true);
             case IoMapUi.OTHER:
                 return AllyInfo._picURLs.neutralHex >>> 0;
         }
         return AllyInfo._picURLs.noneHex >>> 0;
+    }
+
+    /** Inferno-only (QoL #228): a relation's stance for its letter (IoFormat.relLetter): 1 friendly, -1 hostile, 4 your alliance, 0 others. */
+    public static relationStance(key: int): int {
+        switch (key) {
+            case IoMapUi.ALLY:
+                return 4;
+            case IoMapUi.FRIENDLY:
+                return 1;
+            case IoMapUi.HOSTILE:
+                return -1;
+        }
+        return 0;
+    }
+
+    /** A relation's name (RELATION_NAMES, in the player's language: QoL #235). */
+    public static relationName(key: int): string {
+        let english: string = String(IoMapUi.RELATION_NAMES[key] || "");
+        if (!GLOBAL.INFERNO_ONLY) {
+            return english;
+        }
+        switch (key) {
+            case IoMapUi.YOU:
+                return IoFormat.text("io_visit_stance_you", english);
+            case IoMapUi.ALLY:
+                return IoFormat.text("io_visit_stance_ally", english);
+            case IoMapUi.FRIENDLY:
+                return IoFormat.text("io_visit_stance_friendly", english);
+            case IoMapUi.HOSTILE:
+                return IoFormat.text("io_visit_stance_hostile", english);
+            case IoMapUi.OTHER:
+                return IoFormat.text("io_fmt_rel_other", english);
+        }
+        return IoFormat.text("io_visit_stance_none", english);
     }
 
     /** "-263, -95" */
@@ -187,8 +224,16 @@ export class IoMapUi extends ASObject {
         let color: uint = (style == "dark" ? IoMapUi.LIGHT : (style == "gold" ? IoMapUi.INK : 0x333333)) >>> 0;
         enabled = true;
         t = IoMapUi.label(text, size, color, true, w, TextFormatAlign.CENTER);
+        // (16 October: a longer language's label drawn smaller rather than cut at the button's edges)
+        GLOBAL.ioFitText(t, Math.min(8, size));
+        // (11 October: the gold and grey ones are the game's own stock buttons; the dark ones, on the map, drawn)
+        let face: MovieClip = style == "dark" ? null : IoKit.stockFace(b, w, h, style == "gold");
         draw = (over: boolean): void => {
             b.graphics.clear();
+            if (face) {
+                IoKit.stockState(face, over, enabled);
+                return;
+            }
             IoMapUi.roundBox(b.graphics, 0, 0, w, h, over && enabled ? hover : fill, 1, edge, 6, 1.5);
         };
         b.buttonMode = true;

@@ -9,6 +9,7 @@ import { casinoErr } from "./access.js";
 import { fairStream, hashSeed, wholeShiny } from "./rng.js";
 import { lockSeed, sqlAll, type Em } from "./wallet.js";
 import { bonePileLayout, bonePileMultiplier, bonePileSafeChance } from "./games/bonePile.js";
+import { luckFor, luckRollFree } from "./luck.js";
 
 /**
  * Bone Pile games, played over several requests (casino_session, one open per player). The bet is taken
@@ -74,7 +75,7 @@ const settle = async (em: Em, s: SessionRow, status: "won" | "refunded"): Promis
   // a game started before the part was drawn (no u) is paid rounded down
   let payout = status === "won" ? wholeShiny(s.stake * mult, s.layout.u ?? 1) : s.stake;
   if (status === "won" && casinoConfig.maxPayout > 0) payout = Math.min(payout, casinoConfig.maxPayout);
-  const paid = await sqlAll<{ credits: number }>(em, `UPDATE bym.save SET credits = credits + ? WHERE userid = ? AND type = ? RETURNING credits`, [payout, s.user_id, BaseType.MAIN]);
+  const paid = await sqlAll<{ credits: number }>(em, `UPDATE bym.save SET credits = LEAST(credits::bigint + ?, 2147483647) WHERE userid = ? AND type = ? RETURNING credits`, [payout, s.user_id, BaseType.MAIN]);
   await sqlAll(em,
     `UPDATE bym.casino_bet SET payout = ?, multiplier = ?, status = ?, settled_at = now(), outcome = outcome || CAST(? AS jsonb) WHERE id = ? RETURNING id`,
     [payout, mult.toFixed(2), status === "won" ? "settled" : "refunded", JSON.stringify({ layout: s.layout.mines, revealed: s.revealed, end: status }), s.bet_id]);
@@ -101,7 +102,8 @@ export const startBonePile = async (user: User, requestId: string, stake: number
       const s = await sqlAll<SessionRow>(em, `SELECT * FROM bym.casino_session WHERE bet_id = ?`, [seen[0].id]);
       return { view: sessionView(s[0]), credits: await balance(em, user.userid), replayed: true };
     }
-    const open = await sqlAll(em, `SELECT id FROM bym.casino_session WHERE user_id = ? AND status = 'open' FOR UPDATE`, [user.userid]);
+    // (one open game of each kind: the card games have sessions too since 7 October)
+    const open = await sqlAll(em, `SELECT id FROM bym.casino_session WHERE user_id = ? AND game = 'bonepile' AND status = 'open' FOR UPDATE`, [user.userid]);
     if (open.length) throw casinoErr("Finish the Bone Pile game you have open first.", Status.CONFLICT);
     const bal = await sqlAll<{ credits: number }>(em, `SELECT credits FROM bym.save WHERE userid = ? AND type = ? FOR UPDATE`, [user.userid, BaseType.MAIN]);
     if (!bal.length) throw casinoErr("Your yard could not be found.", Status.CONFLICT);
@@ -138,7 +140,23 @@ export const revealBonePile = async (user: User, sessionId: number, tile: number
   const result = await postgres.em.fork().transactional(async (em) => {
     const s = await lockSession(em, user.userid, sessionId);
     if (s.status !== "open" || s.revealed.includes(tile)) {
-      return { view: sessionView(s), credits: await balance(em, user.userid), safe: !s.layout.mines.includes(tile), payout: null as number | null };
+      // (a game over: its payout, as a cash-out gives it; one cashed out at the cap with piles left showed none; 9 October)
+      const paid = s.status === "open" ? [] : await sqlAll<{ payout: number }>(em, `SELECT payout FROM bym.casino_bet WHERE id = ?`, [s.bet_id]);
+      return { view: sessionView(s), credits: await balance(em, user.userid), safe: !s.layout.mines.includes(tile), payout: paid.length ? Number(paid[0].payout) : (null as number | null) };
+    }
+    // luck (silent, luck.ts): a Sabnox found is moved, with the chance of the player's luck, to a pile not yet opened
+    if (s.layout.mines.includes(tile)) {
+      const luck = await luckFor(em, user.userid, s.stake);
+      if (luckRollFree(luck)) {
+        const free: number[] = [];
+        for (let p = 0; p < rules().piles; p++) if (p !== tile && !s.layout.mines.includes(p) && !s.revealed.includes(p)) free.push(p);
+        if (free.length) {
+          const to = free[Math.floor(Math.random() * free.length)];
+          s.layout = { ...s.layout, mines: s.layout.mines.map((m: number) => (m === tile ? to : m)).sort((a: number, b: number) => a - b) };
+          await sqlAll(em, `UPDATE bym.casino_session SET layout = CAST(? AS jsonb) WHERE id = ? RETURNING id`, [JSON.stringify(s.layout), s.id]);
+          await sqlAll(em, `UPDATE bym.casino_bet SET luck = ?, lucky = true WHERE id = ? RETURNING id`, [luck.toFixed(4), s.bet_id]);
+        }
+      }
     }
     if (s.layout.mines.includes(tile)) {
       await sqlAll(em,
@@ -150,7 +168,8 @@ export const revealBonePile = async (user: User, sessionId: number, tile: number
     }
     s.revealed = [...s.revealed, tile];
     await sqlAll(em, `UPDATE bym.casino_session SET revealed = CAST(? AS jsonb), updated_at = now() WHERE id = ? RETURNING id`, [JSON.stringify(s.revealed), s.id]);
-    if (s.revealed.length >= rules().piles - s.config.sabnox) {
+    // (every safe pile open, or the multiplier at the Pit's most: nothing more to win, cashed out; 9 October)
+    if (s.revealed.length >= rules().piles - s.config.sabnox || bonePileMultiplier(rules(), s.revealed.length, s.config.sabnox, cap()) >= cap()) {
       const done = await settle(em, s, "won");
       return { view: sessionView(s), credits: done.credits, safe: true, payout: done.payout };
     }

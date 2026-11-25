@@ -4,6 +4,7 @@ import { flashClass } from "../_internal";
 export {
   DisplayObject, InteractiveObject, DisplayObjectContainer, Sprite, MovieClip, Shape, Bitmap, SimpleButton, Stage,
   Loader, LoaderInfo, FrameLabel, Scene, Transform, IBitmapDrawable,
+  ioUpright, ioSetFoot, ioUprightRefresh,
 } from "./core";
 export { Graphics } from "./Graphics";
 export { BitmapData } from "./BitmapData";

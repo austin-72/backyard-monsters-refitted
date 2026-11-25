@@ -599,7 +599,7 @@ export const monsterStats: MonsterStatsMap = {
     },
   },
 
-  // Valgos
+  // Valgos (21 October, the user's: 1.5 times as fast, 2 -> 3)
   IC4: {
     resource: 38400,
     time: 64800,
@@ -611,7 +611,7 @@ export const monsterStats: MonsterStatsMap = {
       [230400, 388800],
     ],
     props: {
-      speed: [2, 2, 2, 2, 2, 2],
+      speed: [3, 3, 3, 3, 3, 3],
       health: [1600, 1920, 2380, 3200, 3600, 4000],
       damage: [343, 371, 435, 645, 700, 775],
       cTime: [450, 350, 250, 225, 195, 195],
@@ -1106,10 +1106,10 @@ export const mr3MonsterStats: MR3MonsterStatsMap = {
     },
   },
 
-  // Valgos
+  // Valgos (21 October, the user's: 1.5 times as fast, 2 -> 3)
   IC4: {
     props: {
-      speed: [2, 2, 2, 2, 2, 2],
+      speed: [3, 3, 3, 3, 3, 3],
       health: [2000, 2400, 2800, 3200, 3600, 4000],
       damage: [490, 530, 580, 645, 700, 775],
       cTime: [1350, 1050, 750, 675, 585, 585],
@@ -1189,7 +1189,7 @@ export const mr3MonsterStats: MR3MonsterStatsMap = {
 };
 
 /**
- * Korath (IC9) and Drull (IC10): champion stats per level, 600 housing. Hatched and healed for Ashkarr's magma
+ * Korath (IC9) and Drull (IC10): champion stats per level, 400 housing (600 until 10 October). Hatched and healed for Ashkarr's magma
  * (2.2M-5.2M, heal 30% of that; the user's choice, 28 September).
  */
 function infernoChampionMonsters(): MonsterStatsMap {
@@ -1215,6 +1215,9 @@ function infernoChampionMonsters(): MonsterStatsMap {
         damage: [2_000, 2_400, 3_000, 3_800, 5_000, 6_500],
         range: [35, 45, 55, 60, 65, 65],
         ...shared,
+        // (10 October: Korath and Drull take 400, Ashkarr and Rimegrave 350)
+        cStorage: [400],
+        bucket: [400],
       },
     },
     IC10: {
@@ -1227,6 +1230,27 @@ function infernoChampionMonsters(): MonsterStatsMap {
         damage: [3_000, 3_600, 4_200, 5_500, 6_500, 8_000],
         range: [35, 45, 55, 65, 85, 90],
         ...shared,
+        // (10 October: Korath and Drull take 400, Ashkarr and Rimegrave 350)
+        cStorage: [400],
+        bucket: [400],
+      },
+    },
+    // (13 October, the user's) the Basilisk: 500 housing; Drull's health x1.15, and his damage per second x1.3 dealt
+    // every 1/8 second (a monster strikes every attackDelay + 1 steps of 80 a second: Drull every 61, the Basilisk
+    // every 10, so 1.3 x 10/61 of Drull's damage a squeeze). Faster. Unlocked in the Strongbox once the player has won 200 battles (services/base/lockedMonsters.ts).
+    IC32: {
+      resource: 0,
+      time: 0,
+      trainingCosts,
+      props: {
+        speed: [3, 3.3, 3.6, 3.9, 4.2, 4.6],
+        health: [25_300, 32_200, 39_100, 46_000, 52_900, 59_800],
+        damage: [639, 767, 895, 1_172, 1_385, 1_705],
+        range: [30],
+        attackDelay: [9],
+        ...shared,
+        cStorage: [500],
+        bucket: [500],
       },
     },
   };
@@ -1316,8 +1340,8 @@ function infernoNewMonsters(): MonsterStatsMap {
       },
     },
     // Ashkarr, the Ember Herald (the user's ASHKARR.md; client CREATURELOCKER ioAddChampionMonsters): Strongbox
-    // page 5, 600 housing, unlocked and trained to level 6 for what Korath and Drull cost (resource and time 0
-    // here, as theirs: the client holds the unlock cost). Her war-cry is client-side (WarCry.as).
+    // page 5, 350 housing (600 until 10 October), unlocked and trained to level 6 for what Korath and Drull cost (resource and time 0
+    // here, as theirs: the client holds the unlock cost). Her war-cry is client-side (WarCry.ts).
     IC24: {
       resource: 0,
       time: 0,
@@ -1334,8 +1358,8 @@ function infernoNewMonsters(): MonsterStatsMap {
         damage: [3000, 3350, 3750, 4150, 4600, 5100],
         cTime: [4200],
         cResource: [2200000, 2600000, 3050000, 3600000, 4300000, 5200000],
-        cStorage: [600],
-        bucket: [600],
+        cStorage: [350],
+        bucket: [350],
         targetGroup: [1],
         hTime: [1260],
         hResource: [660000, 780000, 915000, 1080000, 1290000, 1560000],
@@ -1386,8 +1410,8 @@ function hellFreezesOverMonsters(): MonsterStatsMap {
         attackDelay: [70],
         cTime: [4200],
         cResource: [2200000, 2600000, 3050000, 3600000, 4300000, 5200000],
-        cStorage: [600],
-        bucket: [600],
+        cStorage: [350],
+        bucket: [350],
         targetGroup: [1],
         hTime: [1260],
         hResource: [660000, 780000, 915000, 1080000, 1290000, 1560000],

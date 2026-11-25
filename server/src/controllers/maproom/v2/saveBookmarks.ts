@@ -9,9 +9,12 @@ interface Bookmark { bookmarks: string };
  * The stored bookmarks are the game's own form: `mbms` (how many), `mbm0`, `mbm1`... (x * 10000 + y) and
  * `mbmn0`, `mbmn1`... (names). The map room has no limit on how many (Inferno-only); this cap only keeps
  * one player's row a sensible size (about 6,000 bookmarks).
+ * (QoL #76, 15 October) Also `mbmc0`, `mbmc1`...: a bookmark's colour tag (a small number), when it has one.
  */
 const MAX_BYTES = 256 * 1024;
-const KEY = /^mbm(s|\d{1,5}|n\d{1,5})$/;
+const KEY = /^mbm(s|\d{1,5}|n\d{1,5}|c\d{1,5})$/;
+/** (QoL #76) the colour tags the game has (0 is none). */
+const MAX_COLOUR = 9;
 const MAX_NAME = 40;
 
 const badRequest = (ctx: Parameters<KoaController>[0], error: string) => {
@@ -51,6 +54,9 @@ export const saveBookmarks: KoaController = async (ctx) => {
     if (key.startsWith("mbmn")) {
       if (typeof value !== "string" || value.length > MAX_NAME) return badRequest(ctx, "Bookmarks are not valid");
     } else if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 99_999_999) {
+      return badRequest(ctx, "Bookmarks are not valid");
+    } else if (key.startsWith("mbmc") && value > MAX_COLOUR) {
+      // (QoL #76: a colour tag)
       return badRequest(ctx, "Bookmarks are not valid");
     }
   }

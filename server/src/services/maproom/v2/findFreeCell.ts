@@ -31,6 +31,9 @@ export const mapDistance = (x1: number, y1: number, x2: number, y2: number) => {
 
 const wrap = (value: number, size: number) => ((value % size) + size) % size;
 
+/** (Inferno-only, QoL #193) how far from the inviter's main yard an invited friend's yard is looked for first. */
+export const NEAR_INVITER = 10;
+
 /**
  * Finds a free cell in a given world for a player's main yard: land, not taken, not a Moloch stronghold.
  *
@@ -42,12 +45,17 @@ const wrap = (value: number, size: number) => ((value % size) + size) % size;
  * Candidates are rolled around the players' yards. After `attempts` rolls that break a rule (or
  * when the world has no players yet) any free land cell will do, as before.
  *
+ * (Inferno-only, QoL #193) `near`: a friend invited by a player lands near the inviter's main yard: rolled within
+ * NEAR_INVITER cells of it first, with the same rules (not on top of a main yard, away from the strongholds); when
+ * none is found there, placed as anyone else is.
+ *
  * @param {World} world - The world in which to find a free cell.
  * @param {EntityManager<PostgreSqlDriver>} em - The entity manager for database operations.
+ * @param {{ x: number; y: number } | null} near - (Inferno-only) the inviter's main yard, on this world.
  * @returns {Promise<Cell>} - The coordinates and terrain height of the free cell.
  * @throws {Error} - If no free cell is found at all.
  */
-export const findFreeCell = async (world: World, em: EntityManager<PostgreSqlDriver>): Promise<Cell> => {
+export const findFreeCell = async (world: World, em: EntityManager<PostgreSqlDriver>, near: { x: number; y: number } | null = null): Promise<Cell> => {
   const noise = generateNoise(world.uuid);
   const taken = new Set<string>();
   const players: { x: number; y: number; base_type: number }[] = [];
@@ -69,6 +77,24 @@ export const findFreeCell = async (world: World, em: EntityManager<PostgreSqlDri
   };
 
   const rules = infernoOnlyConfig.spawn;
+  // (Inferno-only, QoL #193: near the inviter's yard first)
+  if (infernoOnlyConfig.enabled && near) {
+    const molochs = molochStrongholds(world.uuid);
+    const mainYards = players.filter((cell) => cell.base_type === MapRoomCell.HOMECELL);
+    const reach = Math.max(NEAR_INVITER, rules.awayFromMainYards + 3);
+    for (let attempt = 0; attempt < Math.max(50, rules.attempts); attempt++) {
+      const x = wrap(near.x + Math.floor(Math.random() * (2 * reach + 1)) - reach, MapRoom2.WIDTH);
+      const y = wrap(near.y + Math.floor(Math.random() * (2 * reach + 1)) - reach, MapRoom2.HEIGHT);
+      const cell = usable(x, y);
+      if (!cell || !isOver(x, y)) continue;
+      if (mainYards.some((p) => mapDistance(x, y, p.x, p.y) <= rules.awayFromMainYards)) continue;
+      if (molochs.some(([mx, my]) => mapDistance(x, y, mx, my) <= rules.awayFromMoloch)) continue;
+      logger.info(`Spawn (${x}, ${y}) near the inviter's yard (${near.x}, ${near.y}) found on roll ${attempt + 1}.`);
+      return cell;
+    }
+    logger.info(`No spawn near the inviter's yard (${near.x}, ${near.y}); placing as usual.`);
+  }
+
   if (infernoOnlyConfig.enabled && rules.enabled && players.length > 0) {
     const mainYards = players.filter((cell) => cell.base_type === MapRoomCell.HOMECELL);
     const molochs = molochStrongholds(world.uuid);

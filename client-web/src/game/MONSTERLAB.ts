@@ -3,7 +3,7 @@ import { int } from "as3";
 import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, CREATURELOCKER, CREEPS, GLOBAL, KEYS, LOGGER, MONSTERLABPOPUP, POPUPS, SOUNDS, STORE, SecNum, popup_building, popup_monster } from "@game";
+import { BASE, BFOUNDATION, CREATURELOCKER, CREEPS, GLOBAL, KEYS, LOGGER, MONSTERLABPOPUP, POPUPS, SOUNDS, STORE, SecNum, popup_building, popup_monster, IoSocial } from "@game";
 
 export class MONSTERLAB extends BFOUNDATION {
     static {
@@ -210,9 +210,14 @@ export class MONSTERLAB extends BFOUNDATION {
             powerName = KEYS.Get(as3.str(MONSTERLAB._powerupProps[this._upgrading].name));
             popupMC = new popup_monster();
             popupMC.tText.htmlText = "<b>" + KEYS.Get("lab_powerup_complete", { "v1": powerName, "v2": this._upgradeLevel }) + "</b>";
-            popupMC.bAction.SetupKey("btn_warnyourfriends");
-            popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
-            popupMC.bAction.Highlight = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #140: Share in chat, not "Warn your friends")
+                IoSocial.ioWarnShare(popupMC.bAction, KEYS.Get("io_soc_share_powerup", { "v1": powerName, "v2": String(this._upgradeLevel) }));
+            } else {
+                popupMC.bAction.SetupKey("btn_warnyourfriends");
+                popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
+                popupMC.bAction.Highlight = true;
+            }
             popupMC.bSpeedup.visible = false;
             POPUPS.Push(popupMC, null, null, null, "" + this._upgrading + "-LAB-150.png");
             this._streamUpgradeCache = this._upgrading;
@@ -252,10 +257,10 @@ export class MONSTERLAB extends BFOUNDATION {
         level = param2;
         let instantCost: int = MONSTERLAB.GetShinyCost(id, level);
         if (BASE._credits.Get() < instantCost) {
-            POPUPS.DisplayGetShiny();
+            POPUPS.ioShinyNeed(instantCost);
             return;
         }
-        if (!GLOBAL.ioConfirmShiny(instantCost, "to get this power-up now", (): void => {
+        if (!GLOBAL.ioConfirmShiny(instantCost, KEYS.Get("io_t3k_for_powerup_now"), (): void => {
             this.InstantMonsterPowerup(id, level);
         })) {
             return;
@@ -275,9 +280,14 @@ export class MONSTERLAB extends BFOUNDATION {
             powerName = KEYS.Get(as3.str(MONSTERLAB._powerupProps[id].name));
             popupMC = new popup_monster();
             popupMC.tText.htmlText = "<b>" + KEYS.Get("lab_powerup_complete", { "v1": powerName, "v2": level }) + "</b>";
-            popupMC.bAction.SetupKey("btn_warnyourfriends");
-            popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
-            popupMC.bAction.Highlight = true;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #140: Share in chat, not "Warn your friends")
+                IoSocial.ioWarnShare(popupMC.bAction, KEYS.Get("io_soc_share_powerup", { "v1": powerName, "v2": String(level) }));
+            } else {
+                popupMC.bAction.SetupKey("btn_warnyourfriends");
+                popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
+                popupMC.bAction.Highlight = true;
+            }
             popupMC.bSpeedup.visible = false;
             POPUPS.Push(popupMC, null, null, null, "" + id + "-LAB-150.png");
             this._streamUpgradeCache = id;

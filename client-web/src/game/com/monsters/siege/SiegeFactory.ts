@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { int } from "as3";
 import { MouseEvent } from "flash/events";
-import { BASE, Decoy, GLOBAL, Jars, KEYS, LOGGER, POPUPS, QUESTS, STORE, SecNum, SiegeBuilding, SiegeWeapon, SiegeWeapons, Vacuum, popup_siegebrag } from "@game";
+import { BASE, Decoy, GLOBAL, Jars, KEYS, LOGGER, POPUPS, QUESTS, STORE, SecNum, SiegeBuilding, SiegeWeapon, SiegeWeapons, Vacuum, popup_siegebrag, IoSocial } from "@game";
 
 export class SiegeFactory extends SiegeBuilding {
     public static readonly ID: int = 133;
@@ -86,9 +86,14 @@ export class SiegeFactory extends SiegeBuilding {
         };
         let popup: popup_siegebrag = new popup_siegebrag();
         popup.tText.htmlText = KEYS.Get("msg_weaponbuilt", { "v1": weapon.name, "v2": weapon.level, "v3": weapon.name });
-        popup.bAction.SetupKey("btn_warnyourfriends");
-        popup.bAction.addEventListener(MouseEvent.CLICK, Post);
-        popup.bAction.Highlight = true;
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #140: Share in chat, not "Warn your friends")
+            IoSocial.ioWarnShare(popup.bAction, KEYS.Get("io_soc_share_siege", { "v1": String(weapon.name), "v2": String(weapon.level) }));
+        } else {
+            popup.bAction.SetupKey("btn_warnyourfriends");
+            popup.bAction.addEventListener(MouseEvent.CLICK, Post);
+            popup.bAction.Highlight = true;
+        }
         popup.bSpeedup.visible = false;
         POPUPS.Push(popup, null, null, null, weapon.warnPopupImage);
     }

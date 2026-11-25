@@ -2,7 +2,7 @@ import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { logger } from "../../utils/logger.js";
 import { Report } from "../../database/models/report.model.js";
 import { User } from "../../database/models/user.model.js";
-import { postgres } from "../../server.js";
+import { postgres, redis } from "../../server.js";
 
 type ReportEntry = {
   message: string;
@@ -68,6 +68,20 @@ export const logAttackViolation = async (user: User, message: string) => {
   (incident.report ??= []).push(newReport);
   postgres.em.persist([incident, user]);
   await postgres.em.flush();
+  if (ban) await silenceBanned(user.userid);
+};
+
+/**
+ * (18 October, SUSPECTED-BUGS.md: an automatic ban set only user.banned, so a player already in chat went on talking,
+ * and their sessions went on) silent in chat at once, as the admin panel's ban, and signed out everywhere.
+ */
+const silenceBanned = async (userid: number) => {
+  await redis.set(`chat:banned:${userid}`, "1").catch(() => 0);
+  const rows = (await postgres.em.getConnection().execute(`SELECT email FROM bym."user" WHERE userid = ?`, [userid], "all").catch(() => [])) as { email: string }[];
+  if (rows[0]?.email) {
+    const { endSessions } = await import("../user/sessionStore.js");
+    await endSessions(rows[0].email).catch(() => undefined);
+  }
 };
 
 /**
@@ -90,6 +104,7 @@ export const logBanReport = async (user: User, message: string) => {
   user.banned = true;
   postgres.em.persist(incident);
   await postgres.em.flush();
+  await silenceBanned(user.userid);
 };
 
 /**

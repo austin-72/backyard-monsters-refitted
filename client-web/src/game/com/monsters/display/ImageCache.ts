@@ -5,7 +5,7 @@ import { Event, IOErrorEvent, TimerEvent } from "flash/events";
 import { URLRequest } from "flash/net";
 import { LoaderContext } from "flash/system";
 import { Timer } from "flash/utils";
-import { GLOBAL, Loadable, print } from "@game";
+import { GLOBAL, IoAllianceBanner, IoChampionStatue, IoSkins, Loadable, print } from "@game";
 
 export class ImageCache extends ASObject {
     static {
@@ -169,6 +169,45 @@ export class ImageCache extends ASObject {
         let req_str: string = null;
         l = queue;
         l.loadState = ImageCache.LOADING;
+        // Inferno-only (14 October): a champion's skin ("monsters/korath_4.png#skin:molten") is its picture, loaded,
+        // recoloured here (IoSkins)
+        // Inferno-only (16 October): the Alliance Banner's picture with its owner's shield painted on
+        // ("...anim.png#ally:c0.1.2.0.1.4.2"): the plain picture, loaded, painted here (IoAllianceBanner)
+        // Inferno-only (22 October): the Champion Statue's picture with its owner's champion painted on in bronze
+        // ("...anim.png#statue:IC9"): the plain picture, loaded, painted here (IoChampionStatue)
+        let statue: any = IoChampionStatue.parseKey(l.key);
+        if (statue) {
+            ImageCache.load.push(l);
+            ImageCache.GetImageWithCallBack(String(statue.base), (k: string, bmd: BitmapData): void => {
+                IoChampionStatue.compose(bmd, String(statue.base), String(statue.which), (made: BitmapData): void => {
+                    l.ioBmd = made;
+                    this.onAssetComplete(l);
+                });
+            }, l.shouldPrepend, l.priority);
+            return;
+        }
+        let ally: any = IoAllianceBanner.parseKey(l.key);
+        if (ally) {
+            ImageCache.load.push(l);
+            ImageCache.GetImageWithCallBack(String(ally.base), (k: string, bmd: BitmapData): void => {
+                IoAllianceBanner.compose(bmd, String(ally.base), String(ally.which), (made: BitmapData): void => {
+                    l.ioBmd = made;
+                    this.onAssetComplete(l);
+                });
+            }, l.shouldPrepend, l.priority);
+            return;
+        }
+        let skin: any = IoSkins.parseKey(l.key);
+        if (skin) {
+            ImageCache.load.push(l);
+            ImageCache.GetImageWithCallBack(String(skin.base), (k: string, bmd: BitmapData): void => {
+                IoSkins.recolour(bmd, String(skin.skin), (made: BitmapData): void => {
+                    l.ioBmd = made;
+                    this.onAssetComplete(l);
+                });
+            }, l.shouldPrepend, l.priority);
+            return;
+        }
         req_str = l.shouldPrepend ? ImageCache.prependImagePath + l.key : l.key;
         if (l.shouldPrepend) {
             // Inferno-only: the server's picture version, so a replaced picture is not served from a cache.
@@ -241,7 +280,7 @@ export class ImageCache extends ASObject {
         let _loc2_: any[] = param1.callbacks.concat();
         param1.callbacks = [].concat();
         for (_loc3_ of as3.values(_loc2_)) {
-            _loc4_ = as3.as(param1.loader.content, Bitmap);
+            _loc4_ = param1.ioBmd ? new Bitmap(param1.ioBmd) : as3.as(param1.loader.content, Bitmap);
             _loc5_ = _loc3_[0];
             _loc6_ = String(_loc3_[1]);
             _loc7_ = as3.cast(_loc3_[2], Array);

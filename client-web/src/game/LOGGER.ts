@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
 import { IOErrorEvent } from "flash/events";
-import { BASE, CHAMPIONCAGE, CREATURELOCKER, EnumYardType, GLOBAL, IoBugReport, KEYS, URLLoaderApi, print } from "@game";
+import { BASE, CHAMPIONCAGE, CREATURELOCKER, EnumYardType, GLOBAL, IoBugReport, IoServerHold, KEYS, URLLoaderApi, print } from "@game";
 
 export class LOGGER extends ASObject {
     public static _logged: any = {};
@@ -21,6 +21,12 @@ export class LOGGER extends ASObject {
         let _loc4_: any[] = null;
         if (message.search("recorddebugdata") != -1) {
             return;
+        }
+        // Inferno-only (16 October, bug reports #92-#95): a request that failed because the server was restarting
+        // (holding, or just after: IoServerHold) is the restart's, not a bug: written, not reported
+        if (GLOBAL.INFERNO_ONLY && logType == "err" && IoServerHold.excused && IoServerHold.connectivity(message)) {
+            logType = "log";
+            message += " (the server was restarting)";
         }
         // Inferno-only: every error is also reported to the admins, whatever gamedebug is set to.
         IoBugReport.Record(logType, message);

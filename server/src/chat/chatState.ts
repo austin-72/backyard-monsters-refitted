@@ -31,6 +31,11 @@ export interface ChatClient {
   lastMsgAt: number;
   /** Inferno-only: an admin (InfernoOnlyConfig.admins) or a chat moderator (user.chat_mod), or null. */
   role?: "admin" | "mod" | null;
+  /** Inferno-only: the colour of the player's name (the D.A.V.E. Club: services/yard/dave.ts), or null. */
+  color?: string | null;
+  /** Inferno-only (13 October): the player's alliance and its tag, for "[ABC] Name" (services/alliance/allianceTag.ts). */
+  allianceId?: number | null;
+  allianceTag?: string | null;
 }
 
 /**

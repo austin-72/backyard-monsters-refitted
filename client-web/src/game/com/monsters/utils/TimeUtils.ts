@@ -1,5 +1,5 @@
 import { ASObject, int } from "as3";
-import { GLOBAL, KEYS } from "@game";
+import { GLOBAL, IoFormat, KEYS } from "@game";
 
 export class TimeUtils extends ASObject {
     public $ctor(): void {
@@ -17,6 +17,11 @@ export class TimeUtils extends ASObject {
      */
     public static TimeDistance(timestamp: number): string {
         let unitKey: string = null;
+        // (Inferno-only, QoL #572: the game's one "time ago" (IoFormat.ago): months and years where it said "26
+        // weeks ago", in the player's language)
+        if (GLOBAL.INFERNO_ONLY) {
+            return timestamp > 0 ? IoFormat.ago(timestamp) : "";
+        }
         let elapsed: int = (GLOBAL.Timestamp() - timestamp) | 0;
         let amount: int = 0;
 

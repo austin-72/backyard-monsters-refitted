@@ -1,11 +1,11 @@
 import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
 import { Bitmap, BitmapData, MovieClip, Shape } from "flash/display";
-import { ALLIANCES, ImageCache } from "@game";
+import { IoFormat, ALLIANCES, ImageCache, IoCrest } from "@game";
 
 export class AllyInfo extends ASObject {
     static {
-        as3.fields(this, { alliance_id: 0, name: null, image: 0, relationship: 0, relationships: null, _relCheckSelf: true, _relCheckThem: false });
+        as3.fields(this, { alliance_id: 0, name: null, image: 0, crest: null, relationship: 0, relationships: null, _relCheckSelf: true, _relCheckThem: false });
     }
 
     private static _forceRelations: boolean = true;
@@ -26,6 +26,8 @@ export class AllyInfo extends ASObject {
     private alliance_id: int;
     public name: string;
     public image: int;
+    /** Inferno-only (14 October): the alliance's own crest (IoCrest), or null for its preset shield. */
+    public crest: string;
     public relationship: int;
     private relationships: any;
     private _relCheckSelf: boolean;
@@ -36,6 +38,7 @@ export class AllyInfo extends ASObject {
         this.alliance_id = param1.alliance_id | 0;
         this.name = as3.str(param1.name);
         this.image = param1.image | 0;
+        this.crest = param1.crest ? String(param1.crest) : null;
         this.relationships = param1.relationships;
         if (AllyInfo._forceRelations) {
             if (ALLIANCES._allianceID && ALLIANCES._allianceID != 0 && this.alliance_id && !this.relationship) {
@@ -111,7 +114,9 @@ export class AllyInfo extends ASObject {
                 _loc7_ = AllyInfo._picPropsS;
             }
             _loc6_ += AllyInfo._picURLs.ext;
-            ImageCache.GetImageWithCallBack(_loc6_, as3.bind(this, this.IconLoaded), true, 1, "", [param2, _loc7_]);
+            if (!(param2 && IoCrest.fit(param2, this.crest, Number(_loc7_.picW) | 0, Number(_loc7_.picX), Number(_loc7_.picY), true))) {
+                ImageCache.GetImageWithCallBack(_loc6_, as3.bind(this, this.IconLoaded), true, 1, "", [param2, _loc7_]);
+            }
             if (param4) {
                 if (AllyInfo._useIconRelations) {
                     _loc8_ = "" + AllyInfo._picURLs.baseURL;
@@ -155,9 +160,9 @@ export class AllyInfo extends ASObject {
                     } else if (this.relationship >= AllyInfo._relationProps.member) {
                         _loc12_ = AllyInfo._picURLs.allyHex >>> 0;
                     } else if (this.relationship > AllyInfo._relationProps.neutral && this.relationship < AllyInfo._relationProps.member) {
-                        _loc12_ = AllyInfo._picURLs.friendlyHex >>> 0;
+                        _loc12_ = IoFormat.relColour(1, AllyInfo._picURLs.friendlyHex >>> 0, true);
                     } else if (this.relationship <= AllyInfo._relationProps.hostile) {
-                        _loc12_ = AllyInfo._picURLs.hostileHex >>> 0;
+                        _loc12_ = IoFormat.relColour(-1, AllyInfo._picURLs.hostileHex >>> 0, true);
                     } else {
                         _loc12_ = AllyInfo._picURLs.noneHex >>> 0;
                     }

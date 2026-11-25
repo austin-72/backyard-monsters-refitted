@@ -100,6 +100,10 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static Setup(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (SPECIALEVENT._setupCalled) {
             return;
         }
@@ -161,6 +165,10 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static StartRound(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (SPECIALEVENT._active) {
             return;
         }
@@ -328,6 +336,10 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static Tick(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc1_: int = 0;
         let _loc2_: any[] = null;
         let _loc3_: uint = 0;
@@ -386,12 +398,20 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static TimerClicked(param1: MouseEvent): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (!SPECIALEVENT._active) {
             SPECIALEVENT.ShowDefenseEventPopup("now");
         }
     }
 
     public static ShowDefenseEventPopup(param1: string): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc2_: MovieClip = null;
         if (!WMIROUNDCOMPLETE.open && !DEFENSEEVENTPOPUP.open && !WMIEXTENSIONPOPUP.open && !SPECIALEVENT._active) {
             _loc2_ = null;
@@ -406,6 +426,10 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static ShowEventEndPopup(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         let _loc1_: MovieClip = null;
         if (!WMIROUNDCOMPLETE.open && !DEFENSEEVENTPOPUP.open && !WMIEXTENSIONPOPUP.open && !SPECIALEVENT._active) {
             _loc1_ = new WMIROUNDCOMPLETE(SPECIALEVENT.EVENTEND);
@@ -415,6 +439,10 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static EventActive(): boolean {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return false;
+        }
         if (!BASE.isMainYard) {
             return false;
         }
@@ -447,6 +475,10 @@ export class SPECIALEVENT extends ASObject {
     }
 
     public static FlagChanged(): void {
+        // (Inferno-only: the invasions switched off, GLOBAL.ioInvasionsOff)
+        if (GLOBAL.ioInvasionsOff) {
+            return;
+        }
         if (!SPECIALEVENT._whatsNewComplete) {
             return;
         }

@@ -1,12 +1,13 @@
 /**
- * Watch mode: rebuilds and republishes the browser client whenever client/scripts changes.
+ * Watch mode: rebuilds and republishes the browser client whenever the game's sources change (src/, public/,
+ * index.html).
  *
  *   npm run watch                      publishes to ../server/public/web-dev (served at /web-dev/)
  *   npm run watch -- --target web      publishes to ../server/public/web instead (what players get!)
  *   npm run watch -- --no-publish      only rebuilds dist/ (for tools/dev-server.ts)
  *
- * Each change runs: convert (all .as files) -> assets (only when a non-.as file or an [Embed] changed)
- * -> build -> copy to the target folder. A failed step keeps the last good build published.
+ * Each change runs the build, then copies it to the target folder (the art, swf/ and embed/, only when something in
+ * public/ changed). A failed build keeps the last good one published.
  * Open the page with ?watch=1 and it reloads itself when a new build is published.
  */
 import { watch, existsSync, readFileSync, readdirSync, cpSync, rmSync, mkdirSync, statSync } from "node:fs";
@@ -15,7 +16,8 @@ import { resolve, dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const scripts = resolve(root, "../client/scripts");
+// what the build is made of
+const sources = ["src", "public", "index.html"].map((p) => resolve(root, p));
 const serverPublic = resolve(root, "../server/public");
 const args = process.argv.slice(2);
 const publish = !args.includes("--no-publish") && existsSync(serverPublic);
@@ -54,7 +56,17 @@ function copyToTarget(assetsChanged: boolean): void {
   }
   // remove bundles of older builds
   const keep = new Set(readdirSync(dist));
-  for (const name of readdirSync(target)) if (/^game\.[0-9a-f]+\.js(\.map)?$/.test(name) && !keep.has(name)) rmSync(join(target, name), { force: true });
+  for (const name of readdirSync(target)) if (/^game\.[0-9a-f]+\.js(\.map)?(\.br|\.gz)?$/.test(name) && !keep.has(name)) rmSync(join(target, name), { force: true });
+  // The server sends file.br / file.gz in place of file: one this build did not make (left by a RELEASE build,
+  // publish-web) would hand out the old contents. So would an old art.bin (version.json says whether to use one).
+  const dropStale = (rel: string) => {
+    for (const name of readdirSync(join(target, rel))) {
+      const r = rel ? `${rel}/${name}` : name;
+      if (statSync(join(target, r)).isDirectory()) dropStale(r);
+      else if ((/\.(br|gz)$/.test(name) || r === "art.bin") && !existsSync(join(dist, r))) rmSync(join(target, r), { force: true });
+    }
+  };
+  dropStale("");
   const v = JSON.parse(readFileSync(join(dist, "version.json"), "utf8"));
   log(`published ${v.script} to ${relative(resolve(root, ".."), target)}`);
   if (firstTime) log(`first publish to this folder: restart the server once so it serves /${targetName}/`);
@@ -88,9 +100,9 @@ function run(): void {
   running = true;
   const files = [...pending];
   pending = new Set();
-  const assetsChanged = firstRun || files.some((f) => !f.endsWith(".as") || hasEmbed(f));
+  const assetsChanged = firstRun || files.some((f) => f.startsWith("public/"));
   if (!firstRun) log(`changed: ${files.slice(0, 5).join(", ")}${files.length > 5 ? ` and ${files.length - 5} more` : ""}`);
-  const ok = step("convert") && (!assetsChanged || step("assets")) && step("build");
+  const ok = step("build");
   if (ok && publish) {
     try {
       copyToTarget(assetsChanged);
@@ -103,35 +115,26 @@ function run(): void {
   firstRun = false;
   running = false;
   if (pending.size) schedule();
-  else log("watching client/scripts for changes (Ctrl+C to stop)");
-}
-
-function hasEmbed(file: string): boolean {
-  try {
-    return readFileSync(join(scripts, file), "utf8").includes("[Embed(");
-  } catch {
-    return true; // deleted or unreadable: refresh the embeds to be safe
-  }
+  else log("watching src/, public/ and index.html for changes (Ctrl+C to stop)");
 }
 
 const ignored = (f: string) => /(^|[\\/])\.|~$|\.(tmp|swp|bak)$/i.test(f);
 
-if (!existsSync(scripts)) {
-  console.error(`client/scripts not found at ${scripts}`);
-  process.exit(1);
-}
 log(publish ? `publishing to ${relative(resolve(root, ".."), target)} (open /${targetName}/?watch=1 to reload on each build)` : "building dist/ only");
 if (publish && targetName === "web") log("NOTE: target is the live folder: players get every build");
-watch(scripts, { recursive: true }, (_ev, file) => {
-  if (!file) return;
-  const f = file.toString();
-  if (ignored(f)) return;
-  try {
-    if (statSync(join(scripts, f)).isDirectory()) return;
-  } catch {
-    /* deleted: still counts as a change */
-  }
-  pending.add(f);
-  schedule();
-});
+for (const source of sources) {
+  const isDir = statSync(source).isDirectory();
+  watch(source, { recursive: isDir }, (_ev, file) => {
+    // (paths relative to client-web, "/"-separated: "src/game/BASE.ts", "public/embed/_assets/x.png")
+    const f = relative(root, isDir && file ? join(source, file.toString()) : source).split(/[\\/]/).join("/");
+    if (ignored(f) || f.startsWith("public/embed/manifest.json")) return;
+    try {
+      if (statSync(resolve(root, f)).isDirectory()) return;
+    } catch {
+      /* deleted: still counts as a change */
+    }
+    pending.add(f);
+    schedule();
+  });
+}
 run();

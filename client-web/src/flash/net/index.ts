@@ -98,8 +98,25 @@ function prepare(req: URLRequest): Prepared {
     body = encoded as BodyInit;
     if (!headers.has("Content-Type")) headers.set("Content-Type", req.contentType ?? "application/x-www-form-urlencoded");
   }
-  return { url, init: { method, headers, body, mode: "cors", credentials: "omit" } };
+  // (13 October) cookies only to the game's own server (same origin): the browser's login key, an HttpOnly cookie
+  // its logins are bound to (server middleware/auth.ts, sameBrowser). Never to other sites.
+  // (Inferno-only, QoL #212: while the page closes, a request small enough for it outlives the page)
+  const keepalive = netHooks.keepalive && (encoded == null || encoded.length < 60000);
+  return { url, init: { method, headers, body, mode: "cors", credentials: "same-origin", ...(keepalive ? { keepalive: true } : {}) } };
 }
+
+/** Inferno-only (QoL #212): set while the page is closing, so a last save is sent with `keepalive`. */
+export const netHooks: {
+  keepalive: boolean;
+  /**
+   * Inferno-only (16 October, the server restarting): asked before each request goes; a promise holds it until it
+   * settles (the requests held go in the order they were made), null sends it now. A last save while the page closes
+   * (keepalive) is never held.
+   */
+  gate: ((url: string) => Promise<void> | null) | null;
+  /** Inferno-only (16 October): every answer's url, status (0: none came) and headers, before the loader hears it. */
+  onAnswer: ((url: string, status: number, headers: Headers | null) => void) | null;
+} = { keepalive: false, gate: null, onAnswer: null };
 
 /**
  * URLLoader. Events arrive on later frames: open, progress, httpStatus, then
@@ -131,7 +148,18 @@ export class URLLoader extends EventDispatcher {
     const live = () => this.$abort === abort;
     const fire = (e: Event) => runtimeHooks.defer(() => { if (live() || e.type !== Event.OPEN) this.dispatchEvent(e); });
     fire(new Event(Event.OPEN));
-    fetch(url, init).then(async (res) => {
+    const held = netHooks.gate && !init.keepalive ? netHooks.gate(url) : null;
+    const send = (): Promise<Response> => {
+      if (!live()) return new Promise<Response>(() => {});
+      return fetch(url, init).then((res) => {
+        try { netHooks.onAnswer?.(url, res.status, res.headers); } catch {}
+        return res;
+      }, (err) => {
+        try { if (live()) netHooks.onAnswer?.(url, 0, null); } catch {}
+        throw err;
+      });
+    };
+    (held ? held.then(send, send) : send()).then(async (res) => {
       const buf = new Uint8Array(await res.arrayBuffer());
       if (!live()) return;
       runtimeHooks.defer(() => {
@@ -152,6 +180,8 @@ export class URLLoader extends EventDispatcher {
       runtimeHooks.defer(() => {
         if (!live()) return;
         this.$abort = null;
+        // (the browser's reason for no answer, "TypeError: Failed to fetch", for the game's error reports)
+        (this as any).$netError = `${err?.name ?? "Error"}: ${err?.message ?? err}`.slice(0, 160);
         this.dispatchEvent(new HTTPStatusEvent(HTTPStatusEvent.HTTP_STATUS, false, false, 0));
         if (err?.name === "SecurityError") this.dispatchEvent(new SecurityErrorEvent(SecurityErrorEvent.SECURITY_ERROR, false, false, `Error #2048: Security sandbox violation: cannot load data from ${url}.`, 2048));
         else this.dispatchEvent(new IOErrorEvent(IOErrorEvent.IO_ERROR, false, false, `Error #2032: Stream Error. URL: ${url}`, 2032));
@@ -366,7 +396,7 @@ flashClass(NetStream, "flash.net.NetStream");
 /**
  * FileReference: browse() opens the browser's file picker (Event.SELECT when a file is chosen, Event.CANCEL when
  * not), load() reads it into `data` (a ByteArray; Event.COMPLETE), save() downloads data (a ByteArray or text) as
- * a file. (Inferno-only use: opening a downloaded attack replay, IoReplays.as.) Browsers only open a picker in
+ * a file. (Inferno-only use: opening a downloaded attack replay, IoReplays.ts.) Browsers only open a picker in
  * answer to a click, which is when the game calls browse().
  */
 export class FileReference extends EventDispatcher {

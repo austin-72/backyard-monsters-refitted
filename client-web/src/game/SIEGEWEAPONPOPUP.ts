@@ -64,6 +64,10 @@ export class SIEGEWEAPONPOPUP extends SIEGEWEAPONPOPUP_view {
         let _loc2_: int = 0;
         let _loc3_: int = 0;
         this._currentSiegeWeapon = SiegeWeapons.availableWeapon;
+        // (Inferno-only, QoL #506: its sheets now load when needed: warmed as its button shows, so the first drop is seen)
+        if (GLOBAL.INFERNO_ONLY && this._currentSiegeWeapon && (this._currentSiegeWeapon as any).ioWarm) {
+            (this._currentSiegeWeapon as any).ioWarm();
+        }
         if (this._currentSiegeWeapon == null) {
             UI2._top.ClearSiegeWeapon();
             return;

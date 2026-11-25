@@ -5,7 +5,7 @@ import { MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
 import { FileReference } from "flash/net";
 import { ByteArray } from "flash/utils";
-import { JPGEncoder, screenshot, screenshot_ui_CLIP } from "@game";
+import { GLOBAL, JPGEncoder, screenshot, screenshot_ui_CLIP } from "@game";
 
 export class screenshot_ui extends screenshot_ui_CLIP {
     static {
@@ -54,6 +54,18 @@ export class screenshot_ui extends screenshot_ui_CLIP {
         this.bSave2.Enabled = false;
         this.bSave3.SetupKey("btn_downloadimage");
         this.bSave3.addEventListener(MouseEvent.CLICK, as3.bind(this, this.Save));
+        if (GLOBAL.INFERNO_ONLY) {
+            // (Inferno-only, QoL #473: "Save to album" and "Post to wall" went to Facebook, which is gone: hidden, and
+            // Download in the middle of where the three were, when they are in a row)
+            let xs: any[] = [this.bSave1.x, this.bSave2.x, this.bSave3.x];
+            let inRow: boolean = Math.abs(this.bSave1.y - this.bSave3.y) < 4 && Math.abs(this.bSave2.y - this.bSave3.y) < 4;
+            this.bSave1.visible = false;
+            this.bSave2.visible = false;
+            if (inRow) {
+                this.bSave3.x = (Math.min(xs[0], xs[1], xs[2]) + Math.max(xs[0], xs[1], xs[2])) / 2;
+            }
+            this.name = "ioPhotoMode";
+        }
         let _loc1_: int = 0;
         while (_loc1_ < this.presets.length) {
             this["bPreset" + (_loc1_ + 1)].Setup(this.presets[_loc1_][0]);

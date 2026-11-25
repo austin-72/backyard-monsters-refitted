@@ -151,13 +151,36 @@ export class User {
   @Property({ type: "string", nullable: true, length: 10 })
   login_last_claim?: string | null;
 
+  /**
+   * (QoL #126) Streak savers held, 0 or 1: one is earned by each completed 14-day stretch and forgives a single missed
+   * day (services/user/dailyLogin.ts). Migration 20261108_StreakSaver; ensureStreakSaver makes it at start too.
+   */
+  @Property({ type: "number", default: 0 })
+  login_savers?: number;
+
   /** Shown to the player when a banned account tries to log in (set from the admin panel). */
   @Property({ type: "string", nullable: true, length: 400 })
   ban_reason?: string | null;
 
+  /**
+   * Inferno-only (QoL #261): the account's admin role, "owner", "admin" or "support" (the panel read only), or none
+   * (migration 20261109_AdminRoles). Read through services/admin/admin.ts (adminRole): the names in
+   * InfernoOnlyConfig.admins are owners whatever this says.
+   */
+  @Property({ type: "string", nullable: true, length: 16 })
+  admin_role?: string | null;
+
   /** Inferno-only: the player's own saved outpost kits, 3 slots (services/maproom/v2/playerKits.ts). */
   @Property({ type: "json", nullable: true })
   player_kits?: (PlayerKit | null)[] | null;
+
+  /**
+   * Inferno-only (12 November, migration 20261115_OutpostLayouts): the Yard Planner's 10 outpost layouts, shared by all
+   * the player's outposts (controllers/yardplanner/plannerSave.ts): [{ slotid, name, data, saved, from }], from: the
+   * outpost (baseid) it was saved in. Null until first used (then filled from the outposts' own slots).
+   */
+  @Property({ type: "json", nullable: true })
+  outpost_layouts?: any[] | null;
 }
 
 export interface PlayerKit {
@@ -165,5 +188,5 @@ export interface PlayerKit {
   savedAt: number;
   /** Picture file name stem under public/assets/kits/player/ (a random id, so pictures cannot be guessed). */
   image?: string;
-  buildings: Record<string, { t: number; X: number; Y: number; id: number; prefab?: number }>;
+  buildings: Record<string, { t: number; X: number; Y: number; id: number; prefab?: number; fort?: number }>;
 }

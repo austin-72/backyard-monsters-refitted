@@ -3,7 +3,7 @@ import { int, uint } from "as3";
 import { DisplayObject, MovieClip, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { ALLIANCES, AllianceConstants, AllianceTabBase, IoAllianceUi, IoScrollPane, KEYS } from "@game";
+import { ALLIANCES, AllianceConstants, AllianceTabBase, GLOBAL, IoAllianceUi, IoScrollPane, KEYS } from "@game";
 
 /**
  * Inferno-only: the Outposts tab (the user's design of 2 October): every outpost the alliance's members
@@ -28,7 +28,8 @@ export class IoOutpostsTab extends AllianceTabBase {
     private static readonly ROW_H: int = 30;
 
     // the columns: when, gained / lost, member, from / to whom, where, jump
-    private static readonly COLS: any[] = [[0, 66], [66, 70], [136, 138], [274, 300], [574, 128], [702, 74]];
+    // (16 October: When wider, "2 weeks ago" was cut to "2 weeks ag"; From / to gives it the room)
+    private static readonly COLS: any[] = [[0, 92], [92, 66], [158, 132], [290, 284], [574, 128], [702, 74]];
 
     private static _filters: any = { "kind": "", "source": "", "member": "", "world": "" };
     private _pane: IoScrollPane;
@@ -99,7 +100,14 @@ export class IoOutpostsTab extends AllianceTabBase {
             this._loading = false;
             if (response == null || response.error) {
                 this._more = false;
-                this._drawRows(response && response.error ? String(response.error) : KEYS.Get("alliance_err_generic"));
+                let why: string = response && response.error ? String(response.error) : KEYS.Get("alliance_err_generic");
+                // (Inferno-only, QoL #451: a next page that failed keeps the rows already there, with Retry; the list
+                // was wiped and only the error was left)
+                if (GLOBAL.INFERNO_ONLY && this._events.length > 0) {
+                    this._retryRow(why);
+                    return;
+                }
+                this._drawRows(why);
                 return;
             }
             let from: int = this._events.length;
@@ -143,7 +151,7 @@ export class IoOutpostsTab extends AllianceTabBase {
             let box: Sprite = new Sprite();
             box.x = x;
             IoAllianceUi.card(box.graphics, 0, 0, 300, 46, AllianceConstants.IO_CARD, AllianceConstants.IO_CARD_EDGE);
-            IoAllianceUi.addText(box, KEYS.Get(String(period[0])), 10, 14, 12, AllianceConstants.IO_INK, true, 96);
+            GLOBAL.ioFitText(IoAllianceUi.addText(box, KEYS.Get(String(period[0])), 10, 14, 12, AllianceConstants.IO_INK, true, 96), 10);
             let figures: any[] = [[KEYS.Get("io_alliance_gained"), "+" + (s.gained | 0), AllianceConstants.IO_GAINED], [KEYS.Get("io_alliance_lost"), ((s.lost | 0) > 0 ? "-" : "") + (s.lost | 0), AllianceConstants.IO_LOST], [KEYS.Get("io_alliance_net"), IoAllianceUi.signed(s.net | 0), (s.net | 0) > 0 ? AllianceConstants.IO_GAINED : ((s.net | 0) < 0 ? AllianceConstants.IO_LOST : AllianceConstants.IO_INK)]];
             for (let i: int = 0; i < figures.length; i++) {
                 IoAllianceUi.addText(box, String(figures[i][0]), (106 + i * 64) | 0, 4, 10, AllianceConstants.IO_MUTED, false, 60, IoAllianceUi.CENTER);
@@ -325,6 +333,37 @@ export class IoOutpostsTab extends AllianceTabBase {
         this._pane.refresh(this._moreRow(c, w));
     }
 
+    /** Inferno-only (QoL #451): under the rows, why the next page failed, and Retry (which asks for it again). */
+    private _retryRow(why: string): void {
+        let c: Sprite = this._pane.content;
+        for (let name of ["ioMore", "ioMoreFailed", "ioMoreRetry"]) {
+            let old: DisplayObject = c.getChildByName(name);
+            if (old) {
+                c.removeChild(old);
+            }
+        }
+        let w: int = this._pane.innerWidth;
+        let h: int = (this._events.length * IoOutpostsTab.ROW_H) | 0;
+        let t: DisplayObject = IoAllianceUi.addText(c, KEYS.Get("io_alliance_more_failed", { "v1": why }), 10, (h + 9) | 0, 11, AllianceConstants.IO_MUTED, false, (w - 140) | 0);
+        t.name = "ioMoreFailed";
+        let retry: MovieClip = IoAllianceUi.button(KEYS.Get("io_retry"), 100, 24, (e: MouseEvent = null): void => {
+            for (let name of ["ioMoreFailed", "ioMoreRetry"]) {
+                let old: DisplayObject = c.getChildByName(name);
+                if (old) {
+                    c.removeChild(old);
+                }
+            }
+            this._more = true;
+            this._pane.refresh(this._moreRow(c, w));
+            this._fetch();
+        }, "gold", 11);
+        retry.name = "ioMoreRetry";
+        retry.x = w - 112;
+        retry.y = h + 4;
+        c.addChild(retry);
+        this._pane.refresh(h + 34);
+    }
+
     /** "Loading..." under the rows while there are more; returns the list's height. */
     private _moreRow(c: Sprite, w: int): int {
         let h: int = (this._events.length * IoOutpostsTab.ROW_H) | 0;
@@ -351,7 +390,8 @@ export class IoOutpostsTab extends AllianceTabBase {
         r.graphics.lineTo(w, IoOutpostsTab.ROW_H - 0.5);
         let ty: int = ((IoOutpostsTab.ROW_H - 18) / 2) | 0;
         let gained: boolean = String(ev.kind) == "gained";
-        IoAllianceUi.addText(r, IoAllianceUi.ago(Number(ev.ts)), ((IoOutpostsTab.COLS[0][0] | 0) + 6) | 0, ty, 11, AllianceConstants.IO_MUTED, false, ((IoOutpostsTab.COLS[0][1] | 0) - 8) | 0);
+        // (and smaller, when a language's "ago" is longer still)
+        GLOBAL.ioFitText(IoAllianceUi.addText(r, IoAllianceUi.ago(Number(ev.ts)), ((IoOutpostsTab.COLS[0][0] | 0) + 6) | 0, ty, 11, AllianceConstants.IO_MUTED, false, ((IoOutpostsTab.COLS[0][1] | 0) - 8) | 0), 9);
         IoAllianceUi.addText(r, KEYS.Get(gained ? "io_alliance_gained" : "io_alliance_lost"), ((IoOutpostsTab.COLS[1][0] | 0) + 6) | 0, ty, 11, gained ? AllianceConstants.IO_GAINED : AllianceConstants.IO_LOST, true, ((IoOutpostsTab.COLS[1][1] | 0) - 8) | 0);
         IoAllianceUi.addText(r, String(ev.user_name), ((IoOutpostsTab.COLS[2][0] | 0) + 6) | 0, ty, 11, AllianceConstants.IO_INK, true, ((IoOutpostsTab.COLS[2][1] | 0) - 8) | 0);
         IoAllianceUi.addText(r, this._other(ev), ((IoOutpostsTab.COLS[3][0] | 0) + 6) | 0, ty, 11, AllianceConstants.IO_INK, false, ((IoOutpostsTab.COLS[3][1] | 0) - 8) | 0, "left", true);

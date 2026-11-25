@@ -3,11 +3,12 @@
  * (containers, stage, loader, rendering and hit testing all walk each other).
  */
 import { iface, implement } from "as3";
-import { EventDispatcher, Event, IOErrorEvent, ProgressEvent, HTTPStatusEvent, UncaughtErrorEvents, dispatchHooks } from "../events";
+import { EventDispatcher, Event, IOErrorEvent, ProgressEvent, HTTPStatusEvent, UncaughtErrorEvents, dispatchHooks, anyCaptureListeners } from "../events";
 import { Point, Rectangle, Matrix, ColorTransform } from "../geom";
 import { Graphics } from "./Graphics";
 import { BitmapData, drawHooks, IBitmapDrawable } from "./BitmapData";
 import { flashClass, argumentError, rangeError, nullParam, toTwips, unimplemented, context2d } from "../_internal";
+import { filterSettings } from "../filters";
 
 export type M6 = [number, number, number, number, number, number];
 const IDENT: M6 = [1, 0, 0, 1, 0, 0];
@@ -84,11 +85,124 @@ export const player = {
   /** schedules async work to run inside the frame loop (Loader completion etc.) */
   defer: (fn: () => void): void => { setTimeout(fn, 0); },
   reportError: (e: unknown): void => { console.error(e); },
+  /**
+   * (21 October) The yard shown straight from the graphics card: its WebGL canvas is a page element under the game's
+   * canvas, and where the yard's picture is drawn the game's canvas is left see-through (a Bitmap whose BitmapData has
+   * $ioHole). Copying the card's picture into the game's canvas every frame made the card wait for the processor.
+   * mainCtx: the game's own canvas's context (only there is the hole left); glDirect: decided as the page starts (a
+   * real graphics card, the setting on; the game's canvas then has an alpha channel); showGlLayer puts the card's
+   * canvas under the game's (or hides it); glLayer: that canvas while shown.
+   */
+  mainCtx: null as CanvasRenderingContext2D | null,
+  glDirect: false,
+  glLayer: null as HTMLCanvasElement | null,
+  showGlLayer: (_c: HTMLCanvasElement | null, _on: boolean): void => {},
   /** profiling switches (debugging only) */
-  debug: { noFilters: false, noText: false, noBitmaps: false, noCache: false, damageLog: null as null | [string, number[], string][] },
+  debug: { noFilters: false, noText: false, noBitmaps: false, noCache: false, damageLog: null as null | [string, number[], string][], fxLog: null as null | [string, number, string][],
+    /** compares every unchanged part of the screen again, as before change marks (touch) */
+    noSkip: false,
+    /** (21 October) colour transforms worked out in script, pixel by pixel, as before the browser's filter (a test tool) */
+    scriptColorTransform: false,
+    /** (21 October) colour transforms done by the browser's filter so far (a test tool) */
+    ctFastCount: 0,
+    /** a test tool: [] checks each part stepped over (redrawRegions) and lists any that had changed unmarked */
+    skipCheck: null as null | string[],
+    /** a test tool: [] lists the children compared at each drawing (not stepped over), and why */
+    visitLog: null as null | string[],
+    /** objects compared and stepped over, all drawings */
+    walk: { visited: 0, skipped: 0 },
+    /** a test tool: [] lists, for each frame drawn whole, [damaged boxes, % of the screen they add up to] */
+    fullWhy: null as null | number[][],
+    /** draws what windows hide too (DisplayObject.ioOccludes), as before them */
+    noOccluders: false,
+    /** (19 October) a test tool: the browser made to finish each drawing at once (it does that work later otherwise,
+     *  unseen by the timings), its time counted in the player's stats.flushMs */
+    measureFlush: false,
+    /** draws the yard's picture through the clip of all the rectangles too, as before (findPrefix) */
+    noPrefix: false,
+    /** a cached layer's signature taken again every drawing it isn't vouched for, as before (renderWithEffects) */
+    noTouchSig: false,
+    /** (19 October) the game's frames are heavy (Player: timers, no made-up frames) past this share of a frame's time */
+    heavyShare: 0.7,
+    /** the game's "render" (the yard's own drawing) at every frame, drawn or not, as before (Player.frame) */
+    renderAlways: false,
+
+    /** a test tool: [] collects the rectangles drawn again (partial drawings), up to 2,000 */
+    lastRects: null as null | number[][] },
 };
 
 let instanceCount = 0;
+
+// ------------------------------------------------------------------------------------------ change marks
+/** Counts the drawings (redrawRegions); a record's ep says which one last saw its object (interp). */
+let visitEpoch = 0;
+/**
+ * Marks o, and its parents up to the stage, as changed for the next drawing. Everything that changes how an
+ * object looks, where it is or what it holds calls this; redrawRegions then steps over every child that is
+ * unmarked, in the same place on screen and on screen at the last drawing, without comparing it again (fps pass,
+ * 11 October: the map room's 3,000 visible objects were compared one by one every frame, most of an idle frame).
+ * A mask marks its owner; a button's state (no parent) marks its button.
+ */
+export function touch(o: DisplayObject | null | undefined, hiding = false): void {
+  const s = visitEpoch + 1;
+  let d: any = o;
+  while (d && d.$dk !== s) {
+    d.$dk = s;
+    if (d.$maskOwner) touch(d.$maskOwner);
+    // (inside something hidden nothing shows: showing it again marks it, and what it holds is then compared whole,
+    // not having been drawn; hidden clips still play, a map room's cells' 200 hidden animations every frame)
+    // (an object just hidden (hiding) is marked the whole way up: its old place must be repainted)
+    if ((!d.$visible || d.$alpha <= 0) && !(hiding && d === o)) return;
+    d = d.$parent ?? d.$btn ?? null;
+  }
+}
+/**
+ * Inferno-only (14 October): the yard's tilt (the game's IoTilt). Its ground is squashed (or stretched) up and down by
+ * `ioUpright.k`; what stands on it (the children of a container marked `$ioUpright`: a building's hit area, the
+ * monsters' health bars, projectiles) is kept its own height, standing on its foot (`$ioFoot`, the child's ground point
+ * in its parent's space; its own place if none): drawn, hit and bounded by that (`$matrix`), its x, y, width and height
+ * as the game set them.
+ */
+export const ioUpright = { k: 1 };
+/** A child's foot set (its ground point in its parent's space; NaN: its own place). */
+export function ioSetFoot(o: DisplayObject, foot: number): void {
+  const a: any = o;
+  if (a.$ioFoot === foot || (Number.isNaN(foot) && a.$ioFoot === undefined)) return;
+  a.$ioFoot = foot;
+  o.$matrixCache = null;
+  touch(o);
+}
+/** The tilt changed: every standing child of these containers worked out again. */
+export function ioUprightRefresh(containers: (DisplayObjectContainer | null)[]): void {
+  for (const c of containers) {
+    if (!c) continue;
+    for (const ch of c.$children) { ch.$matrixCache = null; touch(ch); }
+    touch(c);
+  }
+}
+/** Run before each comparison: marks what changes without telling (the focused text field's caret, a playing video). */
+export const redrawHooks: (() => void)[] = [];
+/** Bitmaps that showed bd when they were last compared: marked when its pixels change (BitmapData calls this). */
+drawHooks.changed = (bd: any): void => {
+  const s = visitEpoch + 1;
+  if (bd.$shownAt === s) return;
+  bd.$shownAt = s;
+  for (const b of bd.$shown) touch(b);
+};
+function onStageOrButton(o: any): boolean {
+  for (let d = o; d; d = d.$parent ?? d.$btn ?? null) if (d instanceof Stage) return true;
+  return false;
+}
+function noteShown(bd: any, b: DisplayObject): void {
+  let set: Set<DisplayObject> | null = bd.$shown;
+  if (!set) set = bd.$shown = new Set<DisplayObject>();
+  else if (set.size >= (bd.$shownMax || 16) && !set.has(b)) {
+    // (gone from the screen, or showing another bitmap: dropped, so a shared picture keeps no old objects alive)
+    for (const x of set) if ((x as any).$bitmapData !== bd || !onStageOrButton(x)) set.delete(x);
+    bd.$shownMax = Math.max(16, set.size * 2);
+  }
+  set.add(b);
+}
 
 export { IBitmapDrawable };
 
@@ -126,6 +240,8 @@ export class DisplayObject extends EventDispatcher {
   declare $uid: number;
   /** cached filtered layer */
   declare $fx: any;
+  /** the drawing this object was last marked changed for (touch) */
+  declare $dk: number;
 
   $alloc(): void {
     super.$alloc();
@@ -153,6 +269,7 @@ export class DisplayObject extends EventDispatcher {
     this.$clipDepth = 0;
     this.$scale9 = null;
     this.$shapeDef = null;
+    this.$dk = 0;
   }
 
   $afterAlloc(): void {
@@ -167,6 +284,7 @@ export class DisplayObject extends EventDispatcher {
       player.pendingRoot = null;
       this.$parent = root.stage;
       root.stage.$children.push(this);
+      touch(root.stage);
       this.$loaderInfo = root.loaderInfo;
       root.loaderInfo.$content = this;
     }
@@ -175,19 +293,20 @@ export class DisplayObject extends EventDispatcher {
     if (embed) player.populateSymbol(this, embed);
   }
 
-  $invalidate(): void {}
+  /** something it draws changed (its Graphics) */
+  $invalidate(): void { touch(this); }
 
   // ---------------------------------------------------------- transform
   get x(): number { return this.$x; }
-  set x(v: number) { if (interp.on) ipNote(this); this.$x = toTwips(v); this.$matrixCache = null; this.$scripted = true; }
+  set x(v: number) { const t = toTwips(v); this.$scripted = true; if (t === this.$x) return; if (interp.on) ipNote(this); this.$x = t; this.$matrixCache = null; touch(this); }
   get y(): number { return this.$y; }
-  set y(v: number) { if (interp.on) ipNote(this); this.$y = toTwips(v); this.$matrixCache = null; this.$scripted = true; }
+  set y(v: number) { const t = toTwips(v); this.$scripted = true; if (t === this.$y) return; if (interp.on) ipNote(this); this.$y = t; this.$matrixCache = null; touch(this); }
   get z(): number { return 0; }
   set z(_v: number) { unimplemented("DisplayObject.z"); }
   get scaleX(): number { return this.$sx; }
-  set scaleX(v: number) { if (interp.on) ipNote(this); this.$sx = +v; this.$matrixCache = null; this.$scripted = true; }
+  set scaleX(v: number) { v = +v; this.$scripted = true; if (v === this.$sx) return; if (interp.on) ipNote(this); this.$sx = v; this.$matrixCache = null; touch(this); }
   get scaleY(): number { return this.$sy; }
-  set scaleY(v: number) { if (interp.on) ipNote(this); this.$sy = +v; this.$matrixCache = null; this.$scripted = true; }
+  set scaleY(v: number) { v = +v; this.$scripted = true; if (v === this.$sy) return; if (interp.on) ipNote(this); this.$sy = v; this.$matrixCache = null; touch(this); }
   get scaleZ(): number { return 1; }
   set scaleZ(_v: number) {}
   get rotation(): number { return this.$rotation; }
@@ -200,21 +319,33 @@ export class DisplayObject extends EventDispatcher {
     this.$rotation = v;
     this.$matrixCache = null;
     this.$scripted = true;
+    touch(this);
   }
   get rotationX(): number { return 0; } set rotationX(_v: number) {}
   get rotationY(): number { return 0; } set rotationY(_v: number) {}
   get rotationZ(): number { return this.rotation; } set rotationZ(v: number) { this.rotation = v; }
   get alpha(): number { return this.$alpha; }
-  set alpha(v: number) { if (interp.on) ipNote(this); this.$alpha = Math.trunc(+v * 256) / 256 || 0; }
+  set alpha(v: number) { const a = Math.trunc(+v * 256) / 256 || 0; if (a === this.$alpha) return; if (interp.on) ipNote(this); this.$alpha = a; touch(this, true); }
   get visible(): boolean { return this.$visible; }
-  set visible(v: boolean) { this.$visible = !!v; }
+  set visible(v: boolean) { v = !!v; if (v === this.$visible) return; this.$visible = v; touch(this, true); }
 
   /** Local matrix (object → parent). */
   $matrix(): M6 {
     if (this.$matrixCache) return this.$matrixCache;
-    const m: M6 = [this.$sx * Math.cos(this.$skewY), this.$sx * Math.sin(this.$skewY), -this.$sy * Math.sin(this.$skewX), this.$sy * Math.cos(this.$skewX), this.$x, this.$y];
+    const m: M6 = this.$rawMatrix();
+    // (standing on a tilted yard: its own height kept, about its foot; see ioUpright)
+    const k = ioUpright.k;
+    if (k !== 1 && (this.$parent as any)?.$ioUpright) {
+      const f = (this as any).$ioFoot;
+      const foot = typeof f === "number" && !Number.isNaN(f) ? f : m[5];
+      m[1] /= k; m[3] /= k; m[5] = foot + (m[5] - foot) / k;
+    }
     this.$matrixCache = m;
     return m;
+  }
+  /** The local matrix as the object's properties give it (no tilt). */
+  $rawMatrix(): M6 {
+    return [this.$sx * Math.cos(this.$skewY), this.$sx * Math.sin(this.$skewY), -this.$sy * Math.sin(this.$skewX), this.$sy * Math.cos(this.$skewX), this.$x, this.$y];
   }
   $setMatrix(a: number, b: number, c: number, d: number, tx: number, ty: number): void {
     this.$sx = Math.sqrt(a * a + b * b);
@@ -225,6 +356,7 @@ export class DisplayObject extends EventDispatcher {
     this.$rotation = (this.$skewY * 180) / Math.PI;
     this.$x = toTwips(tx); this.$y = toTwips(ty);
     this.$matrixCache = null;
+    touch(this);
   }
   /** Concatenated matrix (object → root space). */
   $globalMatrix(): M6 {
@@ -235,13 +367,13 @@ export class DisplayObject extends EventDispatcher {
     return m;
   }
 
-  get width(): number { return this.$boundsIn(this.$matrix(), true)?.width ?? 0; }
+  get width(): number { return this.$boundsIn(this.$rawMatrix(), true)?.width ?? 0; }
   set width(v: number) {
     const b = this.$boundsIn(IDENT, true);
     if (!b || !b.width) return;
     this.$setSize(+v / b.width, +v / b.height, b.height / b.width, true);
   }
-  get height(): number { return this.$boundsIn(this.$matrix(), true)?.height ?? 0; }
+  get height(): number { return this.$boundsIn(this.$rawMatrix(), true)?.height ?? 0; }
   set height(v: number) {
     const b = this.$boundsIn(IDENT, true);
     if (!b || !b.height) return;
@@ -262,12 +394,14 @@ export class DisplayObject extends EventDispatcher {
       if (sin === 0) { this.$sx = psx; this.$sy = tsy; }
     }
     this.$matrixCache = null;
+    touch(this);
   }
 
   get transform(): Transform { return new Transform(this); }
   set transform(t: Transform) {
     const m = t.matrix; this.$setMatrix(m.a, m.b, m.c, m.d, m.tx, m.ty); this.$scripted = true;
     this.$colorTransform = t.colorTransform;
+    touch(this, true);
   }
 
   // ---------------------------------------------------------- tree
@@ -292,9 +426,10 @@ export class DisplayObject extends EventDispatcher {
   }
   get mask(): DisplayObject | null { return this.$mask; }
   set mask(m: DisplayObject | null) {
-    if (this.$mask) this.$mask.$maskOwner = null;
+    touch(this);
+    if (this.$mask) { touch(this.$mask); this.$mask.$maskOwner = null; }
     this.$mask = m ?? null;
-    if (m) m.$maskOwner = this;
+    if (m) { m.$maskOwner = this; touch(m); }
   }
   get filters(): any[] { return this.$filters.map((f) => f.clone?.() ?? f); }
   set filters(v: any[]) {
@@ -302,17 +437,30 @@ export class DisplayObject extends EventDispatcher {
       if (f == null || typeof f.clone !== "function") throw argumentError(2005, "Parameter 0 is of the incorrect type. Should be type Filter.");
       return f.clone();
     });
+    touch(this);
   }
   get blendMode(): string { return this.$blendMode; }
-  set blendMode(v: string) { this.$blendMode = v; }
+  set blendMode(v: string) { this.$blendMode = v; touch(this); }
   get cacheAsBitmap(): boolean { return this.$cacheAsBitmap || this.$filters.length > 0; }
   set cacheAsBitmap(v: boolean) { this.$cacheAsBitmap = !!v; }
+  /**
+   * Not Flash: says the rectangle r (in this object's own space) is drawn fully opaque by it, so a change under it
+   * (anything drawn before it) cannot be seen and is not drawn again. A window over a live yard: the yard's
+   * monsters, smoke and glowing ground under the window had it all drawn again every frame (the Quest Book "runs
+   * slow", 12 October). null: it hides nothing. Only used while it and all its parents are visible, fully opaque
+   * and not rotated or masked.
+   */
+  ioOccludes(r: Rectangle | null): void {
+    (this as any).$ioOcc = r ? r.clone() : null;
+    if (r) occluders.add(this); else occluders.delete(this);
+    touch(this);
+  }
   get opaqueBackground(): any { return this.$opaqueBackground; }
   set opaqueBackground(v: any) { this.$opaqueBackground = v; }
   get scrollRect(): Rectangle | null { return this.$scrollRect?.clone() ?? null; }
-  set scrollRect(r: Rectangle | null) { this.$scrollRect = r?.clone() ?? null; }
+  set scrollRect(r: Rectangle | null) { this.$scrollRect = r?.clone() ?? null; touch(this); }
   get scale9Grid(): Rectangle | null { return this.$scale9?.clone() ?? null; }
-  set scale9Grid(r: Rectangle | null) { this.$scale9 = r?.clone() ?? null; }
+  set scale9Grid(r: Rectangle | null) { this.$scale9 = r?.clone() ?? null; touch(this); }
   get accessibilityProperties(): any { return null; }
   set accessibilityProperties(_v: any) {}
   get mouseX(): number { return this.globalToLocal(new Point(player.mouseX, player.mouseY)).x; }
@@ -370,7 +518,7 @@ function findEmbed(ctor: any): any {
 
 export class Transform {
   constructor(private o: DisplayObject) {}
-  get matrix(): Matrix { const m = this.o.$matrix(); return new Matrix(m[0], m[1], m[2], m[3], m[4], m[5]); }
+  get matrix(): Matrix { const m = this.o.$rawMatrix(); return new Matrix(m[0], m[1], m[2], m[3], m[4], m[5]); }
   set matrix(m: Matrix) { if (m) { this.o.$setMatrix(m.a, m.b, m.c, m.d, m.tx, m.ty); this.o.$scripted = true; } }
   get colorTransform(): ColorTransform {
     const c = this.o.$colorTransform?.clone() ?? new ColorTransform();
@@ -381,6 +529,7 @@ export class Transform {
     if (c == null) throw nullParam("colorTransform");
     this.o.$colorTransform = c.clone();
     this.o.$alpha = c.alphaMultiplier;
+    touch(this.o, true);
   }
   get concatenatedMatrix(): Matrix { const m = this.o.$globalMatrix(); return new Matrix(m[0], m[1], m[2], m[3], m[4], m[5]); }
   get concatenatedColorTransform(): ColorTransform {
@@ -441,6 +590,7 @@ export class DisplayObjectContainer extends InteractiveObject {
     // Flash checks the index against numChildren before taking an existing child out, so
     // addChildAt(existingChild, numChildren) is allowed and moves it to the top (the yard planner does it).
     if (index < 0 || index > this.$children.length) throw rangeError(2006, "The supplied index is out of bounds.");
+    touch(this);
     if (child.$parent === this) {
       const i = this.$children.indexOf(child);
       this.$children.splice(i, 1);
@@ -451,6 +601,7 @@ export class DisplayObjectContainer extends InteractiveObject {
     if (child.$parent) child.$parent.$detach(child);
     this.$children.splice(index, 0, child);
     child.$parent = this;
+    if (ioUpright.k !== 1) child.$matrixCache = null;
     child.dispatchEvent(new Event(Event.ADDED, true));
     if (this.stage) dispatchStageEvent(child, Event.ADDED_TO_STAGE);
     return child;
@@ -473,6 +624,8 @@ export class DisplayObjectContainer extends InteractiveObject {
     const i = this.$children.indexOf(child);
     if (i >= 0) this.$children.splice(i, 1);
     child.$parent = null;
+    if (ioUpright.k !== 1) child.$matrixCache = null;
+    touch(this);
     return child;
   }
   removeChildren(begin: number = 0, end: number = 2147483647): void {
@@ -502,14 +655,17 @@ export class DisplayObjectContainer extends InteractiveObject {
     if (index < 0 || index >= this.$children.length) throw rangeError(2006, "The supplied index is out of bounds.");
     this.$children.splice(i, 1);
     this.$children.splice(index, 0, child);
+    touch(this);
   }
   swapChildren(a: DisplayObject, b: DisplayObject): void {
     const i = this.getChildIndex(a), j = this.getChildIndex(b);
     this.$children[i] = b; this.$children[j] = a;
+    touch(this);
   }
   swapChildrenAt(i: number, j: number): void {
     const a = this.getChildAt(i), b = this.getChildAt(j);
     this.$children[i] = b; this.$children[j] = a;
+    touch(this);
   }
   contains(child: DisplayObject): boolean {
     for (let o: DisplayObject | null = child; o; o = o.$parent) if (o === this) return true;
@@ -536,9 +692,11 @@ flashClass(DisplayObjectContainer, "flash.display.DisplayObjectContainer");
  * instead of walking the whole display list every frame.
  */
 export const activeClips = new Set<MovieClip>();
+/** A clip with frames to play: one frame (most of them: 4,000 of the map room's 4,300) never changes. */
+export function animates(mc: MovieClip): boolean { return mc.$p && !!mc.$timeline && mc.$timeline.totalFrames > 1; }
 export function trackStage(o: DisplayObject, onStage: boolean): void {
   if (o instanceof MovieClip) {
-    if (onStage && o.$p) activeClips.add(o);
+    if (onStage && animates(o)) activeClips.add(o);
     else activeClips.delete(o);
   }
 }
@@ -546,7 +704,9 @@ export function trackStage(o: DisplayObject, onStage: boolean): void {
 /** ADDED_TO_STAGE / REMOVED_FROM_STAGE go to the object and then every descendant. */
 function dispatchStageEvent(o: DisplayObject, type: string): void {
   trackStage(o, type === Event.ADDED_TO_STAGE);
-  o.dispatchEvent(new Event(type));
+  // (21 October: only to an object listening for it, unless something listens in the capture phase: a map's 224
+  // cells, each 30 objects, made an event and walked their parents for every one)
+  if (o.$listeners?.get(type)?.length || anyCaptureListeners(type)) o.dispatchEvent(new Event(type));
   if (o instanceof DisplayObjectContainer) for (const c of o.$children.slice()) dispatchStageEvent(c, type);
 }
 
@@ -627,7 +787,7 @@ export class MovieClip extends Sprite {
   set $playing(v: boolean) {
     this.$p = v;
     if (!v) activeClips.delete(this);
-    else if (this.stage) activeClips.add(this);
+    else if (this.$timeline && this.$timeline.totalFrames > 1 && this.stage) activeClips.add(this);
   }
   declare $timeline: any;
   declare $frameScripts: (Function | null)[];
@@ -747,8 +907,8 @@ export class Bitmap extends DisplayObject {
     this.$pixelSnapping = "auto";
   }
   get bitmapData(): BitmapData | null { return this.$bitmapData; }
-  set bitmapData(v: BitmapData | null) { this.$bitmapData = v; trackBig(v); }
-  get smoothing(): boolean { return this.$smoothing; } set smoothing(v: boolean) { this.$smoothing = !!v; }
+  set bitmapData(v: BitmapData | null) { this.$bitmapData = v; trackBig(v); touch(this); }
+  get smoothing(): boolean { return this.$smoothing; } set smoothing(v: boolean) { this.$smoothing = !!v; touch(this); }
   get pixelSnapping(): string { return this.$pixelSnapping; } set pixelSnapping(v: string) { this.$pixelSnapping = v; }
   $selfBounds(): Rectangle | null {
     const b = this.$bitmapData;
@@ -758,22 +918,63 @@ export class Bitmap extends DisplayObject {
     const b = this.$bitmapData;
     return !!b && !b.$disposed && lx >= 0 && ly >= 0 && lx < b.$w && ly < b.$h;
   }
-  $drawSelf(ctx: CanvasRenderingContext2D, m: M6, alpha: number): void {
+  /** (19 October) Can be drawn a rectangle's piece at a time (drawPrefix): a big one, upright. */
+  $clipsItself(m: M6): boolean {
     const b = this.$bitmapData;
-    if (!b || b.$disposed || player.debug.noBitmaps) return;
+    return !!b && !b.$disposed && m[1] === 0 && m[2] === 0 && m[0] > 0 && m[3] > 0 && b.$w * b.$h > 262144;
+  }
+  /** The piece of it under the canvas rectangle r (a margin round it), with matrix m (drawPrefix: clipped to r). */
+  /** (21 October) Left see-through in the game's own canvas: the graphics card's canvas under it shows (player.glDirect). */
+  $ioPunch(ctx: CanvasRenderingContext2D, m: M6, alpha: number): boolean {
+    const b = this.$bitmapData as any;
+    if (!b || !b.$ioHole || ctx !== player.mainCtx || alpha < 0.999) return false;
+    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, b.$w, b.$h);
+    return true;
+  }
+  $drawPiece(ctx: CanvasRenderingContext2D, m: M6, alpha: number, r: Box): void {
+    const b = this.$bitmapData!;
+    if (player.debug.noBitmaps) return;
+    if (this.$ioPunch(ctx, m, alpha)) return;
     ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
     ctx.globalAlpha = alpha;
     ctx.imageSmoothingEnabled = this.$smoothing;
+    const mx = Math.ceil(4 / m[0]) + 2, my = Math.ceil(4 / m[3]) + 2;
+    const sx0 = Math.max(0, Math.floor((r[0] - m[4]) / m[0]) - mx), sy0 = Math.max(0, Math.floor((r[1] - m[5]) / m[3]) - my);
+    const sx1 = Math.min(b.$w, Math.ceil((r[2] - m[4]) / m[0]) + mx), sy1 = Math.min(b.$h, Math.ceil((r[3] - m[5]) / m[3]) + my);
+    if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(b.$canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, sx0, sy0, sx1 - sx0, sy1 - sy0);
+    ctx.globalAlpha = 1;
+  }
+  $drawSelf(ctx: CanvasRenderingContext2D, m: M6, alpha: number): void {
+    const b = this.$bitmapData;
+    if (!b || b.$disposed || player.debug.noBitmaps) return;
+    if (this.$ioPunch(ctx, m, alpha)) return;
+    ctx.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = this.$smoothing;
+
     // A big bitmap (the yard, 4000 x 2000) drawn upright: only the part that can show, the redrawn
     // rectangles or the target's size, plus a margin (fps pass, 4 October). Same place, same scale.
     if (m[1] === 0 && m[2] === 0 && m[0] > 0 && m[3] > 0 && b.$w * b.$h > 262144) {
+      // (the margin: at least 4 target pixels, so smoothing at the cut edge never reaches what shows)
+      const mx = Math.ceil(4 / m[0]) + 2, my = Math.ceil(4 / m[3]) + 2;
+      // Several rectangles spread over the screen: each one's own part, rather than the box round them all
+      // through a clip of many rectangles (in a busy yard that box is most of the screen, drawn every frame).
+      if (cullRects && cullRects.length > 1 && cullRects.length <= 64) {
+        for (const r of cullRects) {
+          const sx0 = Math.max(0, Math.floor((r[0] - m[4]) / m[0]) - mx), sy0 = Math.max(0, Math.floor((r[1] - m[5]) / m[3]) - my);
+          const sx1 = Math.min(b.$w, Math.ceil((r[2] - m[4]) / m[0]) + mx), sy1 = Math.min(b.$h, Math.ceil((r[3] - m[5]) / m[3]) + my);
+          if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(b.$canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, sx0, sy0, sx1 - sx0, sy1 - sy0);
+        }
+        ctx.globalAlpha = 1;
+        return;
+      }
       let vx0 = 0, vy0 = 0, vx1 = ctx.canvas.width, vy1 = ctx.canvas.height;
       if (cullRects && cullRects.length) {
         vx0 = Infinity; vy0 = Infinity; vx1 = -Infinity; vy1 = -Infinity;
         for (const r of cullRects) { if (r[0] < vx0) vx0 = r[0]; if (r[1] < vy0) vy0 = r[1]; if (r[2] > vx1) vx1 = r[2]; if (r[3] > vy1) vy1 = r[3]; }
       }
-      // (the margin: at least 4 target pixels, so smoothing at the cut edge never reaches what shows)
-      const mx = Math.ceil(4 / m[0]) + 2, my = Math.ceil(4 / m[3]) + 2;
       const sx0 = Math.max(0, Math.floor((vx0 - m[4]) / m[0]) - mx), sy0 = Math.max(0, Math.floor((vy0 - m[5]) / m[3]) - my);
       const sx1 = Math.min(b.$w, Math.ceil((vx1 - m[4]) / m[0]) + mx), sy1 = Math.min(b.$h, Math.ceil((vy1 - m[5]) / m[3]) + my);
       if (sx1 > sx0 && sy1 > sy0) ctx.drawImage(b.$canvas, sx0, sy0, sx1 - sx0, sy1 - sy0, sx0, sy0, sx1 - sx0, sy1 - sy0);
@@ -788,21 +989,29 @@ flashClass(Bitmap, "flash.display.Bitmap");
 
 export class SimpleButton extends InteractiveObject {
   declare $up: DisplayObject | null; declare $over: DisplayObject | null; declare $down: DisplayObject | null; declare $hit: DisplayObject | null;
-  declare $state: "up" | "over" | "down";
+  declare $st: "up" | "over" | "down";
+  get $state(): "up" | "over" | "down" { return this.$st; }
+  set $state(v: "up" | "over" | "down") { if (v !== this.$st) { this.$st = v; touch(this); } }
   declare $enabled: boolean; declare $useHandCursor: boolean; declare $trackAsMenu: boolean;
   $ctor(upState: DisplayObject = null, overState: DisplayObject = null, downState: DisplayObject = null, hitTestState: DisplayObject = null): void {
     super.$ctor();
     this.$up = upState; this.$over = overState; this.$down = downState; this.$hit = hitTestState;
+    this.$adopt();
+  }
+  /** Its states have no parent: a change inside one marks the button (touch). */
+  $adopt(): void {
+    for (const c of [this.$up, this.$over, this.$down, this.$hit]) if (c) (c as any).$btn = this;
+    touch(this);
   }
   $alloc(): void {
     super.$alloc();
     this.$up = this.$over = this.$down = this.$hit = null;
-    this.$state = "up"; this.$enabled = true; this.$useHandCursor = true; this.$trackAsMenu = false;
+    this.$st = "up"; this.$enabled = true; this.$useHandCursor = true; this.$trackAsMenu = false;
   }
-  get upState(): DisplayObject | null { return this.$up; } set upState(v: DisplayObject | null) { this.$up = v; }
-  get overState(): DisplayObject | null { return this.$over; } set overState(v: DisplayObject | null) { this.$over = v; }
-  get downState(): DisplayObject | null { return this.$down; } set downState(v: DisplayObject | null) { this.$down = v; }
-  get hitTestState(): DisplayObject | null { return this.$hit; } set hitTestState(v: DisplayObject | null) { this.$hit = v; }
+  get upState(): DisplayObject | null { return this.$up; } set upState(v: DisplayObject | null) { this.$up = v; this.$adopt(); }
+  get overState(): DisplayObject | null { return this.$over; } set overState(v: DisplayObject | null) { this.$over = v; this.$adopt(); }
+  get downState(): DisplayObject | null { return this.$down; } set downState(v: DisplayObject | null) { this.$down = v; this.$adopt(); }
+  get hitTestState(): DisplayObject | null { return this.$hit; } set hitTestState(v: DisplayObject | null) { this.$hit = v; this.$adopt(); }
   get enabled(): boolean { return this.$enabled; } set enabled(v: boolean) { this.$enabled = !!v; }
   get useHandCursor(): boolean { return this.$useHandCursor; } set useHandCursor(v: boolean) { this.$useHandCursor = !!v; }
   get trackAsMenu(): boolean { return this.$trackAsMenu; } set trackAsMenu(v: boolean) { this.$trackAsMenu = !!v; }
@@ -990,12 +1199,25 @@ flashClass(Loader, "flash.display.Loader");
  */
 export function renderObject(ctx: CanvasRenderingContext2D, o: DisplayObject, pm: M6, palpha: number, forceMask = false): void {
   if (!o.$visible && !forceMask) return;
+  // (drawn already, before the clip of the rectangles: drawPrefix)
+  if (o === prefixDone && cullRects && !forceMask) return;
   if (o.$maskOwner && !forceMask) return;
   const alpha = palpha * o.$alpha;
   if (alpha <= 0 && !forceMask) return;
-  if (cullRects && !forceMask) {
-    const rd: RedrawRec | undefined = (o as any).$rd;
-    if (rd && (!rd.box || !hitsCull(rd.box))) return;
+  const rd: RedrawRec | undefined = cullRects && !forceMask ? (o as any).$rd : undefined;
+  // (an occluder reached: what is drawn from here on is over it)
+  if (drawOccN && (o as any).$ioOcc && cullRects && !forceMask) reachDrawOcc(o);
+  if (rd) {
+    if (!rd.box || !hitsCull(rd.box)) return;
+    // (19 October: where it is to be drawn again, a window drawn after it hides it (DisplayObject.ioOccludes): not drawn.
+    // A hover in a window over a live yard drew the yard's picture under it again too, scaled from the whole yard,
+    // the most of the Brimstone Pit's drawing)
+    if (drawOccN && !drawOccAnc.has(o) && hiddenByOcc(rd.box)) return;
+    // (outside the mask or scroll rectangle of what holds it: nothing of it shows; a dragged map's 224 cells were all
+    // drawn, most of them clipped away)
+    const c = cullClip, b = rd.box;
+    // (2 px of slack: a clip's anti-aliased edge reaches past its box)
+    if (c && (b[0] >= c[2] + 2 || b[2] <= c[0] - 2 || b[1] >= c[3] + 2 || b[3] <= c[1] - 2)) return;
   }
   const m = mul(pm, ...o.$matrix());
   let clipped = false;
@@ -1012,6 +1234,9 @@ export function renderObject(ctx: CanvasRenderingContext2D, o: DisplayObject, pm
   }
   const ct = o.$colorTransform;
   const tinted = ct && !ct.$isAlphaOnly;
+  const outerClip = cullClip;
+  if (rd && rd.clip) cullClip = outerClip ? clipBox(rd.clip, outerClip) ?? NOWHERE : rd.clip;
+  try {
   if (!player.debug.noFilters && (tinted || o.$filters.length || (o.$blendMode !== "normal" && o.$blendMode !== "layer"))) {
     renderWithEffects(ctx, o, cm, alpha);
   } else if (o.$cacheAsBitmap && !o.$scale9 && !player.debug.noCache && cacheWorthwhile(o) && renderCached(ctx, o, cm, alpha)) {
@@ -1022,6 +1247,7 @@ export function renderObject(ctx: CanvasRenderingContext2D, o: DisplayObject, pm
     o.$drawSelf(ctx, cm, alpha);
     if (o instanceof DisplayObjectContainer) renderChildren(ctx, o, cm, alpha);
   }
+  } finally { cullClip = outerClip; }
   if (clipped) ctx.restore();
 }
 
@@ -1037,7 +1263,7 @@ export function renderObject(ctx: CanvasRenderingContext2D, o: DisplayObject, pm
  * (ipNote); apply() puts the noted objects part of the way for one drawing, restore() puts them back at once,
  * so the game never sees an in-between value. Only objects that were on screen at the last drawing are
  * moved (a new one appears where it is), and not one that jumped (more than maxJump: put somewhere else).
- * The yard's own renderer (the game's Renderer.as) does the same for what it draws, through `hook`.
+ * The yard's own renderer (the game's Renderer.ts) does the same for what it draws, through `hook`.
  */
 export const interp = {
   on: false,
@@ -1077,6 +1303,7 @@ export const interp = {
       o.$skewY = s0[5] + angleStep(s0[5], ky) * a;
       o.$alpha = s0[6] + (al - s0[6]) * a;
       o.$matrixCache = null;
+      touch(o);
       this.applied.push(o);
     }
   },
@@ -1085,6 +1312,7 @@ export const interp = {
       const c = (o as any).$ipCur as number[];
       o.$x = c[0]; o.$y = c[1]; o.$sx = c[2]; o.$sy = c[3]; o.$skewX = c[4]; o.$skewY = c[5]; o.$alpha = c[6]; o.$rotation = c[7];
       o.$matrixCache = null;
+      touch(o);
     }
     this.applied.length = 0;
   },
@@ -1096,12 +1324,22 @@ function angleStep(a: number, b: number): number {
   return d;
 }
 /** Notes o's transform before its first change in this game frame, if it was on screen at the last drawing. */
+/** On screen at the last drawing: compared then, or inside a part stepped over unchanged (touch). */
+function shownLast(o: DisplayObject, rd: RedrawRec): boolean {
+  if (rd.ep === visitEpoch) return true;
+  for (let d = o.$parent; d; d = d.$parent) {
+    const r = (d as any).$rd as RedrawRec | undefined;
+    if (!r) return false;
+    if (r.ep === visitEpoch) return r.skip === visitEpoch;
+  }
+  return false;
+}
 function ipNote(o: DisplayObject): void {
   const r = o as any;
   if (r.$ipT === interp.tick) return;
   r.$ipT = interp.tick;
   const rd = r.$rd as RedrawRec | undefined;
-  if (!rd || rd.ep !== visitEpoch || !rd.box) { r.$ip0 = null; return; }
+  if (!rd || !rd.box || !shownLast(o, rd)) { r.$ip0 = null; return; }
   const s0: number[] = r.$ip0Store || (r.$ip0Store = [0, 0, 0, 0, 0, 0, 0]);
   s0[0] = o.$x; s0[1] = o.$y; s0[2] = o.$sx; s0[3] = o.$sy; s0[4] = o.$skewX; s0[5] = o.$skewY; s0[6] = o.$alpha;
   r.$ip0 = s0;
@@ -1116,22 +1354,213 @@ function ipNote(o: DisplayObject): void {
 // every object whose box misses it. When nothing changed, nothing is drawn.
 
 type Box = [number, number, number, number]; // x0, y0, x1, y1 in canvas pixels
-interface RedrawRec { own: number; m: M6; box: Box | null; ownBox: Box | null; kids: DisplayObject[] | null; clean: boolean; bv?: number; ep?: number; }
-/** Counts the drawings (redrawRegions); a record's ep says which one last saw its object (interp). */
-let visitEpoch = 0;
+interface RedrawRec { own: number; m: M6; box: Box | null; ownBox: Box | null; kids: DisplayObject[] | null; clean: boolean; bv?: number; ep?: number; skip?: number; clip?: Box | null; }
 let cullRects: Box[] | null = null;
 let damage: Box[] = [];
 /** Strips a big bitmap had drawn again quietly (BitmapData.$noteSwept): repainted, kept apart from damage. */
 let sweptDamage: Box[] = [];
+/**
+ * While the content of a container with a scrollRect or a mask is visited: the screen box it can show in. Damage
+ * inside is clipped to it (7 October: a world moving inside the arcade's masked game area counted its whole size,
+ * most of the screen, as damaged every frame, so everything was drawn again).
+ */
+let damageClip: Box | null = null;
+function clipBox(b: Box | null, c: Box | null): Box | null {
+  if (!b || !c) return b;
+  const r: Box = [Math.max(b[0], c[0]), Math.max(b[1], c[1]), Math.min(b[2], c[2]), Math.min(b[3], c[3])];
+  return r[2] > r[0] && r[3] > r[1] ? r : null;
+}
+/** Changes seen this visit, kept or clipped away (a record is "clean" only if none happened inside it). */
+let damageSeen = 0;
+function pushDamage(b: Box | null, uncut = false): void {
+  if (b) damageSeen++;
+  const c = damageClip ? clipBox(b, damageClip) : b;
+  if (!c) return;
+  // (on a window already reached: drawn over it, so it shows there)
+  for (const f of frameOcc) if (!f.pending) { const o = clipBox(c, f.box); if (o) f.over = unionBox(f.over, o); }
+  // (13 October: `uncut`, a child gone or moved in its parent's order, whose place among the windows is not known: it
+  // may have been over one (a menu over Who's Online), and what it covered must be drawn again, the window too)
+  if (pendingOcc.length && !uncut) { for (const p of hiddenCut(c)) damage.push(p); return; }
+  damage.push(c);
+}
+
+// ---- occluders (DisplayObject.ioOccludes): opaque rectangles over what is drawn before them
+const occluders = new Set<DisplayObject>();
+/** This frame's occluders not visited yet (so above the object being visited), with their screen boxes. */
+let pendingOcc: { o: DisplayObject; box: Box }[] = [];
+/** All of this frame's occluders: still to be reached or not, and what changed on top of each once reached. */
+let frameOcc: { o: DisplayObject; box: Box; pending: boolean; over: Box | null }[] = [];
+function collectOccluders(base: M6): void {
+  pendingOcc = [];
+  if (player.debug.noOccluders) return;
+  for (const o of occluders) {
+    const r: Rectangle | null = (o as any).$ioOcc;
+    // (13 October) a window closed (off the stage) is let go, so closed windows are not kept for the whole session;
+    // one put back on the stage joins again when it is next visited (visitRedraw)
+    if (!r || !o.stage) { occluders.delete(o); continue; }
+    let ok = true;
+    for (let d: DisplayObject | null = o; d; d = d.$parent) {
+      if (!d.$visible || d.$alpha < 0.999 || d.$mask || d.$scrollRect || d.$maskOwner || (d.$blendMode !== "normal" && d.$blendMode !== "layer")) { ok = false; break; }
+    }
+    if (!ok) continue;
+    const m = mul(base, ...o.$globalMatrix());
+    if (Math.abs(m[1]) > 1e-6 || Math.abs(m[2]) > 1e-6) continue; // (turned: its box is not the rectangle)
+    const b = toBox(boundsOf(r, m));
+    // (1 px in from its edges: anti-aliasing)
+    if (b && b[2] - b[0] > 4 && b[3] - b[1] > 4) pendingOcc.push({ o, box: [b[0] + 1, b[1] + 1, b[2] - 1, b[3] - 1] });
+  }
+  frameOcc = pendingOcc.map((p) => ({ o: p.o, box: p.box, pending: true, over: null }));
+}
+/**
+ * b less what the occluders above it hide: the parts still seen (none when all of it is hidden; up to four bands round
+ * an occluder in its middle: a change over the whole yard, under a window, is drawn again only round the window).
+ */
+/**
+ * The occluders at or inside o reached (13 October): what is drawn after them is over them. Called for o visited, and
+ * for o stepped over unchanged (visitRedraw's skip): a window that did not change was never visited, and stayed
+ * "above" everything drawn after it, so a message or a second window opened over a still window was not drawn there.
+ */
+function reachOccluders(o: DisplayObject): void {
+  const inside = (p: DisplayObject): boolean => { for (let d: DisplayObject | null = p; d; d = d.$parent) if (d === o) return true; return false; };
+  const reached = pendingOcc.filter((p) => inside(p.o));
+  if (!reached.length) return;
+  pendingOcc = pendingOcc.filter((p) => !reached.includes(p));
+  for (const f of frameOcc) if (reached.some((p) => p.o === f.o)) f.pending = false;
+}
+function hiddenCut(b: Box): Box[] {
+  return cutBy(b, pendingOcc.map((p) => p.box));
+}
+function cutBy(b: Box, hide: Box[]): Box[] {
+  let parts: Box[] = [b];
+  for (const h of hide) {
+    const next: Box[] = [];
+    for (const c of parts) {
+      if (h[0] >= c[2] || h[2] <= c[0] || h[1] >= c[3] || h[3] <= c[1]) { next.push(c); continue; }
+      // above, below, then left and right of it in the rows between
+      if (h[1] > c[1]) next.push([c[0], c[1], c[2], h[1]]);
+      if (h[3] < c[3]) next.push([c[0], h[3], c[2], c[3]]);
+      const y0 = Math.max(c[1], h[1]), y1 = Math.min(c[3], h[3]);
+      if (h[0] > c[0]) next.push([c[0], y0, h[0], y1]);
+      if (h[2] < c[2]) next.push([h[2], y0, c[2], y1]);
+    }
+    parts = next;
+    if (!parts.length) break;
+  }
+  return parts;
+}
+const NOWHERE: Box = [0, 0, 0, 0];
+/** The screen box a container's content can show in (its scrollRect and its mask), or null for anywhere. */
+function ownClip(o: DisplayObject, m: M6): Box | null {
+  let c: Box | null = null;
+  const sr = o.$scrollRect;
+  if (sr) c = toBox(boundsOf(new Rectangle(0, 0, sr.width, sr.height), m)) ?? NOWHERE;
+  const mk = o.$mask;
+  if (mk && mk.$maskOwner === o) {
+    const mm = mul(mul(m, ...invert(o.$globalMatrix())), ...mk.$globalMatrix());
+    const mb = toBox(mk.$boundsIn(mm, true)) ?? NOWHERE;
+    c = c ? clipBox(c, mb) ?? NOWHERE : mb;
+  }
+  return c;
+}
+
+// ---- (19 October) occluders while drawing: what is drawn before a window, where the window hides it, is left out
+/** This drawing's occluders (redrawRegions' list), whether each is still ahead in the drawing order; their parents. */
+let drawOcc: { o: DisplayObject; box: Box; ahead: boolean }[] = [];
+let drawOccN = 0;
+let drawOccAnc = new Set<DisplayObject>();
+function setDrawOcc(list: { o: DisplayObject; box: Box }[]): void {
+  drawOcc = player.debug.noOccluders ? [] : list.map((f) => ({ o: f.o, box: f.box, ahead: true }));
+  drawOccN = drawOcc.length;
+  drawOccAnc = new Set();
+  for (const f of drawOcc) for (let d: DisplayObject | null = f.o.$parent; d; d = d.$parent) drawOccAnc.add(d);
+}
+/** The occluders all ahead again: a drawing in parts goes through the display list once for each part. */
+export function rearmDrawOcc(): void {
+  for (const f of drawOcc) f.ahead = true;
+  drawOccN = drawOcc.length;
+}
+/** All of r (canvas pixels) inside one of this drawing's occluders. */
+export function occludedRect(r: Box): boolean {
+  for (const f of drawOcc) if (r[0] >= f.box[0] && r[1] >= f.box[1] && r[2] <= f.box[2] && r[3] <= f.box[3]) return true;
+  return false;
+}
+function reachDrawOcc(o: DisplayObject): void {
+  for (const f of drawOcc) if (f.ahead && f.o === o) { f.ahead = false; drawOccN--; }
+}
+/** Every part of b to be drawn again (b in the cull rectangles, with their slack) lies inside an occluder still ahead. */
+function hiddenByOcc(b: Box): boolean {
+  let any = false;
+  for (const r of cullRects!) {
+    const x0 = Math.max(b[0], r[0] - 2), y0 = Math.max(b[1], r[1] - 2), x1 = Math.min(b[2], r[2] + 2), y1 = Math.min(b[3], r[3] + 2);
+    if (x1 <= x0 || y1 <= y0) continue;
+    any = true;
+    let inside = false;
+    for (const f of drawOcc) if (f.ahead && x0 >= f.box[0] && y0 >= f.box[1] && x1 <= f.box[2] && y1 <= f.box[3]) { inside = true; break; }
+    if (!inside) return false;
+  }
+  return any;
+}
+
+// ---- (19 October) the yard's picture first, outside the clip of all the rectangles
+// A partial redraw of several rectangles draws through one clip of them all, and the browser masks every picture drawn
+// through such a clip: each piece of the yard's 4000 x 2000 picture under 20 ember squares in the Brimstone Pit cost
+// 70 µs, the most of its drawing. When that picture is the first thing drawn in every rectangle (nothing but the
+// background under it, reached through plain containers), its pieces are drawn first, each through a clip of its own
+// rectangle alone (for nothing), and everything else after it through the clip of them all, as before.
+let prefixDone: DisplayObject | null = null;
+function plainForPrefix(o: DisplayObject): boolean {
+  const ct = o.$colorTransform;
+  return o.$alpha >= 0.999 && !o.$filters.length && (!ct || ct.$isAlphaOnly && ct.alphaMultiplier >= 0.999 && !ct.alphaOffset) && (o.$blendMode === "normal" || o.$blendMode === "layer") && !o.$mask && !o.$scrollRect && !o.$cacheAsBitmap && !o.$scale9 && !o.$clipDepth;
+}
+/** The big picture drawn first: a Bitmap ($clipsItself), null nothing drawn in the subtree, false something else first. */
+function firstDrawn(o: DisplayObject): Bitmap | null | false {
+  if (!o.$visible || o.$alpha <= 0 || o.$maskOwner) return null;
+  const rd = (o as any).$rd as RedrawRec | undefined;
+  if (!rd || !rd.box) return rd ? null : false;
+  if (!hitsCull(rd.box)) return null;
+  if (!plainForPrefix(o)) return false;
+  if (o instanceof Bitmap) return o.$clipsItself(rd.m) ? o : false;
+  if (!(o instanceof DisplayObjectContainer)) return false;
+  const g = (o as any).$graphics;
+  if (g && !g.$isEmpty && (!rd.ownBox || hitsCull(rd.ownBox))) return false;
+  for (const k of o.$children) {
+    if (k.$clipDepth > 0) return false;
+    const r = firstDrawn(k);
+    if (r !== null) return r;
+  }
+  return null;
+}
+/** With the cull rectangles set: the picture to draw first, or null (none: drawn as before). */
+export function findPrefix(root: DisplayObjectContainer): Bitmap | null {
+  if (!cullRects || player.debug.noPrefix) return null;
+  return firstDrawn(root) || null;
+}
+/** Its pieces, each clipped to its rectangle alone (none where a window drawn later hides all of the rectangle). */
+export function drawPrefix(ctx: CanvasRenderingContext2D, o: Bitmap): void {
+  const rd = (o as any).$rd as RedrawRec;
+  for (const r of cullRects!) {
+    let hidden = false;
+    for (const f of drawOcc) if (r[0] >= f.box[0] && r[1] >= f.box[1] && r[2] <= f.box[2] && r[3] <= f.box[3]) { hidden = true; break; }
+    if (hidden) continue;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(r[0], r[1], r[2] - r[0], r[3] - r[1]); ctx.clip();
+    o.$drawPiece(ctx, rd.m, o.$alpha, r);
+    ctx.restore();
+  }
+  prefixDone = o;
+}
+export function endPrefix(): void { prefixDone = null; }
 
 function hitsCull(b: Box): boolean {
-  for (const r of cullRects!) if (b[0] < r[2] && b[2] > r[0] && b[1] < r[3] && b[3] > r[1]) return true;
+  // (2 px of slack: an edge on a box's border is anti-aliased into the pixel past it; a box ending on row 38 left a
+  // redrawn rectangle starting there without the shade of that row)
+  for (const r of cullRects!) if (b[0] < r[2] + 2 && b[2] > r[0] - 2 && b[1] < r[3] + 2 && b[3] > r[1] - 2) return true;
   return false;
 }
 function withoutCull<T>(fn: () => T): T {
-  const saved = cullRects;
-  cullRects = null;
-  try { return fn(); } finally { cullRects = saved; }
+  const saved = cullRects, savedClip = cullClip;
+  cullRects = null; cullClip = null;
+  try { return fn(); } finally { cullRects = saved; cullClip = savedClip; }
 }
 function toBox(r: Rectangle | null): Box | null {
   return r && r.width > 0 && r.height > 0 ? [r.x, r.y, r.x + r.width, r.y + r.height] : null;
@@ -1197,20 +1626,28 @@ function shiftBox(b: Box | null, dx: number, dy: number): Box | null {
   return b && [b[0] + dx, b[1] + dy, b[2] + dx, b[3] + dy];
 }
 
-function visitRedraw(o: DisplayObject, m: M6, record: boolean): Box | null {
+function visitRedraw(o: DisplayObject, m: M6, record: boolean, cur: boolean): Box | null {
   let rd: RedrawRec | undefined = (o as any).$rd;
-  if (o.$maskOwner) return null; // masks are not drawn; their changes show in the owner's signature
+  // (an occluder reached: what comes from here on is drawn over it, not hidden by it)
+  if ((o as any).$ioOcc) {
+    if (!occluders.has(o)) occluders.add(o);
+    if (pendingOcc.length) reachOccluders(o);
+  }
+  if (o.$maskOwner) { if (rd) rd.box = null; return null; } // masks are not drawn; their changes show in the owner's signature
   const own = ownSig(o);
+  player.debug.walk.visited++;
   // a pure move (same appearance, same scale/rotation): recorded boxes can be shifted, not recomputed
   const pm = rd?.m;
   const moved = !!rd && rd.own === own && !!pm && pm[0] === m[0] && pm[1] === m[1] && pm[2] === m[2] && pm[3] === m[3];
   const mdx = moved ? m[4] - pm![4] : 0, mdy = moved ? m[5] - pm![5] : 0;
   if (!record && (!rd || rd.own !== own || !sameMatrix(rd.m, m))) {
-    if (rd) damage.push(...(rd.box ? [rd.box] : []));
-    const b = visitRedraw(o, m, true);
-    if (b) damage.push(b);
+    // (why, for the damage log: taken before the visit below records the new look)
+    const why = !rd ? "new" : rd.own !== own ? "look" : "moved";
+    if (rd) pushDamage(rd.box);
+    const b = visitRedraw(o, m, true, false);
+    pushDamage(b);
     // (__player.debug.damageLog = []: what was drawn again, and why; a test tool)
-    if (player.debug.damageLog && b) player.debug.damageLog.push([damageName(o), b.map(Math.round), !rd ? "new" : rd.own !== own ? "look" : "moved"]);
+    if (player.debug.damageLog && b) player.debug.damageLog.push([damageName(o), b.map(Math.round), why]);
     return b;
   }
   // A big bitmap drawn in the same place whose pixels changed in places: only those places are damaged.
@@ -1219,14 +1656,14 @@ function visitRedraw(o: DisplayObject, m: M6, record: boolean): Box | null {
   if (!record && rd && tb && tb.$track && rd.bv !== tb.$version) {
     bmChanged = true;
     const boxes = rd.bv === undefined ? null : tb.$dirtySince(rd.bv);
-    if (!boxes) { if (rd.box) damage.push(rd.box); }
+    if (!boxes) { if (rd.box) { pushDamage(rd.box); if (player.debug.damageLog) player.debug.damageLog.push([damageName(o), rd.box.map(Math.round), "all pixels"]); } }
     else if (rd.box) {
       for (const b of boxes) {
         const s = toBox(boundsOf(new Rectangle(b[0], b[1], b[2] - b[0], b[3] - b[1]), m));
         if (!s) continue;
         const x0 = Math.max(s[0], rd.box[0]), y0 = Math.max(s[1], rd.box[1]), x1 = Math.min(s[2], rd.box[2]), y1 = Math.min(s[3], rd.box[3]);
         if (x1 > x0 && y1 > y0) {
-          damage.push([x0, y0, x1, y1]);
+          pushDamage([x0, y0, x1, y1]);
           if (player.debug.damageLog) player.debug.damageLog.push([damageName(o), [x0, y0, x1, y1].map(Math.round), "pixels"]);
         }
       }
@@ -1240,15 +1677,16 @@ function visitRedraw(o: DisplayObject, m: M6, record: boolean): Box | null {
         const sb = toBox(boundsOf(new Rectangle(l[i], l[i + 1], l[i + 2] - l[i], l[i + 3] - l[i + 1]), m));
         if (!sb) continue;
         const x0 = Math.max(sb[0], rd.box[0]), y0 = Math.max(sb[1], rd.box[1]), x1 = Math.min(sb[2], rd.box[2]), y1 = Math.min(sb[3], rd.box[3]);
-        if (x1 > x0 && y1 > y0) sweptDamage.push([x0, y0, x1, y1]);
+        // (what an occluder above it hides is not repainted either)
+        if (x1 > x0 && y1 > y0) { if (pendingOcc.length) sweptDamage.push(...hiddenCut([x0, y0, x1, y1])); else sweptDamage.push([x0, y0, x1, y1]); }
       }
     }
     l.length = 0;
   }
   if (!rd) { rd = { own, m, box: null, ownBox: null, kids: null, clean: false }; (o as any).$rd = rd; }
   rd.ep = visitEpoch;
-  if (tb) rd.bv = tb.$version;
-  const damageBefore = damage.length;
+  if (tb) { rd.bv = tb.$version; noteShown(tb, o); }
+  const damageBefore = damageSeen;
   rd.own = own; rd.m = m;
   if (!o.$visible || o.$alpha <= 0) { rd.box = null; rd.kids = null; rd.clean = false; return null; }
   if (!(o instanceof DisplayObjectContainer)) {
@@ -1265,30 +1703,75 @@ function visitRedraw(o: DisplayObject, m: M6, record: boolean): Box | null {
     }
   }
   const kids = o.$children;
-  if (!record && rd.kids && !sameKids(rd.kids, kids)) {
+  // (its content's damage clipped to where it can show)
+  const clip = o.$scrollRect || o.$mask ? ownClip(o, m) : null;
+  const outerClip = damageClip;
+  if (clip) damageClip = outerClip ? clipBox(clip, outerClip) ?? NOWHERE : clip;
+  rd.clip = clip;
+  const oldKids = rd.kids, same = !!oldKids && sameKids(oldKids, kids);
+  let was: Set<DisplayObject> | null = null;
+  if (!record && oldKids && !same) {
     const now = new Set(kids);
-    for (const k of rd.kids) if (!now.has(k)) { const kb = (k as any).$rd?.box; if (kb) damage.push(kb); }
-    const before = rd.kids.filter((k) => now.has(k)), was = new Set(rd.kids), after = kids.filter((k) => was.has(k));
-    if (!sameKids(before, after)) for (const k of after) { const kb = (k as any).$rd?.box; if (kb) damage.push(kb); }
+    for (const k of oldKids) if (!now.has(k)) { const kb = (k as any).$rd?.box; if (kb) { pushDamage(kb, true); if (player.debug.damageLog) player.debug.damageLog.push([damageName(k), kb.map(Math.round), "gone"]); } }
+    was = new Set(oldKids);
+    const before = oldKids.filter((k) => now.has(k)), after = kids.filter((k) => was!.has(k));
+    if (!sameKids(before, after)) for (const k of after) { const kb = (k as any).$rd?.box; if (kb) { pushDamage(kb, true); if (player.debug.damageLog) player.debug.damageLog.push([damageName(k), kb.map(Math.round), "order"]); } }
   }
-  if (record || !rd.kids || !sameKids(rd.kids, kids)) rd.kids = kids.slice();
+  if (record || !same) rd.kids = kids.slice();
   const sr = o.$scrollRect;
   const cm = sr ? mul(m, 1, 0, 0, 1, -sr.x, -sr.y) : m;
   let box = rd.ownBox;
+  // (a child drawn last time, unmarked since (touch) and in the same place: its records still hold, stepped over)
+  const canSkip = !record && cur && !player.debug.noSkip;
+  const check = player.debug.skipCheck;
   for (let i = 0; i < kids.length; i++) {
     const k = kids[i];
-    box = unionBox(box, visitRedraw(k, childMatrix(cm, k), record));
+    const km = childMatrix(cm, k);
+    const kcur = canSkip && (same || (!!was && was.has(k)));
+    if (kcur && k.$dk !== visitEpoch) {
+      const kr = (k as any).$rd as RedrawRec | undefined;
+      if (kr && kr.m === km) {
+        kr.ep = visitEpoch; kr.skip = visitEpoch; kr.clean = true;
+        player.debug.walk.skipped++;
+        if (pendingOcc.length) reachOccluders(k);
+        if (check && check.length < 200) { const why = staleIn(k, km); if (why) check.push(why); }
+        box = unionBox(box, kr.box);
+        continue;
+      }
+    }
+    if (player.debug.visitLog && !record && player.debug.visitLog.length < 20000) player.debug.visitLog.push(damageName(k) + (!kcur ? " | not drawn last" : k.$dk === visitEpoch ? " | marked" : !(k as any).$rd ? " | new" : " | moved"));
+    box = unionBox(box, visitRedraw(k, km, record, kcur));
   }
-  if (box && sr) {
-    const clip = toBox(boundsOf(new Rectangle(0, 0, sr.width, sr.height), m));
-    box = clip ? [Math.max(box[0], clip[0]), Math.max(box[1], clip[1]), Math.min(box[2], clip[2]), Math.min(box[3], clip[3])] : box;
-    if (box[2] <= box[0] || box[3] <= box[1]) box = null;
-  }
+  damageClip = outerClip;
+  if (box && clip) box = clipBox(box, clip);
   rd.box = padBox(o, box);
   // "clean": compared (not re-recorded) this frame and nothing inside it changed; a cached layer of it
   // is then still valid without recomputing its content signature
-  rd.clean = !record && damage.length === damageBefore;
+  rd.clean = !record && damageSeen === damageBefore;
   return rd.box;
+}
+/** skipCheck: why a part stepped over had in fact changed (a change that did not call touch), or null. */
+function staleIn(o: DisplayObject, m: M6): string | null {
+  if (o.$maskOwner) return null;
+  const rd = (o as any).$rd as RedrawRec | undefined;
+  if (!rd) return damageName(o) + ": no record";
+  // (hidden: only that it was hidden when compared matters)
+  if (!o.$visible || o.$alpha <= 0) return rd.box ? damageName(o) + ": hidden" : null;
+  if (!sameMatrix(rd.m, m)) return damageName(o) + ": moved";
+  let own = ownSig(o);
+  // (a text field laid out since it was compared: the same look, its version off by the layout alone)
+  if (own !== rd.own && (o as any).$lay) { const l = (o as any).$lay; (o as any).$lay = null; own = ownSig(o); (o as any).$lay = l; }
+  if (own !== rd.own) return damageName(o) + ": look";
+  const tb = (o as any).$bitmapData as BitmapData | null | undefined;
+  if (tb && tb.$track && rd.bv !== tb.$version) return damageName(o) + ": pixels";
+  if (tb && tb.$swept && tb.$swept.length) return damageName(o) + ": swept";
+  if (!o.$visible || o.$alpha <= 0 || !(o instanceof DisplayObjectContainer)) return null;
+  const kids = o.$children;
+  if (!rd.kids || !sameKids(rd.kids, kids)) return damageName(o) + ": children";
+  const sr = o.$scrollRect;
+  const cm = sr ? mul(m, 1, 0, 0, 1, -sr.x, -sr.y) : m;
+  for (const k of kids) { const r = staleIn(k, childMatrix(cm, k)); if (r) return r; }
+  return null;
 }
 function damageName(o: DisplayObject): string {
   const path: string[] = [];
@@ -1310,20 +1793,58 @@ function padBox(o: DisplayObject, b: Box | null): Box | null {
  * the canvas changed).
  */
 export function redrawRegions(root: DisplayObjectContainer, base: M6, width: number, height: number, full: boolean): Box[] | null {
+  for (const h of redrawHooks) h();
   visitEpoch++;
   damage = [];
   sweptDamage = [];
-  visitRedraw(root, base, full);
+  collectOccluders(base);
+  const occ = frameOcc;
+  visitRedraw(root, base, full, !!(root as any).$rd);
+  pendingOcc = [];
+  frameOcc = [];
+  setDrawOcc(occ);
   if (full) return null;
-  const rects = mergeDamage(width, height);
+  let rects = mergeDamage(width, height);
+  // Too much changed to draw it in parts, but windows hide some of the screen: everything round them, and of what is
+  // under them only what changed on them (what is drawn before them was taken out already), not the whole screen
+  // again with the windows on it (12 October: a busy yard drew the whole screen every fourth frame, the Quest Book
+  // with it).
+  let round = false;
+  if (rects === null && occ.length) { rects = roundOccluders(occ, width, height); round = rects !== null; }
+  // (__player.debug.fullWhy = []: why a frame was drawn whole; a test tool)
+  if (rects === null && player.debug.fullWhy) { let a = 0; for (const d of damage) a += (d[2] - d[0]) * (d[3] - d[1]); player.debug.fullWhy.push([damage.length, Math.round(a / (width * height) * 100)]); }
   if (rects === null) return null;
   // the swept strips: added after the merging and the "most of the screen" test, which they would tip
   // into repainting everything (a strip is the width of the yard); they only need repainting
+  // (drawn round the windows: those parts already hold every strip outside them, and one drawn again over them
+  // would draw what is see-through there twice)
+  if (round) return rects;
+  // (less what the other parts already hold: a strip over one of them drew what is see-through there twice, a
+  // darker patch, put right only by the next whole frame; 12 October)
   for (const d of sweptDamage) {
     const r: Box = [Math.max(0, Math.floor(d[0])), Math.max(0, Math.floor(d[1])), Math.min(width, Math.ceil(d[2])), Math.min(height, Math.ceil(d[3]))];
-    if (r[2] > r[0] && r[3] > r[1]) rects.push(r);
+    if (r[2] > r[0] && r[3] > r[1]) for (const p of cutBy(r, rects.slice())) rects.push(p);
   }
   return rects;
+}
+function roundOccluders(occ: { box: Box; over: Box | null }[], width: number, height: number): Box[] | null {
+  // (whole pixels, the same on both sides of every edge: the parts must not overlap, or what is drawn see-through in
+  // two of them is drawn twice, darker; the occluders are 1 px in from their windows' edges already)
+  const R = (b: Box): Box => [Math.max(0, Math.round(b[0])), Math.max(0, Math.round(b[1])), Math.min(width, Math.round(b[2])), Math.min(height, Math.round(b[3]))];
+  const hide = occ.map((f) => R(f.box));
+  const out: Box[] = cutBy([0, 0, width, height], hide);
+  // what changed on top of the windows (drawn after them), inside them: apart from the parts round them
+  occ.forEach((f, i) => { if (f.over) { const o = clipBox([f.over[0] - 2, f.over[1] - 2, f.over[2] + 2, f.over[3] + 2], hide[i]); if (o) out.push(R(o)); } });
+  const rects: Box[] = [];
+  let area = 0;
+  for (const r of out) if (r[2] > r[0] && r[3] > r[1]) { rects.push(r); area += (r[2] - r[0]) * (r[3] - r[1]); }
+  // (two windows over each other: their parts might overlap; then drawn whole, as before)
+  for (let i = 0; i < rects.length; i++) for (let j = i + 1; j < rects.length; j++) {
+    const a = rects[i], b = rects[j];
+    if (a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]) return null;
+  }
+  // (the windows hide little of it: drawn whole, as before)
+  return area > width * height * 0.85 ? null : rects;
 }
 function mergeDamage(width: number, height: number): Box[] | null {
   if (!damage.length) return [];
@@ -1338,11 +1859,17 @@ function mergeDamage(width: number, height: number): Box[] | null {
   // they match: only what changed is drawn, and no frame merges hundreds of boxes pairwise. (They were
   // grouped into one box for each 4 x 4 part of the screen: in a busy yard those covered most of it, so
   // every other frame was drawn whole; fps pass, 4 October.)
+  // (When the tiles cover most of the screen but the changes themselves don't, finer tiles are tried before the
+  // whole screen is drawn: on a slow machine several game frames' changes land in one drawing, and a busy yard's
+  // 50 small changes, 32-pixel tiles each, tipped every frame into a whole-screen redraw, slower still.)
   if (rects.length > 16) {
-    rects = tileRects(rects, width, height, rects.length > 600 ? 64 : 32);
-    let area = 0;
-    for (const r of rects) area += (r[2] - r[0]) * (r[3] - r[1]);
-    return area > width * height * 0.6 ? null : rects;
+    for (let t = rects.length > 600 ? 64 : 32; t >= 16; t /= 2) {
+      const tiled = tileRects(rects, width, height, t);
+      let area = 0;
+      for (const r of tiled) area += (r[2] - r[0]) * (r[3] - r[1]);
+      if (area <= width * height * 0.6) return tiled;
+    }
+    return null;
   }
   // merge overlapping rectangles until no two overlap; too many small ones become one
   let merged = true;
@@ -1396,7 +1923,9 @@ function tileRects(rects: Box[], width: number, height: number, t: number): Box[
   return out;
 }
 /** While set, renderObject skips objects whose recorded box misses these rectangles. */
-export function setCullRects(r: Box[] | null): void { cullRects = r; }
+export function setCullRects(r: Box[] | null): void { cullRects = r; cullClip = null; if (!r) { drawOcc = []; drawOccN = 0; } }
+/** While drawing what a mask or scroll rectangle holds: the screen box it can show in (its record's clip). */
+let cullClip: Box | null = null;
 
 function isScaled(o: DisplayObject): boolean {
   const [a, b, c, d] = o.$matrix();
@@ -1527,6 +2056,33 @@ function renderCached(ctx: CanvasRenderingContext2D, o: DisplayObject, m: M6, al
   return true;
 }
 
+/**
+ * A finished layer put on screen at (x, y): only its parts inside the rectangles being drawn again and the clip
+ * of what holds it (a layer of a chat's 60 lines, a few in view, was copied whole into every frame).
+ */
+function drawLayerParts(ctx: CanvasRenderingContext2D, c: HTMLCanvasElement, x: number, y: number): void {
+  let x0 = x, y0 = y, x1 = x + c.width, y1 = y + c.height;
+  const k = cullClip;
+  if (k) { x0 = Math.max(x0, Math.floor(k[0]) - 2); y0 = Math.max(y0, Math.floor(k[1]) - 2); x1 = Math.min(x1, Math.ceil(k[2]) + 2); y1 = Math.min(y1, Math.ceil(k[3]) + 2); }
+  if (x1 <= x0 || y1 <= y0) return;
+  const rs = cullRects;
+  if (!rs || rs.length > 24) {
+    if (rs) {
+      let ux0 = Infinity, uy0 = Infinity, ux1 = -Infinity, uy1 = -Infinity;
+      for (const r of rs) { if (r[0] < ux0) ux0 = r[0]; if (r[1] < uy0) uy0 = r[1]; if (r[2] > ux1) ux1 = r[2]; if (r[3] > uy1) uy1 = r[3]; }
+      x0 = Math.max(x0, ux0); y0 = Math.max(y0, uy0); x1 = Math.min(x1, ux1); y1 = Math.min(y1, uy1);
+      if (x1 <= x0 || y1 <= y0) return;
+    }
+    if (x0 === x && y0 === y && x1 === x + c.width && y1 === y + c.height) ctx.drawImage(c, x, y);
+    else ctx.drawImage(c, x0 - x, y0 - y, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0);
+    return;
+  }
+  for (const r of rs) {
+    const a0 = Math.max(x0, r[0]), b0 = Math.max(y0, r[1]), a1 = Math.min(x1, r[2]), b1 = Math.min(y1, r[3]);
+    if (a1 > a0 && b1 > b0) ctx.drawImage(c, a0 - x, b0 - y, a1 - a0, b1 - b0, a0, b0, a1 - a0, b1 - b0);
+  }
+}
+
 /** Colour transforms, filters and blend modes: render to a layer, post-process, composite. */
 function renderWithEffects(ctx: CanvasRenderingContext2D, o: DisplayObject, m: M6, alpha: number): void {
   // Reuse the finished layer while nothing in the subtree changed and its scale/rotation is the same.
@@ -1535,18 +2091,28 @@ function renderWithEffects(ctx: CanvasRenderingContext2D, o: DisplayObject, m: M
   const fx = o.$fx;
   const rd: RedrawRec | undefined = (o as any).$rd;
   const vouched = cullRects !== null && rd !== undefined && rd.clean && sameMatrix(rd.m, m);
-  const sig = vouched && fx ? fx.sig : subtreeSig(o, 0x811c9dc5, true);
-  if (fx && fx.sig === sig && fx.a === m[0] && fx.b === m[1] && fx.c === m[2] && fx.d === m[3]) {
+  // (19 October: nothing in it marked changed (touch) since its signature was last taken: the same signature, not walked
+  // again. A pure move of what holds it (a dragged map's 224 cached cells) left none of them "clean", and every cell's
+  // whole content was walked again every frame of the drag)
+  const untouched = cullRects !== null && !!fx && fx.vEp !== undefined && (o.$dk | 0) <= fx.vEp && !player.debug.noTouchSig;
+  const sig = (vouched || untouched) && fx ? fx.sig : subtreeSig(o, 0x811c9dc5, true);
+  // (QoL #242: not one filtered before the page's "Glow effects" switch changed)
+  if (fx && fx.ep === filterSettings.epoch && fx.sig === sig && fx.a === m[0] && fx.b === m[1] && fx.c === m[2] && fx.d === m[3]) {
+    // (__player.debug.fxLog = []: every filtered, tinted or blended draw, its layer's size, reused or rebuilt; a test tool)
+    if (player.debug.fxLog) player.debug.fxLog.push([damageName(o), fx.canvas.width * fx.canvas.height, "reused"]);
+    if (cullRects !== null) fx.vEp = visitEpoch;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = alpha;
     const op = BLEND_OPS[o.$blendMode];
     if (op) ctx.globalCompositeOperation = op;
-    ctx.drawImage(fx.canvas, Math.round(fx.px + m[4] - fx.tx), Math.round(fx.py + m[5] - fx.ty));
+    drawLayerParts(ctx, fx.canvas, Math.round(fx.px + m[4] - fx.tx), Math.round(fx.py + m[5] - fx.ty));
     ctx.restore();
     return;
   }
-  const b = o.$boundsIn(m, true);
+  // (19 October: a text field alone, filtered: only where its text is (TextField.$inkBounds))
+  const ink: Rectangle | null = (o as any).$inkBounds && !(o instanceof DisplayObjectContainer) ? (o as any).$inkBounds(m) : null;
+  const b = ink ? boundsOf(ink, m) : o.$boundsIn(m, true);
   if (!b || b.width <= 0 || b.height <= 0) return;
   let pad = 0;
   for (const f of o.$filters) pad = Math.max(pad, (f.$padding?.() ?? 0) * player.dpr);
@@ -1571,7 +2137,7 @@ function renderWithEffects(ctx: CanvasRenderingContext2D, o: DisplayObject, m: M
   });
   lctx.setTransform(1, 0, 0, 1, 0, 0);
   const ct = o.$colorTransform;
-  if (ct && !ct.$isAlphaOnly) applyColorTransform(lctx, w, h, ct);
+  if (ct && !ct.$isAlphaOnly && !applyColorTransformFast(layer, lctx, w, h, ct)) applyColorTransform(lctx, w, h, ct);
   let src: HTMLCanvasElement = layer;
   for (let i = 0; i < nf; i++) { const f = o.$filters[i]; src = f.$apply?.(src, player.dpr, i === nf - 1 && prev !== layer ? prev : null) ?? src; }
   const px = x0 - (src.width - w) / 2, py = y0 - (src.height - h) / 2;
@@ -1582,12 +2148,101 @@ function renderWithEffects(ctx: CanvasRenderingContext2D, o: DisplayObject, m: M
   if (op) ctx.globalCompositeOperation = op;
   ctx.drawImage(src, Math.round(px), Math.round(py)); // same snapped position as when the layer is reused
   ctx.restore();
-  o.$fx = { sig, a: m[0], b: m[1], c: m[2], d: m[3], canvas: src, px, py, tx: m[4], ty: m[5] };
+  o.$fx = { sig, a: m[0], b: m[1], c: m[2], d: m[3], canvas: src, px, py, tx: m[4], ty: m[5], ep: filterSettings.epoch, vEp: cullRects !== null ? visitEpoch : undefined };
+  if (player.debug.fxLog) player.debug.fxLog.push([damageName(o), w * h, !fx ? "new" : fx.sig !== sig ? "changed" : "scaled"]);
 }
 const BLEND_OPS: Record<string, GlobalCompositeOperation> = {
   multiply: "multiply", screen: "screen", lighten: "lighten", darken: "darken", difference: "difference",
   add: "lighter", overlay: "overlay", hardlight: "hard-light", erase: "destination-out", alpha: "destination-in",
 };
+/**
+ * (21 October) A colour transform done by the browser's own filter (an SVG feColorMatrix, the same sums on the same
+ * unpremultiplied colours) rather than reading every pixel back into script and writing it again: a map's tinted
+ * cells took a third of a second. Not when it adds alpha (the script's way leaves see-through pixels alone), nor where
+ * the browser can't (checked once): false, and the script does it.
+ */
+let ctFilterOk: boolean | null = null;
+let ctSvg: SVGSVGElement | null = null;
+const ctFilterIds = new Map<string, string>();
+let ctScratch: HTMLCanvasElement | null = null;
+function ctFilterFor(ct: ColorTransform): string | null {
+  if (ct.alphaOffset !== 0) return null;
+  const key = `${ct.redMultiplier},${ct.greenMultiplier},${ct.blueMultiplier},${ct.redOffset},${ct.greenOffset},${ct.blueOffset}`;
+  let id = ctFilterIds.get(key);
+  if (id) return `url(#${id})`;
+  if (ctFilterIds.size >= 512 || typeof document === "undefined" || !document.body) return null;
+  const NS = "http://www.w3.org/2000/svg";
+  if (!ctSvg) {
+    ctSvg = document.createElementNS(NS, "svg") as SVGSVGElement;
+    ctSvg.setAttribute("width", "0");
+    ctSvg.setAttribute("height", "0");
+    ctSvg.setAttribute("aria-hidden", "true");
+    ctSvg.style.position = "absolute";
+    ctSvg.style.width = ctSvg.style.height = "0";
+    ctSvg.style.overflow = "hidden";
+    ctSvg.style.pointerEvents = "none";
+    document.body.appendChild(ctSvg);
+  }
+  id = "ioct" + ctFilterIds.size;
+  const f = document.createElementNS(NS, "filter");
+  f.setAttribute("id", id);
+  f.setAttribute("color-interpolation-filters", "sRGB");
+  f.setAttribute("x", "0"); f.setAttribute("y", "0"); f.setAttribute("width", "1"); f.setAttribute("height", "1");
+  f.setAttribute("filterUnits", "objectBoundingBox");
+  const m = document.createElementNS(NS, "feColorMatrix");
+  m.setAttribute("type", "matrix");
+  m.setAttribute("values", `${ct.redMultiplier} 0 0 0 ${ct.redOffset / 255} 0 ${ct.greenMultiplier} 0 0 ${ct.greenOffset / 255} 0 0 ${ct.blueMultiplier} 0 ${ct.blueOffset / 255} 0 0 0 1 0`);
+  f.appendChild(m);
+  ctSvg.appendChild(f);
+  ctFilterIds.set(key, id);
+  return `url(#${id})`;
+}
+function ctFilterWorks(): boolean {
+  if (ctFilterOk !== null) return ctFilterOk;
+  ctFilterOk = false;
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 4;
+    const x = c.getContext("2d", { willReadFrequently: true });
+    if (!x || !("filter" in x)) return false;
+    const t = new ColorTransform(0.5, 1, 1, 1, 0, 40, 0, 0);
+    const url = ctFilterFor(t);
+    if (!url) return false;
+    const src = document.createElement("canvas");
+    src.width = src.height = 4;
+    const sx = src.getContext("2d")!;
+    sx.fillStyle = "rgb(200,100,50)";
+    sx.fillRect(0, 0, 4, 4);
+    x.filter = url;
+    x.drawImage(src, 0, 0);
+    x.filter = "none";
+    const d = x.getImageData(1, 1, 1, 1).data;
+    ctFilterOk = Math.abs(d[0] - 100) <= 2 && Math.abs(d[1] - 140) <= 2 && Math.abs(d[2] - 50) <= 2 && d[3] === 255;
+  } catch (e) {
+    ctFilterOk = false;
+  }
+  return ctFilterOk;
+}
+function applyColorTransformFast(layer: HTMLCanvasElement, ctx: CanvasRenderingContext2D, w: number, h: number, ct: ColorTransform): boolean {
+  if (player.debug.scriptColorTransform || !ctFilterWorks()) return false;
+  const url = ctFilterFor(ct);
+  if (!url) return false;
+  if (!ctScratch) ctScratch = document.createElement("canvas");
+  const sc = ctScratch;
+  if (sc.width < w || sc.height < h) { sc.width = Math.max(sc.width, w); sc.height = Math.max(sc.height, h); }
+  const sx = context2d(sc);
+  sx.setTransform(1, 0, 0, 1, 0, 0);
+  sx.globalAlpha = 1;
+  sx.globalCompositeOperation = "source-over";
+  sx.clearRect(0, 0, w, h);
+  sx.filter = url;
+  sx.drawImage(layer, 0, 0, w, h, 0, 0, w, h);
+  sx.filter = "none";
+  ctx.clearRect(0, 0, w, h);
+  ctx.drawImage(sc, 0, 0, w, h, 0, 0, w, h);
+  player.debug.ctFastCount++;
+  return true;
+}
 function applyColorTransform(ctx: CanvasRenderingContext2D, w: number, h: number, ct: ColorTransform): void {
   const img = ctx.getImageData(0, 0, w, h), d = img.data;
   for (let i = 0; i < d.length; i += 4) {
@@ -1610,6 +2265,30 @@ drawHooks.drawObject = (ctx, obj, matrix, ct) => {
   if (ct) obj.$colorTransform = ct;
   try { renderObject(ctx, obj, base, ct ? 1 : 1, true); }
   finally { obj.$matrixCache = saved; obj.$visible = visible; obj.$colorTransform = prevCt; }
+};
+
+/** The most any filter in o's subtree reaches past what it draws (Infinity when one can't say), and a text field's 2 px. */
+function subtreePad(o: DisplayObject): number {
+  let pad = (o as any).$drawText ? 2 : 0;
+  for (const f of o.$filters) {
+    const p = f.$padding?.();
+    if (typeof p !== "number" || !Number.isFinite(p)) return Infinity;
+    pad = Math.max(pad, p);
+  }
+  if (o instanceof DisplayObjectContainer) for (const c of o.$children) { pad = Math.max(pad, subtreePad(c)); if (pad === Infinity) break; }
+  return pad;
+}
+drawHooks.drawnBounds = (obj, matrix) => {
+  if (!(obj instanceof DisplayObject)) return null;
+  const m: M6 = matrix ? [matrix.a, matrix.b, matrix.c, matrix.d, matrix.tx, matrix.ty] : IDENT;
+  const b = obj.$boundsIn(m, true);
+  if (!b) return new Rectangle(0, 0, 0, 0);
+  const pad = subtreePad(obj);
+  if (pad === Infinity || !Number.isFinite(b.x + b.y + b.width + b.height)) return null;
+  // (room to spare: filters scaled with the drawing, anti-aliasing)
+  const k = Math.max(1, Math.hypot(m[0], m[1]), Math.hypot(m[2], m[3]));
+  const p = pad * k * 2 + 4;
+  return new Rectangle(b.x - p, b.y - p, b.width + 2 * p, b.height + 2 * p);
 };
 
 // ------------------------------------------------------------ mouse picking

@@ -12,6 +12,8 @@ export class GameObject extends EventDispatcher implements IAttackable, IEventDi
     }
 
     protected static readonly k_DOES_PRINT_DETAILED_LOGGING: boolean = true;
+    /** Inferno-only: updateRasterData's rectangle, used again. */
+    private static _ioRect: Rectangle = null;
     public _middle: int;
     private _health: SecNum;
     public _size: int;
@@ -102,7 +104,10 @@ export class GameObject extends EventDispatcher implements IAttackable, IEventDi
     }
 
     public get graphic(): Sprite {
-        return as3.as(this._mc, Sprite);
+        // (Inferno-only, 21 October: asked many times a game step for each of thousands of monsters; a Sprite is the
+        // usual case, answered without as3.as)
+        let mc: any = this._mc;
+        return mc instanceof Sprite ? mc : as3.as(mc, Sprite);
     }
 
     public get x(): number {
@@ -215,29 +220,36 @@ export class GameObject extends EventDispatcher implements IAttackable, IEventDi
         if (!BYMConfig.instance.RENDERER_ON) {
             return;
         }
+        // (Inferno-only, 21 October: nothing added (most monsters): nothing to do, and the yard's view, a rectangle and
+        // the picture's height (its bounds, measured) aren't asked for; the height only when there is no middle)
+        let _loc4_: int = this.m_children ? this.m_children.length | 0 : 0;
+        if (!_loc4_ || !this._mc) {
+            return;
+        }
         let _loc1_: Point = MAP.instance.offset;
-        let _loc2_: Function = as3.bind(MAP.instance.viewRect, MAP.instance.viewRect.intersects);
-        let _loc3_: Rectangle = new Rectangle();
-        let _loc4_: int = this.m_children.length | 0;
+        let view: Rectangle = MAP.instance.viewRect;
+        let _loc3_: Rectangle = GameObject._ioRect || (GameObject._ioRect = new Rectangle());
         if (Boolean(this._mc) && Boolean(_loc4_)) {
-            _loc9_ = this._mc.height * 0.5;
-            if (this._middle) {
-                _loc9_ = this._middle;
-            }
+            _loc9_ = this._middle ? this._middle : this._mc.height * 0.5;
             _loc10_ = this.m_baseDepth + (this._mc.y - _loc1_.y + _loc9_) * 1000 + (this._mc.x - _loc1_.x);
+            // Inferno-only (14 October): a building's added pictures (its alert, its bars) stand on its footprint's
+            // middle on a tilted yard (IoTilt), as its own pictures do
+            let ioSelf: any = this;
+            let ioFoot: number = typeof ioSelf.ioFootMid === "function" ? this._mc.y + ioSelf.ioFootMid() - _loc1_.y : NaN;
             while (_loc12_ < _loc4_) {
                 _loc6_ = (_loc5_ = as3.vget(this.m_children, _loc12_)).m_rasterData;
                 _loc7_ = _loc5_.m_rasterPt;
                 _loc8_ = _loc5_.m_depth;
                 if (Boolean(_loc6_) && Boolean(_loc7_)) {
                     _loc6_.depth = !(!_loc8_) ? _loc10_ + _loc8_ : _loc10_ + _loc12_ + 1;
+                    _loc6_._ioFoot = ioFoot;
                     _loc7_.x = this._mc.x + _loc5_.m_source.x - _loc1_.x;
                     _loc7_.y = this._mc.y + _loc5_.m_source.y - _loc1_.y;
                     _loc3_.x = _loc7_.x;
                     _loc3_.y = _loc7_.y;
                     _loc3_.width = _loc6_.rect.width;
                     _loc3_.height = _loc6_.rect.height;
-                    _loc6_.visible = Boolean(_loc2_(_loc3_) && this._mc.visible);
+                    _loc6_.visible = Boolean(view.intersects(_loc3_) && this._mc.visible);
                     _loc6_.alpha = this._mc.alpha;
                 }
                 _loc12_++;

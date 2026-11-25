@@ -5,6 +5,8 @@ import { requireAllianceMember } from "../../services/alliance/allianceAccess.js
 import { countOtherMembers, removeAllianceMember } from "../../services/alliance/membership.js";
 import { leaderMustTransferErr } from "../../errors/errors.js";
 import type { KoaController } from "../../utils/KoaController.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
+import { KEEP_DAYS } from "../../services/alliance/ioDisbandKeep.js";
 
 /**
  * Removes the authenticated user from their alliance. An ordinary member leaves
@@ -24,8 +26,9 @@ export const leaveAlliance: KoaController = async (ctx) => {
     throw leaderMustTransferErr(alliance.name);
   }
 
-  await removeAllianceMember(user, alliance, AllianceMessageType.LEFT, otherMembers);
+  const disbanded = await removeAllianceMember(user, alliance, AllianceMessageType.LEFT, otherMembers);
 
   ctx.status = Status.OK;
-  ctx.body = { error: 0 };
+  // (Inferno-only, QoL #502: disbanded, it is kept this many days for the player to restore)
+  ctx.body = { error: 0, ...(disbanded && infernoOnlyConfig.enabled && { kept_days: KEEP_DAYS }) };
 };

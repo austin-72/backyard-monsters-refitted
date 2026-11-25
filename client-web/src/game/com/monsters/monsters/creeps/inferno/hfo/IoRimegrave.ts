@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { int } from "as3";
 import { Bitmap, BitmapData, IBitmapDrawable } from "flash/display";
 import { Point } from "flash/geom";
-import { BFOUNDATION, BYMConfig, CREATURELOCKER, CREATURES, CreepBase, IAttackable, ITargetable, IoFreezeEffect, IoIce, MonsterBase, RasterData, SOUNDS, SPRITES } from "@game";
+import { BFOUNDATION, BYMConfig, CREATURELOCKER, CREATURES, CreepBase, IAttackable, ITargetable, IoDave, IoFreezeEffect, IoIce, IoSkins, MonsterBase, RasterData, SOUNDS, SPRITES } from "@game";
 
 /**
  * Hell Freezes Over: Rimegrave (IC25), the ice champion: a frost wendigo-elk with an ice-bone skull and
@@ -34,6 +34,8 @@ export class IoRimegrave extends CreepBase {
         super.$ctor(param1, param2, param3, param4, param5, param6, param7, param8, param9, param10, param11, param12);
         this.m_level = IoRimegrave.levelOf(param5, this._friendly);
         this.m_spriteID = IoRimegrave.ID + "_" + this.m_level;
+        // (14 October) a skin of his sheet his owner bought (IoSkins)
+        this.m_spriteID = IoSkins.sprite(this.m_spriteID, IoDave.skin(IoRimegrave.ID, this._friendly));
         this.useOwnGraphic();
         this.m_ready = true;
     }
@@ -89,7 +91,9 @@ export class IoRimegrave extends CreepBase {
             row = (1 + ((this._frameNumber / 8) | 0) % 8) | 0;
         }
         let cell: int = (row * 16 + column) | 0;
-        if (cell != this.m_lastCell) {
+        // (26 October: also the same frame again, when the same-frame cache tells: a picture wiped since (healed to full)
+        // was left empty until the frame changed)
+        if (cell != this.m_lastCell || SPRITES.ioSameFrame) {
             let sheet: any = SPRITES.GetSpriteDescriptor(this.m_spriteID);
             if (!sheet || !sheet.image) {
                 return;

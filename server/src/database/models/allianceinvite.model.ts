@@ -21,6 +21,14 @@ export class AllianceInvite {
   @Property({ type: "string" })
   status: AllianceInviteStatus = AllianceInviteStatus.PENDING;
 
+  /** Inferno-only (QoL #169): a join request's few words from the player asking, or null. */
+  @Property({ type: "string", nullable: true })
+  message?: string | null = null;
+
+  /** Inferno-only (QoL #165): who sent an invite (the leader or an officer), or null (older rows, requests). */
+  @Property({ type: "number", nullable: true })
+  invited_by?: number | null = null;
+
   @Property({ type: Date })
   created_at: Date = new Date();
 

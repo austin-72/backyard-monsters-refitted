@@ -3,7 +3,7 @@ import { Vector, int } from "as3";
 import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { GlowFilter } from "flash/filters";
 import { Point } from "flash/geom";
-import { ATTACK, BFOUNDATION, BTOWER, BWALL, DummyTarget, FIREBALLS, FIREBALL_CLIP, GLOBAL, ITargetable, InstanceManager, MonsterBase, ProjectileBase, ProjectileEvent, SPRITES, SpriteData, SpurtzCannon, Targeting, Vacuum, VacuumHose } from "@game";
+import { ATTACK, BFOUNDATION, BTOWER, BWALL, DummyTarget, FIREBALLS, FIREBALL_CLIP, GLOBAL, ITargetable, InstanceManager, MonsterBase, ProjectileBase, ProjectileEvent, SPRITES, SpriteData, SpurtzCannon, Targeting, Vacuum, VacuumHose, IoTd2 } from "@game";
 
 export class FIREBALL extends ProjectileBase {
     static {
@@ -142,11 +142,17 @@ export class FIREBALL extends ProjectileBase {
         this._distance = (this._distance - _loc1_) | 0;
         if (this._distance <= this._maxSpeed) {
             this.dispatchEvent(new ProjectileEvent(FIREBALL.COLLIDED, as3.cast(this._targetCreep, ITargetable), this._targetBuilding));
+            // (Hellgate Defense 2: the tower that fired it deals these hits, IoTd2.hurt)
+            let ioSrc: any = IoTd2.source;
+            if (GLOBAL.INFERNO_ONLY && IoTd2.on) {
+                IoTd2.source = this._source;
+            }
             if (this.ioNoDamage) {
             } else if (this._splash > 0) {
                 this.Splash();
             } else if (this._targetType == 1) {
                 if (this._targetCreep.dead) {
+                    IoTd2.source = ioSrc;
                     FIREBALLS.Remove(this._id);
                     return true;
                 }
@@ -176,6 +182,7 @@ export class FIREBALL extends ProjectileBase {
                     }
                 }
             }
+            IoTd2.source = ioSrc;
             if (this._glaves > 0) {
                 --this._glaves;
                 this.FindGlaiveTarget();

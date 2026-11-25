@@ -4,7 +4,8 @@ import { BitmapData, DisplayObject } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BFOUNDATION, BMUSHROOM, GLOBAL, GRID, InstanceManager, PATHINGfloodobject, PATHINGobject } from "@game";
+import { BFOUNDATION, BMUSHROOM, GLOBAL, GRID, InstanceManager, IoTargets, PATHINGfloodobject, PATHINGobject } from "@game";
+import { floodWorkerAsk, floodWorkerAvailable, floodWorkerGen, floodWorkerGrid, floodWorkerListen, floodWorkerStats, type FloodAnswer } from "flash/_floodWorker";
 
 export class PATHING extends ASObject {
     private static _poolPathing: Vector<PATHINGobject>;
@@ -125,6 +126,10 @@ export class PATHING extends ASObject {
         for (let c: int = 0; c < PATHING._costGrid.length; c++) {
             as3.vset(PATHING._costGrid, c, 10);
         }
+        // (Inferno-only, 21 October: the cells with a building, for the background thread's floods; a new grid)
+        PATHING._ioWallGrid = new Uint8Array(PATHING._gridWidth * PATHING._gridHeight);
+        PATHING._ioCostGrid = new Int32Array(PATHING._gridWidth * PATHING._gridHeight).fill(10);
+        PATHING.ioGridChanged();
         PATHING._poolPathing = new Vector<PATHINGobject>(0, false, PATHINGobject);
         PATHING._poolPathingB = new Vector<PATHINGobject>(0, false, PATHINGobject);
         PATHING._poolPathingLength = 0;
@@ -147,6 +152,10 @@ export class PATHING extends ASObject {
                     if (PATHING._costGrid) {
                         as3.vset(PATHING._costGrid, xIdx * PATHING._gridHeight + yIdx, PATHING._costs[gridKey].cost | 0);
                     }
+                    if (PATHING._ioCostGrid) {
+                        PATHING._ioCostGrid[xIdx * PATHING._gridHeight + yIdx] = PATHING._costs[gridKey].cost | 0;
+                    }
+                    PATHING._ioGridDirty = true;
 
                     if (xIdx < PATHING._dirtyMinX) {
                         PATHING._dirtyMinX = xIdx;
@@ -179,6 +188,10 @@ export class PATHING extends ASObject {
                     } else {
                         delete PATHING._costs[gridKey].building;
                     }
+                    if (PATHING._ioWallGrid) {
+                        PATHING._ioWallGrid[xIdx * PATHING._gridHeight + yIdx] = register && building ? 1 : 0;
+                    }
+                    PATHING._ioGridDirty = true;
                 }
             }
         }
@@ -200,6 +213,10 @@ export class PATHING extends ASObject {
                     if (PATHING._costGrid) {
                         as3.vset(PATHING._costGrid, widthIdx * PATHING._gridHeight + heightIdx, 10);
                     }
+                    if (PATHING._ioCostGrid) {
+                        PATHING._ioCostGrid[widthIdx * PATHING._gridHeight + heightIdx] = 10;
+                    }
+                    PATHING._ioGridDirty = true;
                 }
             }
             let allBuildings: Vector<any> = InstanceManager.getInstancesByClass(BFOUNDATION);
@@ -217,7 +234,7 @@ export class PATHING extends ASObject {
         PATHING.ProcessFlood();
     }
 
-    public static GetPath(startPoint: Point, targetRect: Rectangle, callback: Function = null, ignoreWalls: boolean = false, targetBuilding: BFOUNDATION = null): any[] {
+    public static GetPath(startPoint: Point, targetRect: Rectangle, callback: Function = null, ignoreWalls: boolean = false, targetBuilding: BFOUNDATION = null, ioAvoid: boolean = false): any[] {
         let originalStart: Point = startPoint;
         let originalTarget: Point = new Point(targetRect.x, targetRect.y);
         startPoint.x = startPoint.x | 0;
@@ -231,11 +248,11 @@ export class PATHING extends ASObject {
         gridTargetRect.y = gridTargetPoint.y;
         gridTargetRect.width *= 0.1;
         gridTargetRect.height *= 0.1;
-        PATHING.GetPathB(gridStart, gridTargetRect, originalStart, originalTarget, callback, ignoreWalls, targetBuilding);
+        PATHING.GetPathB(gridStart, gridTargetRect, originalStart, originalTarget, callback, ignoreWalls, targetBuilding, ioAvoid);
         return [];
     }
 
-    public static GetPathB(gridStart: Point, gridTargetRect: Rectangle, originalStart: Point, originalTarget: Point, callback: Function = null, ignoreWalls: boolean = false, targetBuilding: BFOUNDATION = null): void {
+    public static GetPathB(gridStart: Point, gridTargetRect: Rectangle, originalStart: Point, originalTarget: Point, callback: Function = null, ignoreWalls: boolean = false, targetBuilding: BFOUNDATION = null, ioAvoid: boolean = false): void {
         PATHING.RenderCosts();
         let gridKeyStart: int = (gridStart.x * 1000 + gridStart.y) | 0;
         let gridKeyTarget: int = (gridTargetRect.x * 1000 + gridTargetRect.y) | 0;
@@ -271,13 +288,26 @@ export class PATHING extends ASObject {
             // Separate floods that calculate walls differently
             gridKeyTarget += 1000000;
         }
+        if (ioAvoid) {
+            // (Inferno-only, 21 November) and the ones that keep out of the defenses' reach (Malphus: IoTargets)
+            gridKeyTarget += 2000000;
+        }
         // Does no other monster have this target position?
         if (!PATHING._floods[gridKeyTarget]) {
             let newFlood: PATHINGfloodobject = new PATHINGfloodobject();
             let cells: int = (PATHING._gridWidth * PATHING._gridHeight) | 0;
-            newFlood.depth = new Vector<int>(cells, false, int);
-            for (let c: int = 0; c < cells; c++) {
-                as3.vset(newFlood.depth, c, -1);
+            // (Inferno-only, 19 October: the grid of a flood let go is used again (ioPoolDepth), not a new one: when a
+            // building fell in a battle every monster asked again at once, a new grid of 67,600 for each target)
+            let pooled: any = GLOBAL.INFERNO_ONLY ? PATHING._ioDepthPool.pop() : null;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (21 October: a plain typed list, emptied in one go; the background thread's answers are these too)
+                newFlood.depth = (pooled instanceof Int32Array && pooled.length == cells ? pooled : new Int32Array(cells)).fill(-1) as any;
+            } else {
+                newFlood.depth = pooled && pooled.length == cells ? pooled : new Vector<int>(cells, false, int);
+                let dv: any = newFlood.depth;
+                for (let c: int = 0; c < cells; c++) {
+                    dv[c] = -1;
+                }
             }
             // the target's cells, at depth 0 (inside the grid)
             for (let widthIdx: int = 0; widthIdx < gridTargetRect.width; widthIdx++) {
@@ -295,8 +325,21 @@ export class PATHING extends ASObject {
                 }
             }
             newFlood.ignoreWalls = ignoreWalls;
+            newFlood.ioDanger = ioAvoid ? IoTargets.dangerGrid(PATHING._gridWidth, PATHING._gridHeight) : null;
             PATHING._floods[gridKeyTarget] = newFlood;
+            // (Inferno-only, 21 October: flooded in the background thread, the game's thread free meanwhile; 21 November:
+            // not one that keeps out of the defenses' reach, which the worker doesn't know of)
+            if (GLOBAL.INFERNO_ONLY && !ioAvoid) {
+                PATHING.ioAskWorker(newFlood);
+            }
+            // (Inferno-only, 18 October: a flood is the size of the whole grid; monsters wandering in their housing,
+            // pets and workers keep asking for new spots, and every finished flood was kept until a building moved:
+            // an idle yard grew by about 13 MB a minute. The ones nothing waits on now go, oldest first, past a few.)
+            if (GLOBAL.INFERNO_ONLY) {
+                PATHING.ioDropOldFloods(gridKeyTarget);
+            }
         }
+        (PATHING._floods[gridKeyTarget] as PATHINGfloodobject).lastUsed = getTimer();
         // Does no other monster have this starting position?
         if (!PATHING._floods[gridKeyTarget].startpoints[gridKeyStart]) {
             PATHING._floods[gridKeyTarget].startpoints[gridKeyStart] = { "startID": gridKeyStart, "callbackfunctions": [], "startPoint": gridStart };
@@ -332,8 +375,18 @@ export class PATHING extends ASObject {
         let k: int = 0;
         let sliceStart: int = 0;
         as3.vsetLength(list, 0);
+        PATHING._ioStep++;
         for (currentFloodObject of as3.values(PATHING._floods)) {
             if (currentFloodObject.pending > 0) {
+                // (Inferno-only, 21 October) the background thread's flood waited for, a moment at most; then
+                // flooded here, as before (its answer, if it still comes, is the same depths: taken all the same)
+                if (currentFloodObject.ioAsked > 0) {
+                    if (PATHING._ioStep - currentFloodObject.ioAskedStep < PATHING.IO_WAIT_STEPS) {
+                        continue;
+                    }
+                    currentFloodObject.ioAsked = 0;
+                    floodWorkerStats.fellBack++;
+                }
                 list.push(currentFloodObject);
             }
         }
@@ -396,9 +449,18 @@ export class PATHING extends ASObject {
             return false;
         }
         as3.vsetLength(next, 0);
+        // (Inferno-only, 19 October: the lists read and grown in place, every index inside them: the checked reads
+        // and pushes were most of a flood's time, many floods at once in a big battle)
+        let E: any = edge;
+        let D: any = depth;
+        let C: any = costs;
+        let N: any = next;
+        let nn: int = 0;
+        // (Inferno-only, 21 November: the cells inside the defenses' reach, for a flood that keeps out of it)
+        let Z: Uint8Array = f.ioDanger;
         while (i < n) {
-            idx = as3.vget(edge, i++);
-            d = as3.vget(depth, idx);
+            idx = E[i++];
+            d = D[idx];
             if (d <= limit) {
                 cx = (idx / gh) | 0;
                 cy = (idx - cx * gh) | 0;
@@ -409,20 +471,23 @@ export class PATHING extends ASObject {
                         while (ny <= cy + 1) {
                             if (ny >= 0 && ny < gh && !(nx == cx && ny == cy)) {
                                 ni = (nx * gh + ny) | 0;
-                                if (as3.vget(depth, ni) < 0) {
-                                    cost = as3.vget(costs, ni);
+                                if (D[ni] < 0) {
+                                    cost = C[ni];
                                     if (f.ignoreWalls) {
                                         cell = PATHING._costs[nx * 1000 + ny];
                                         if (Boolean(cell) && Boolean(cell.building)) {
                                             cost = 20;
                                         }
                                     }
+                                    if (Z && Z[ni]) {
+                                        cost = (cost + IoTargets.DANGER_COST) | 0;
+                                    }
                                     if (nx != cx && ny != cy) {
                                         cost = (cost * 1.5) | 0;
                                     }
                                     nd = (d + cost) | 0;
-                                    as3.vset(depth, ni, nd);
-                                    next.push(ni);
+                                    D[ni] = nd;
+                                    N[nn++] = ni;
                                     if (nd < minDepth) {
                                         minDepth = nd;
                                     }
@@ -434,7 +499,7 @@ export class PATHING extends ASObject {
                     nx++;
                 }
             } else {
-                next.push(idx);
+                N[nn++] = idx;
                 if (d < minDepth) {
                     minDepth = d;
                 }
@@ -587,6 +652,105 @@ export class PATHING extends ASObject {
         callback(path, targetBuilding);
     }
 
+    // ---- Inferno-only (21 October, the user's: more of the game on other threads): the floods in a background
+    // thread (flash/_floodWorker). The worker floods the whole grid, round by round as ExpandFlood does (the same
+    // depths, cell for cell), and the monsters waiting get their ways here, in a game step (ProcessFlood).
+
+    /** PATHING's steps (ProcessFlood calls), for how long a flood has waited on the worker. */
+    private static _ioStep: int = 0;
+
+    /** Steps a flood waits on the worker before it is flooded here (half a second of the game's 80 a second). */
+    private static readonly IO_WAIT_STEPS: int = 40;
+
+    /** Cells with a building (RegisterBuilding), for the floods that go through walls (ignoreWalls: cost 20). */
+    private static _ioWallGrid: Uint8Array = null;
+
+    /** _costGrid's copy, kept by the same writes (handed to the worker in one copy). */
+    private static _ioCostGrid: Int32Array = null;
+
+    /** The grid changed since it was last handed to the worker; and its generation. */
+    private static _ioGridDirty: boolean = true;
+
+    private static _ioGridGen: int = 0;
+
+    private static _ioListening: boolean = false;
+
+    /** The flood each of the worker's answers is for (by its id). */
+    private static _ioAsked: Map<number, PATHINGfloodobject> = new Map();
+
+    private static ioGridChanged(): void {
+        PATHING._ioGridDirty = true;
+    }
+
+    /**
+     * The worker is asked for this new flood (its edge: the target's cells): in a battle (an attack, Hellgate Defense),
+     * where the floods are many and long. Not in a yard at peace (workers, pets and housed monsters wandering a few
+     * steps: a flood here stops as soon as it has reached them, the worker's would flood the whole grid for nothing),
+     * nor in a catch-up (no frames to wait on).
+     */
+    private static ioAskWorker(f: PATHINGfloodobject): void {
+        if (GLOBAL._catchup || !(GLOBAL.isInAttackMode || GLOBAL.ioTdMode()) || !PATHING._ioCostGrid || !PATHING._ioWallGrid || !floodWorkerAvailable()) {
+            return;
+        }
+        if (!PATHING._ioListening) {
+            PATHING._ioListening = true;
+            floodWorkerListen(PATHING.ioAnswered);
+        }
+        if (PATHING._ioGridDirty || floodWorkerGen() != PATHING._ioGridGen) {
+            PATHING._ioGridGen++;
+            PATHING._ioGridDirty = false;
+            floodWorkerGrid(PATHING._ioGridGen, PATHING._gridWidth, PATHING._gridHeight, PATHING._ioCostGrid, PATHING._ioWallGrid);
+        }
+        let targets: number[] = [];
+        let E: any = f.edge;
+        for (let i: int = 0; i < f.edge.length; i++) {
+            targets.push(E[i]);
+        }
+        let id: int = floodWorkerAsk(PATHING._ioGridGen, targets, f.ignoreWalls) | 0;
+        if (id > 0) {
+            f.ioAsked = id;
+            f.ioGen = PATHING._ioGridGen;
+            f.ioAskedStep = PATHING._ioStep;
+            PATHING._ioAsked.set(id, f);
+        }
+    }
+
+    /**
+     * The worker's flood: taken when it is still wanted (not let go, a building fallen since: all floods start again)
+     * and the grid hasn't changed since it was asked for. Whole: nothing left to flood (ExpandFlood stops), the
+     * monsters waiting get their ways in the next step.
+     */
+    private static ioAnswered(a: FloodAnswer): void {
+        let f: PATHINGfloodobject = PATHING._ioAsked.get(a.id);
+        PATHING._ioAsked.delete(a.id);
+        if (!f) {
+            return;
+        }
+        let live: boolean = false;
+        for (let key in PATHING._floods) {
+            if (PATHING._floods[key] === f) {
+                live = true;
+                break;
+            }
+        }
+        if (!live || !a.depth || a.gen != f.ioGen || a.gen != PATHING._ioGridGen || PATHING._ioGridDirty || a.depth.length != PATHING._gridWidth * PATHING._gridHeight) {
+            // (flooded here instead, if it's still wanted)
+            f.ioAsked = 0;
+            return;
+        }
+        PATHING.ioPoolDepth(f);
+        f.depth = a.depth as any;
+        as3.vsetLength(f.edge, 0);
+        as3.vsetLength(f.edgeNext, 0);
+        f.minDepth = 9999999;
+        f.ioAsked = 0;
+    }
+
+    /** For tests: the background thread's floods. */
+    public static get ioFloodStats(): any {
+        return floodWorkerStats;
+    }
+
     private static Jiggle(x: int, y: int): Point {
         return new Point(x + (Math.random() - 0.5) * 0.4, y + (Math.random() - 0.5) * 0.4);
     }
@@ -598,6 +762,49 @@ export class PATHING extends ASObject {
             return as3.cast(PATHING._costs[gridKey].building, BFOUNDATION);
         }
         return null;
+    }
+
+    /** Inferno-only (19 October): the grids of floods let go, for new ones (at most IO_DEPTH_POOL). */
+    private static _ioDepthPool: any[] = [];
+
+    private static readonly IO_DEPTH_POOL: int = 32;
+
+    /** Inferno-only (19 October): a flood let go: its grid kept for the next. */
+    private static ioPoolDepth(f: PATHINGfloodobject): void {
+        if (GLOBAL.INFERNO_ONLY && f && f.depth && PATHING._ioDepthPool.length < PATHING.IO_DEPTH_POOL && PATHING._ioDepthPool.indexOf(f.depth) < 0) {
+            PATHING._ioDepthPool.push(f.depth);
+            f.depth = null;
+        }
+    }
+
+    /** Inferno-only (18 October): the most floods kept (each one 260 x 260 cells). */
+    public static readonly IO_MAX_FLOODS: int = 24;
+
+    /**
+     * Inferno-only (18 October): past IO_MAX_FLOODS, the floods nothing waits on are let go, the least recently asked
+     * for first (never `keep`, the one just made). A flood asked for again is made again: the yard's costs stay.
+     */
+    private static ioDropOldFloods(keep: int): void {
+        let idle: any[] = [];
+        let count: int = 0;
+        for (let key in PATHING._floods) {
+            count++;
+            let f: PATHINGfloodobject = PATHING._floods[key];
+            if (f && f.pending <= 0 && Number(key) != keep) {
+                idle.push([key, f.lastUsed]);
+            }
+        }
+        if (count <= PATHING.IO_MAX_FLOODS) {
+            return;
+        }
+        idle.sort((a: any[], b: any[]): number => Number(a[1]) - Number(b[1]));
+        let i: int = 0;
+        while (count > PATHING.IO_MAX_FLOODS && i < idle.length) {
+            PATHING.ioPoolDepth(PATHING._floods[idle[i][0]]);
+            delete PATHING._floods[idle[i][0]];
+            count--;
+            i++;
+        }
     }
 
     /*
@@ -646,7 +853,12 @@ export class PATHING extends ASObject {
                 }
             }
         }
+        for (floodObject of as3.values(PATHING._floods)) {
+            PATHING.ioPoolDepth(floodObject);
+        }
         PATHING._floods = {};
+        // (Inferno-only, 21 October: the background thread's answers for these, when they come, go nowhere)
+        PATHING._ioAsked.clear();
 
         // Invoke each callback function with an empty path and null as the building parameter
         for (let callbackIndex: int = 0; callbackIndex < collectedCallbacks.length; callbackIndex++) {
@@ -661,6 +873,10 @@ export class PATHING extends ASObject {
         }
         PATHING._costs = {};
         PATHING._floods = {};
+        PATHING._ioAsked.clear();
+        PATHING._ioWallGrid = null;
+        PATHING._ioCostGrid = null;
+        PATHING._ioGridDirty = true;
         PATHING.ClearDirtyRegion();
     }
 

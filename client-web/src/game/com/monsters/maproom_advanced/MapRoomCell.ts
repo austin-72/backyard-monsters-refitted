@@ -1,19 +1,23 @@
 import * as as3 from "as3";
-import { int } from "as3";
-import { Bitmap, BitmapData, DisplayObject, MovieClip } from "flash/display";
+import { int, uint } from "as3";
+import { Bitmap, BitmapData, DisplayObject, MovieClip, Shape } from "flash/display";
 import { MouseEvent } from "flash/events";
-import { Point } from "flash/geom";
+import { ColorTransform, Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { ALLIANCES, AllyInfo, BUILDING5, CREATURES, GLOBAL, HellTileVariants, IMapRoomCell, InfernoMapTheme, IoTestMode, IoUnderworld, LOGGER, LOGIN, MapRoomCell_CLIP, SecNum, TRIBES, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { ALLIANCES, AllyInfo, BUILDING5, CREATURES, GLOBAL, HellTileVariants, IMapRoomCell, InfernoMapTheme, IoFormat, IoMapFilters, IoTestMode, IoUnderworld, LOGGER, LOGIN, MapRoomCell_CLIP, SecNum, TRIBES, com_monsters_maproom_advanced_MapRoom as MapRoom, KEYS } from "@game";
 
 export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
     static {
         as3.implement(this, [IMapRoomCell]);
-        as3.fields(this, { X: 0, Y: 0, _updated: false, _ioShownData: null, _dataAge: 0, _ioSnap: false, _ioUnder: false, _ioPortal: null, _base: 0, _baseID: NaN, _allianceID: 0, _alliance: null, _height: 0, _groundVariant: null, _mine: 0, _facebookID: NaN, _pic_square: null, _userID: 0, _online: 0, _friend: 0, _truce: 0, _name: null, _protected: 0, _resources: null, _hpResources: null, _monsterData: null, _flingerRange: null, _flingerLevel: null, _catapult: null, _level: 0, _destroyed: 0, _damaged: 0, _water: false, _monsters: null, _ticks: 0, _processed: false, _dirty: false, _locked: 0, _hpMonsterData: null, _hpMonsters: null, _invitePendingID: 0, _damage: 0, _workerBusy: false, _inRange: false, _over: false, _terrain: null, _hasWarned: 0, _value: 0, _smokeBMD: null, _smokeDO: null, _smokeRender: false, _smokeParticles: null, _frame: 0, depth: 0, inTest: false, _inAllianceProps: null, _soloProps: null, _picURLs: null, testAllianceIDs: null, _ioWorker2: null });
+        as3.fields(this, { _ioTint: -1, _ioBadge: null, _ioBadgeStance: 0, X: 0, Y: 0, _updated: false, _ioShownData: null, _dataAge: 0, _ioSnap: false, _ioUnder: false, _ioPortal: null, _base: 0, _baseID: NaN, _allianceID: 0, _alliance: null, _height: 0, _groundVariant: null, _mine: 0, _facebookID: NaN, _pic_square: null, _userID: 0, _online: 0, _friend: 0, _truce: 0, _name: null, _protected: 0, _resources: null, _hpResources: null, _monsterData: null, _flingerRange: null, _flingerLevel: null, _catapult: null, _level: 0, _destroyed: 0, _damaged: 0, _water: false, _monsters: null, _ticks: 0, _processed: false, _dirty: false, _locked: 0, _hpMonsterData: null, _hpMonsters: null, _invitePendingID: 0, _damage: 0, _workerBusy: false, _inRange: false, _over: false, _terrain: null, _hasWarned: 0, _value: 0, _smokeBMD: null, _smokeDO: null, _smokeRender: false, _smokeParticles: null, _frame: 0, depth: 0, inTest: false, _inAllianceProps: null, _soloProps: null, _picURLs: null, testAllianceIDs: null, _ioWorker2: null, _ioProtUntil: 0, _ioResetAt: 0 });
     }
 
     public X: int;
     public Y: int;
+    /** (QoL #228) the colour the name bar is recoloured to for the colour-blind setting (-1: its own), and the letter's badge. */
+    private _ioTint: int;
+    private _ioBadge: Shape;
+    private _ioBadgeStance: int;
     public _updated: boolean;
     /** The map data object this cell is currently drawn from (see MapRoomPopup.Update). */
     public _ioShownData: any;
@@ -108,6 +112,17 @@ export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
         this.mc.mcEdges.visible = false;
         this.mc.mcPrompt.enabled = false;
         this.mc.mcPrompt.visible = false;
+        // Inferno-only (8 October, from the base game's pull request #293): timelines no cell uses stop here
+        // (every frame they otherwise played on, in up to 480 cells): the player's marker and its level badge
+        // (always sent to a frame by Setup), the unused second flag, the hidden prompt's two buttons.
+        try {
+            this.mc.mcPlayer.stop();
+            this.mc.mcPlayer.mcFlag2.stop();
+            this.mc.mcPlayer.mcLevel.stop();
+            this.mc.mcPrompt.bYes.stop();
+            this.mc.mcPrompt.bNo.stop();
+        } catch (e) {
+        }
     }
 
     /**
@@ -298,6 +313,29 @@ export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
         return this._locked != 0 && this._locked != LOGIN._playerID;
     }
 
+    public _ioProtUntil: number;
+
+    public _ioResetAt: number;
+
+    /** "Protected: 5h 12m" or "Resets in 7h 40m" (Inferno), or "". */
+    public ioStatusLine(): string {
+        let now: number = GLOBAL.Timestamp();
+        if (this._protected && this._ioProtUntil > now) {
+            return KEYS.Get("io_cell_protected", { "v1": GLOBAL.ioDuration(this._ioProtUntil - now) });
+        }
+        if (this._base == 1 && this._ioResetAt > now) {
+            return KEYS.Get("io_cell_resets", { "v1": GLOBAL.ioDuration(this._ioResetAt - now) });
+        }
+        return "";
+    }
+
+    /** The "under damage protection" refusal, with how long is left when known. */
+    public ioProtectedText(): string {
+        let now: number = GLOBAL.Timestamp();
+        let base: string = KEYS.Get("newmap_dp");
+        return GLOBAL.INFERNO_ONLY && this._ioProtUntil > now ? base + " " + KEYS.Get("io_protected_left", { "v1": GLOBAL.ioDuration(this._ioProtUntil - now) }) : base;
+    }
+
     public get isProtected(): int {
         return this._protected;
     }
@@ -377,6 +415,10 @@ export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
         this._friend = serverData.fr | 0;
         this._online = serverData.on | 0;
         this._protected = serverData.p | 0;
+        // (Inferno-only, QoL #63 / #64: until when a yard is protected, and when a damaged tribe yard goes back to
+        // fresh, for the yard's popup and the refusal)
+        this._ioProtUntil = Number(serverData.pu) || 0;
+        this._ioResetAt = Number(serverData.rs) || 0;
         if (serverData.pi) {
             this._invitePendingID = serverData.pi | 0;
         } else {
@@ -574,6 +616,8 @@ export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
             // outpost or open ground.
             InfernoMapTheme.tribeIcon(as3.cast(this.mc.mcPlayer, MovieClip), this._base == 1 ? this._name : null);
             IoUnderworld.portalIcon(this.mc, this._base == 0 ? this._ioPortal : null, this.X, this.Y);
+            // (QoL #73: a yard the map's target filters leave out is faint)
+            this.ioFilterLook();
         }
         if (this._damage) {
             this.mc.mcPlayer.mcFlag2.visible = false;
@@ -624,6 +668,17 @@ export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
             });
             this.mc.mcPrompt.bNo.addEventListener(MouseEvent.MOUSE_UP, MapRoom.RejectInvitation);
         }
+    }
+
+    /**
+     * Inferno-only (QoL #73): the yard drawn faint when the map's target filters (level range, protected, locked,
+     * in your flinger range: IoMapFilters) leave it out; as usual otherwise. Also called when the filters change.
+     */
+    public ioFilterLook(): void {
+        if (!GLOBAL.INFERNO_ONLY || !this.mc || !this.mc.mcPlayer) {
+            return;
+        }
+        this.mc.mcPlayer.alpha = IoMapFilters.cellOk(this) ? 1 : IoMapFilters.FAINT;
     }
 
     /** Inferno-only: draws one of the four ground pictures of this cell's terrain (HellTileVariants). */
@@ -1172,5 +1227,74 @@ export class MapRoomCell extends MapRoomCell_CLIP implements IMapRoomCell {
             }
             this.mc.mcPlayer.mcFlag.visible = true;
         }
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioRelationLook();
+        }
+    }
+
+    /**
+     * Inferno-only (QoL #228): with the colour-blind setting, another player's yard in a friendly alliance has its
+     * name bar blue and one in a hostile alliance orange (IoFormat.relColour), and a badge right of the bar says F, H
+     * or A (your alliance). Cells are recycled, so it is put back as it was for every other yard.
+     */
+    private ioRelationLook(): void {
+        let flag: any = this.mc && this.mc.mcPlayer ? this.mc.mcPlayer.mcFlag : null;
+        if (!flag || !flag.nameBar) {
+            return;
+        }
+        let stance: int = 0;
+        if (IoFormat.colourBlind && (this._base == 2 || this._base == 3) && !this._mine && this._allianceID && this._alliance) {
+            let r: int = this._alliance.relationship | 0;
+            stance = r == -1 ? -1 : (r == 1 ? 1 : (r == 4 || r == 5 ? 4 : 0));
+        }
+        let bar: any = flag.nameBar.mcBar;
+        let bg: any = flag.nameBar.mcBG;
+        // (a colour transform is set only when it changes: setting one draws the cell again, and cells are
+        // refreshed all the time: InfernoMapTheme.setTint)
+        let tint: int = stance == 1 || stance == -1 ? (IoFormat.relColour(stance, 0, true) & 0xFFFFFF) | 0 : -1;
+        if (tint != this._ioTint) {
+            if (tint >= 0) {
+                let r8: int = (tint >> 16) & 255;
+                let g8: int = (tint >> 8) & 255;
+                let b8: int = tint & 255;
+                if (bar) {
+                    bar.transform.colorTransform = new ColorTransform(0, 0, 0, 1, r8, g8, b8, 0);
+                }
+                if (bg) {
+                    bg.transform.colorTransform = new ColorTransform(0, 0, 0, 1, (r8 * 0.4) | 0, (g8 * 0.4) | 0, (b8 * 0.4) | 0, 0);
+                }
+            } else {
+                if (bar) {
+                    bar.transform.colorTransform = new ColorTransform();
+                }
+                if (bg) {
+                    bg.transform.colorTransform = new ColorTransform();
+                }
+            }
+            this._ioTint = tint;
+        }
+        if (stance == 0) {
+            if (this._ioBadge) {
+                this._ioBadge.visible = false;
+            }
+            return;
+        }
+        if (!this._ioBadge) {
+            this._ioBadge = new Shape();
+            this._ioBadge.name = "ioRelBadge";
+        }
+        if (this._ioBadge.parent != flag) {
+            flag.addChild(this._ioBadge);
+        }
+        if (stance != this._ioBadgeStance) {
+            let stock: uint = (stance < 0 ? AllyInfo._picURLs.hostileHex : (stance == 4 ? AllyInfo._picURLs.allyHex : AllyInfo._picURLs.friendlyHex)) >>> 0;
+            this._ioBadge.graphics.clear();
+            IoFormat.drawBadge(this._ioBadge.graphics, stance, stock, 0, 0, 6);
+            this._ioBadgeStance = stance;
+        }
+        let edge: Rectangle = flag.nameBar.getBounds(flag);
+        this._ioBadge.x = Math.round(edge.x + edge.width + 8);
+        this._ioBadge.y = Math.round(edge.y + edge.height / 2);
+        this._ioBadge.visible = true;
     }
 }

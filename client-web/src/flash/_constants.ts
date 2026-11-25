@@ -1,4 +1,4 @@
-// Generated from playerglobal.swc by tools/as3-to-ts/gen-constants.ts. Do not edit.
+// The Flash API's constants, with the exact values Flash Player had (read once from its playerglobal.swc). Do not edit.
 export const FLASH_CONSTANTS: Record<string, Record<string, unknown>> = {
     "flash.automation.KeyboardAutomationAction": { KEY_DOWN: "keyDown", KEY_UP: "keyUp" },
     "flash.automation.MouseAutomationAction": { MOUSE_DOWN: "mouseDown", MOUSE_MOVE: "mouseMove", MOUSE_UP: "mouseUp", MOUSE_WHEEL: "mouseWheel", MIDDLE_MOUSE_DOWN: "middleMouseDown", MIDDLE_MOUSE_UP: "middleMouseUp", RIGHT_MOUSE_DOWN: "rightMouseDown", RIGHT_MOUSE_UP: "rightMouseUp" },

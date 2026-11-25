@@ -31,7 +31,7 @@ export class INFERNO_CANNON_TOWER extends BTOWER {
 
     public override Fire(param1: IAttackable): void {
         super.Fire(param1);
-        SOUNDS.Play("icannon", !this.isJard ? 0.8 : 0.4);
+        SOUNDS.ioPlayAt("icannon", !this.isJard ? 0.8 : 0.4, this._mc.x, this._mc.y);
         let _loc2_: number = 0.5 + 0.5 / this.maxHealth * this.health;
         let _loc3_: number = 1;
         if (Boolean(GLOBAL._towerOverdrive) && GLOBAL._towerOverdrive.Get() >= GLOBAL.Timestamp()) {

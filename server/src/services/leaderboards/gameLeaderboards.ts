@@ -1,9 +1,10 @@
+import { testModeUserIds } from "../admin/testMode.js";
 import { createHash } from "crypto";
 import { brotliCompress, constants, gzip } from "zlib";
 import { promisify } from "util";
 
 import { MapRoomCell, MapRoomVersion } from "../../enums/MapRoom.js";
-import { postgres } from "../../server.js";
+import { postgres, redis } from "../../server.js";
 import { logger } from "../../utils/logger.js";
 import { configuredAdmins } from "../admin/admin.js";
 import { lazyEncoding, type LazyEncoding } from "../maproom/v2/bulk/terrainMap.js";
@@ -15,7 +16,7 @@ import {
 } from "../maproom/v2/bulk/worldSnapshot.js";
 
 /**
- * Inferno-only: the game's leaderboards (the top bar's button: com/monsters/leaderboards/IoLeaderboards.as).
+ * Inferno-only: the game's leaderboards (the top bar's button: com/monsters/leaderboards/IoLeaderboards.ts).
  * A second snapshot, made from every world's map snapshot (services/maproom/v2/bulk/worldSnapshot.ts) at the
  * start of each 5-minute cycle of their clock, plus the Brimstone Pit's ledger. One payload for every
  * player, so a cycle costs a few queries however many look; the game comes back for the next at `nextAt`.
@@ -28,6 +29,8 @@ import {
  *               their outposts and empire values);
  *  - gamblers:  [[uid, name, world, total gambled, lifetime net, bets]]: everyone with a settled bet in the
  *               Pit (refunded and unfinished bets don't count); world -1: not on a map.
+ *  - defenders: [[uid, name, world, best wave, kills that run, runs]]: everyone who has finished a run of
+ *               Hellgate Defense (services/td/hellgate.ts), the most waves survived first.
  *
  * Admins (InfernoOnlyConfig.admins) are on none of the lists (the user's call, 2 October): their test mode
  * makes outposts and Shiny that aren't really theirs. World indexes are into `worlds`.
@@ -53,12 +56,31 @@ let current: Promise<Board> | null = null;
 /** The admins' user ids (by their configured names). */
 const adminIds = async (): Promise<Set<number>> => {
   const names = configuredAdmins();
-  if (!names.length) return new Set();
-  const rows = await postgres.em
-    .getConnection()
-    .execute<{ userid: number }[]>(`SELECT userid FROM bym."user" WHERE username IN (${names.map(() => "?").join(",")})`, names);
-  return new Set(rows.map((row) => Number(row.userid)));
+  const ids = new Set<number>();
+  if (names.length) {
+    const rows = await postgres.em
+      .getConnection()
+      .execute<{ userid: number }[]>(`SELECT userid FROM bym."user" WHERE username IN (${names.map(() => "?").join(",")})`, names);
+    for (const row of rows) ids.add(Number(row.userid));
+  }
+  // (18 October, SUSPECTED-BUGS.md: admins given the role from the panel were on every board, with the outposts and
+  // Shiny of test mode) also owners and admins by role, and anyone in test mode now
+  try {
+    const rows = await postgres.em
+      .getConnection()
+      .execute<{ userid: number }[]>(`SELECT userid FROM bym."user" WHERE admin_role IN ('owner', 'admin')`);
+    for (const row of rows) ids.add(Number(row.userid));
+  } catch {
+    // (no admin_role column before the 20261109 migration: nobody has one)
+  }
+  for (const id of await testModeUserIds().catch(() => [] as number[])) ids.add(Number(id));
+  return ids;
 };
+
+/** Inferno-only (QoL #253): players an admin took off the Pit and Hellgate boards (their scores wiped). */
+export const BOARD_HIDDEN_KEY = "leaderboards:hidden";
+const hiddenIds = async (): Promise<Set<number>> =>
+  new Set(((await redis.send("SMEMBERS", [BOARD_HIDDEN_KEY]).catch(() => [])) as string[] | null ?? []).map(Number));
 
 /** Each world's name: the owner of its cell 0x0. */
 export const worldNames = async (worlds: string[]): Promise<Map<string, string>> => {
@@ -89,6 +111,11 @@ const build = async (generatedAt: number, nextAt: number): Promise<Board> => {
   const worlds = await snapshotWorlds();
   const names = await worldNames(worlds);
   const admins = await adminIds();
+  const hidden = await hiddenIds();
+  // (13 October) banned accounts are on none of the lists either (an account banned for an exploit kept its place)
+  for (const row of await postgres.em.getConnection().execute<{ userid: number }[]>(`SELECT userid FROM bym."user" WHERE banned`)) {
+    admins.add(Number(row.userid));
+  }
   const worldIndex = new Map<string, number>(worlds.map((worldid, i) => [worldid, i]));
 
   const players: PlayerRow[] = [];
@@ -136,16 +163,31 @@ const build = async (generatedAt: number, nextAt: number): Promise<Board> => {
       GROUP BY b.user_id, u.username, s.worldid`
   );
   const gamblers = bets
-    .filter((row) => !admins.has(Number(row.user_id)))
+    .filter((row) => !admins.has(Number(row.user_id)) && !hidden.has(Number(row.user_id)))
     .map((row) => [Number(row.user_id), row.username, row.worldid ? worldIndex.get(String(row.worldid)) ?? -1 : -1, Number(row.wagered), Number(row.net), Number(row.bets)]);
+
+  const scores = await postgres.em.getConnection().execute<{ user_id: number; username: string; worldid: string | null; best_wave: number; best_kills: number; runs: number }[]>(
+    `SELECT t.user_id, u.username, s.worldid, t.best_wave, t.best_kills, t.runs
+       FROM bym.td_score t
+       JOIN bym."user" u ON u.userid = t.user_id
+       LEFT JOIN bym.save s ON s.basesaveid = u.save_basesaveid
+      WHERE t.runs > 0
+      ORDER BY t.best_wave DESC, t.best_kills DESC`
+  ).catch((err) => {
+    logger.warn(`Leaderboards: no Hellgate scores (${err})`);
+    return [];
+  });
+  const defenders = scores
+    .filter((row) => !admins.has(Number(row.user_id)) && !hidden.has(Number(row.user_id)))
+    .map((row) => [Number(row.user_id), row.username, row.worldid ? worldIndex.get(String(row.worldid)) ?? -1 : -1, Number(row.best_wave), Number(row.best_kills), Number(row.runs)]);
 
   const body =
     `{"error":0,"generatedAt":${generatedAt},"nextAt":${nextAt},` +
     `"worlds":${JSON.stringify(worlds.map((worldid) => [worldid, names.get(worldid) ?? worldid]))},` +
-    `"players":${JSON.stringify(players)},"alliances":${JSON.stringify(alliances)},"gamblers":${JSON.stringify(gamblers)}}`;
+    `"players":${JSON.stringify(players)},"alliances":${JSON.stringify(alliances)},"gamblers":${JSON.stringify(gamblers)},"defenders":${JSON.stringify(defenders)}}`;
   const raw = Buffer.from(body);
   logger.info(
-    `Leaderboards: ${players.length} players, ${alliances.length} alliances, ${gamblers.length} gamblers on ${worlds.length} worlds (${createHash("sha1").update(raw).digest("hex").slice(0, 8)}, ${raw.length} bytes)`
+    `Leaderboards: ${players.length} players, ${alliances.length} alliances, ${gamblers.length} gamblers, ${defenders.length} defenders on ${worlds.length} worlds (${createHash("sha1").update(raw).digest("hex").slice(0, 8)}, ${raw.length} bytes)`
   );
   return {
     raw,

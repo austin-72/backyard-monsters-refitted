@@ -1,20 +1,22 @@
 import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
-import { MovieClip, Shape } from "flash/display";
+import { IBitmapDrawable, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { Dictionary } from "flash/utils";
-import { ATTACK, BASE, BTOWER, BuildingOverlay, GLOBAL, GRID, IAttackable, KEYS, MonsterBase, POPUPS, QUEUE, SOUNDS, Targeting, TweenLite, Vacuum, VacuumHose, popup_building } from "@game";
+import { ATTACK, BASE, BTOWER, BYMConfig, BuildingOverlay, GLOBAL, GRID, IAttackable, IoTd, KEYS, MAP, MonsterBase, POPUPS, QUEUE, RasterData, SOUNDS, Targeting, TweenLite, Vacuum, VacuumHose, popup_building, IoTd2 } from "@game";
 
 export class INFERNOQUAKETOWER extends BTOWER {
     static {
-        as3.fields(this, { _shouldAnimate: false });
+        as3.fields(this, { _shouldAnimate: false, _quakeGraphic: null });
     }
 
     public static readonly UNDERHALL_ID: int = 999;
 
     public static readonly TYPE: int = 129;
     private _shouldAnimate: boolean;
+    /** The ring it sent out last, while the bitmap renderer draws it (kept on the tower as it shakes). */
+    private _quakeGraphic: QuakeGraphic;
 
     public $ctor(): void {
         super.$ctor();
@@ -42,6 +44,20 @@ export class INFERNOQUAKETOWER extends BTOWER {
         this._origin = new Point(this._mc.x, this._mc.y);
     }
 
+    /**
+     * Inferno-only (7 October, the user's: "quake towers are not placing correctly from the yard planner"): its
+     * place (_origin: where it is saved, and where it settles after shaking) follows whenever it is moved. The
+     * Yard Planner moves buildings with moveTo / ioPlaceAt (x and y), which never set _origin: the tower was saved
+     * where it had been (back there on the next load), and snapped back there the first time it fired.
+     */
+    protected override onMove(): void {
+        // (a shake moves _mc directly, not through x and y, so this is only ever a real move)
+        super.onMove();
+        if (this._mc) {
+            this._origin = new Point(this._mc.x, this._mc.y);
+        }
+    }
+
     public override TickFast(param1: Event = null): void {
         super.TickFast(param1);
         if (this._shake > 0) {
@@ -56,7 +72,53 @@ export class INFERNOQUAKETOWER extends BTOWER {
                 this._mcBase.x = this._origin.x;
                 this._mcBase.y = this._origin.y;
             }
+            // Inferno-only (8 October, from the base game's pull request #304): the bitmap renderer draws the
+            // tower from its raster data, not from _mc, so the shake only shows once that follows _mc.
+            this.updateRasterData();
         }
+    }
+
+    /**
+     * Inferno-only (8 October, from the base game's pull request #304): back on its spot when its graphics
+     * are cleared mid-shake (a render that stops animating, such as the destroyed state, takes TickFast away
+     * and would leave the tower resting a pixel or two off its spot). The shake carries on if it animates on.
+     */
+    public override RenderClear(param1: boolean = true): void {
+        if (this._shake > 0 && this._origin) {
+            this._mc.x = this._origin.x;
+            this._mc.y = this._origin.y;
+            this._mcBase.x = this._origin.x;
+            this._mcBase.y = this._origin.y;
+        }
+        super.RenderClear(param1);
+    }
+
+    protected override updateRasterData(): void {
+        super.updateRasterData();
+        this.placeQuakeGraphic();
+    }
+
+    /**
+     * Inferno-only (8 October, from #304): the ring, drawn by the bitmap renderer (a child of _mc, which is
+     * not on the stage when the renderer is on, it was never seen), kept on the tower as it shakes and the
+     * camera moves, just above the tower's own layers (where being a child of _mc put it).
+     */
+    private placeQuakeGraphic(): void {
+        if (!this._quakeGraphic || !BYMConfig.instance.RENDERER_ON || !this._mc || !this._rasterData || !MAP.instance) {
+            return;
+        }
+        if (!this._quakeGraphic.drawing) {
+            this._quakeGraphic = null;
+            return;
+        }
+        let depth: number = MAP.DEPTH_SHADOW + 1;
+        for (let layer of (this._rasterData ?? [])) {
+            if (layer && layer.depth > depth) {
+                depth = layer.depth;
+            }
+        }
+        let mapOffset: Point = MAP.instance.offset;
+        this._quakeGraphic.moveTo(this._mc.x - mapOffset.x, this._mc.y - mapOffset.y, depth + 1);
     }
 
     public override Update(param1: boolean = false): void {
@@ -99,11 +161,14 @@ export class INFERNOQUAKETOWER extends BTOWER {
         }
         if (this._shouldAnimate) {
             ++this._frameNumber;
-            if (this._frameNumber % 6 == 0 || this._animTick >= this._animFrames - 4) {
+            // (Inferno-only, Hellgate Defense: the quake's wind-up is most of its reload, so a Fire rate upgrade
+            // quickens it too)
+            let every: int = (GLOBAL.ioTdMode() ? Math.max(2, Math.round(6 / IoTd.cycleSpeed(this)) | 0) : 6) | 0;
+            if (this._frameNumber % every == 0 || this._animTick >= this._animFrames - 4) {
                 this.AnimFrame(false);
                 if (this._animTick < this._animFrames) {
                     if (this._animTick == this._animFrames - 6) {
-                        SOUNDS.Play("quake", !this.isJard ? 0.8 : 0.4);
+                        SOUNDS.ioPlayAt("quake", !this.isJard ? 0.8 : 0.4, this._mc.x, this._mc.y);
                     }
                     ++this._animTick;
                 } else {
@@ -144,12 +209,19 @@ export class INFERNOQUAKETOWER extends BTOWER {
             // to twice the tower's range, which Flash has to blur again on every frame at that size.
             // A yard with two Quake towers could afford that; converted tribe yards have many.
             if (!QuakeGraphic.isBusy(this._mc)) {
-                _loc3_ = new QuakeGraphic(20, (this._range * 2) >>> 0, this._mc);
+                _loc3_ = new QuakeGraphic(20, (this._range * 2) >>> 0, this._mc, BYMConfig.instance.RENDERER_ON ? new Point() : null, MAP.DEPTH_SHADOW + 1);
                 _loc3_.graphic.y += this._top;
-                this._mc.addChild(_loc3_.graphic);
+                if (!BYMConfig.instance.RENDERER_ON) {
+                    this._mc.addChild(_loc3_.graphic);
+                }
+                this._quakeGraphic = _loc3_;
+                this.placeQuakeGraphic();
             }
         }
-        this._origin = new Point(this._mc.x, this._mc.y);
+        // (not mid-shake: _mc is a pixel or two off its spot then, and the tower would settle there; #304)
+        if (this._shake <= 0) {
+            this._origin = new Point(this._mc.x, this._mc.y);
+        }
         this._shake = 10;
     }
 
@@ -180,7 +252,11 @@ export class INFERNOQUAKETOWER extends BTOWER {
             // first, so under a 50% shield a monster on 200 took 100, then 50, 25, ... and never died.
             // What it counts as done is what the monster lost.
             let ioBefore: number = _loc3_.health;
+            // (Hellgate Defense 2: this tower deals the hit, IoTd2.hurt)
+            let ioSrc: any = IoTd2.source;
+            IoTd2.source = this;
             _loc3_.modifyHealth(-_loc5_);
+            IoTd2.source = ioSrc;
             _loc7_ = (_loc7_ + Math.max(0, ioBefore - Math.max(0, _loc3_.health))) | 0;
         }
         if ((Boolean(_loc9_ = Vacuum.getHose())) && GLOBAL.QuickDistance(this._position, new Point(_loc9_.x, _loc9_.y)) < this._range) {
@@ -281,15 +357,23 @@ export class INFERNOQUAKETOWER extends BTOWER {
 
 class QuakeGraphic extends ASObject {
     static {
-        as3.fields(this, { graphic: null, _owner: null });
+        as3.fields(this, { graphic: null, _owner: null, _rasterData: null, _rasterPt: null });
     }
 
     /** Towers (their clips) that currently show a ring. */
     private static s_busy: Dictionary = new Dictionary(true);
     public graphic: Shape;
     private _owner: any;
+    /** While the bitmap renderer draws the ring (#304): what it draws, and where. */
+    private _rasterData: RasterData;
+    private _rasterPt: Point;
 
-    public $ctor(param1?: uint, param2?: uint, param3: any = null): void {
+    /**
+     * @param param3 The tower's clip (one ring per tower at a time)
+     * @param rasterPt With the bitmap renderer on: the ring is drawn by it, here (moveTo); left out, the ring is
+     *                 added to a display object by the caller
+     */
+    public $ctor(param1?: uint, param2?: uint, param3: any = null, rasterPt: Point = null, depth: number = 2): void {
         super.$ctor();
         this._owner = param3;
         if (param3) {
@@ -305,10 +389,30 @@ class QuakeGraphic extends ASObject {
         this.graphic.graphics.drawEllipse(-param1 * 0.8, -param1 / 2.5, param1 * 1.6, param1 * 0.8);
         this.graphic.graphics.drawEllipse(-param1 * 0.6, -param1 / 3.333333, param1 * 1.2, param1 * 0.6);
         TweenLite.to(this.graphic, 1, { "width": param2 * 2, "height": param2, "alpha": 0, "onComplete": as3.bind(this, this.onComplete) });
+        if (rasterPt && BYMConfig.instance.RENDERER_ON) {
+            let wrapper: Sprite = new Sprite();
+            wrapper.addChild(this.graphic);
+            this._rasterPt = rasterPt;
+            this._rasterData = new RasterData(as3.cast(wrapper, IBitmapDrawable), this._rasterPt, depth);
+        }
     }
 
     public static isBusy(param1: any): boolean {
         return QuakeGraphic.s_busy.get(param1) === true;
+    }
+
+    /** Whether the renderer is still drawing it (not faded yet). */
+    public get drawing(): boolean {
+        return this._rasterData != null;
+    }
+
+    /** Where the renderer draws it (on the canvas), and its place in the draw order. */
+    public moveTo(x: number, y: number, depth: number): void {
+        if (this._rasterData) {
+            this._rasterPt.x = x;
+            this._rasterPt.y = y;
+            this._rasterData.depth = depth;
+        }
     }
 
     private onComplete(): void {
@@ -320,5 +424,10 @@ class QuakeGraphic extends ASObject {
         }
         this.graphic = null;
         this._owner = null;
+        if (this._rasterData) {
+            this._rasterData.clear();
+        }
+        this._rasterData = null;
+        this._rasterPt = null;
     }
 }

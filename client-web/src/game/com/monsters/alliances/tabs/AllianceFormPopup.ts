@@ -4,11 +4,11 @@ import { Bitmap, BitmapData, MovieClip } from "flash/display";
 import { FocusEvent, IOErrorEvent, MouseEvent } from "flash/events";
 import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { AntiAliasType, TextField, TextFieldType, TextFormat, TextFormatAlign } from "flash/text";
-import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, Button_CLIP, GLOBAL, ImageCache, KEYS, POPUPSETTINGS, SOUNDS, ScrollSetV, URLLoaderApi, frame_CLIP } from "@game";
+import { ALLIANCES, ALLIANCEWINDOW, AllianceConstants, Button_CLIP, GLOBAL, ImageCache, IoCrest, KEYS, PLEASEWAIT, POPUPSETTINGS, SOUNDS, ScrollSetV, URLLoaderApi, frame_CLIP } from "@game";
 
 export class AllianceFormPopup extends ASObject {
     static {
-        as3.fields(this, { _mc: null, _mode: 0, _selectedIdx: 0, _cells: null, _previewCells: null, _scrollContent: null, _allianceName: null, _allianceDesc: null, _nameField: null, _descField: null });
+        as3.fields(this, { _mc: null, _mode: 0, _selectedIdx: 0, _cells: null, _previewCells: null, _scrollContent: null, _allianceName: null, _allianceDesc: null, _nameField: null, _descField: null, _tag: null, _tagDefault: null, _tagField: null, _crest: null, _custom: false, _design: null, _customCell: null, _grid: null, _designer: null, _designParts: null });
     }
 
     public static MODE_CREATE: int; // const
@@ -75,6 +75,22 @@ export class AllianceFormPopup extends ASObject {
     private _allianceDesc: string;
     private _nameField: TextField;
     private _descField: TextField;
+    /** Inferno-only (13 October): the alliance's chat tag now, the one its name gives, and its field (edit mode). */
+    private _tag: string;
+    private _tagDefault: string;
+    private _tagField: TextField;
+    /**
+     * Inferno-only (14 October): the alliance's own crest (IoCrest). `_crest` is the one it has (edit), `_custom`
+     * whether the Custom cell is the one chosen, `_design` the crest being made, `_customCell` the grid's first cell,
+     * `_grid` the shield grid, `_designer` the panel over it, `_designParts` its pieces redrawn on a change.
+     */
+    private _crest: string;
+    private _custom: boolean;
+    private _design: string;
+    private _customCell: MovieClip;
+    private _grid: MovieClip;
+    private _designer: MovieClip;
+    private _designParts: any;
 
     public $ctor(): void {
         super.$ctor();
@@ -89,8 +105,13 @@ export class AllianceFormPopup extends ASObject {
      * @param {int} image - Existing shield id, preselected in edit mode.
      * @param {String} description - Existing description, prefilled in edit mode.
      */
-    public Show(mode: int, allianceName: string = null, image: int = 0, description: string = null): void {
+    public Show(mode: int, allianceName: string = null, image: int = 0, description: string = null, tag: string = null, tagDefault: string = null, crest: string = null): void {
         this._mode = mode;
+        this._crest = IoCrest.has(crest) ? crest : null;
+        this._custom = this._crest != null;
+        this._design = this._crest != null ? this._crest : IoCrest.DEFAULT;
+        this._tag = tag;
+        this._tagDefault = tagDefault;
         this._allianceName = allianceName;
         this._allianceDesc = description;
         this._mc = new MovieClip();
@@ -148,17 +169,49 @@ export class AllianceFormPopup extends ASObject {
         let gridContainer: MovieClip = as3.as(this._mc.addChild(new MovieClip()), MovieClip);
         gridContainer.x = leftX;
         gridContainer.y = leftY;
+        this._grid = gridContainer;
 
         this._scrollContent = as3.as(gridContainer.addChild(new MovieClip()), MovieClip);
         this._scrollContent.x = 6;
+        // (14 October: first, Custom: the alliance's own crest, made in the designer it opens)
+        const first: int = GLOBAL.INFERNO_ONLY ? 1 : 0;
+        if (first) {
+            let cc: MovieClip = as3.as(this._scrollContent.addChild(new MovieClip()), MovieClip);
+            cc.name = "ioCrestCustom";
+            cc.buttonMode = true;
+            cc.mouseChildren = false;
+            cc.focusRect = false;
+            cc.y = 5;
+            this._customCell = cc;
+            this._drawCell(cc, this._custom);
+            IoCrest.fit(cc, this._design, 46, 10, 4);
+            let lbl: TextField = new TextField();
+            let lf: TextFormat = new TextFormat("Verdana", 9, 0xFFFFFF, true);
+            lf.align = TextFormatAlign.CENTER;
+            lbl.defaultTextFormat = lf;
+            lbl.width = AllianceFormPopup.CELL_SIZE - 2;
+            lbl.height = 14;
+            lbl.y = 50;
+            lbl.selectable = false;
+            lbl.mouseEnabled = false;
+            lbl.background = true;
+            lbl.backgroundColor = 0x5A3A1E;
+            lbl.text = "Custom";
+            cc.addChild(lbl);
+            cc.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                this._chooseCustom(true);
+                this._openDesigner(true);
+            });
+        }
         for (let i: int = 0; i < AllianceFormPopup.SHIELD_IDS.length; i++) {
             let cell: MovieClip = as3.as(this._scrollContent.addChild(new MovieClip()), MovieClip);
             cell.buttonMode = true;
             cell.mouseChildren = false;
             cell.focusRect = false;
-            cell.x = (i % AllianceFormPopup.GRID_COLS) * AllianceFormPopup.CELL_SIZE;
-            cell.y = ((i / AllianceFormPopup.GRID_COLS) | 0) * AllianceFormPopup.CELL_SIZE + 5;
-            this._drawCell(cell, i == this._selectedIdx);
+            cell.x = ((i + first) % AllianceFormPopup.GRID_COLS) * AllianceFormPopup.CELL_SIZE;
+            cell.y = (((i + first) / AllianceFormPopup.GRID_COLS) | 0) * AllianceFormPopup.CELL_SIZE + 5;
+            this._drawCell(cell, i == this._selectedIdx && !this._custom);
             this._loadIcon(cell, AllianceFormPopup.SHIELD_IDS[i] | 0, (AllianceFormPopup.CELL_SIZE - 2) | 0, 2);
             cell.addEventListener(MouseEvent.CLICK, this._makeShieldClickHandler(i));
             this._cells.push(cell);
@@ -173,6 +226,219 @@ export class AllianceFormPopup extends ASObject {
         let scrollBar: ScrollSetV = as3.as(gridContainer.addChild(new ScrollSetV(this._scrollContent, maskMC, true)), ScrollSetV);
         scrollBar.x = AllianceFormPopup.GRID_CONTENT_W;
         scrollBar.y = 0;
+        if (first) {
+            this._buildDesigner(leftX, leftY);
+            this._openDesigner(false);
+        }
+    }
+
+    // ---- Inferno-only (14 October, the user's): the crest designer
+
+    /** Custom chosen (the shields' choice let go) or not (a shield chosen). */
+    private _chooseCustom(on: boolean): void {
+        this._custom = on;
+        if (this._customCell) {
+            this._drawCell(this._customCell, on);
+        }
+        let shield: MovieClip = as3.as(this._cells[this._selectedIdx], MovieClip);
+        if (shield) {
+            this._drawCell(shield, !on);
+        }
+        this._updatePreview();
+    }
+
+    /** The designer over the shield grid, or the grid again. */
+    private _openDesigner(open: boolean): void {
+        if (this._designer) {
+            this._designer.visible = open;
+        }
+        if (this._grid) {
+            this._grid.visible = !open;
+        }
+    }
+
+    private _designText(mc: MovieClip, text: string, x: number, y: number, w: number, size: int = 11, bold: boolean = true, align: string = "left"): TextField {
+        let t: TextField = new TextField();
+        let f: TextFormat = new TextFormat("Verdana", size, 0x333333, bold);
+        f.align = align;
+        t.defaultTextFormat = f;
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.width = w;
+        t.height = size + 7;
+        t.x = x;
+        t.y = y;
+        t.text = text;
+        mc.addChild(t);
+        return t;
+    }
+
+    private _designButton(mc: MovieClip, label: string, x: number, y: number, w: int, h: int, name: string, fn: Function): Button_CLIP {
+        let b: Button_CLIP = as3.as(mc.addChild(new Button_CLIP()), Button_CLIP);
+        b.Setup(label, false, w, h);
+        b.x = x;
+        b.y = y;
+        b.name = name;
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            fn();
+        });
+        return b;
+    }
+
+    /** A small button with an arrow on it (left: dir -1), 28 x 24. */
+    private _designArrow(mc: MovieClip, dir: int, x: number, y: number, name: string, fn: Function): void {
+        let b: MovieClip = as3.as(mc.addChild(new MovieClip()), MovieClip);
+        b.name = name;
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        b.x = x;
+        b.y = y;
+        let paint = (over: boolean): void => {
+            let g: any = b.graphics;
+            g.clear();
+            g.lineStyle(1, 0x6E4A22, 1);
+            g.beginFill(over ? 0xF4D68A : 0xE6C27A, 1);
+            g.drawRoundRect(0, 0, 28, 24, 8, 8);
+            g.endFill();
+            g.lineStyle();
+            g.beginFill(0x4A2E14, 1);
+            let cx: number = 14 + dir * 1.5;
+            g.moveTo(cx + dir * 5, 12);
+            g.lineTo(cx - dir * 4, 6);
+            g.lineTo(cx - dir * 4, 18);
+            g.lineTo(cx + dir * 5, 12);
+            g.endFill();
+        };
+        paint(false);
+        b.addEventListener(MouseEvent.MOUSE_OVER, (e: MouseEvent): void => paint(true));
+        b.addEventListener(MouseEvent.MOUSE_OUT, (e: MouseEvent): void => paint(false));
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            fn();
+        });
+    }
+
+    /** One part of the design changed by `by` (round its choices), or set to `to`. */
+    private _changePart(part: int, by: int, to: int = -1): void {
+        let p: int[] = IoCrest.parse(this._design) || IoCrest.parse(IoCrest.DEFAULT);
+        let n: int = IoCrest.LIMITS[part];
+        p[part] = to >= 0 ? to : (((p[part] + by) % n) + n) % n;
+        this._design = IoCrest.spec(p);
+        this._refreshDesign();
+    }
+
+    private _randomDesign(): void {
+        let r = (n: int): int => Math.floor(Math.random() * n) | 0;
+        let p: int[] = [r(6), r(10), r(16), 0, 1 + r(24), 0, r(4)];
+        do {
+            p[3] = r(16);
+        } while (p[3] == p[2]);
+        do {
+            p[5] = r(16);
+        } while (p[5] == p[2] || p[5] == p[3]);
+        this._design = IoCrest.spec(p);
+        this._refreshDesign();
+    }
+
+    private _buildDesigner(leftX: int, leftY: int): void {
+        const W: int = (AllianceFormPopup.GRID_CONTENT_W + AllianceFormPopup.SCROLLBAR_ALLOC) | 0;
+        let d: MovieClip = as3.as(this._mc.addChild(new MovieClip()), MovieClip);
+        d.name = "ioCrestDesigner";
+        d.x = leftX;
+        d.y = leftY;
+        d.graphics.beginFill(AllianceConstants.INNER_BG, 1);
+        d.graphics.lineStyle(1, 8947848, 1);
+        d.graphics.drawRect(0, 0, W, AllianceFormPopup.GRID_H);
+        d.graphics.endFill();
+        this._designer = d;
+        let parts: any = { names: [], swatches: [] };
+        this._designParts = parts;
+        this._designText(d, "Your alliance's crest", 10, 8, 180, 12);
+        this._designText(d, "Shown instead of a shield, wherever your alliance's shield is.", 10, 26, 170, 9, false).height = 40;
+        (d.getChildAt(d.numChildren - 1) as TextField).wordWrap = true;
+        let big: MovieClip = as3.as(d.addChild(new MovieClip()), MovieClip);
+        big.name = "ioCrestBig";
+        big.x = W - 96 - 14;
+        big.y = 6;
+        parts.big = big;
+        // the parts with a choice of a few: < name >
+        const rows: any[] = [["Shape", 0, IoCrest.SHAPES], ["Pattern", 1, IoCrest.PATTERNS], ["Emblem", 4, IoCrest.EMBLEMS], ["Rim", 6, null]];
+        let y: int = 108;
+        for (let i: int = 0; i < rows.length; i++) {
+            let part: int = rows[i][1] | 0;
+            this._designText(d, String(rows[i][0]), 10, y + 4, 70);
+            this._designArrow(d, -1, 80, y, "ioCrestPrev" + part, (): void => this._changePart(part, -1));
+            parts.names[part] = this._designText(d, "", 110, y + 4, 128, 11, true, "center");
+            this._designArrow(d, 1, 240, y, "ioCrestNext" + part, (): void => this._changePart(part, 1));
+            y += 28;
+        }
+        // the colours: one row of swatches each
+        const colours: any[] = [["Field colour", 2], ["Pattern colour", 3], ["Emblem colour", 5]];
+        y += 2;
+        for (let i: int = 0; i < colours.length; i++) {
+            let part: int = colours[i][1] | 0;
+            this._designText(d, String(colours[i][0]), 10, y, 160, 10);
+            let row: any[] = [];
+            for (let k: int = 0; k < IoCrest.COLOURS.length; k++) {
+                let sw: MovieClip = as3.as(d.addChild(new MovieClip()), MovieClip);
+                sw.name = "ioCrestColour" + part + "_" + k;
+                sw.buttonMode = true;
+                sw.x = 10 + k * 17;
+                sw.y = y + 15;
+                let kk: int = k;
+                sw.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                    SOUNDS.Play("click1");
+                    this._changePart(part, 0, kk);
+                });
+                row.push(sw);
+            }
+            parts.swatches[part] = row;
+            y += 37;
+        }
+        this._designButton(d, "Random", 10, AllianceFormPopup.GRID_H - 40, 130, 30, "ioCrestRandom", (): void => this._randomDesign());
+        this._designButton(d, "Shields", W - 140, AllianceFormPopup.GRID_H - 40, 130, 30, "ioCrestShields", (): void => this._openDesigner(false));
+        this._refreshDesign();
+    }
+
+    /** The designer, the Custom cell and the previews, showing the design now. */
+    private _refreshDesign(): void {
+        let p: int[] = IoCrest.parse(this._design);
+        let parts: any = this._designParts;
+        if (!p || !parts) {
+            return;
+        }
+        IoCrest.fit(parts.big, this._design, 96);
+        let names: any[] = [IoCrest.SHAPES, IoCrest.PATTERNS, null, null, IoCrest.EMBLEMS, null, null];
+        for (let part of [0, 1, 4, 6]) {
+            let t: TextField = as3.as(parts.names[part], TextField);
+            if (t) {
+                t.text = part == 6 ? String(IoCrest.RIMS[p[6]][0]) : String(names[part][p[part]]);
+            }
+        }
+        for (let part of [2, 3, 5]) {
+            let row: any[] = parts.swatches[part];
+            for (let k: int = 0; k < row.length; k++) {
+                let g: any = (row[k] as MovieClip).graphics;
+                g.clear();
+                if (k == p[part]) {
+                    g.beginFill(0x000000, 1);
+                    g.drawRect(-2, -2, 19, 19);
+                    g.endFill();
+                    g.beginFill(0xFFFFFF, 1);
+                    g.drawRect(-1, -1, 17, 17);
+                    g.endFill();
+                }
+                g.lineStyle(1, 0x555555, 1);
+                g.beginFill(IoCrest.COLOURS[k], 1);
+                g.drawRect(0, 0, 15, 15);
+                g.endFill();
+            }
+        }
+        if (this._customCell) {
+            IoCrest.fit(this._customCell, this._design, 46, 10, 4);
+        }
+        this._updatePreview();
     }
 
     private _buildFormColumn(x: int, y: int): void {
@@ -202,6 +468,7 @@ export class AllianceFormPopup extends ASObject {
         actBtn.Setup(KEYS.Get(this._mode == AllianceFormPopup.MODE_CREATE ? "alliance_btn_create" : "alliance_btn_save"), false, btnW, btnH);
         actBtn.x = x + (((AllianceFormPopup.RIGHT_FORM_W - btnW) / 2) | 0);
         actBtn.y = btnY;
+        actBtn.name = "ioAllianceSave";
         actBtn.addEventListener(MouseEvent.CLICK, as3.bind(this, this._onAction));
 
         const textareaY: int = (btnY - gap - textareaH) | 0;
@@ -237,8 +504,13 @@ export class AllianceFormPopup extends ASObject {
 
         this._previewCells = [];
         const previewSizes: any[] = [60, 36, 20];
+        // (13 October, edit mode: the name can be changed, and the chat tag set beside it, each with a label over it)
+        const io: boolean = GLOBAL.INFERNO_ONLY && this._mode == AllianceFormPopup.MODE_EDIT;
+        const labelH: int = io ? 15 : 0;
         const nameInputY: int = (textareaY - gap - inputH) | 0;
-        const previewY: int = (nameInputY - gap - 60) | 0;
+        const previewY: int = (nameInputY - labelH - gap - 60) | 0;
+        const tagW: int = io ? 72 : 0;
+        const nameW: int = (AllianceFormPopup.RIGHT_FORM_W - (io ? tagW + 8 : 0)) | 0;
         let previewX: int = x;
         for (let i: int = 0; i < previewSizes.length; i++) {
             let sz: int = previewSizes[i] | 0;
@@ -250,7 +522,9 @@ export class AllianceFormPopup extends ASObject {
             pCell.x = previewX;
             pCell.y = previewY;
             previewX = (previewX + (sz + 8)) | 0;
-            this._loadIcon(pCell, AllianceFormPopup.SHIELD_IDS[this._selectedIdx] | 0, sz);
+            if (!(this._custom && IoCrest.fit(pCell, this._design, sz))) {
+                this._loadIcon(pCell, AllianceFormPopup.SHIELD_IDS[this._selectedIdx] | 0, sz);
+            }
             this._previewCells.push(pCell);
         }
 
@@ -258,16 +532,17 @@ export class AllianceFormPopup extends ASObject {
         nameBg.mouseEnabled = false;
         nameBg.graphics.beginFill(16777215, 1);
         nameBg.graphics.lineStyle(1, 8947848, 1);
-        nameBg.graphics.drawRoundRect(0, 0, AllianceFormPopup.RIGHT_FORM_W, inputH, 4, 4);
+        nameBg.graphics.drawRoundRect(0, 0, nameW, inputH, 4, 4);
         nameBg.graphics.endFill();
         nameBg.x = x;
         nameBg.y = nameInputY;
 
         let nameField: TextField = as3.as(this._mc.addChild(new TextField()), TextField);
         this._nameField = nameField;
+        nameField.name = "ioAllianceName";
         nameField.background = false;
         nameField.border = false;
-        nameField.width = AllianceFormPopup.RIGHT_FORM_W - 12;
+        nameField.width = nameW - 12;
         nameField.height = 18;
         nameField.x = x + 6;
         nameField.y = nameInputY + (((inputH - 18) / 2) | 0);
@@ -278,12 +553,58 @@ export class AllianceFormPopup extends ASObject {
             nameField.mouseEnabled = true;
             nameField.maxChars = 30;
             this._applyPlaceholder(nameField, KEYS.Get("alliance_name_placeholder"));
+        } else if (io) {
+            nameField.type = TextFieldType.INPUT;
+            nameField.selectable = true;
+            nameField.mouseEnabled = true;
+            nameField.maxChars = 30;
+            nameField.text = (this._allianceName != null) ? this._allianceName : "";
+            this._addLabel("Name", x, nameInputY - labelH);
+            this._addLabel("Chat tag", x + nameW + 8, nameInputY - labelH);
+            let tagBg: MovieClip = as3.as(this._mc.addChild(new MovieClip()), MovieClip);
+            tagBg.mouseEnabled = false;
+            tagBg.graphics.beginFill(16777215, 1);
+            tagBg.graphics.lineStyle(1, 8947848, 1);
+            tagBg.graphics.drawRoundRect(0, 0, tagW, inputH, 4, 4);
+            tagBg.graphics.endFill();
+            tagBg.x = x + nameW + 8;
+            tagBg.y = nameInputY;
+            let tagField: TextField = as3.as(this._mc.addChild(new TextField()), TextField);
+            this._tagField = tagField;
+            tagField.name = "ioAllianceTag";
+            tagField.type = TextFieldType.INPUT;
+            tagField.selectable = true;
+            tagField.mouseEnabled = true;
+            tagField.background = false;
+            tagField.border = false;
+            tagField.maxChars = 5;
+            tagField.width = tagW - 12;
+            tagField.height = 18;
+            tagField.x = tagBg.x + 6;
+            tagField.y = nameField.y;
+            let tagFmt: TextFormat = new TextFormat("Verdana", 11, 0x333333, true);
+            tagFmt.align = TextFormatAlign.CENTER;
+            tagField.defaultTextFormat = tagFmt;
+            tagField.text = this._tag ? this._tag : (this._tagDefault ? this._tagDefault : "");
         } else {
             nameField.type = TextFieldType.DYNAMIC;
             nameField.selectable = false;
             nameField.mouseEnabled = false;
             nameField.text = (this._allianceName != null) ? this._allianceName : "";
         }
+    }
+
+    /** Inferno-only (13 October): a small label over a field. */
+    private _addLabel(text: string, x: number, y: number): void {
+        let t: TextField = as3.as(this._mc.addChild(new TextField()), TextField);
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.defaultTextFormat = new TextFormat("Verdana", 10, 0x555555, true);
+        t.width = 140;
+        t.height = 15;
+        t.text = text;
+        t.x = x;
+        t.y = y;
     }
 
     /**
@@ -360,6 +681,10 @@ export class AllianceFormPopup extends ASObject {
     private _makeShieldClickHandler(idx: int): Function {
         return (e: MouseEvent): void => {
             SOUNDS.Play("click1");
+            if (this._custom) {
+                this._custom = false;
+                this._drawCell(this._customCell, false);
+            }
             this._drawCell(as3.as(this._cells[this._selectedIdx], MovieClip), false);
             this._selectedIdx = idx;
             this._drawCell(as3.as(this._cells[this._selectedIdx], MovieClip), true);
@@ -376,6 +701,9 @@ export class AllianceFormPopup extends ASObject {
             let pc: MovieClip = as3.as(this._previewCells[i], MovieClip);
             while (pc.numChildren > 0) {
                 pc.removeChildAt(0);
+            }
+            if (this._custom && IoCrest.fit(pc, this._design, previewSizes[i] | 0)) {
+                continue;
             }
             this._loadIcon(pc, AllianceFormPopup.SHIELD_IDS[this._selectedIdx] | 0, previewSizes[i] | 0);
         }
@@ -418,6 +746,14 @@ export class AllianceFormPopup extends ASObject {
 
         let r: URLLoaderApi = new URLLoaderApi();
         let createVars: any[] = [["alliance_name", name], ["alliance_image", image], ["alliance_desc", description]];
+        if (GLOBAL.INFERNO_ONLY && this._custom) {
+            createVars.push(["alliance_crest", this._design]);
+        }
+        // (Inferno-only, 14 October, QoL #434: "Creating..." with its click shield: a double click made the alliance
+        // and then said "That name is already taken")
+        if (GLOBAL.INFERNO_ONLY) {
+            PLEASEWAIT.Show(KEYS.Get("io_alliance_creating"));
+        }
         r.load(GLOBAL._allianceURL + "createalliance", createVars, as3.bind(this, this._onCreateComplete), as3.bind(this, this._onCreateFail));
     }
 
@@ -430,6 +766,7 @@ export class AllianceFormPopup extends ASObject {
      * form closes and the window jumps to the My Alliance tab.
      */
     private _onCreateComplete(response: any): void {
+        PLEASEWAIT.Hide();
         if (response && response.alliance) {
             ALLIANCES._allianceID = response.alliance.alliance_id | 0;
             ALLIANCES._myAlliance = ALLIANCES.SetAlliance(response.alliance);
@@ -446,6 +783,7 @@ export class AllianceFormPopup extends ASObject {
     }
 
     private _onCreateFail(e: IOErrorEvent): void {
+        PLEASEWAIT.Hide();
         GLOBAL.Message(KEYS.Get("alliance_err_generic"));
     }
 
@@ -466,8 +804,27 @@ export class AllianceFormPopup extends ASObject {
 
         let image: int = AllianceFormPopup.SHIELD_IDS[this._selectedIdx] | 0;
 
-        let r: URLLoaderApi = new URLLoaderApi();
         let editVars: any[] = [["alliance_image", image], ["alliance_desc", description]];
+        // (13 October: the name, which can be changed now, and the chat tag: at least 1 letter or number)
+        if (GLOBAL.INFERNO_ONLY && this._tagField != null) {
+            let name: string = this._trim(this._nameField.text);
+            if (name.length == 0) {
+                GLOBAL.Message(KEYS.Get("alliance_err_name_too_short"));
+                return;
+            }
+            let tag: string = this._trim(this._tagField.text);
+            if (tag.length == 0) {
+                GLOBAL.Message("The chat tag needs at least 1 letter or number.");
+                return;
+            }
+            editVars.push(["alliance_name", name], ["alliance_tag", tag]);
+        }
+        // (14 October: the crest designed, or none: the shield chosen)
+        if (GLOBAL.INFERNO_ONLY) {
+            editVars.push(["alliance_crest", this._custom ? this._design : ""]);
+        }
+
+        let r: URLLoaderApi = new URLLoaderApi();
         r.load(GLOBAL._allianceURL + "editalliance", editVars, as3.bind(this, this._onEditComplete), as3.bind(this, this._onEditFail));
     }
 
@@ -479,7 +836,19 @@ export class AllianceFormPopup extends ASObject {
      */
     private _onEditComplete(response: any): void {
         if (response && response.alliance) {
-            ALLIANCES._myAlliance = ALLIANCES.SetAlliance(response.alliance);
+            // (13 October: a known alliance's record is reused as it was, so the new name and shield are put on it;
+            // the answer carries no stances, so the ones the game had are kept: chat's tag colours come from them)
+            let before: any = ALLIANCES._myAlliance as any;
+            let after: any = ALLIANCES.SetAlliance(response.alliance) as any;
+            if (after) {
+                after.name = String(response.alliance.name);
+                after.image = response.alliance.image | 0;
+                after.crest = response.alliance.crest ? String(response.alliance.crest) : null;
+                if (!after.relationships && before && before.relationships) {
+                    after.relationships = before.relationships;
+                }
+            }
+            ALLIANCES._myAlliance = after;
             ALLIANCES.InvalidateMyAlliance();
             this._onClose();
             if (ALLIANCEWINDOW._mc != null) {

@@ -16,6 +16,10 @@ import { FORTUNE_LINES, fortuneLines, fortuneRtp, fortuneWindow, playFortune, pl
 import { derbyRace, derbyRtp } from "../src/services/casino/games/derby.js";
 import { ascentCrashFor, ascentFlightMs, ascentMultiplier } from "../src/services/casino/games/ascent.js";
 import { bonePileLayout, bonePileMultiplier, bonePileRtp } from "../src/services/casino/games/bonePile.js";
+import { DEVIL, SAFE, devilAt, diceMultiplier, diceRolls, diceRtp } from "../src/services/casino/games/dice.js";
+import { act as bjAct, basicStrategy, deal as bjDeal, finish as bjFinish, shuffleShoe } from "../src/services/casino/games/blackjack.js";
+import { chanceOf, drawCards, hiloMultiplier, wins as hiloWins } from "../src/services/casino/games/hilo.js";
+import { dealLayout, dealOffer, openedBy } from "../src/services/casino/games/deal.js";
 
 const rounds = Number(process.argv[2] || 1_000_000);
 let failed = 0;
@@ -350,6 +354,156 @@ for (const risk of Object.keys(casinoConfig.magmaDrop.risks)) {
   check(`Derby: runners win as often as their chances say, grouped by chance (at most ${Math.max(...zs.map(Math.abs)).toFixed(2)} standard errors off)`, zs.every((z) => Math.abs(z) < 4), bins.filter((b) => b.n > 1000).map((b) => `${(b.chance / b.n * 100).toFixed(1)}%:${(b.wins / b.n * 100).toFixed(1)}%`).join(" "));
   check("Derby: six different runners; strengths 1 to 6; finishing times in the order drawn, within the race; every runner's times go forward", raceOk);
   check("Derby: every monster wins races", Object.keys(firsts).length === rules.monsters.length, JSON.stringify(firsts));
+}
+
+// Devil's Dice
+{
+  const rules = casinoConfig.dice;
+  const cap = casinoConfig.maxMultiplier;
+  const ms = Array.from({ length: rules.maxRolls }, (_, i) => diceMultiplier(rules, i + 1, cap));
+  check(`Devil's Dice: the multipliers are 1.43x, 2.07x, 2.98x ... ${ms[ms.length - 1]}x after ${rules.maxRolls} (${ms.join(", ")})`, ms[0] === 1.43 && ms[1] === 2.07 && ms[2] === 2.98 && ms.every((m, i) => i === 0 || m > ms[i - 1]) && ms[ms.length - 1] < cap);
+  const rtps = ms.map((_, i) => diceRtp(rules, i + 1, cap));
+  check(`Devil's Dice: banking after any throw returns ${pct(Math.min(...rtps))} to ${pct(Math.max(...rtps))}, under 100%`, rtps.every(under) && Math.max(...rtps) <= rules.rtp + 1e-12);
+  // the bones drawn from rounds' seeds: each face as often, the Devil's throw as often as (25/36)^(k-1) x 11/36
+  const N = Math.min(rounds, 300_000);
+  const faces = new Array(7).fill(0);
+  const devilOn = new Array(rules.maxRolls + 1).fill(0);
+  const reach = [1, 3, 6, 12].map(() => 0);
+  let ok = true;
+  for (let n = 0; n < N; n++) {
+    const rolls = diceRolls(`${seed}-dice-${n}`, rules.maxRolls);
+    if (rolls.length !== rules.maxRolls) ok = false;
+    for (const [a, b] of rolls) {
+      faces[a]++;
+      faces[b]++;
+      if (a < 1 || a > 6 || b < 1 || b > 6) ok = false;
+    }
+    const d = devilAt(rolls);
+    devilOn[d]++;
+    if (d > 0 && !(rolls[d - 1].includes(DEVIL) && rolls.slice(0, d - 1).every(([a, b]) => a !== DEVIL && b !== DEVIL))) ok = false;
+    [1, 3, 6, 12].forEach((k, i) => { if (d === 0 || d > k) reach[i]++; });
+  }
+  check("Devil's Dice: two bones a throw, 1 to 6 each; the Devil's throw is the first with a 6", ok);
+  const each = (N * rules.maxRolls * 2) / 6;
+  check("Devil's Dice: every face comes up as often", faces.slice(1).every((c) => Math.abs(c / each - 1) < 0.01), faces.slice(1).join(" "));
+  [1, 3, 6, 12].forEach((k, i) => {
+    const p = Math.pow(SAFE, k);
+    const tol = 4 * Math.sqrt((p * (1 - p)) / N) + 1e-9;
+    const measured = reach[i] / N;
+    check(`Devil's Dice: ${k} safe throw${k === 1 ? "" : "s"} in a row in ${pct(measured)} of rounds (${pct(p)}); banking there returned ${pct(measured * diceMultiplier(rules, k, cap))}`, Math.abs(measured - p) < tol);
+  });
+}
+
+// Cinderjack: played by the book, it returns just under 100% (simulated: blackjack has no closed form here)
+{
+  const rules = casinoConfig.blackjack;
+  const N = Math.min(rounds, 1_000_000);
+  let first = 0, wagered = 0, paid = 0, naturals = 0, splits = 0, doubles = 0;
+  for (let n = 0; n < N; n++) {
+    const rng = fairStream(seed, "blackjack", n);
+    const shoe = shuffleShoe(rules, rng);
+    const t = bjDeal(shoe, 1);
+    first += 1;
+    wagered += 1;
+    while (t.at < t.hands.length && !t.hands[t.at].done) {
+      const a = basicStrategy(rules, t);
+      if (a === "split") splits++;
+      if (a === "double") doubles++;
+      wagered += bjAct(rules, t, shoe, a);
+    }
+    paid += bjFinish(rules, t, shoe);
+    if (t.hands[0].result === "blackjack") naturals++;
+  }
+  // (one hand's result has a standard deviation of about 1.15 of its first bet)
+  const rtp = paid / first - (wagered - first) / first;
+  const tol = 4 * 1.15 / Math.sqrt(N);
+  check(`Cinderjack: by the book it returns ${pct(1 + (paid - wagered) / first)} of the first bets (${pct(paid / wagered)} of all staked), under 100% (+-${pct(tol)})`, 1 + (paid - wagered) / first < 1 && 1 + (paid - wagered) / first > 0.985, `(${N} hands: ${pct(naturals / N)} blackjacks, ${pct(splits / N)} splits, ${pct(doubles / N)} doubles)`);
+  void rtp;
+  // the shoe: every card in it decks times
+  const shoe = shuffleShoe(rules, fairStream(seed, "shoe", 0));
+  const counts = new Array(52).fill(0);
+  shoe.forEach((c) => counts[c]++);
+  check("Cinderjack: a shoe holds every card decks times", shoe.length === 52 * rules.decks && counts.every((c) => c === rules.decks));
+}
+
+// Higher or Lower: every guess's multiplier keeps every stopping point at rtp (less its rounding)
+{
+  const rules = casinoConfig.hilo;
+  const cap = casinoConfig.maxMultiplier;
+  let worst = 1;
+  for (let r = 1; r <= 13; r++) {
+    for (const g of ["hi", "lo"]) {
+      const p = chanceOf(r, g);
+      if (p >= 1) continue;
+      const ret = p * hiloMultiplier(rules, p, cap);
+      worst = Math.min(worst, ret);
+      if (!under(ret)) check(`Higher or Lower: one guess ${g} on ${r}`, false, pct(ret));
+    }
+  }
+  check(`Higher or Lower: one guess returns under 100% on every card and way (the worst ${pct(worst)})`, worst < 1 && worst >= FLOOR);
+  // simulated: always guess the likelier way, stop after k right guesses
+  const N = Math.min(rounds, 400_000);
+  for (const k of [1, 3, 6]) {
+    let staked = 0, paid = 0;
+    for (let n = 0; n < N; n++) {
+      const cards = drawCards(rules, fairStream(seed, `hilo-${k}`, n));
+      let odds = 1, i = 0, right = 0, lost = false;
+      while (right < k) {
+        const r = cards[i][0];
+        const g = chanceOf(r, "hi") >= chanceOf(r, "lo") ? "hi" : "lo";
+        if (chanceOf(r, g) >= 1) { i++; continue; }
+        const next = cards[i + 1][0];
+        if (!hiloWins(r, next, g)) { lost = true; break; }
+        odds *= chanceOf(r, g);
+        right++;
+        i++;
+      }
+      staked += 1;
+      if (!lost) paid += hiloMultiplier(rules, odds, cap);
+    }
+    const sd = 6 / Math.sqrt(N);
+    check(`Higher or Lower: stopping after ${k} right guess${k === 1 ? "" : "es"} returned ${pct(paid / staked)} (about 99.9%)`, paid / staked < 1 + sd && paid / staked > 0.99 - sd);
+  }
+  const cards = drawCards(rules, fairStream(seed, "hilo-even", 0));
+  check("Higher or Lower: a game's cards are 1 (Ace) to 13 (King), suits 0 to 3", cards.length === rules.cards && cards.every(([r, s]) => r >= 1 && r <= 13 && s >= 0 && s <= 3));
+}
+
+// The Undertaker's Offer: keeping (or swapping) to the end returns the prizes' average; every offer is below the average of what is left
+{
+  const rules = casinoConfig.deal;
+  const n = rules.prizes.length;
+  const avg = rules.prizes.reduce((a, b) => a + b, 0) / n;
+  check(`The Undertaker's Offer: ${n} prizes averaging ${pct(avg)} (kept to the end), under 100%`, n === 12 && under(avg));
+  check(`The Undertaker's Offer: the rounds open ${rules.rounds.join(" + ")} = ${n - 2} coffins (two left for keep or swap); an offer after each`,
+    rules.rounds.reduce((a, b) => a + b, 0) === n - 2 && rules.offers.length === rules.rounds.length && rules.offers.every((o) => o > 0 && o < 1));
+  const N = Math.min(rounds, 400_000);
+  const where = Array.from({ length: n }, () => new Array(n).fill(0));
+  let keep = 0, swap = 0, first = 0, layoutOk = true, offerOk = true;
+  for (let g = 0; g < N; g++) {
+    const layout = dealLayout(rules, fairStream(seed, "deal", g));
+    if (new Set(layout).size !== n) layoutOk = false;
+    layout.forEach((prize, c) => where[c][prize]++);
+    // the player keeps coffin 0 and opens 1, 2, 3 ... in order
+    const opened: number[] = [];
+    for (let r = 0; r < rules.rounds.length; r++) {
+      while (opened.length < openedBy(rules, r)) opened.push(opened.length + 1);
+      const sealed = layout.filter((_, c) => !opened.includes(c)).map((i) => rules.prizes[i]);
+      const offer = dealOffer(rules, r, sealed);
+      const left = sealed.reduce((a, b) => a + b, 0) / sealed.length;
+      if (offer > left + 1e-12 || offer < 0) offerOk = false;
+      if (r === 0) first += offer;
+    }
+    keep += rules.prizes[layout[0]];
+    swap += rules.prizes[layout[n - 1]];
+  }
+  const sd = 5 * 1.6 / Math.sqrt(N);
+  check(`The Undertaker's Offer: keeping to the end returned ${pct(keep / N)} over ${N} games (exact ${pct(avg)})`, Math.abs(keep / N - avg) < sd);
+  check(`The Undertaker's Offer: swapping at the end returned ${pct(swap / N)} (the same: the Undertaker doesn't know either)`, Math.abs(swap / N - avg) < sd);
+  check(`The Undertaker's Offer: taking the first offer returned ${pct(first / N)} (${pct(rules.offers[0] * avg)} about), under keeping`, first / N < avg && first / N > rules.offers[0] * avg - sd);
+  check("The Undertaker's Offer: every offer is at most the average of the prizes still sealed", offerOk);
+  check("The Undertaker's Offer: every layout holds every prize once", layoutOk);
+  const mean = N / n;
+  check("The Undertaker's Offer: every prize as likely in every coffin", where.every((row) => row.every((x) => Math.abs(x - mean) < 5 * Math.sqrt(mean))));
 }
 
 // The stream: the same seed, client seed and nonce give the same numbers; its numbers are even

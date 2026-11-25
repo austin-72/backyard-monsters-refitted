@@ -1,0 +1,12 @@
+# Optional overlay for the browser client (WEB-CLIENT.md): binds server/public/web (and the
+# watch-mode folder web-dev) into the container like public/client, so publishing is a plain file
+# copy with no image rebuild. Without it, a published browser client ships with the next
+# `docker compose up --build`.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.web.yml up --build -d
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.web.yml up --build -d
+services:
+  web:
+    volumes:
+      - ./public/web:/app/public/web
+      - ./public/web-dev:/app/public/web-dev

@@ -130,6 +130,18 @@ export class MembersTab extends AllianceTabBase {
     }
 
     /**
+     * Where the table starts, and how tall its scrolling view is. (Inferno-only, QoL #163: the Recruit tab moves it
+     * down for its filter row.)
+     */
+    protected get _tableTop(): int {
+        return MembersTab.TABLE_Y;
+    }
+
+    protected get _viewHeight(): int {
+        return MembersTab.VIEW_H;
+    }
+
+    /**
      * Background colour for a data row. The current player's own row is
      * highlighted yellow; every other row uses the beige alternating bands
      * shared with Browse Alliances.
@@ -195,7 +207,7 @@ export class MembersTab extends AllianceTabBase {
 
         let viewport: MovieClip = as3.as(this.addChild(new MovieClip()), MovieClip);
         viewport.x = MembersTab.TABLE_X;
-        viewport.y = MembersTab.TABLE_Y;
+        viewport.y = this._tableTop;
 
         let tableMC: MovieClip = as3.as(viewport.addChild(new MovieClip()), MovieClip);
 
@@ -271,7 +283,7 @@ export class MembersTab extends AllianceTabBase {
 
         let maskMC: MovieClip = as3.as(viewport.addChild(new MovieClip()), MovieClip);
         maskMC.graphics.beginFill(16711680, 1);
-        maskMC.graphics.drawRect(0, 0, MembersTab.TABLE_W, MembersTab.VIEW_H);
+        maskMC.graphics.drawRect(0, 0, MembersTab.TABLE_W, this._viewHeight);
         maskMC.graphics.endFill();
         tableMC.mask = maskMC;
 

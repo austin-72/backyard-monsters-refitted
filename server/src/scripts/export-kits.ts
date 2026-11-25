@@ -161,6 +161,7 @@ try {
     if (!hall) fail(`Kit ${slot}: the outpost on (${x}, ${y}) has no outpost hall.`);
 
     const buildings: Record<string, KitBuilding> = { "0": { t: OUTPOST_HALL, X: Number(hall!.X), Y: Number(hall!.Y), id: 0 } };
+    if (Number(hall!.fort) >= 1) buildings["0"].fort = Math.min(4, Math.trunc(Number(hall!.fort)));
     let nextId = 1;
 
     for (const building of source) {
@@ -172,6 +173,8 @@ try {
         id: nextId,
         prefab: Math.max(1, Number(building.l) || 1),
       };
+      // (12 November) and how far it is calcified, as the Designer and player kits keep it
+      if (Number(building.fort) >= 1) buildings[String(nextId)].fort = Math.min(4, Math.trunc(Number(building.fort)));
       nextId++;
     }
 

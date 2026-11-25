@@ -1,11 +1,13 @@
+import { setTimeout } from "flash/utils";
 import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
 import { Bitmap, BitmapData, GradientType, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent } from "flash/events";
 import { DropShadowFilter, GlowFilter } from "flash/filters";
-import { Matrix } from "flash/geom";
+import { Matrix, Rectangle } from "flash/geom";
 import { TextField, TextFormat, TextFormatAlign } from "flash/text";
-import { ATTACK, BASE, BFOUNDATION, CREATURELOCKER, CellData, EnumYardType, GLOBAL, ImageCache, InstanceManager, IoOutpostsPopup, KEYS, MapRoomCell, PLEASEWAIT, POPUPSETTINGS, SOUNDS, SecNum, URLLoaderApi } from "@game";
+import { SharedObject } from "flash/net";
+import { GRID, POPUPS, ArcadeArt, ATTACK, BASE, BFOUNDATION, CasinoUI, CellData, CREATURELOCKER, CREATURES, EnumYardType, GLOBAL, ImageCache, InstanceManager, IoKit, IoOutpostsPopup, IoTrophies, IoToast, KEYS, LOGIN, MapRoomCell, PLEASEWAIT, POPUPSETTINGS, SecNum, SOUNDS, URLLoaderApi, IoFormat } from "@game";
 
 /**
  * Inferno-only: Moloch's Gauntlet, the monthly event (server: services/events/gauntlet.ts).
@@ -21,10 +23,15 @@ import { ATTACK, BASE, BFOUNDATION, CREATURELOCKER, CellData, EnumYardType, GLOB
  *
  * During the attack a bar shows how much of the yard is destroyed and the line to reach. The attack's end
  * sends the player home, where the window opens again with what the attack did (the server's `last`).
+ *
+ * (15 October) QoL #345: the gate's panel says what the attack would take (the monsters housed in the main yard, from
+ * the server's `home`, and its Flinger's level), and its Layout button shows the gate's yard in Moloch's place
+ * (worldmapv2/gauntletlayout: buildings by kind, damaged and destroyed ones marked, traps hidden). The attack is still
+ * made from the main yard only: the game has no way to send another yard's monsters to a Gauntlet gate.
  */
 export class IoGauntlet extends ASObject {
     static {
-        as3.fields(this, { _mc: null, _status: null, _gates: null, _selected: 0, _detail: null, _embers: null, _emberLayer: null, _moloch: null, _tick: 0 });
+        as3.fields(this, { _mc: null, _status: null, _gates: null, _selected: 0, _detail: null, _embers: null, _emberLayer: null, _moloch: null, _tick: 0, _ioPreview: null, _ioLayoutOn: false });
     }
 
     private static _open: IoGauntlet = null;
@@ -47,10 +54,16 @@ export class IoGauntlet extends ASObject {
 
     private static readonly H: int = 530;
 
-    /** The gates' names, I to XIII. */
-    private static readonly GATE_NAMES: any[] = ["The Ashen Gate", "The Bone Moat", "The Cinder Wall", "The Iron Maw", "The Weeping Spires", "The Sulfur Pits", "The Chained Host", "The Blood Forge", "The Howling Keep", "The Obsidian Crown", "The Pyre of Kings", "The Last Bastion", "Moloch's Throne"];
+    /**
+     * The gates' names, I to XIII ("The Ashen Gate" ... "Moloch's Throne"): their keys (QoL #235: in the player's
+     * language, read when shown).
+     */
+    private static readonly GATE_NAMES: any[] = ["io_t3t_gnt_gate_1", "io_t3t_gnt_gate_2", "io_t3t_gnt_gate_3", "io_t3t_gnt_gate_4", "io_t3t_gnt_gate_5", "io_t3t_gnt_gate_6", "io_t3t_gnt_gate_7", "io_t3t_gnt_gate_8", "io_t3t_gnt_gate_9", "io_t3t_gnt_gate_10", "io_t3t_gnt_gate_11", "io_t3t_gnt_gate_12", "io_t3t_gnt_gate_13"];
 
-    private static readonly LORE: string = "Once each moon, Moloch throws open the gates of his Gauntlet. Thirteen strongholds stand between you and his hoard, each crueler than the last. Break them, and his treasures are yours.\n\nFalter thrice at any gate, and the fires mend its walls — and the prize behind it is lost to you until the next moon.";
+    /** The legend (QoL #235: in the player's language, read when shown: the language file isn't loaded when the class is). */
+    private static get LORE(): string {
+        return KEYS.Get("io_t3t_gnt_lore1") + "\n\n" + KEYS.Get("io_t3t_gnt_lore2");
+    }
 
     /** Where the gates sit: three to a row, winding down (left to right, then back). */
     private static readonly GATE_X: any[] = [-290, -185, -80];
@@ -80,6 +93,17 @@ export class IoGauntlet extends ASObject {
     private _emberLayer: Sprite;
     private _moloch: Sprite;
     private _tick: int;
+    /** (QoL #345) the gate's layout, in Moloch's place while shown. */
+    private _ioPreview: Sprite;
+    private _ioLayoutOn: boolean;
+
+    /** (QoL #345) each gate's layout as the server last sent it (stage: buildings), while the window is open. */
+    private static _ioLayouts: any = {};
+
+    /** (QoL #345) the panel's height (it was 184; room for the army's line) and where it starts. */
+    private static readonly IO_PH: int = 214;
+
+    private static readonly IO_PANEL_Y: int = 46;
 
     public $ctor(status?: any): void {
         let moloch: Sprite = null;
@@ -88,6 +112,8 @@ export class IoGauntlet extends ASObject {
         super.$ctor();
         this._status = status;
         IoGauntlet._winPercent = status.winPercent | 0 || 90;
+        // (QoL #602: whether the Purist Trophy can still be won this month: no catapult fired, not won yet)
+        IoGauntlet.puristOpen = !(status.trophies && Number(status.trophies.gauntlet_nocat) > 0) && !status.catapult;
         let stages: any[] = as3.as(status.stages, Array) || [];
         let left: int = (-((IoGauntlet.W * 0.5) | 0)) | 0;
         let top: int = (-((IoGauntlet.H * 0.5) | 0)) | 0;
@@ -113,13 +139,14 @@ export class IoGauntlet extends ASObject {
         // Moloch, looming on the right
         this._moloch = as3.as(this._mc.addChild(new Sprite()), Sprite);
         this._moloch.x = 210;
-        this._moloch.y = -60;
+        // (QoL #345: a little smaller and higher, clear of the gate's panel, now taller)
+        this._moloch.y = GLOBAL.INFERNO_ONLY ? -72 : -60;
         this._moloch.mouseEnabled = false;
         moloch = this._moloch;
         ImageCache.GetImageWithCallBack("popups/tribe_moloch.png", (key: string, bmd: BitmapData, args: any[] = null): void => {
             let picture: Bitmap = new Bitmap(bmd);
             picture.smoothing = true;
-            picture.height = 250;
+            picture.height = GLOBAL.INFERNO_ONLY ? 230 : 250;
             picture.scaleX = picture.scaleY;
             picture.x = -((picture.width * 0.5) | 0);
             picture.y = -((picture.height * 0.5) | 0);
@@ -127,13 +154,14 @@ export class IoGauntlet extends ASObject {
         });
 
         // the title, and how long the gates stay open
-        let title: TextField = as3.as(this._mc.addChild(IoGauntlet.label("MOLOCH'S GAUNTLET", 28, 16766346, false, IoGauntlet.W, TextFormatAlign.CENTER, "Groboldov")), TextField);
+        let title: TextField = as3.as(this._mc.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_title"), 28, 16766346, false, IoGauntlet.W, TextFormatAlign.CENTER, "Groboldov")), TextField);
         title.embedFonts = true;
         title.height = 40;
         title.filters = [new GlowFilter(0xFF4A00, 0.9, 12, 12, 2, 2), new DropShadowFilter(3, 45, 0, 0.8, 4, 4, 1, 2)];
         title.x = left;
         title.y = top + 16;
         let when: TextField = as3.as(this._mc.addChild(IoGauntlet.label(this.whenText(), 12, 15771752, false, IoGauntlet.W, TextFormatAlign.CENTER)), TextField);
+        // (QoL #570: it counts down while the window is open, by the second in the last hour)
         when.name = "ioGauntletWhen";
         when.filters = [new GlowFilter(0, 1, 2, 2, 4, 1)];
         when.x = left;
@@ -144,33 +172,71 @@ export class IoGauntlet extends ASObject {
         if (result) {
             let banner: Sprite = as3.as(this._mc.addChild(new Sprite()), Sprite);
             let won: boolean = Boolean(this._status.last && this._status.last.result == "won");
-            banner.graphics.lineStyle(1, (won ? 0xE2B227 : 0x8A2A1A) >>> 0, 1);
-            banner.graphics.beginFill((won ? 0x3A2206 : 0x2A0806) >>> 0, 0.92);
-            banner.graphics.drawRoundRect(0, 0, IoGauntlet.W - 60, 28, 10, 10);
-            banner.graphics.endFill();
+            banner.name = "ioGauntletResult";
             banner.x = left + 30;
             banner.y = y;
             let bannerText: TextField = as3.as(banner.addChild(IoGauntlet.label("", 12, (won ? 0xFFE08A : 0xF0B090) >>> 0, false, (IoGauntlet.W - 76) | 0, TextFormatAlign.CENTER)), TextField);
+            // (QoL #88: the numbers can take two lines)
+            bannerText.multiline = true;
+            bannerText.wordWrap = true;
             bannerText.htmlText = result;
+            bannerText.height = Math.max(18, bannerText.textHeight + 4);
             bannerText.x = 8;
             bannerText.y = 5;
-            y += 34;
+            let bannerH: int = Math.max(28, (bannerText.height + 10) | 0) | 0;
+            banner.graphics.lineStyle(1, (won ? 0xE2B227 : 0x8A2A1A) >>> 0, 1);
+            banner.graphics.beginFill((won ? 0x3A2206 : 0x2A0806) >>> 0, 0.92);
+            banner.graphics.drawRoundRect(0, 0, IoGauntlet.W - 60, bannerH, 10, 10);
+            banner.graphics.endFill();
+            y = (y + bannerH + 6) | 0;
             IoGauntlet._shownResult = Number(this._status.last.at);
         }
 
         // the legend
-        let lore: TextField = as3.as(this._mc.addChild(IoGauntlet.label("", 12, 15258288, false, 400, TextFormatAlign.LEFT, "Georgia", true)), TextField);
+        // (QoL #604, 15 October: a point smaller and one paragraph break, so the lines under it clear the gates)
+        let lore: TextField = as3.as(this._mc.addChild(IoGauntlet.label("", GLOBAL.INFERNO_ONLY ? 11 : 12, 15258288, false, 400, TextFormatAlign.LEFT, "Georgia", true)), TextField);
         lore.name = "ioGauntletLore";
         lore.multiline = true;
         lore.wordWrap = true;
-        lore.text = IoGauntlet.LORE;
+        lore.text = GLOBAL.INFERNO_ONLY ? IoGauntlet.LORE.replace("\n\n", "\n") : IoGauntlet.LORE;
         lore.height = 118;
         lore.x = left + 30;
         lore.y = y + 2;
-        let numbers: TextField = as3.as(this._mc.addChild(IoGauntlet.label(IoGauntlet._winPercent + "% destroyed breaks a gate  ·  " + (status.attempts | 0) + " attempts at each  ·  the gates rise anew on the 1st", 10, 12618330, false, 400, TextFormatAlign.LEFT)), TextField);
+        let numbers: TextField = as3.as(this._mc.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_numbers1", { "v1": IoGauntlet._winPercent, "v2": status.attempts | 0 }) + "\n" + KEYS.Get("io_t3t_gnt_numbers2", { "v1": IoGauntlet.ioNextFirst() }), 10, 12618330, false, 400, TextFormatAlign.LEFT)), TextField);
         numbers.name = "ioGauntletNumbers";
+        // (two lines: the second says when the gates rise again, in the player's own time: QoL #566)
+        numbers.multiline = true;
+        numbers.wordWrap = true;
+        numbers.height = 32;
         numbers.x = lore.x;
-        numbers.y = lore.y + lore.textHeight + 10;
+        numbers.y = lore.y + lore.textHeight + (GLOBAL.INFERNO_ONLY ? 6 : 10);
+        // the trophies (10 October): for beating it, and for beating it without a catapult
+        // (QoL #604: with a result's banner at the top there's room for one line under the numbers: this moon's Shiny
+        // then, the trophies' line the other times)
+        let ioTrophyLine: boolean = !(GLOBAL.INFERNO_ONLY && result && stages.length);
+        if (GLOBAL.INFERNO_ONLY && status.trophies) {
+            if (GLOBAL._flags) {
+                GLOBAL._flags.io_trophies = JSON.stringify(status.trophies);
+                IoTrophies.Sync();
+            }
+            let tw: boolean = Number(status.trophies.gauntlet) > 0;
+            let tn: boolean = Number(status.trophies.gauntlet_nocat) > 0;
+            let trophies: TextField = as3.as(this._mc.addChild(IoGauntlet.label("", 10, 12618330, false, 400, TextFormatAlign.LEFT)), TextField);
+            trophies.visible = ioTrophyLine;
+            trophies.name = "ioGauntletTrophies";
+            trophies.htmlText = KEYS.Get("io_t3t_gnt_trophies", { "v1": tw ? "<font color=\"#E2B227\">" + KEYS.Get("io_t3t_gnt_won") + "</font>" : KEYS.Get("io_t3t_gnt_tro_all"), "v2": tn ? "<font color=\"#E2B227\">" + KEYS.Get("io_t3t_gnt_won") + "</font>" : status.catapult ? "<font color=\"#E0705A\">" + KEYS.Get("io_t3t_gnt_tro_fired") + "</font>" : KEYS.Get("io_t3t_gnt_tro_nocat") });
+            trophies.x = lore.x;
+            trophies.y = numbers.y + 27;
+        }
+        // (QoL #604: this moon's Shiny: claimed, still to win, lost)
+        if (GLOBAL.INFERNO_ONLY && stages.length) {
+            let money: any[] = IoGauntlet.ioMoonShiny(stages);
+            let moon: TextField = as3.as(this._mc.addChild(IoGauntlet.label("", 10, 12618330, false, 400, TextFormatAlign.LEFT)), TextField);
+            moon.name = "ioGauntletMoon";
+            moon.htmlText = KEYS.Get("io_t3t_gnt_moon") + " <font color=\"#E2B227\">" + KEYS.Get("io_t3t_gnt_claimed", { "v1": money[0] }) + "</font>  ·  " + KEYS.Get("io_t3t_gnt_to_win", { "v1": money[1] }) + (money[2] > 0 ? "  ·  <font color=\"#E0705A\">" + KEYS.Get("io_t3t_gnt_lost", { "v1": money[2] }) + "</font>" : "");
+            moon.x = lore.x;
+            moon.y = numbers.y + (status.trophies && ioTrophyLine ? 41 : 27);
+        }
 
         // the gates, winding down into the fire
         this.drawPath(stages);
@@ -183,23 +249,21 @@ export class IoGauntlet extends ASObject {
         // the chosen gate: the one to fight (or the last)
         this._detail = as3.as(this._mc.addChild(new Sprite()), Sprite);
         this._detail.x = 72;
-        this._detail.y = 72;
+        this._detail.y = GLOBAL.INFERNO_ONLY ? IoGauntlet.IO_PANEL_Y : 72;
+        // (QoL #345: the gate's layout, where Moloch stands, shown by the panel's Layout button)
+        if (GLOBAL.INFERNO_ONLY) {
+            IoGauntlet._ioLayouts = {};
+            this._ioPreview = as3.as(this._mc.addChild(new Sprite()), Sprite);
+            this._ioPreview.name = "ioGnt3Layout";
+            this._ioPreview.x = 96;
+            this._ioPreview.y = -128;
+            this._ioPreview.visible = false;
+        }
         this.select((Math.min(status.current | 0, stages.length) - 1) | 0);
 
         // close
-        let x: Sprite = as3.as(this._mc.addChild(new Sprite()), Sprite);
-        x.name = "ioGauntletClose";
-        x.buttonMode = true;
-        x.mouseChildren = false;
-        x.graphics.lineStyle(2, 14708778, 1);
-        x.graphics.beginFill(2755078, 1);
-        x.graphics.drawCircle(0, 0, 14);
-        x.graphics.endFill();
-        x.graphics.lineStyle(3, 16766346, 1);
-        x.graphics.moveTo(-5, -5);
-        x.graphics.lineTo(5, 5);
-        x.graphics.moveTo(5, -5);
-        x.graphics.lineTo(-5, 5);
+        // (the kit's close button, 11 October)
+        let x: Sprite = as3.as(this._mc.addChild(IoKit.closeButton("ioGauntletClose", 14, (e: any): void => {})), Sprite);
         x.x = -left - 24;
         x.y = top + 24;
         x.addEventListener(MouseEvent.CLICK, as3.bind(this, this.close));
@@ -221,9 +285,135 @@ export class IoGauntlet extends ASObject {
         return null;
     }
 
+    /**
+     * Inferno-only (QoL #106): the first visit home while the Gauntlet is open (once per opening, in this browser):
+     * it's open, until when in the player's own time, and how many gates are left, with a button to it.
+     */
+    public static ioNoticeOpen(): void {
+        let f: any = IoGauntlet.flag();
+        if (!f || !f.open || f.test || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYardOrInfernoMainYard) {
+            return;
+        }
+        let stages: int = f.stages | 0;
+        let done: int = Math.max(0, (f.stage | 0) - 1) | 0;
+        if (stages > 0 && done >= stages) {
+            return;
+        }
+        let key: string = "ioGauntletNoticed" + LOGIN._playerID;
+        try {
+            let so: SharedObject = SharedObject.getLocal("bymr_data", "/");
+            if (String(so.data[key]) == String(f.closesAt)) {
+                return;
+            }
+            so.data[key] = String(f.closesAt);
+            so.flush();
+        } catch (e) {
+            return;
+        }
+        let until: Date = new Date(Number(f.closesAt) * 1000);
+        let when: string = until.toLocaleDateString(undefined, { "weekday": "long", "day": "numeric", "month": "long" }) + ", " + (until.getHours() < 10 ? "0" : "") + until.getHours() + ":" + (until.getMinutes() < 10 ? "0" : "") + until.getMinutes();
+        // (a line over the yard with a button, for 15 seconds: it blocks nothing)
+        IoToast.Show(KEYS.Get("io_gauntlet_open_notice", { "v1": when, "v2": Math.max(0, stages - done) }), 15000, KEYS.Get("io_gauntlet_open_go"), (): void => {
+            IoGauntlet.Show();
+        });
+    }
+
+    /**
+     * Inferno-only (QoL #603): its last day: "Moloch's Gauntlet closes in 18h: 6 gates still to beat", once per
+     * opening, in this browser (with a button to it). Not when every gate is beaten.
+     */
+    public static ioNoticeClosing(): boolean {
+        let f: any = IoGauntlet.flag();
+        if (!f || !f.open || f.test || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYardOrInfernoMainYard) {
+            return false;
+        }
+        let left: number = Number(f.closesAt) - GLOBAL.Timestamp();
+        let stages: int = f.stages | 0;
+        let done: int = Math.max(0, (f.stage | 0) - 1) | 0;
+        if (left <= 0 || left > 86400 || (stages > 0 && done >= stages)) {
+            return false;
+        }
+        let key: string = "ioGauntletClosing" + LOGIN._playerID;
+        try {
+            let so: SharedObject = SharedObject.getLocal("bymr_data", "/");
+            if (String(so.data[key]) == String(f.closesAt)) {
+                return false;
+            }
+            so.data[key] = String(f.closesAt);
+            // (the opening's own notice isn't needed after this one)
+            so.data["ioGauntletNoticed" + LOGIN._playerID] = String(f.closesAt);
+            so.flush();
+        } catch (e) {
+            return false;
+        }
+        IoToast.Show(KEYS.Get("io_gauntlet_closing", { "v1": GLOBAL.ioDuration(left | 0), "v2": Math.max(0, stages - done) }), 15000, KEYS.Get("io_gauntlet_open_go"), (): void => {
+            IoGauntlet.Show();
+        });
+        return true;
+    }
+
     /** A Gauntlet yard's baseid: 15 digits starting with 9 (server: gauntletBaseId). */
     public static isGauntletBase(baseid: number): boolean {
         return baseid >= 900000000000000 && baseid < 1000000000000000;
+    }
+
+    /** This attack's catapult was told to the server. */
+    private static _catapultTold: boolean = false;
+
+    /** The Purist Trophy can still be won this month (as the Gauntlet's window last said). */
+    public static puristOpen: boolean = false;
+
+    /** The player was asked about the Purist Trophy before a catapult this attack (CATAPULTPOPUP.Fire). */
+    public static puristAsked: boolean = false;
+
+    /**
+     * Inferno-only (QoL #602, 14 October): one catapult shot in the Gauntlet ends the Purist Trophy for the month,
+     * and nothing said so. True when the shot should wait for the player's answer (asked once an attack).
+     */
+    public static askBeforeCatapult(fire: Function): boolean {
+        if (!GLOBAL.INFERNO_ONLY || !IoGauntlet.inAttack() || !IoGauntlet.puristOpen || IoGauntlet.puristAsked) {
+            return false;
+        }
+        GLOBAL.Message(KEYS.Get("io_purist_ask"), KEYS.Get("io_purist_fire"), (): void => {
+            IoGauntlet.puristAsked = true;
+            fire();
+        }, null, KEYS.Get("io_purist_keep"));
+        return true;
+    }
+
+    /**
+     * A catapult was fired (ResourceBombs.BombDrop): in a Gauntlet attack the server is told, once an attack
+     * (10 October: the trophy for beating the Gauntlet without catapults goes to those who never fire one).
+     */
+    public static ReportCatapult(): void {
+        if (!GLOBAL.INFERNO_ONLY || !IoGauntlet.inAttack() || IoGauntlet._catapultTold) {
+            return;
+        }
+        IoGauntlet._catapultTold = true;
+        IoGauntlet.ioSendCatapult(IoGauntlet.attackStage, 0);
+    }
+
+    /**
+     * Inferno-only (14 October, QoL #440): the report is sent again (up to 3 times, 2 s apart) when it fails or the
+     * server refuses it. A refusal used to count as told, so the no-catapult trophy could be won with a catapult.
+     */
+    private static ioSendCatapult(stage: int, tries: int): void {
+        let again: Function = (): void => {
+            if (tries < 3) {
+                setTimeout((): void => {
+                    IoGauntlet.ioSendCatapult(stage, tries + 1);
+                }, 2000);
+            } else {
+                IoGauntlet._catapultTold = false;
+            }
+        };
+        new URLLoaderApi().load(GLOBAL.serverUrl + "gauntlet/catapult", [["stage", stage]], (r: any): void => {
+            if (!r || (r.error && r.error !== 0 && r.error !== "0")) {
+                again();
+            }
+        }, (e: IOErrorEvent): void => {
+            again();
+        });
     }
 
     /** In an attack on a Gauntlet yard now. */
@@ -241,7 +431,7 @@ export class IoGauntlet extends ASObject {
             return;
         }
         if (BASE.ioAttackRunning()) {
-            GLOBAL.Message("Not while your yard is being attacked.");
+            GLOBAL.Message(KEYS.Get("io_t3t_not_attacked"));
             return;
         }
         if (e) {
@@ -251,11 +441,11 @@ export class IoGauntlet extends ASObject {
         new URLLoaderApi().load(GLOBAL.serverUrl + "gauntlet/status", [["v", "1"]], (response: any): void => {
             PLEASEWAIT.Hide();
             if (!response || response.error) {
-                GLOBAL.Message(response && response.error ? String(response.error) : "Moloch's Gauntlet could not be loaded. Please try again.");
+                GLOBAL.Message(response && response.error ? String(response.error) : KEYS.Get("io_t3t_gnt_load_fail"));
                 return;
             }
             if (!response.enabled) {
-                GLOBAL.Message("Moloch's Gauntlet is not running on this server.");
+                GLOBAL.Message(KEYS.Get("io_t3t_gnt_off"));
                 return;
             }
             if (BASE.ioAttackRunning() || IoGauntlet._open || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) {
@@ -269,7 +459,7 @@ export class IoGauntlet extends ASObject {
             IoGauntlet._open = new IoGauntlet(response);
         }, (e: IOErrorEvent): void => {
             PLEASEWAIT.Hide();
-            GLOBAL.Message("Moloch's Gauntlet could not be loaded. Please try again.");
+            GLOBAL.Message(KEYS.Get("io_t3t_gnt_load_fail"));
         });
     }
 
@@ -279,7 +469,7 @@ export class IoGauntlet extends ASObject {
         IoGauntlet.removeBar();
         if (IoGauntlet._showOnHome && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && BASE.isMainYardOrInfernoMainYard) {
             IoGauntlet._showOnHome = false;
-            IoGauntlet.Show();
+            POPUPS.ioWhenClear((): void => { IoGauntlet.Show(); }); // (QoL #462: after the popups the yard brought)
         }
     }
 
@@ -292,6 +482,8 @@ export class IoGauntlet extends ASObject {
         bg.graphics.beginGradientFill(GradientType.LINEAR, [0x2C0F09, 0x160605, 0x240804], [1, 1, 1], [0, 150, 255], m);
         bg.graphics.drawRoundRect(left, top, IoGauntlet.W, IoGauntlet.H, 26, 26);
         bg.graphics.endFill();
+        // (12 October: its inside is opaque, so a live yard under it is not drawn again under it: DisplayObject.ioOccludes)
+        this._mc.ioOccludes(new Rectangle(left + 14, top + 14, IoGauntlet.W - 28, IoGauntlet.H - 28));
         // Moloch's glow
         let glow: Shape = as3.as(this._mc.addChild(new Shape()), Shape);
         m = new Matrix();
@@ -314,11 +506,29 @@ export class IoGauntlet extends ASObject {
         this.crack(cracks, left + 12, top + 34, 4, 1);
         this.crack(cracks, -left - 14, top + 120, 5, 1);
         cracks.filters = [new GlowFilter(0xFF4A00, 0.8, 8, 8, 2, 2)];
-        // the molten rim
+        for (let gk of ["sealed", "burning", "broken"]) {
+            ArcadeArt.picture("popups/gauntlet/gate_" + gk + ".png");
+        }
+        // the painted realm (popups/gauntlet/bg.jpg, art/uikit/events.py; 11 October): the glow, the chasm and the
+        // cracks above are drawn until it has loaded
+        let art: Sprite = as3.as(this._mc.addChild(new Sprite()), Sprite);
+        let mask: Shape = as3.as(this._mc.addChild(new Shape()), Shape);
+        mask.graphics.beginFill(0);
+        mask.graphics.drawRoundRect(left + 2, top + 2, IoGauntlet.W - 4, IoGauntlet.H - 4, 24, 24);
+        mask.graphics.endFill();
+        art.mask = mask;
+        CasinoUI.picture(art, "popups/gauntlet/bg.jpg", left, top, IoGauntlet.W, IoGauntlet.H, (b: any): void => {
+            glow.visible = chasm.visible = cracks.visible = false;
+        });
+        // the molten rim (the kit's forged one once it has loaded)
         let rim: Shape = as3.as(this._mc.addChild(new Shape()), Shape);
         rim.graphics.lineStyle(2, 13784604, 1);
         rim.graphics.drawRoundRect(left + 6, top + 6, IoGauntlet.W - 12, IoGauntlet.H - 12, 20, 20);
         rim.filters = [new GlowFilter(0xFF4A00, 0.75, 10, 10, 2, 2)];
+        IoKit.whenLoaded(["frame"], (): void => {
+            rim.visible = false;
+        });
+        IoKit.rim(this._mc, "ioGauntletRim", left, top, IoGauntlet.W, IoGauntlet.H);
     }
 
     /** A jagged crack from a point, going up (-1) or across (1). */
@@ -405,7 +615,16 @@ export class IoGauntlet extends ASObject {
             }
             g.graphics.endFill();
         }
-        if (current && !stage.won) {
+        // the gate's picture (popups/gauntlet/gate_<sealed, burning, broken>.png, art/uikit/events.py; 11 October)
+        let kind: string = current && !stage.won ? "burning" : (stage.won ? "broken" : "sealed");
+        let gateArt: BitmapData = ArcadeArt.picture("popups/gauntlet/gate_" + kind + ".png");
+        if (gateArt) {
+            let size: number = 50 * r / 21;
+            ArcadeArt.stamp(g.graphics, gateArt, -size / 2, -size / 2, size, size);
+            if (kind == "burning") {
+                g.filters = [new GlowFilter(0xFF6A00, 0.9, 14, 14, 2, 2)];
+            }
+        } else if (current && !stage.won) {
             m.createGradientBox(r * 2, r * 2, 0, -r, -r);
             g.graphics.lineStyle(2, 16769184, 1);
             g.graphics.beginGradientFill(GradientType.RADIAL, [0xFFD27A, 0xE0501C, 0x6A1406], [1, 1, 1], [0, 140, 255], m);
@@ -467,7 +686,7 @@ export class IoGauntlet extends ASObject {
             mark.y = r * 0.72;
         }
         if (last) {
-            let prize: TextField = as3.as(gate.addChild(IoGauntlet.label(((stage.reward ? stage.reward.shiny : 0) | 0) + " shiny", 11, 16766346, true, 90, TextFormatAlign.LEFT)), TextField);
+            let prize: TextField = as3.as(gate.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_shiny", { "v1": (stage.reward ? stage.reward.shiny : 0) | 0 }), 11, 16766346, true, 90, TextFormatAlign.LEFT)), TextField);
             prize.x = r + 14;
             prize.y = -9;
             prize.filters = [new GlowFilter(0xFF4A00, 0.8, 6, 6, 2, 1)];
@@ -507,7 +726,7 @@ export class IoGauntlet extends ASObject {
         let current: boolean = n == (this._status.current | 0) && !this._status.finished;
         let d: Sprite = this._detail;
         let PW: int = 282;
-        let PH: int = 184;
+        let PH: int = GLOBAL.INFERNO_ONLY ? IoGauntlet.IO_PH : 184;
         let m: Matrix = new Matrix();
         while (d.numChildren > 0) {
             d.removeChildAt(0);
@@ -520,21 +739,44 @@ export class IoGauntlet extends ASObject {
         d.graphics.endFill();
         d.filters = [new GlowFilter(0xFF4A00, 0.45, 10, 10, 2, 2)];
 
-        let name: TextField = as3.as(d.addChild(IoGauntlet.label("Gate " + IoGauntlet.roman(n) + ": " + IoGauntlet.GATE_NAMES[Math.min(n, IoGauntlet.GATE_NAMES.length) - 1], 15, 16766346, false, (PW - 16) | 0, TextFormatAlign.LEFT, "Groboldov")), TextField);
+        let name: TextField = as3.as(d.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_gate_title", { "v1": IoGauntlet.roman(n), "v2": KEYS.Get(as3.str(IoGauntlet.GATE_NAMES[Math.min(n, IoGauntlet.GATE_NAMES.length) - 1])) }), 15, 16766346, false, (PW - 16) | 0, TextFormatAlign.LEFT, "Groboldov")), TextField);
         name.embedFonts = true;
+        // (QoL #235: a longer name in another language drawn smaller to stay in the panel)
+        GLOBAL.ioFitText(name, 10);
         name.name = "ioGateName";
         name.height = 24;
         name.x = 10;
         name.y = 8;
         name.filters = [new GlowFilter(0xFF4A00, 0.7, 6, 6, 2, 1)];
-        let level: TextField = as3.as(d.addChild(IoGauntlet.label("Level " + (stage.level | 0) + ((stage.stage | 0) == stages.length ? "  ·  Moloch himself" : ""), 11, 12618330, false, (PW - 20) | 0, TextFormatAlign.LEFT)), TextField);
+        let level: TextField = as3.as(d.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_level", { "v1": stage.level | 0 }) + ((stage.stage | 0) == stages.length ? "  ·  " + KEYS.Get("io_t3t_gnt_himself") : ""), 11, 12618330, false, (PW - (GLOBAL.INFERNO_ONLY ? 96 : 20)) | 0, TextFormatAlign.LEFT)), TextField);
         level.x = 12;
         level.y = 32;
+        // (QoL #345: the gate's layout, in Moloch's place; and what the attack would take)
+        if (GLOBAL.INFERNO_ONLY) {
+            let layout: Sprite = IoGauntlet.ioSmallButton(KEYS.Get(this._ioLayoutOn ? "io_op3_gnt_layout_hide" : "io_op3_gnt_layout"), 76, 18, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                this._ioLayoutOn = !this._ioLayoutOn;
+                this.select(this._selected);
+            });
+            layout.name = "ioGnt3LayoutButton";
+            layout.x = PW - 86;
+            layout.y = 31;
+            d.addChild(layout);
+            let army: TextField = as3.as(d.addChild(IoGauntlet.label("", 10, 15258288, false, (PW - 24) | 0, TextFormatAlign.LEFT)), TextField);
+            army.name = "ioGnt3Army";
+            army.multiline = true;
+            army.wordWrap = true;
+            army.height = 30;
+            army.htmlText = this.ioArmyText();
+            army.x = 12;
+            army.y = 134;
+            this.ioShowLayout(stage);
+        }
         let prize: TextField = as3.as(d.addChild(IoGauntlet.label("", 11, 15785152, false, (PW - 20) | 0, TextFormatAlign.LEFT)), TextField);
         prize.name = "ioGatePrize";
         prize.multiline = true;
         prize.height = 34;
-        prize.htmlText = "<b>Prize:</b> " + IoGauntlet.rewardText(stage.reward);
+        prize.htmlText = KEYS.Get("io_t3t_gnt_prize", { "v1": IoGauntlet.rewardText(stage.reward) });
         prize.wordWrap = true;
         prize.x = 12;
         prize.y = 50;
@@ -545,9 +787,9 @@ export class IoGauntlet extends ASObject {
         state.y = 88;
         let left: int = stage.attemptsLeft | 0;
         if (stage.won) {
-            state.htmlText = stage.paid ? "<font color=\"#E2B227\">Broken · its prize is yours</font>" : "<font color=\"#C87A6A\">Broken · its prize was lost</font>";
+            state.htmlText = stage.paid ? "<font color=\"#E2B227\">" + KEYS.Get("io_t3t_gnt_broken_yours") + "</font>" : "<font color=\"#C87A6A\">" + KEYS.Get("io_t3t_gnt_broken_lost") + "</font>";
         } else if (!current) {
-            state.htmlText = "<font color=\"#8A6A5A\">Sealed · break gate " + IoGauntlet.roman(this._status.current | 0) + " first</font>";
+            state.htmlText = "<font color=\"#8A6A5A\">" + KEYS.Get("io_t3t_gnt_sealed", { "v1": IoGauntlet.roman(this._status.current | 0) }) + "</font>";
         } else {
             // attempts left, as flames
             for (let p: int = 0; p < (this._status.attempts | 0); p++) {
@@ -563,8 +805,8 @@ export class IoGauntlet extends ASObject {
                 pip.y = 98;
             }
             state.x = 12 + (this._status.attempts | 0) * 17 + 4;
-            let lost: string = stage.lost ? " · <font color=\"#E0705A\">prize lost</font>" : (stage.paid ? " · <font color=\"#C8A070\">prize already claimed</font>" : "");
-            state.htmlText = left + (left == 1 ? " attempt left" : " attempts left") + lost;
+            let lost: string = stage.lost ? " · <font color=\"#E0705A\">" + KEYS.Get("io_t3t_gnt_s_prize_lost") + "</font>" : (stage.paid ? " · <font color=\"#C8A070\">" + KEYS.Get("io_t3t_gnt_s_prize_claimed") + "</font>" : "");
+            state.htmlText = KEYS.Get(left == 1 ? "io_t3t_gnt_left_one" : "io_t3t_gnt_left_n", { "v1": left }) + lost;
             if ((stage.damage | 0) > 0) {
                 let bar: Shape = as3.as(d.addChild(new Shape()), Shape);
                 bar.graphics.beginFill(2757648, 1);
@@ -578,7 +820,7 @@ export class IoGauntlet extends ASObject {
                 bar.graphics.lineTo((PW - 24) * IoGauntlet._winPercent / 100, 8);
                 bar.x = 12;
                 bar.y = 112;
-                let broken: TextField = as3.as(d.addChild(IoGauntlet.label((stage.damage | 0) + "% of its walls already broken", 10, 12618330, false, (PW - 20) | 0, TextFormatAlign.LEFT)), TextField);
+                let broken: TextField = as3.as(d.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_dmg", { "v1": stage.damage | 0 }), 10, 12618330, false, (PW - 20) | 0, TextFormatAlign.LEFT)), TextField);
                 broken.x = 12;
                 broken.y = 118;
             }
@@ -586,11 +828,11 @@ export class IoGauntlet extends ASObject {
 
         let action: Sprite = null;
         if (current) {
-            action = IoGauntlet.moltenButton("ENTER THE GATE", 210, 36, (e: MouseEvent): void => {
+            action = IoGauntlet.moltenButton(KEYS.Get("io_t3t_gnt_enter"), 210, 36, (e: MouseEvent): void => {
                 this.confirmAttack(stage);
             }, Boolean(this._status.open));
         } else if (this._status.finished && index == stages.length - 1) {
-            let done: TextField = as3.as(d.addChild(IoGauntlet.label("You have conquered the Gauntlet this moon.", 12, 16766346, true, (PW - 20) | 0, TextFormatAlign.CENTER)), TextField);
+            let done: TextField = as3.as(d.addChild(IoGauntlet.label(KEYS.Get("io_t3t_gnt_conquered"), 12, 16766346, true, (PW - 20) | 0, TextFormatAlign.CENTER)), TextField);
             done.x = 10;
             done.y = PH - 36;
         }
@@ -614,14 +856,23 @@ export class IoGauntlet extends ASObject {
         m.createGradientBox(width, height, Math.PI / 2, 0, 0);
         draw = (hot: boolean): void => {
             b.graphics.clear();
+            // (the UI kit's molten button, 11 October)
+            if (IoKit.slice(b.graphics, enabled ? (hot ? "btn_molten_h" : "btn_molten") : "btn_molten_d", 0, 0, width, height)) {
+                return;
+            }
             b.graphics.lineStyle(2, (enabled ? 0xFFE0A0 : 0x6A5A50) >>> 0, 1);
             b.graphics.beginGradientFill(GradientType.LINEAR, enabled ? (hot ? [0xFFC060, 0xE0501C, 0x9A2008] : [0xF0A040, 0xC8401A, 0x7A1806]) : [0x5A4A44, 0x3A2E2A, 0x2A2220], [1, 1, 1], [0, 140, 255], m);
             b.graphics.drawRoundRect(0, 0, width, height, 12, 12);
             b.graphics.endFill();
         };
         draw(false);
+        IoKit.whenLoaded(["btn_molten", "btn_molten_h", "btn_molten_d"], (): void => {
+            draw(false);
+        });
         let t: TextField = as3.as(b.addChild(IoGauntlet.label(text, 16, (enabled ? 0xFFFFFF : 0xA09088) >>> 0, false, width, TextFormatAlign.CENTER, "Groboldov")), TextField);
         t.embedFonts = true;
+        // (QoL #235: a longer translation drawn smaller to fit the button)
+        GLOBAL.ioFitText(t, 10);
         t.height = 26;
         t.y = ((height - 24) / 2) | 0;
         t.filters = [new GlowFilter(0x4A0A02, 1, 3, 3, 5, 1)];
@@ -655,6 +906,15 @@ export class IoGauntlet extends ASObject {
             return;
         }
         this._tick++;
+        if (this._tick % 12 == 0) {
+            let when: TextField = as3.as(this._mc.getChildByName("ioGauntletWhen"), TextField);
+            if (when) {
+                let t: string = this.whenText();
+                if (when.text != t) {
+                    when.text = t;
+                }
+            }
+        }
         for (let ember of as3.values(this._embers)) {
             let s: Shape = as3.cast(ember.s, Shape);
             ember.sway += 0.05;
@@ -681,45 +941,91 @@ export class IoGauntlet extends ASObject {
     /** "The gates close in 5d 3h" (or when they open). */
     private whenText(): string {
         let s: any = this._status;
-        let now: number = Number(Number(s.now) || GLOBAL.Timestamp());
+        // (QoL #570: the time now, not when the window was opened; the server's clock, by how long ago it answered)
+        let now: number = GLOBAL.Timestamp();
         if (s.test) {
             return "Admin test ladder · always open · nothing is paid";
         }
         if (s.finished) {
-            return "You have conquered the Gauntlet this moon." + (s.open && s.closesAt ? " The gates close in " + IoOutpostsPopup.duration((s.closesAt - now) | 0) + "." : "");
+            return KEYS.Get("io_t3t_gnt_conquered") + (s.open && s.closesAt ? " " + KEYS.Get("io_t3t_gnt_close_in_dot", { "v1": IoOutpostsPopup.duration((s.closesAt - now) | 0) }) : "");
         }
         if (s.open) {
-            return s.closesAt ? "The gates close in " + IoOutpostsPopup.duration((s.closesAt - now) | 0) : "The gates are open";
+            return s.closesAt ? KEYS.Get("io_t3t_gnt_close_in", { "v1": IoGauntlet.ioLeft((s.closesAt - now) | 0) }) : KEYS.Get("io_t3t_gnt_open");
         }
         return IoGauntlet.startsText(s, now);
     }
 
-    /** "Moloch's Gauntlet starts in 4d 2h." */
-    private static startsText(s: any, now: number): string {
-        return "Moloch's Gauntlet starts in " + (s && s.opensAt ? IoOutpostsPopup.duration(Math.max(60, (s.opensAt - now) | 0) | 0) : "a few days") + ".";
+    /** QoL #570: "5d 3h", "4h 12m", and in the last hour "12m 05s". */
+    public static ioLeft(sec: int): string {
+        if (sec >= 3600) {
+            return IoOutpostsPopup.duration(sec);
+        }
+        sec = Math.max(0, sec) | 0;
+        let m: int = (sec / 60) | 0;
+        let r: int = sec % 60;
+        return m + "m " + (r < 10 ? "0" : "") + r + "s";
     }
 
-    /** What the last attack did, if it hasn't been shown yet. */
+    /** "Moloch's Gauntlet starts in 4d 2h." */
+    private static startsText(s: any, now: number): string {
+        return KEYS.Get("io_t3t_gnt_starts", { "v1": s && s.opensAt ? IoGauntlet.ioLeft(Math.max(1, (s.opensAt - now) | 0) | 0) : KEYS.Get("io_t3t_gnt_few_days") });
+    }
+
+    /** What the last attack did, if it hasn't been shown yet: the exact %, the attempts left and the prize (QoL #88). */
     private resultText(): string {
         let last: any = this._status.last;
         if (!last || Number(last.at) <= IoGauntlet._shownResult) {
             return "";
         }
-        let gate: string = "Gate " + IoGauntlet.roman(last.stage | 0);
+        // (QoL #235: in the player's language: each headline with and without the %, "_at")
+        let gate: string = IoGauntlet.roman(last.stage | 0);
+        let at: boolean = last.damage !== undefined && last.damage !== null;
+        let head: Function = (key: string, more: any = null): string => {
+            let v: any = { "v1": gate, "v2": last.damage | 0 };
+            if (more != null) {
+                v = { "v1": gate, "v2": more, "v3": last.damage | 0 };
+            }
+            return "<b>" + KEYS.Get(key + (at ? "_at" : ""), v) + "</b>";
+        };
         if (last.result == "won") {
             if (last.reward) {
-                return "<b>" + gate + " falls!</b> " + (last.test ? "Test ladder: it would pay " : "You claim ") + IoGauntlet.rewardText(last.reward) + ".";
+                // (the admin test ladder's words stay English: only admins see it)
+                return head("io_t3t_gnt_h_falls_x") + " " + (last.test ? "Test ladder: it would pay " + IoGauntlet.rewardText(last.reward) + "." : KEYS.Get("io_t3t_gnt_r_claim", { "v1": IoGauntlet.rewardText(last.reward) }));
             }
             if (last.already) {
-                return "<b>" + gate + " falls.</b> Its prize was already claimed this moon.";
+                return head("io_t3t_gnt_h_falls_d") + " " + KEYS.Get("io_t3t_gnt_r_already");
             }
-            return "<b>" + gate + " falls,</b> but its prize was lost. The next gate awaits.";
+            return head("io_t3t_gnt_h_falls_c") + " " + KEYS.Get("io_t3t_gnt_r_lost");
         }
         if (last.result == "healed") {
-            return "<b>" + gate + " held for every attempt.</b> The fires mended its walls, and its prize is lost.";
+            return head("io_t3t_gnt_h_held", IoGauntlet._winPercent) + " " + KEYS.Get("io_t3t_gnt_r_mended");
         }
         let left: int = last.attemptsLeft | 0;
-        return "<b>" + gate + " holds.</b> " + left + (left == 1 ? " attempt" : " attempts") + " left" + (last.lost ? "." : " before the fires mend its walls.");
+        let prize: string = "";
+        for (let st of as3.values(as3.as(this._status.stages, Array) || [])) {
+            if ((st.stage | 0) == (last.stage | 0) && st.reward && !last.lost && !st.paid) {
+                prize = " " + KEYS.Get("io_t3t_gnt_r_prize", { "v1": IoGauntlet.rewardText(st.reward) });
+            }
+        }
+        return head("io_t3t_gnt_h_holds") + " " + KEYS.Get("io_t3t_gnt_r_breaks", { "v1": IoGauntlet._winPercent }) + " " + KEYS.Get("io_t3t_gnt_r_left_" + (left == 1 ? "one" : "n") + (last.lost ? "" : "_b"), { "v1": left }) + prize;
+    }
+
+    /** QoL #604: [claimed, still to win, lost] Shiny of this moon's gates (a lost gate's prize can't be won again). */
+    public static ioMoonShiny(stages: any[]): any[] {
+        let claimed: int = 0;
+        let open: int = 0;
+        let lost: int = 0;
+        for (let st of as3.values(stages || [])) {
+            let shiny: int = st && st.reward ? st.reward.shiny | 0 : 0;
+            if (st.paid) {
+                claimed = (claimed + shiny) | 0;
+            } else if (st.lost) {
+                lost = (lost + shiny) | 0;
+            } else {
+                open = (open + shiny) | 0;
+            }
+        }
+        return [claimed, open, lost];
     }
 
     /** "5 shiny, 2.3M bone, coal and sulfur, 1.2M magma". */
@@ -728,8 +1034,11 @@ export class IoGauntlet extends ASObject {
             return "";
         }
         let same: boolean = reward.r1 == reward.r2 && reward.r2 == reward.r3;
-        let resources: string = same ? IoGauntlet.short(Number(reward.r1)) + " bone, coal and sulfur" : IoGauntlet.short(Number(reward.r1)) + " bone, " + IoGauntlet.short(Number(reward.r2)) + " coal, " + IoGauntlet.short(Number(reward.r3)) + " sulfur";
-        return (reward.shiny | 0) + " shiny, " + resources + ", " + IoGauntlet.short(Number(reward.r4)) + " magma";
+        // (QoL #235: in the player's language)
+        if (same) {
+            return KEYS.Get("io_t3t_gnt_rw_same", { "v1": reward.shiny | 0, "v2": IoGauntlet.short(Number(reward.r1)), "v3": IoGauntlet.short(Number(reward.r4)) });
+        }
+        return KEYS.Get("io_t3t_gnt_rw", { "v1": reward.shiny | 0, "v2": IoGauntlet.short(Number(reward.r1)), "v3": IoGauntlet.short(Number(reward.r2)), "v4": IoGauntlet.short(Number(reward.r3)), "v5": IoGauntlet.short(Number(reward.r4)) });
     }
 
     /** 2300000: "2.3M". */
@@ -743,6 +1052,189 @@ export class IoGauntlet extends ASObject {
         return String(amount | 0);
     }
 
+    // ---- (QoL #345) the army and the gate's layout
+    /** "Your army: 40 Pokey, 12 Bolt, 8 Brain +3 more · Flinger 6": the monsters housed in the main yard (`home`). */
+    private ioArmyText(): string {
+        let home: any = this._status ? this._status.home : null;
+        if (GLOBAL.ioTestMode()) {
+            return KEYS.Get("io_op3_gnt_army_test");
+        }
+        if (!home) {
+            return "<font color=\"#E0705A\">" + KEYS.Get("io_op3_gnt_army_nohome") + "</font>";
+        }
+        let housed: any = home.m && home.m.housed ? home.m.housed : {};
+        let kinds: any[] = [];
+        let space: int = 0;
+        for (let id in housed) {
+            let n: int = Number(housed[id]) | 0;
+            if (n <= 0) {
+                continue;
+            }
+            kinds.push([id, n]);
+            let size: number = 1;
+            try {
+                size = Number(CREATURES.GetProperty(id, "cStorage", 0, true)) || 1;
+            } catch (err) {
+            }
+            space = (space + n * size) | 0;
+        }
+        if (kinds.length == 0) {
+            return "<font color=\"#E0705A\">" + KEYS.Get("io_op3_gnt_army_none") + "</font>";
+        }
+        kinds.sort((a: any[], b: any[]): number => (b[1] | 0) - (a[1] | 0));
+        let parts: any[] = [];
+        for (let i: int = 0; i < kinds.length && i < 4; i++) {
+            let id: string = as3.str(kinds[i][0]);
+            let creature: any = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[id] : null;
+            parts.push(GLOBAL.FormatNumber(kinds[i][1] | 0) + " " + (creature && creature.name ? KEYS.Get(as3.str(creature.name)) : id));
+        }
+        let more: string = kinds.length > 4 ? " " + KEYS.Get("io_op3_gnt_army_more", { "v1": kinds.length - 4 }) : "";
+        let flinger: int = Number(home.f) | 0;
+        return KEYS.Get("io_op3_gnt_army", { "v1": parts.join(", ") + more, "v2": GLOBAL.FormatNumber(space) }) + (flinger > 0 ? "  ·  " + KEYS.Get("io_op3_gnt_army_flinger", { "v1": flinger }) : "");
+    }
+
+    /** The layout shown (asked for once a window), or Moloch when it is hidden. */
+    private ioShowLayout(stage: any): void {
+        let n: int = stage.stage | 0;
+        if (!this._ioPreview) {
+            return;
+        }
+        this._ioPreview.visible = this._ioLayoutOn;
+        this._moloch.visible = !this._ioLayoutOn;
+        if (!this._ioLayoutOn) {
+            return;
+        }
+        let known: any = IoGauntlet._ioLayouts[String(n)];
+        this.ioDrawLayout(n, known === undefined ? null : known);
+        if (known !== undefined) {
+            return;
+        }
+        IoGauntlet._ioLayouts[String(n)] = null;
+        new URLLoaderApi().load(GLOBAL._mapURL + "gauntletlayout", [["stage", n]], (r: any): void => {
+            let list: any[] = r && !r.error ? as3.as(r.buildings, Array) : null;
+            if (list) {
+                IoGauntlet._ioLayouts[String(n)] = list;
+            } else {
+                delete IoGauntlet._ioLayouts[String(n)];
+            }
+            if (this._mc && this._ioLayoutOn && this._selected >= 0 && this._status && this._status.stages && this._status.stages[this._selected] && (this._status.stages[this._selected].stage | 0) == n) {
+                this.ioDrawLayout(n, list ? list : []);
+            }
+        }, (e: IOErrorEvent): void => {
+            delete IoGauntlet._ioLayouts[String(n)];
+            if (this._mc && this._ioLayoutOn) {
+                this.ioDrawLayout(n, []);
+            }
+        });
+    }
+
+    /**
+     * The gate's yard from above, as the game lays it out (GRID.ToISO), fitted in the box: walls grey, towers red,
+     * harvesters gold, the rest brown, the hall larger; damaged ones dimmed, destroyed ones as a cross. null: loading.
+     */
+    private ioDrawLayout(stageNo: int, list: any[]): void {
+        let BW: int = 232;
+        let BH: int = 170;
+        let p: Sprite = this._ioPreview;
+        while (p.numChildren > 0) {
+            p.removeChildAt(0);
+        }
+        let g: any = p.graphics;
+        g.clear();
+        g.lineStyle(2, 11552794, 1);
+        g.beginFill(0x120404, 0.92);
+        g.drawRoundRect(0, 0, BW, BH, 14, 14);
+        g.endFill();
+        g.lineStyle();
+        let title: TextField = as3.as(p.addChild(IoGauntlet.label(KEYS.Get("io_op3_gnt_layout_title", { "v1": IoGauntlet.roman(stageNo) }), 11, 16766346, true, (BW - 16) | 0, TextFormatAlign.CENTER)), TextField);
+        title.x = 8;
+        title.y = 4;
+        if (list == null || list.length == 0) {
+            let wait: TextField = as3.as(p.addChild(IoGauntlet.label(KEYS.Get(list == null ? "io_op3_gnt_layout_loading" : "io_op3_gnt_layout_none"), 10, 12618330, false, (BW - 16) | 0, TextFormatAlign.CENTER)), TextField);
+            wait.x = 8;
+            wait.y = (BH * 0.5 - 8) | 0;
+            return;
+        }
+        let points: any[] = [];
+        let minX: number = Number.MAX_VALUE;
+        let maxX: number = -Number.MAX_VALUE;
+        let minY: number = Number.MAX_VALUE;
+        let maxY: number = -Number.MAX_VALUE;
+        for (let b of as3.values(list)) {
+            if (!b) {
+                continue;
+            }
+            let at: any = GRID.ToISO(Number(b[1]), Number(b[2]), 0);
+            points.push([b[0] | 0, at.x, at.y, b[4] | 0]);
+            minX = Math.min(minX, at.x);
+            maxX = Math.max(maxX, at.x);
+            minY = Math.min(minY, at.y);
+            maxY = Math.max(maxY, at.y);
+        }
+        let areaW: number = BW - 20;
+        let areaH: number = BH - 44;
+        let scale: number = Math.min(areaW / Math.max(1, maxX - minX), areaH / Math.max(1, maxY - minY));
+        let ox: number = 10 + (areaW - (maxX - minX) * scale) * 0.5;
+        let oy: number = 24 + (areaH - (maxY - minY) * scale) * 0.5;
+        let dots: Shape = as3.as(p.addChild(new Shape()), Shape);
+        let towers: any = { "20": 1, "21": 1, "22": 1, "23": 1, "25": 1, "115": 1, "118": 1, "128": 1, "129": 1, "130": 1, "132": 1, "144": 1, "145": 1 };
+        // (walls first, under the rest)
+        for (let pass: int = 0; pass < 2; pass++) {
+            for (let q of as3.values(points)) {
+                let t: int = q[0] | 0;
+                let wall: boolean = t == 17 || t == 18;
+                if ((pass == 0) != wall) {
+                    continue;
+                }
+                let x: number = ox + (q[1] - minX) * scale;
+                let y: number = oy + (q[2] - minY) * scale;
+                let colour: uint = (wall ? 0x8A7A70 : (towers[String(t)] ? 0xE0482A : (t >= 1 && t <= 4 ? 0xE2B227 : (t == 112 || t == 14 ? 0xFF8A2A : 0xA0704A)))) >>> 0;
+                let r: number = wall ? 1.4 : (t == 112 || t == 14 ? 4.5 : (towers[String(t)] ? 3 : 2.4));
+                if ((q[3] | 0) == 2) {
+                    dots.graphics.lineStyle(1, 0x6A4A40, 1);
+                    dots.graphics.moveTo(x - r, y - r);
+                    dots.graphics.lineTo(x + r, y + r);
+                    dots.graphics.moveTo(x + r, y - r);
+                    dots.graphics.lineTo(x - r, y + r);
+                    dots.graphics.lineStyle();
+                    continue;
+                }
+                dots.graphics.beginFill(colour, (q[3] | 0) == 1 ? 0.5 : 1);
+                dots.graphics.drawCircle(x, y, r);
+                dots.graphics.endFill();
+            }
+        }
+        let legend: TextField = as3.as(p.addChild(IoGauntlet.label("", 9, 12618330, false, (BW - 16) | 0, TextFormatAlign.CENTER)), TextField);
+        legend.htmlText = KEYS.Get("io_op3_gnt_layout_legend");
+        legend.x = 8;
+        legend.y = BH - 19;
+    }
+
+    /** A small dark button with a gold rim (the panel's Layout). */
+    private static ioSmallButton(text: string, width: int, height: int, onClick: Function): Sprite {
+        let b: Sprite = new Sprite();
+        let draw: Function = (hot: boolean): void => {
+            b.graphics.clear();
+            b.graphics.lineStyle(1, (hot ? 0xFFE0A0 : 0xC89A50) >>> 0, 1);
+            b.graphics.beginFill((hot ? 0x5A2410 : 0x3A1408) >>> 0, 1);
+            b.graphics.drawRoundRect(0, 0, width, height, 8, 8);
+            b.graphics.endFill();
+        };
+        draw(false);
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        let t: TextField = as3.as(b.addChild(IoGauntlet.label(text, 10, 16766346, true, width, TextFormatAlign.CENTER)), TextField);
+        t.y = ((height - 16) / 2) | 0;
+        b.addEventListener(MouseEvent.ROLL_OVER, (e: MouseEvent): void => {
+            draw(true);
+        });
+        b.addEventListener(MouseEvent.ROLL_OUT, (e: MouseEvent): void => {
+            draw(false);
+        });
+        b.addEventListener(MouseEvent.CLICK, onClick);
+        return b;
+    }
+
     /** Before attacking: the last attempt with a prize still on says what failing it means. */
     private confirmAttack(stage: any): void {
         if (!this._status.open) {
@@ -751,7 +1243,7 @@ export class IoGauntlet extends ASObject {
         }
         let left: int = stage.attemptsLeft | 0;
         if (left == 1 && !stage.lost && !stage.paid) {
-            GLOBAL.Message("<b>Last attempt at Gate " + IoGauntlet.roman(stage.stage | 0) + ".</b><br><br>If it fails, the fires mend its walls and its prize (" + IoGauntlet.rewardText(stage.reward) + ") is lost for this moon.", "Attack", (): void => {
+            GLOBAL.Message(KEYS.Get("io_t3t_gnt_last_ask", { "v1": IoGauntlet.roman(stage.stage | 0), "v2": IoGauntlet.rewardText(stage.reward) }), KEYS.Get("io_t3t_gnt_attack"), (): void => {
                 this.attack(stage);
             });
             return;
@@ -770,11 +1262,11 @@ export class IoGauntlet extends ASObject {
         let monsterType: string = null;
         let any: boolean = false;
         if (!home) {
-            GLOBAL.Message("Your main yard is not on the world map yet, so it can't attack from there.");
+            GLOBAL.Message(KEYS.Get("io_op3_gnt_army_nohome"));
             return;
         }
         if (BASE.ioAttackRunning()) {
-            GLOBAL.Message("Not while your yard is being attacked.");
+            GLOBAL.Message(KEYS.Get("io_t3t_not_attacked"));
             return;
         }
         cell = new MapRoomCell();
@@ -808,13 +1300,15 @@ export class IoGauntlet extends ASObject {
             any = true;
         }
         if (!any) {
-            GLOBAL.Message("You have no monsters in your main yard to attack with. House some there first.");
+            GLOBAL.Message(KEYS.Get("io_t3t_gnt_no_monsters"));
             return;
         }
         GLOBAL._attackerMapResources = { "r1": GLOBAL._resources.r1.Get(), "r2": GLOBAL._resources.r2.Get(), "r3": GLOBAL._resources.r3.Get(), "catapult": new SecNum(Number(GLOBAL._playerCatapultLevel ? GLOBAL._playerCatapultLevel.Get() : 0)), "flinger": new SecNum(Number(cell._flingerLevel ? cell._flingerLevel.Get() : 0)) };
         GLOBAL._attackerCellsInRange = Vector.from([new CellData(cell, 0)], CellData);
         GLOBAL._currentCell = null;
         IoGauntlet.attackStage = stage.stage | 0;
+        IoGauntlet._catapultTold = false;
+        IoGauntlet.puristAsked = false;
         IoGauntlet._showOnHome = true;
         this.close();
         IoGauntlet.watchBar();
@@ -831,11 +1325,12 @@ export class IoGauntlet extends ASObject {
 
     /** The attack-end window's words for a Gauntlet attack. */
     public static endTitle(success: boolean): string {
-        return success ? "Gate " + IoGauntlet.roman(IoGauntlet.attackStage) + " falls!" : "Gate " + IoGauntlet.roman(IoGauntlet.attackStage) + " holds";
+        // (QoL #235: in the player's language)
+        return KEYS.Get(success ? "io_t3t_gnt_h_falls_x" : "io_t3t_gnt_h_holds", { "v1": IoGauntlet.roman(IoGauntlet.attackStage) });
     }
 
     public static endMessage(success: boolean): string {
-        return success ? "At least " + IoGauntlet._winPercent + "% of Moloch's stronghold lies in ruins. Its prize awaits you at home." : "Less than " + IoGauntlet._winPercent + "% of its walls fell. The damage stays for your next attempt.";
+        return KEYS.Get(success ? "io_t3t_gnt_end_win" : "io_t3t_gnt_end_lose", { "v1": IoGauntlet._winPercent });
     }
 
     public close(e: MouseEvent = null): void {
@@ -925,7 +1420,7 @@ export class IoGauntlet extends ASObject {
         IoGauntlet._barFill.graphics.beginFill((destroyed >= IoGauntlet._winPercent ? 0x4CC34C : 0xE0501C) >>> 0, 1);
         IoGauntlet._barFill.graphics.drawRect(1, 1, Math.max(0, (IoGauntlet.BAR_W - 2) * Math.min(100, destroyed) / 100), IoGauntlet.BAR_H - 2);
         IoGauntlet._barFill.graphics.endFill();
-        IoGauntlet._barText.text = "Gate " + IoGauntlet.roman(IoGauntlet.attackStage) + ": " + destroyed + "% destroyed, " + IoGauntlet._winPercent + "% breaks it";
+        IoGauntlet._barText.text = KEYS.Get("io_t3t_gnt_bar", { "v1": IoGauntlet.roman(IoGauntlet.attackStage), "v2": destroyed, "v3": IoGauntlet._winPercent });
         IoGauntlet._bar.x = (GLOBAL._SCREENCENTER.x - IoGauntlet.BAR_W * 0.5) | 0;
         IoGauntlet._bar.y = (GLOBAL._SCREEN.y + 100) | 0;
         IoGauntlet._bar.visible = true;
@@ -948,6 +1443,18 @@ export class IoGauntlet extends ASObject {
     }
 
     // ---- helpers
+    /**
+     * QoL #566: when the next month starts (00:00 UTC on the 1st) in the player's own time: "on Nov 1, 01:00 (your
+     * time)". (It said "on the 1st": in the Americas that's the evening of the 31st.)
+     */
+    public static ioNextFirst(): string {
+        let now: Date = new Date();
+        let next: Date = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+        // (QoL #235: the top bar's own words for it, io_tr_top_gt_on)
+        // (16 October: "1 Nov 2026, 01:00", the game's one way to say when)
+        return KEYS.Get("io_tr_top_gt_on", { "v1": IoFormat.dateTime(next.getTime() / 1000) });
+    }
+
     private static label(text: string, size: int, color: uint, bold: boolean, width: int, align: string, font: string = "Verdana", italic: boolean = false): TextField {
         let field: TextField = new TextField();
         field.selectable = false;

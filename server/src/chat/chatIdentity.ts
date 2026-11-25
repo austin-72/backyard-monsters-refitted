@@ -1,7 +1,7 @@
 import { Save } from "../database/models/save.model.js";
 import { User } from "../database/models/user.model.js";
 import { postgres, redis } from "../server.js";
-import { calculateBaseLevel } from "../services/base/calculateBaseLevel.js";
+import { tagsOfUsers } from "../services/alliance/allianceTag.js";
 import { chatTokenKey } from "./chatChannels.js";
 import {
   AuthFailReason,
@@ -14,6 +14,7 @@ import {
 import { leaveAllChannels } from "./chatRooms.js";
 import { clients, type ChatClient, type SocketData } from "./chatState.js";
 import { roleOf } from "./chatModeration.js";
+import { chatColorOf } from "../services/yard/dave.js";
 
 type ServerWebSocket<T> = import("bun").ServerWebSocket<T>;
 
@@ -38,11 +39,13 @@ const CHAT_FIELDS = [
  * @param {ChatIdentity} user - The authenticated user, with the level fields selected.
  * @returns {string} The display name to broadcast for this user.
  */
-const getDisplayName = (user: ChatIdentity): string => {
-  const save = user.save;
-  const level = save ? calculateBaseLevel(save.points, save.basevalue) : 1;
+// (13 October, the user's call: the name alone; the speaker's alliance tag goes with each line, not the yard level)
+const getDisplayName = (user: ChatIdentity): string => user.username;
 
-  return `[${level}] ${user.username}`;
+/** The player's alliance and its tag, or nulls (a failure leaves them out: the line still goes). */
+const allianceOf = async (userid: number): Promise<{ allianceId: number | null; allianceTag: string | null }> => {
+  const t = (await tagsOfUsers([userid]).catch(() => null))?.get(userid);
+  return { allianceId: t?.allianceId ?? null, allianceTag: t?.tag ?? null };
 };
 
 /**
@@ -91,7 +94,14 @@ export const authenticate = async (ws: ServerWebSocket<SocketData>, message: Aut
     channels: new Map(),
     lastMsgAt: 0,
     role: await roleOf(user.userid, user.username),
+    color: await chatColorOf(user.userid).catch(() => null),
+    ...(await allianceOf(user.userid)),
   };
+
+  // (18 October, SUSPECTED-BUGS.md: a connection that closed during the reads above was still registered, and the
+  // player stayed "in chat" with nowhere for their messages to go) not registered once closed
+  const state = ws as unknown as { readyState?: number; closed?: boolean };
+  if (state.closed === true || (typeof state.readyState === "number" && state.readyState > 1)) return;
 
   ws.data.userId = user.userid;
   ws.data.displayName = displayName;
@@ -120,6 +130,8 @@ export const refreshDisplayName = async (client: ChatClient, force = false) => {
   const now = Date.now();
   if (!force && now - (lastRefresh.get(client.userId) ?? 0) < 10_000) return;
   lastRefresh.set(client.userId, now);
+  // (18 October, SUSPECTED-BUGS.md: one entry per player ever seen, never removed) the old ones dropped past 5,000
+  if (lastRefresh.size > 5000) for (const [id, at] of lastRefresh) if (now - at > 10_000) lastRefresh.delete(id);
   const em = postgres.orm.em.fork();
   const user = await em.findOne(User, { userid: client.userId }, { fields: CHAT_FIELDS });
   if (!user) return;
@@ -132,4 +144,6 @@ export const refreshDisplayName = async (client: ChatClient, force = false) => {
     send(client.ws, { type: ServerMessageType.AuthOk, userId: user.userid, displayName: client.displayName, role, refresh: true });
   }
   client.role = role;
+  client.color = await chatColorOf(user.userid).catch(() => client.color ?? null);
+  Object.assign(client, await allianceOf(user.userid));
 };

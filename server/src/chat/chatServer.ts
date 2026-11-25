@@ -57,6 +57,9 @@ const startPolicyServer = () => {
  * Initialises the chat subsystem: Redis pub/sub gateway, Flash socket policy server, 
  * and WebSocket server.
  */
+/** (18 October) Uncaught exceptions in a minute after which the server stops. */
+const EXCEPTIONS_TO_STOP = 20;
+
 export const startChatServer = () => {
   const PORT = Number(process.env.CHAT_WS_PORT);
 
@@ -64,8 +67,19 @@ export const startChatServer = () => {
     logger.error(`Unhandled rejection in chat process: ${reason}`);
   });
 
+  // (18 October, SUSPECTED-BUGS.md: chat runs in the game server's process, so this swallowed every uncaught
+  // exception of the whole server and let it carry on in whatever state it was left) logged; and a server throwing
+  // them over and over (EXCEPTIONS_TO_STOP in a minute) stops, to be started again clean (Docker restarts it)
+  const thrown: number[] = [];
   process.on("uncaughtException", (err) => {
-    logger.error(`Uncaught exception in chat process: ${err.stack ?? err}`);
+    logger.error(`Uncaught exception in the server: ${err.stack ?? err}`);
+    const now = Date.now();
+    thrown.push(now);
+    while (thrown.length && now - thrown[0] > 60_000) thrown.shift();
+    if (thrown.length >= EXCEPTIONS_TO_STOP) {
+      logger.error(`${thrown.length} uncaught exceptions in a minute: the server stops, to start again clean`);
+      process.exit(1);
+    }
   });
 
   initGateway();

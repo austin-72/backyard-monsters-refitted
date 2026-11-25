@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { IOErrorEvent } from "flash/events";
-import { ACHIEVEMENTS, ALLIANCEWINDOW, AllianceConstants, AllyInfo, BASE, GLOBAL, KEYS, LOGIN, MapRoomCell, PLEASEWAIT, POPUPS, URLLoaderApi } from "@game";
+import { ACHIEVEMENTS, ALLIANCEWINDOW, AllianceConstants, AllyInfo, BASE, GLOBAL, IoAllianceUi, IoSocial, KEYS, LOGIN, MapRoomCell, PLEASEWAIT, POPUPS, URLLoaderApi } from "@game";
 
 export class ALLIANCES extends ASObject {
     public static _allianceID: int = 0;
@@ -80,9 +80,19 @@ export class ALLIANCES extends ASObject {
 
     private static _onMyAllianceLoaded(param1: any): void {
         ALLIANCES._myAllianceData = (param1 && param1.alliance) ? param1.alliance : null;
-        ALLIANCES._myAllianceLoaded = true;
+        // (Inferno-only, QoL #502: no alliance, but one they disbanded that can still be restored)
+        if (GLOBAL.INFERNO_ONLY && param1 && !param1.error) {
+            ALLIANCES._ioKept = !param1.alliance && param1.kept ? param1.kept : null;
+        }
+        // (Inferno-only, QoL #452: a refusal or an error is not kept as the answer: the Overview asked again only
+        // after the game was reloaded)
+        ALLIANCES._myAllianceLoaded = !(GLOBAL.INFERNO_ONLY && (!param1 || param1.error));
         ALLIANCES._myAllianceLoading = false;
         ALLIANCES._flushMyAlliancePending();
+        if (GLOBAL.INFERNO_ONLY && param1 && !param1.error) {
+            // (QoL #179: the board's top pin, one line over the Alliance chat tab)
+            IoAllianceUi.pinBanner();
+        }
     }
 
     private static _onMyAllianceLoadFail(param1: IOErrorEvent): void {
@@ -149,6 +159,10 @@ export class ALLIANCES extends ASObject {
         ALLIANCES._messagesLoaded = true;
         ALLIANCES._messagesLoading = false;
         ALLIANCES._flushMessagesPending();
+        if (GLOBAL.INFERNO_ONLY && ALLIANCES._messagesData != null) {
+            // (QoL #195: a new invite, as a browser notification while the tab is hidden)
+            IoSocial.ioInvitesSeen(ALLIANCES._messagesData);
+        }
     }
 
     private static _onMessagesLoadFail(error: IOErrorEvent): void {
@@ -259,10 +273,42 @@ export class ALLIANCES extends ASObject {
         }
 
         ALLIANCES._suggestedLoading = true;
-        new URLLoaderApi().load(GLOBAL._allianceURL + "getsuggestedmembers", null, ALLIANCES._onSuggestedLoaded, ALLIANCES._onSuggestedLoadFail);
+        // (Inferno-only, QoL #163: the Recruit tab's filters and page, when it has set any)
+        let vars: any[] = GLOBAL.INFERNO_ONLY && ALLIANCES._ioSuggestVars && ALLIANCES._ioSuggestVars.length ? ALLIANCES._ioSuggestVars.concat() : null;
+        ALLIANCES._ioSuggestSent = ALLIANCES._ioSuggestGen;
+        new URLLoaderApi().load(GLOBAL._allianceURL + "getsuggestedmembers", vars, ALLIANCES._onSuggestedLoaded, ALLIANCES._onSuggestedLoadFail);
+    }
+
+    /** (Inferno-only, QoL #163) what the Recruit tab asks with: [["mine", "1"], ["min_level", "20"], ...] */
+    private static _ioSuggestVars: any[] = null;
+
+    /** (QoL #163) the last answer's { page, more, total }, or null */
+    private static _ioSuggestMeta: any = null;
+
+    /** (QoL #163) filters changed while a list was on its way: that answer is not kept */
+    private static _ioSuggestGen: int = 0;
+    private static _ioSuggestSent: int = 0;
+
+    /** (QoL #163) The Recruit tab's filters and page: the list is asked for again with them. */
+    public static ioSetSuggestFilters(vars: any[]): void {
+        ALLIANCES._ioSuggestVars = vars;
+        ALLIANCES._ioSuggestGen = (ALLIANCES._ioSuggestGen + 1) | 0;
+        ALLIANCES.InvalidateSuggested();
+    }
+
+    /** (QoL #163) { page, more, total } of the list last loaded, or null before one has. */
+    public static ioSuggestMeta(): any {
+        return ALLIANCES._ioSuggestMeta;
     }
 
     private static _onSuggestedLoaded(response: any): void {
+        if (GLOBAL.INFERNO_ONLY && ALLIANCES._ioSuggestSent != ALLIANCES._ioSuggestGen) {
+            // (QoL #163: asked with filters since changed: asked again, the callers waiting get the new list)
+            ALLIANCES._suggestedLoading = false;
+            ALLIANCES.LoadSuggested(null, true);
+            return;
+        }
+        ALLIANCES._ioSuggestMeta = (response && !response.error && response.page !== undefined) ? { "page": response.page | 0, "more": Boolean(response.more), "total": response.total | 0 } : null;
         ALLIANCES._suggestedData = (response && !response.error) ? as3.as(response.members, Array) : null;
         ALLIANCES._suggestedLoaded = true;
         ALLIANCES._suggestedLoading = false;
@@ -313,6 +359,18 @@ export class ALLIANCES extends ASObject {
         });
     }
 
+    /** Inferno-only (QoL #162): an invite to the player named `name` (any capitals), from the Recruit tab. */
+    public static ioInviteByName(name: string, onDone: Function): void {
+        new URLLoaderApi().load(GLOBAL._allianceURL + "inviteuser", [["username", name]], (response: any): void => {
+            if (response != null && !response.error) {
+                ALLIANCES.InvalidateSuggested();
+            }
+            onDone(response);
+        }, (e: IOErrorEvent): void => {
+            onDone(null);
+        });
+    }
+
     /**
      * Loads the alliance's power-ups for the Power-Ups tab.
      *
@@ -333,8 +391,13 @@ export class ALLIANCES extends ASObject {
      * @param {int} powerupId - Which power-up to start.
      * @param {Function} onDone - Receives the server response, carrying the refreshed rows.
      */
-    public static ActivatePowerup(powerupId: int, onDone: Function): void {
-        new URLLoaderApi().load(GLOBAL._allianceURL + "activatepowerup", [["powerup_id", powerupId]], (response: any): void => {
+    public static ActivatePowerup(powerupId: int, onDone: Function, tier: int = 1): void {
+        // (Inferno-only, 22 October: at a tier; 2 runs longer and charges longer after)
+        let args: any[] = [["powerup_id", powerupId]];
+        if (GLOBAL.INFERNO_ONLY && tier == 2) {
+            args.push(["tier", 2]);
+        }
+        new URLLoaderApi().load(GLOBAL._allianceURL + "activatepowerup", args, (response: any): void => {
             onDone(response);
         }, (e: IOErrorEvent): void => {
             onDone(null);
@@ -349,6 +412,18 @@ export class ALLIANCES extends ASObject {
      * @param {int} hours - Hours to remove; the server clamps this to what is left.
      * @param {Function} onDone - Receives the server response, carrying the refreshed rows.
      */
+    /**
+     * Inferno-only (22 October, the user's pick "C"): plans when a power-up starts (at: seconds; 0 cancels the plan),
+     * at a tier. For whoever may start it; the server answers with the rows.
+     */
+    public static ioPlanPowerup(powerupId: int, at: number, tier: int, onDone: Function): void {
+        new URLLoaderApi().load(GLOBAL._allianceURL + "planpowerup", [["powerup_id", powerupId], ["at", Math.floor(at)], ["tier", tier]], (response: any): void => {
+            onDone(response);
+        }, (e: IOErrorEvent): void => {
+            onDone(null);
+        });
+    }
+
     public static PurchasePowerup(powerupId: int, hours: int, onDone: Function): void {
         new URLLoaderApi().load(GLOBAL._allianceURL + "purchasepowerup", [["powerup_id", powerupId], ["purchase_hours", hours]], (response: any): void => {
             onDone(response);
@@ -479,8 +554,13 @@ export class ALLIANCES extends ASObject {
         });
     }
 
-    public static RequestJoin(allianceId: int, onDone: Function): void {
-        new URLLoaderApi().load(GLOBAL._allianceURL + "requestjoin", [["alliance_id", allianceId]], (response: any): void => {
+    public static RequestJoin(allianceId: int, onDone: Function, message: string = null): void {
+        let vars: any[] = [["alliance_id", allianceId]];
+        // (Inferno-only, QoL #169: a few words to the leader)
+        if (message) {
+            vars.push(["message", message]);
+        }
+        new URLLoaderApi().load(GLOBAL._allianceURL + "requestjoin", vars, (response: any): void => {
             onDone(response);
         }, (e: IOErrorEvent): void => {
             onDone(null);
@@ -632,6 +712,31 @@ export class ALLIANCES extends ASObject {
         ALLIANCES.ioCall("movepin", [["id", String(id)], ["dir", dir]], onDone);
     }
 
+    /** (QoL #177) "keep" or "unkeep" (the leader), "renew" (the leader or an officer: 30 days from now). */
+    public static ioPinLife(id: int, action: string, onDone: Function): void {
+        ALLIANCES.ioCall("pinlife", [["id", String(id)], ["action", action]], (response: any): void => {
+            if (response != null && !response.error) {
+                ALLIANCES.InvalidateMyAlliance();
+            }
+            onDone(response);
+        });
+    }
+
+    /**
+     * (QoL #164) The alliance's invites still waiting on an answer (the leader and officers); `cancel` > 0 takes that
+     * one back first. onDone(response: { invites: [{ invite_id, user_id, user_name, by_name, sent, expires }], days }
+     * or null).
+     */
+    public static ioSentInvites(cancel: int, onDone: Function): void {
+        ALLIANCES.ioCall("sentinvites", cancel > 0 ? [["cancel", String(cancel)]] : null, (response: any): void => {
+            if (cancel > 0 && response != null && !response.error) {
+                // (they can be suggested again)
+                ALLIANCES.InvalidateSuggested();
+            }
+            onDone(response);
+        });
+    }
+
     /** A page of the outposts gained and lost: filters { kind, source, member, world }, `before` the last id shown. */
     public static ioLoadOutposts(filters: any, before: int, onDone: Function): void {
         let vars: any[] = [];
@@ -645,6 +750,36 @@ export class ALLIANCES extends ASObject {
             vars.push(["before", String(before)]);
         }
         ALLIANCES.ioCall("outposts", vars, onDone);
+    }
+
+    /**
+     * (Inferno-only, QoL #501) Puts back a member removed in the last 5 minutes, with their role and join date (whoever
+     * removed them, or the leader). onDone(response: { name } or an error, or null).
+     */
+    public static ioUndoKick(userId: int, onDone: Function): void {
+        ALLIANCES.ioCall("undokick", [["userid", String(userId)]], (response: any): void => {
+            if (response != null && !response.error) {
+                ALLIANCES.InvalidateMyAlliance();
+                ALLIANCES.InvalidateMembers();
+                ALLIANCES.InvalidateSuggested();
+            }
+            onDone(response);
+        });
+    }
+
+    /**
+     * (Inferno-only, QoL #172) The most senior active officer takes the lead when the leader hasn't been seen for 14
+     * days (the server checks). onDone(response or null).
+     */
+    public static ioTakeLead(onDone: Function): void {
+        ALLIANCES.ioCall("takelead", null, (response: any): void => {
+            if (response != null && !response.error) {
+                ALLIANCES._isLeader = true;
+                ALLIANCES.InvalidateMyAlliance();
+                ALLIANCES.InvalidateMembers();
+            }
+            onDone(response);
+        });
     }
 
     /** The leader names a member an officer (or stops). */
@@ -662,7 +797,90 @@ export class ALLIANCES extends ASObject {
         ALLIANCES.InvalidateMyAlliance();
         if (ALLIANCEWINDOW._open) {
             ALLIANCES.LoadMyAlliance(ALLIANCEWINDOW.RefreshTabLabels);
+        } else if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #179: the chat's pin banner catches up too)
+            ALLIANCES.LoadMyAlliance(null);
         }
+    }
+
+    // ---- Inferno-only: who can join (QoL #166), restoring a disbanded alliance (QoL #502)
+    /** (QoL #502) The alliance the player disbanded that can still be restored: { alliance_id, name, tag, at, until, days }, or null. */
+    private static _ioKept: any = null;
+
+    public static ioKept(): any {
+        return ALLIANCES._ioKept;
+    }
+
+    /** (QoL #166) The alliance's join policy, from the cached My Alliance payload: { mode, min_level }, or null. */
+    public static ioJoinPolicy(): any {
+        return ALLIANCES._myAllianceData && ALLIANCES._myAllianceData.join_policy ? ALLIANCES._myAllianceData.join_policy : null;
+    }
+
+    /** (QoL #166) The leader sets who can join: `mode` "open", "request" or "invite", and the minimum level (0: none). */
+    public static ioSetJoinPolicy(mode: string, minLevel: int, onDone: Function): void {
+        ALLIANCES.ioCall("joinpolicy", [["mode", mode], ["min_level", String(minLevel)]], (response: any): void => {
+            if (response != null && !response.error && response.policy && ALLIANCES._myAllianceData) {
+                ALLIANCES._myAllianceData.join_policy = response.policy;
+            }
+            onDone(response);
+        });
+    }
+
+    /**
+     * (QoL #166, #502) The player is in an alliance now (joined an open one from Browse, or restored theirs): its
+     * base-load payload is taken in, as an accepted invite's is, and the stores are asked again.
+     */
+    public static ioJoined(alliancedata: any, leader: boolean = false): void {
+        if (alliancedata) {
+            ALLIANCES._allianceID = alliancedata.alliance_id | 0;
+            ALLIANCES._myAlliance = ALLIANCES.SetAlliance(alliancedata);
+            ALLIANCES._isLeader = leader || Boolean(alliancedata.is_leader);
+        }
+        ALLIANCES._ioKept = null;
+        ALLIANCES.InvalidateMyAlliance();
+        ALLIANCES.InvalidateMessages();
+        ALLIANCES.InvalidateMembers();
+        ALLIANCES.InvalidateSuggested();
+    }
+
+    /** (QoL #502) Restores the alliance the player disbanded. onDone(response: { name, alliancedata } or an error, or null). */
+    public static ioRestore(onDone: Function): void {
+        ALLIANCES.ioCall("restore", null, (response: any): void => {
+            if (response != null && !response.error) {
+                ALLIANCES.ioJoined(response.alliancedata, true);
+            }
+            onDone(response);
+        });
+    }
+
+    // ---- Inferno-only (16 October, QoL #174): what the leader lets officers do
+    /** The alliance's switches, from the cached My Alliance payload: { powerups, relations, description } (all off when not known). */
+    public static ioOfficerPerms(): any {
+        let p: any = ALLIANCES._myAllianceData && ALLIANCES._myAllianceData.officer_perms ? ALLIANCES._myAllianceData.officer_perms : null;
+        return { "powerups": Boolean(p && p.powerups), "relations": Boolean(p && p.relations), "description": Boolean(p && p.description) };
+    }
+
+    /** Whether the player may do `perm` ("powerups", "relations" or "description"): the leader always, an officer when let. */
+    public static ioCan(perm: string): boolean {
+        if (ALLIANCES._isLeader) {
+            return true;
+        }
+        return ALLIANCES.ioRole() == "officer" && Boolean(ALLIANCES.ioOfficerPerms()[perm]);
+    }
+
+    /** The leader switches what officers may do: `perms` { powerups, relations, description }. onDone(response or null). */
+    public static ioSetOfficerPerms(perms: any, onDone: Function): void {
+        let vars: any[] = [];
+        for (const $value of as3.values(["powerups", "relations", "description"])) {
+            let k: string = as3.str($value);
+            vars.push([k, perms && perms[k] ? "1" : "0"]);
+        }
+        ALLIANCES.ioCall("officerperms", vars, (response: any): void => {
+            if (response != null && !response.error && response.perms && ALLIANCES._myAllianceData) {
+                ALLIANCES._myAllianceData.officer_perms = response.perms;
+            }
+            onDone(response);
+        });
     }
 
     public static Setup(param1: int = 0): void {

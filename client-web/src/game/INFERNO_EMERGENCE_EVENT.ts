@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, Vector, int, uint } from "as3";
 import { Sprite } from "flash/display";
 import { Event } from "flash/events";
-import { BASE, BFOUNDATION, BUILDINGOPTIONS, BUILDINGS, GLOBAL, INFERNOPORTAL, INFERNO_EMERGENCE_POPUPS, INFERNO_PORTAL_ATTACK, InstanceManager, KEYS, MAP, MAPROOM_DESCENT, POPUPS, SOUNDS, STORE, TUTORIAL, TweenLite, UI2 } from "@game";
+import { BASE, BFOUNDATION, BUILDINGOPTIONS, BUILDINGS, GLOBAL, INFERNOPORTAL, INFERNO_EMERGENCE_POPUPS, INFERNO_PORTAL_ATTACK, InstanceManager, KEYS, MAP, MAPROOM_DESCENT, POPUPS, SOUNDS, STORE, TUTORIAL, TweenLite, UI2, IoTilt } from "@game";
 
 export class INFERNO_EMERGENCE_EVENT extends ASObject {
     private static readonly postEvent: any = as3.namespace("postEvent");
@@ -175,6 +175,8 @@ export class INFERNO_EMERGENCE_EVENT extends ASObject {
         UI2.Show("warning");
         UI2._warning.Update("<font size=\"26\">" + KEYS.Get(INFERNO_EMERGENCE_EVENT._WARNING_KEY) + "</font>");
         BASE.Shake(INFERNO_EMERGENCE_EVENT._SHAKE_AMOUNT | 0);
+        // (Inferno-only, 14 October: and a heavy nod)
+        IoTilt.nod(IoTilt.HEAVY);
         TweenLite.delayedCall(INFERNO_EMERGENCE_EVENT._ATTACK_DELAY, INFERNO_EMERGENCE_EVENT.ShowWarningPopup);
     }
 

@@ -1,10 +1,10 @@
 import * as as3 from "as3";
-import { ASObject, Vector, int } from "as3";
+import { ASObject, Vector, int, uint } from "as3";
 import { BitmapData, DisplayObjectContainer, Sprite, StageDisplayState } from "flash/display";
 import { Event, IOErrorEvent, MouseEvent, TimerEvent } from "flash/events";
 import { Point } from "flash/geom";
 import { Dictionary, Timer, setTimeout } from "flash/utils";
-import { ALLIANCES, BASE, CREATURES, Chat, EnumYardType, FriendPicker, GLOBAL, IMapRoom, IMapRoomCell, IoMapShare, IoMapSnapshot, IoQuests, IoUnderworld, KEYS, LOGGER, MAILBOX, MailBox, MapRoomCell, MapRoomManager, MapRoomPopup, PLEASEWAIT, POPUPS, PopupRelocateMe, SOUNDS, SecNum, Smoke, Thread, Tutorial, UI2, UI_BOTTOM, URLLoaderApi, bubble_acceptInvite, bubble_selecttarget, objZone } from "@game";
+import { ALLIANCES, IoToast, BASE, CREATURES, Chat, EnumYardType, FriendPicker, GLOBAL, IMapRoom, IMapRoomCell, IoMapShare, IoMapSnapshot, IoQuests, IoUnderworld, KEYS, LOGGER, MAILBOX, MailBox, MapRoomCell, MapRoomManager, MapRoomPopup, PLEASEWAIT, POPUPS, PopupRelocateMe, SOUNDS, SecNum, Smoke, Thread, Tutorial, UI2, UI_BOTTOM, URLLoaderApi, bubble_acceptInvite, bubble_selecttarget, objZone } from "@game";
 
 export class MapRoom extends ASObject implements IMapRoom {
     static {
@@ -65,6 +65,9 @@ export class MapRoom extends ASObject implements IMapRoom {
 
     private static _showEnemyWait: boolean = false;
 
+    /** Inferno-only (QoL #86): with showEnemyWait, press the yard window's Take over / Attack once it's open */
+    public static ioActWait: string = "";
+
     private static _resourceCounter: int = 0;
 
     private static _monstersTransferred: int = 0;
@@ -115,13 +118,31 @@ export class MapRoom extends ASObject implements IMapRoom {
     /** How many zones at the front of the queue the request on its way is for (0: none on its way). */
     private static _ioInFlight: int = 0;
 
+    /** Inferno-only (QoL #537): the wait before asking again after the area limit refused a request, in ms (0: none). */
+    private static _ioBackoff: int = 0;
+
     /** The most zones asked for in one getarea request (the server takes up to 16). */
     private static readonly IO_BATCH_ZONES: int = 12;
+
+    /**
+     * Inferno-only (QoL #344): when the main yard can be moved again (GLOBAL.Timestamp time; 0: now or not known),
+     * from getarea's io_move. The yard's map popup greys "Move main yard here" until then and says why.
+     */
+    public static ioMoveFreeAt: number = 0;
 
     /** A cell clicked while it only had the snapshot's data: clicked again once its zone has arrived. */
     private static _ioPendingClick: Point = null;
 
     private static _ioPendingClickAt: int = 0;
+
+    /** Inferno-only (QoL #74): the pending click is the Targets list's Attack: the yard's window then presses its Attack. */
+    private static _ioPendingAttack: boolean = false;
+
+    /** Inferno-only (QoL #76): how many colour tags a bookmark can have (0 is none: the gold pin). */
+    public static readonly IO_BOOKMARK_COLOURS: int = 6;
+
+    /** (QoL #76) the pins' colours by tag: gold (none), red, green, blue, purple, white. */
+    private static readonly IO_BOOKMARK_TINTS: any[] = [14856743, 14173251, 4170573, 4029912, 10180048, 15461355];
 
     public $ctor(): void {
         super.$ctor();
@@ -251,7 +272,7 @@ export class MapRoom extends ASObject implements IMapRoom {
             let count: int = 0;
             let warning: string = null;
             if (!serverData || serverData.error != 0) {
-                GLOBAL.Message(serverData && serverData.error ? String(serverData.error) : "This invitation could not be checked. Please try again.");
+                GLOBAL.Message(serverData && serverData.error ? String(serverData.error) : KEYS.Get("io_t3m_mr_invite_unchecked"));
                 return;
             }
             MapRoom._inviteCrossWorld = (serverData.crossWorld | 0) == 1;
@@ -260,12 +281,12 @@ export class MapRoom extends ASObject implements IMapRoom {
                 return;
             }
             count = serverData.outposts | 0;
-            warning = "<b>This outpost is in a different world.</b><br><br>Moving there means leaving your current world: " + (count > 0 ? "you will lose <b>all " + count + " of your outpost" + (count == 1 ? "" : "s") + "</b> and start the new world with just your main yard." : "you will start the new world with just your main yard.") + "<br><br>Do you still want to move?";
-            GLOBAL.Message(warning, "Move anyway", (): void => {
+            warning = KEYS.Get("io_t3m_mr_cross", { "v1": count > 0 ? KEYS.Get(count == 1 ? "io_t3m_mr_cross_lose_one" : "io_t3m_mr_cross_lose_n", { "v1": count }) : KEYS.Get("io_t3m_mr_cross_keep") });
+            GLOBAL.Message(warning, KEYS.Get("io_t3m_mr_move_anyway"), (): void => {
                 MapRoom.openRelocateForInvite(container);
             });
         }, (e: Event): void => {
-            GLOBAL.Message("This invitation could not be checked. Please try again.");
+            GLOBAL.Message(KEYS.Get("io_t3m_mr_invite_unchecked"));
         });
     }
 
@@ -349,7 +370,7 @@ export class MapRoom extends ASObject implements IMapRoom {
                     POPUPS.DisplayGetShiny();
                     return;
                 }
-                if (!GLOBAL.ioConfirmShiny(SHINYCOST.Get() | 0, "to move your main yard to this outpost", (): void => {
+                if (!GLOBAL.ioConfirmShiny(SHINYCOST.Get() | 0, KEYS.Get("io_t3m_mr_shiny_move"), (): void => {
                     MapRoom.AcceptInvitation(true);
                 })) {
                     return;
@@ -509,14 +530,25 @@ export class MapRoom extends ASObject implements IMapRoom {
                 MapRoom.BookmarksSave();
             }
         };
+        // (Inferno-only, QoL #457: a save that didn't go through says so, with Try again; it was silent, and the
+        // change was gone at the next load unless a later one was saved)
+        let failed: Function = (): void => {
+            if (GLOBAL.INFERNO_ONLY && !MapRoom._ioBookmarkDirty) {
+                IoToast.Show(KEYS.Get("io_bookmark_failed"), 8000, KEYS.Get("io_try_again"), (): void => {
+                    MapRoom.BookmarksSave();
+                });
+            }
+        };
         handleBMSaveSuccessful = (param1: any): void => {
             if (param1.error != 0) {
                 LOGGER.Log("err", "MapRoom.BookmarksSave", Boolean(param1.error));
+                failed();
             }
             done();
         };
         handleBMSaveError = (param1: IOErrorEvent): void => {
             LOGGER.Log("err", "MapRoom.BookmarksSave HTTP");
+            failed();
             done();
         };
         let url: string = GLOBAL._apiURL + "player/savebookmarks";
@@ -531,10 +563,21 @@ export class MapRoom extends ASObject implements IMapRoom {
      */
     public static ioBookmarksWrite(): void {
         let i: int = 0;
+        let colours: any[] = [];
+        // (QoL #76: the colour tags, read before the stored form is written again)
+        while (i < MapRoom._bookmarks.length) {
+            colours.push(MapRoom.ioBookmarkColour(i));
+            i++;
+        }
+        i = 0;
         MapRoom._bookmarkData = {};
         while (i < MapRoom._bookmarks.length) {
             MapRoom._bookmarkData["mbm" + i] = (MapRoom._bookmarks[i].location.x | 0) * 10000 + (MapRoom._bookmarks[i].location.y | 0);
             MapRoom._bookmarkData["mbmn" + i] = String(MapRoom._bookmarks[i].name);
+            // (QoL #76: mbmc0, mbmc1...: a bookmark's colour tag, only when it has one)
+            if ((colours[i] | 0) > 0) {
+                MapRoom._bookmarkData["mbmc" + i] = colours[i] | 0;
+            }
             i++;
         }
         if (MapRoom._bookmarks.length > 0) {
@@ -547,7 +590,7 @@ export class MapRoom extends ASObject implements IMapRoom {
     public static ioRenameBookmark(index: int, name: string): string {
         name = String(name || "").replace(/^\s+|\s+$/g, "");
         if (index < 0 || index >= MapRoom._bookmarks.length) {
-            return "That bookmark is gone.";
+            return KEYS.Get("io_t3m_mr_bookmark_gone");
         }
         if (name.length == 0) {
             return KEYS.Get("newmap_bm_name");
@@ -560,6 +603,50 @@ export class MapRoom extends ASObject implements IMapRoom {
             MapRoom.ioBookmarksWrite();
         }
         return "";
+    }
+
+    /**
+     * Inferno-only (QoL #76): a bookmark's colour tag (0: none, the gold pin; up to IO_BOOKMARK_COLOURS - 1). Kept
+     * with the bookmark's stored form (mbmc0, mbmc1... beside mbm0 and mbmn0); read from it the first time.
+     */
+    public static ioBookmarkColour(index: int): int {
+        let bookmark: any = index >= 0 && index < MapRoom._bookmarks.length ? MapRoom._bookmarks[index] : null;
+        let count: int = 0;
+        let i: int = 0;
+        let at: int = 0;
+        if (!bookmark) {
+            return 0;
+        }
+        if (bookmark.ioColour == null) {
+            bookmark.ioColour = 0;
+            at = ((bookmark.location.x | 0) * 10000 + (bookmark.location.y | 0)) | 0;
+            count = MapRoom.BookmarkDataGet("mbms");
+            while (i < count) {
+                if (MapRoom.BookmarkDataGet("mbm" + i) == at) {
+                    bookmark.ioColour = Math.max(0, Math.min(MapRoom.IO_BOOKMARK_COLOURS - 1, MapRoom.BookmarkDataGet("mbmc" + i))) | 0;
+                    break;
+                }
+                i++;
+            }
+        }
+        return bookmark.ioColour | 0;
+    }
+
+    /** Inferno-only (QoL #76): the colour of a bookmark's pin (the sidebar, the world map). */
+    public static ioBookmarkTint(index: int): uint {
+        return MapRoom.IO_BOOKMARK_TINTS[MapRoom.ioBookmarkColour(index)] >>> 0;
+    }
+
+    /** Inferno-only (QoL #76): sets a bookmark's colour tag, and saves. */
+    public static ioSetBookmarkColour(index: int, colour: int): void {
+        if (index < 0 || index >= MapRoom._bookmarks.length) {
+            return;
+        }
+        colour = ((colour % MapRoom.IO_BOOKMARK_COLOURS + MapRoom.IO_BOOKMARK_COLOURS) % MapRoom.IO_BOOKMARK_COLOURS) | 0;
+        if (MapRoom.ioBookmarkColour(index) != colour) {
+            MapRoom._bookmarks[index].ioColour = colour;
+            MapRoom.ioBookmarksWrite();
+        }
     }
 
     public static ioRemoveBookmark(index: int): void {
@@ -673,6 +760,16 @@ export class MapRoom extends ASObject implements IMapRoom {
                 let allianceData: any[] = null;
                 let cell: any = null;
                 let area: any = null;
+                // (Inferno-only, QoL #537: refused by the area limit: the same zones are asked for again a little
+                // later, 2 s, then 4, 8, at most 15; they were dropped, so the map's zones stayed empty for a
+                // minute, and a bug report was made for it)
+                if (GLOBAL.INFERNO_ONLY && serverData && serverData.error && /too many/i.test(String(serverData.error))) {
+                    MapRoom._ioInFlight = 0;
+                    MapRoom._ioBackoff = Math.min(15000, MapRoom._ioBackoff > 0 ? MapRoom._ioBackoff * 2 : 2000) | 0;
+                    setTimeout(trySendRequest, MapRoom._ioBackoff);
+                    return;
+                }
+                MapRoom._ioBackoff = 0;
                 // (Inferno-only: a request can be for several zones, the front of the queue)
                 MapRoom._pendingMapCellDataRequests.splice(0, Math.max(1, MapRoom._ioInFlight));
                 MapRoom._ioInFlight = 0;
@@ -684,6 +781,10 @@ export class MapRoom extends ASObject implements IMapRoom {
                 }
                 if (serverData && serverData.io_under) {
                     IoUnderworld.setInfo(serverData.io_under);
+                }
+                // (Inferno-only, QoL #344: the seconds left before the main yard can move again)
+                if (GLOBAL.INFERNO_ONLY && serverData && !serverData.error && serverData.io_move != null) {
+                    MapRoom.ioMoveFreeAt = Number(serverData.io_move) > 0 ? GLOBAL.Timestamp() + Number(serverData.io_move) : 0;
                 }
                 if (serverData && !serverData.error && as3.is(serverData.areas, Array)) {
                     // Several zones: each as if it had come on its own, the map drawn again once.
@@ -879,6 +980,21 @@ export class MapRoom extends ASObject implements IMapRoom {
         return vars;
     }
 
+    /**
+     * Inferno-only (11 November, bug report #100): a cell asked for again now, and drawn from the answer. A cell set
+     * up in the last 10 seconds takes no newer data (_dataAge, MapRoomPopup.Update), and after that only the next
+     * forced pass gives it any: up to a minute. So a yard taken over just after the map opened ("Stay on the map")
+     * stayed the tribe's on the map; its window still offered View, and the yard, an outpost by then, halted the
+     * game ("yard w OP bdg").
+     */
+    public static ioRefreshCell(cellX: int, cellY: int): any {
+        let shown: MapRoomCell = MapRoom._mc ? MapRoom._mc.ioCellAt(cellX, cellY) : null;
+        if (shown) {
+            shown._dataAge = 0;
+        }
+        return MapRoom.GetCell(cellX, cellY, true);
+    }
+
     public static GetCell(cellX: int, cellY: int, param3: boolean = false): any {
         if (GLOBAL.INFERNO_ONLY && IoUnderworld.isVoid(cellX, cellY)) {
             return IoUnderworld.voidCell;
@@ -919,10 +1035,12 @@ export class MapRoom extends ASObject implements IMapRoom {
         return { "loaded": true, "data": z.data[cellX] ? z.data[cellX][cellY] : null };
     }
 
-    public static ioClickWhenLoaded(cell: MapRoomCell): void {
+    public static ioClickWhenLoaded(cell: MapRoomCell, attack: boolean = false): void {
         let zone: any = MapRoom.GetCellZone(cell.X, cell.Y);
         MapRoom._ioPendingClick = new Point(cell.X, cell.Y);
         MapRoom._ioPendingClickAt = GLOBAL.Timestamp();
+        // (QoL #74: a click on the map itself is no Attack from the Targets list)
+        MapRoom._ioPendingAttack = attack;
         if (MapRoom.GetPendingZoneRequestIndex(cell.X, cell.Y) > 0) {
             MapRoom._priorityMapCellsToRequest.push(zone.point);
         } else if (MapRoom.GetPendingZoneRequestIndex(cell.X, cell.Y) == -1) {
@@ -951,6 +1069,36 @@ export class MapRoom extends ASObject implements IMapRoom {
         }
         MapRoom._ioPendingClick = null;
         cell.ioClick();
+        // (QoL #74)
+        if (MapRoom._ioPendingAttack) {
+            MapRoom._ioPendingAttack = false;
+            MapRoom.ioPressAttack(cell);
+        }
+    }
+
+    /**
+     * Inferno-only (QoL #74): the Targets list's Attack: the map is at the yard; its window (opened as a click on the map
+     * opens it) presses its own Attack, or Take over, when it can. When it can't, the window stays open and says why.
+     */
+    public static ioAttackCell(cell: MapRoomCell): void {
+        if (!cell) {
+            return;
+        }
+        if (cell._ioSnap || !cell._updated) {
+            // its zone's data first (the window needs the yard's monsters and resources)
+            MapRoom.ioClickWhenLoaded(cell, true);
+            return;
+        }
+        cell.ioClick();
+        MapRoom.ioPressAttack(cell);
+    }
+
+    private static ioPressAttack(cell: MapRoomCell): void {
+        let info: any = MapRoom._mc ? MapRoom._mc.ioInfoEnemy : null;
+        if (!cell || cell._mine || !info || !info.parent || !info.bAttack || !info.bAttack.Enabled || !info.bAttack.Highlight) {
+            return;
+        }
+        info.Attack(null);
     }
 
     /** A new world snapshot (IoMapSnapshot): cells without getarea data yet and the world map redraw. */
@@ -1391,7 +1539,7 @@ export class MapRoom extends ASObject implements IMapRoom {
         if (GLOBAL.mode === GLOBAL.e_BASE_MODE.BUILD) {
             GLOBAL.m_mapRoomFunctional = true;
         }
-        if (param1 || MapRoom._reposition || (!BASE.isMainYard || GLOBAL._bMap && GLOBAL._bMap._canFunction || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) && (GLOBAL.mode == GLOBAL.e_BASE_MODE.HELP || !MapRoom._open)) {
+        if (param1 || MapRoom._reposition || (!BASE.isMainYard || GLOBAL.ioMapRoomWorks() || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD) && (GLOBAL.mode == GLOBAL.e_BASE_MODE.HELP || !MapRoom._open)) {
             SOUNDS.Play("click1");
             MapRoom._open = true;
             MapRoom._reposition = false;
@@ -1404,6 +1552,14 @@ export class MapRoom extends ASObject implements IMapRoom {
             }
             // Map from the Outposts list: open on that outpost, not on the yard you are in.
             let ioFocused: boolean = MapRoom.ioFocus != null;
+            // (Inferno-only, 21 October: opened at the yard you're in, its cells made there at once: they were made around
+            // home first, then all made again at the yard (JumpTo), twice the work of opening the map)
+            let ioAtCell: Point = null;
+            if (GLOBAL.INFERNO_ONLY && !ioFocused && GLOBAL._currentCell) {
+                ioAtCell = new Point(GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY);
+                MapRoom.ioFocus = ioAtCell;
+                MapRoomPopup.ioOpenAtCell();
+            }
             IoMapSnapshot.Request();
             MapRoom._mc = new MapRoomPopup();
             MapRoom._mc.Setup();
@@ -1412,12 +1568,23 @@ export class MapRoom extends ASObject implements IMapRoom {
             UI2.SetupHUD();
             if (GLOBAL._currentCell) {
                 MapRoom.GetCell(GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY, true);
-                if (!ioFocused) {
+                if (ioAtCell) {
+                    MapRoom._mc.ioOpenedAt(MapRoom._homePoint);
+                } else if (!ioFocused) {
                     MapRoom._mc.JumpTo(new Point(GLOBAL._currentCell.cellX, GLOBAL._currentCell.cellY));
                 }
                 if (MapRoom._showEnemyWait) {
                     MapRoom._mc.ShowInfoEnemy(as3.as(GLOBAL._currentCell, MapRoomCell), true);
                     MapRoom._showEnemyWait = false;
+                    // Inferno-only (QoL #86): Take over now / Attack again from the result: that window's button
+                    if (GLOBAL.INFERNO_ONLY && MapRoom.ioActWait) {
+                        let want: string = MapRoom.ioActWait;
+                        MapRoom.ioActWait = "";
+                        let info: any = MapRoom._mc ? MapRoom._mc.ioInfoEnemy : null;
+                        if (info && info.parent && info.bAttack && info.bAttack.Enabled && info.bAttack.Highlight && info.ioTakeoverReady == (want == "takeover")) {
+                            info.Attack(null);
+                        }
+                    }
                 } else if (MapRoom._showAttackWait) {
                     MapRoom._mc.ShowAttack(as3.as(GLOBAL._currentCell, MapRoomCell));
                     MapRoom._showAttackWait = false;

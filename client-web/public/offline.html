@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Inferno Map Room 2 - offline</title>
+  <meta name="theme-color" content="#1a0503">
+  <meta name="color-scheme" content="dark">
+  <meta name="robots" content="noindex">
+  <!-- Inferno-only (QoL #243): shown by sw.js when the game's page can't be loaded (no connection). Everything it
+       needs is in this file: nothing else is kept offline. -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #0d0403; color: #f2dcc8; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    body { display: grid; place-items: center; text-align: center; padding: 24px; box-sizing: border-box;
+      background: radial-gradient(ellipse at 50% 120%, rgba(255, 80, 20, .22), transparent 60%), radial-gradient(ellipse at 50% -20%, rgba(120, 20, 6, .4), transparent 60%), #0d0403; }
+    h1 { margin: 0; font: 700 clamp(28px, 6vw, 52px)/1.1 Impact, "Arial Black", sans-serif; letter-spacing: .5px;
+      background: linear-gradient(#ffe9a0, #ff9a3a 55%, #e0401a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    p { margin: 14px auto 0; max-width: 30em; color: #ffd8b0; }
+    .small { font-size: 13px; color: #b88a70; }
+    button { margin-top: 22px; background: linear-gradient(#3a1008, #250805); color: #ffd8b0; border: 1px solid #ff7a2a; border-radius: 8px; padding: 10px 22px; font: inherit; cursor: pointer; }
+    button:hover { background: linear-gradient(#55180a, #300a05); color: #fff1d8; }
+  </style>
+</head>
+<body>
+  <div>
+    <h1>Inferno Map Room 2</h1>
+    <p><b>You're offline.</b> The Inferno needs an internet connection to play.</p>
+    <p class="small" id="io-offline-wait">The game opens by itself when the connection is back.</p>
+    <button id="io-offline-retry" type="button">Try again</button>
+  </div>
+  <script>
+    // Back online: the game's page again (the one that was asked for: this page is shown in its place)
+    var again = function () { location.reload(); };
+    document.getElementById("io-offline-retry").onclick = again;
+    window.addEventListener("online", again);
+    // (the "online" event doesn't come everywhere: a small check every 10 s)
+    setInterval(function () {
+      fetch("version.json?t=" + Date.now(), { cache: "no-store" }).then(function (r) { if (r.ok) again(); }).catch(function () {});
+    }, 10000);
+  </script>
+</body>
+</html>

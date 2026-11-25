@@ -18,6 +18,8 @@ export const apps = [
     interpreter: "bun",
     interpreter_args: "--bun",
     exp_backoff_restart_delay: 100,
+    // (16 October: a stopping server tells the games for 4 s first, services/admin/restartNotice.ts; PM2 waits for it)
+    kill_timeout: 8000,
     env: {
       NODE_ENV: "production",
       PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}`,

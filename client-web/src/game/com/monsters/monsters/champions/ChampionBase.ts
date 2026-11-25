@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, DisplayObject, IBitmapDrawable } from "flash/displa
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { ATTACK, AdditionPropertyModifier, BASE, BFOUNDATION, BMUSHROOM, BTOWER, BYMConfig, Bounce, Bunker, CHAMPIONCAGE, CModifiableProperty, CREATURES, CREEPS, Decoy, FIREBALLS, GLOBAL, GRID, ILootable, ITargetable, InstanceManager, KEYS, Krallen, LOGGER, LOGIN, MAP, MONSTERBUNKER, MonsterBase, PATHING, POPUPS, QUESTS, RasterData, SOUNDS, SPECIALEVENT, SPRITES, STORE, SecNum, SiegeWeapon, SiegeWeapons, Sine, Targeting, TweenLite } from "@game";
+import { ATTACK, AdditionPropertyModifier, BASE, BFOUNDATION, BMUSHROOM, BTOWER, BYMConfig, Bounce, Bunker, CHAMPIONCAGE, CModifiableProperty, CREATURES, CREEPS, Decoy, FIREBALLS, GLOBAL, GRID, ILootable, ITargetable, InstanceManager, KEYS, Krallen, LOGGER, LOGIN, MAP, MONSTERBUNKER, MonsterBase, PATHING, POPUPS, QUESTS, RasterData, SOUNDS, SPECIALEVENT, SPRITES, STORE, SecNum, SiegeWeapon, SiegeWeapons, Sine, Targeting, TweenLite, IoDave, IoSkins } from "@game";
 
 export class ChampionBase extends MonsterBase {
     static {
@@ -176,6 +176,13 @@ export class ChampionBase extends MonsterBase {
     protected setupSprite(): void {
         this._frameNumber = (Math.random() * 7) | 0;
         this._spriteID = this._creatureID + "_" + Math.min(this._level.Get(), CHAMPIONCAGE.GetGuardianProperties(this._creatureID, "health").length);
+        // Inferno-only (10 October): Korath's and Drull's frozen looks (the D.A.V.E. Club: IoDave)
+        if (IoDave.frozen(this._creatureID, this._friendly) && SPRITES._sprites[this._spriteID + "F"]) {
+            this._spriteID += "F";
+        } else {
+            // (14 October) or a Shiny skin (IoSkins)
+            this._spriteID = IoSkins.sprite(this._spriteID, IoDave.skin(this._creatureID, this._friendly));
+        }
         SPRITES.SetupSprite(this._spriteID);
         if (this._movement == "fly") {
             SPRITES.SetupSprite("bigshadow");
@@ -622,6 +629,11 @@ export class ChampionBase extends MonsterBase {
                 this._spriteID = this._creatureID + "_" + this._powerLevel.Get();
             } else {
                 this._spriteID = this._creatureID + "_" + param1;
+                if (IoDave.frozen(this._creatureID, this._friendly) && SPRITES._sprites[this._spriteID + "F"]) {
+                    this._spriteID += "F";
+                } else {
+                    this._spriteID = IoSkins.sprite(this._spriteID, IoDave.skin(this._creatureID, this._friendly));
+                }
             }
             if (this._graphicMC.parent) {
                 this._graphicMC.parent.removeChild(this._graphicMC);
@@ -1063,7 +1075,7 @@ export class ChampionBase extends MonsterBase {
         if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
             _loc1_ = this.getHealCost();
             if (_loc1_ > BASE._credits.Get()) {
-                POPUPS.DisplayGetShiny();
+                POPUPS.ioShinyNeed(_loc1_);
                 return;
             }
             this.setHealth(this.maxHealth);

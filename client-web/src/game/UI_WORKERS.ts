@@ -1,9 +1,11 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
-import { DisplayObject, MovieClip } from "flash/display";
+import { Bitmap, BitmapData, DisplayObject, MovieClip, Sprite } from "flash/display";
+import { GlowFilter } from "flash/filters";
+import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { BASE, Chat, GLOBAL, KEYS, QUEUE, STORE, TUTORIAL, UI2, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno } from "@game";
+import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno } from "@game";
 
 export class UI_WORKERS extends ASObject {
     private static _do: DisplayObject = null;
@@ -38,6 +40,26 @@ export class UI_WORKERS extends ASObject {
     /** Hell Freezes Over's button: under the Gauntlet's (in its place while that one is hidden). */
     private static _ioExtra2: DisplayObject = null;
 
+    /** The Frozen Monster Invasion's button: in the Gauntlet's place (the two are never on at once). */
+    private static _ioExtraFmi: DisplayObject = null;
+
+    /** (20 October) Trick or Treat's button (com/monsters/events/tot): right under the Gauntlet's. */
+    private static _ioExtraTot: DisplayObject = null;
+
+    /** Hellgate Defense's button (com/monsters/td): first under the workers, above the Gauntlet's. */
+    private static _ioExtra0: DisplayObject = null;
+
+    /** QoL #25: "Pick all warts", first under the workers (while there are some), above the event buttons. */
+    private static _ioWartsBtn: Sprite = null;
+
+    /** QoL #589: "Break all ice", under it (while the event's Days 1-3 ice is in the yard). */
+    private static _ioIceBtn: Sprite = null;
+
+    /** Those two are smaller than the event buttons: their ring, across the middle; the room each takes. */
+    private static readonly IO_YARD_R: int = 18;
+
+    private static readonly IO_YARD_STEP: int = 46;
+
     public $ctor(): void {
         super.$ctor();
     }
@@ -47,6 +69,31 @@ export class UI_WORKERS extends ASObject {
             UI_WORKERS._ioExtra.parent.removeChild(UI_WORKERS._ioExtra);
         }
         UI_WORKERS._ioExtra = param1;
+        UI_WORKERS.ioPlaceExtra();
+    }
+
+    public static ioAddAboveGauntlet(param1: DisplayObject): void {
+        if (UI_WORKERS._ioExtra0 && UI_WORKERS._ioExtra0 != param1 && UI_WORKERS._ioExtra0.parent) {
+            UI_WORKERS._ioExtra0.parent.removeChild(UI_WORKERS._ioExtra0);
+        }
+        UI_WORKERS._ioExtra0 = param1;
+        UI_WORKERS.ioPlaceExtra();
+    }
+
+    public static ioAddFmi(param1: DisplayObject): void {
+        if (UI_WORKERS._ioExtraFmi && UI_WORKERS._ioExtraFmi != param1 && UI_WORKERS._ioExtraFmi.parent) {
+            UI_WORKERS._ioExtraFmi.parent.removeChild(UI_WORKERS._ioExtraFmi);
+        }
+        UI_WORKERS._ioExtraFmi = param1;
+        UI_WORKERS.ioPlaceExtra();
+    }
+
+    /** (20 October) Trick or Treat's button: right under the Gauntlet's (in its place while that one is hidden). */
+    public static ioAddTot(param1: DisplayObject): void {
+        if (UI_WORKERS._ioExtraTot && UI_WORKERS._ioExtraTot != param1 && UI_WORKERS._ioExtraTot.parent) {
+            UI_WORKERS._ioExtraTot.parent.removeChild(UI_WORKERS._ioExtraTot);
+        }
+        UI_WORKERS._ioExtraTot = param1;
         UI_WORKERS.ioPlaceExtra();
     }
 
@@ -64,22 +111,155 @@ export class UI_WORKERS extends ASObject {
             return;
         }
         let r: Rectangle = UI_WORKERS._workers && UI_WORKERS._workers.length >= 5 ? as3.cast(UI_WORKERS._workers[4].mc, DisplayObject).getBounds(UI_WORKERS._mc) : new Rectangle(0, 20 + 4 * UI_WORKERS._workerMCOffset, 40, 40);
-        if (UI_WORKERS._ioExtra2) {
-            if (UI_WORKERS._ioExtra2.parent != UI_WORKERS._mc) {
-                UI_WORKERS._mc.addChild(UI_WORKERS._ioExtra2);
+        // Top to bottom: Hellgate Defense, Moloch's Gauntlet, the Frozen Monster Invasion, Hell Freezes Over; each
+        // moves up into the place of one above it that is hidden (the invasion's takes the Gauntlet's: they are
+        // a week apart, each hidden until a week before it starts).
+        // (QoL #25, #589: first "Pick all warts" and "Break all ice", while shown; the event buttons go under them)
+        let top: number = r.y + r.height + UI_WORKERS.IO_EXTRA_GAP;
+        let off: number = 0;
+        for (let y of as3.values([UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
+            if (!y) {
+                continue;
             }
-            let below: boolean = Boolean(UI_WORKERS._ioExtra) && UI_WORKERS._ioExtra.visible;
-            UI_WORKERS._ioExtra2.x = r.x + r.width / 2 - UI_WORKERS.IO_EXTRA_MIDDLE;
-            UI_WORKERS._ioExtra2.y = r.y + r.height + UI_WORKERS.IO_EXTRA_GAP + 25 - UI_WORKERS.IO_EXTRA_MIDDLE + (below ? 66 : 0);
+            if (y.parent != UI_WORKERS._mc) {
+                UI_WORKERS._mc.addChild(y);
+            }
+            y.x = r.x + r.width / 2 - UI_WORKERS.IO_EXTRA_MIDDLE;
+            y.y = top + off + UI_WORKERS.IO_YARD_R - UI_WORKERS.IO_EXTRA_MIDDLE;
+            if (y.visible) {
+                off += UI_WORKERS.IO_YARD_STEP;
+            }
         }
-        if (!UI_WORKERS._ioExtra) {
+        let slot: int = 0;
+        // (20 October: Trick or Treat's right under the Gauntlet's)
+        for (let b of as3.values([UI_WORKERS._ioExtra0, UI_WORKERS._ioExtra, UI_WORKERS._ioExtraTot, UI_WORKERS._ioExtraFmi, UI_WORKERS._ioExtra2])) {
+            if (!b) {
+                continue;
+            }
+            if (b.parent != UI_WORKERS._mc) {
+                UI_WORKERS._mc.addChild(b);
+            }
+            b.x = r.x + r.width / 2 - UI_WORKERS.IO_EXTRA_MIDDLE;
+            b.y = top + off + 25 - UI_WORKERS.IO_EXTRA_MIDDLE + slot * 66;
+            if (b.visible) {
+                slot++;
+            }
+        }
+    }
+
+    /**
+     * Inferno-only (QoL #25, #589): the workers' column's "Pick all warts (N)" and "Break all ice (N)": each shown
+     * while there is something for it (its count on it), in the player's own main yard. The queue's tick (Update)
+     * keeps them current.
+     */
+    public static ioYardButtons(): void {
+        if (!UI_WORKERS._mc) {
             return;
         }
-        if (UI_WORKERS._ioExtra.parent != UI_WORKERS._mc) {
-            UI_WORKERS._mc.addChild(UI_WORKERS._ioExtra);
+        let warts: int = MUSHROOMS.ioCanPickHere() ? MUSHROOMS.ioWartsLeft() : 0;
+        let ice: int = MUSHROOMS.ioIceDays() ? MUSHROOMS.ioIceLeft() : 0;
+        if (warts > 0 && !UI_WORKERS._ioWartsBtn) {
+            UI_WORKERS._ioWartsBtn = UI_WORKERS.ioYardButton("ioYard2PickAll", false);
         }
-        UI_WORKERS._ioExtra.x = r.x + r.width / 2 - UI_WORKERS.IO_EXTRA_MIDDLE;
-        UI_WORKERS._ioExtra.y = r.y + r.height + UI_WORKERS.IO_EXTRA_GAP + 25 - UI_WORKERS.IO_EXTRA_MIDDLE;
+        if (ice > 0 && !UI_WORKERS._ioIceBtn) {
+            UI_WORKERS._ioIceBtn = UI_WORKERS.ioYardButton("ioYard2BreakIce", true);
+        }
+        let moved: boolean = UI_WORKERS.ioYardCount(UI_WORKERS._ioWartsBtn, warts);
+        moved = UI_WORKERS.ioYardCount(UI_WORKERS._ioIceBtn, ice) || moved;
+        if (moved) {
+            UI_WORKERS.ioPlaceExtra();
+        }
+    }
+
+    /** A button's count put on it (hidden at none): true when it came, went or isn't in the column yet. */
+    private static ioYardCount(b: Sprite, n: int): boolean {
+        if (!b) {
+            return false;
+        }
+        let label: TextField = as3.as(b.getChildByName("ioYard2Count"), TextField);
+        let text: string = String(n);
+        if (label && label.text != text) {
+            label.text = text;
+        }
+        let show: boolean = n > 0;
+        if (b.visible != show) {
+            b.visible = show;
+            if (!show && UI_WORKERS._popupID == -1) {
+                UI_WORKERS.PopupHide();
+            }
+            return true;
+        }
+        return b.parent != UI_WORKERS._mc;
+    }
+
+    /** A round button for the column, smaller than the event buttons: a wart (or a patch of ice) and its count. */
+    private static ioYardButton(name: string, ice: boolean): Sprite {
+        let C: number = UI_WORKERS.IO_EXTRA_MIDDLE;
+        let b: Sprite = new Sprite();
+        b.name = name;
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        b.graphics.lineStyle(2, ice ? 0x1A4A7A : 0xE0A040, 1);
+        b.graphics.beginFill(ice ? 0x9ADCFF : 0x4A2A08, 1);
+        b.graphics.drawCircle(C, C, UI_WORKERS.IO_YARD_R);
+        b.graphics.endFill();
+        if (ice) {
+            let bmd: BitmapData = IoHfoArt.pic("small1");
+            if (bmd) {
+                let pic: Bitmap = new Bitmap(bmd);
+                pic.smoothing = true;
+                pic.scaleX = pic.scaleY = 0.6;
+                pic.x = C - 15;
+                pic.y = C - 10;
+                b.addChild(pic);
+            }
+        } else {
+            let wart: MovieClip = IoWarts.sprite(1);
+            wart.scaleX = wart.scaleY = 0.55;
+            wart.x = C;
+            wart.y = C - 1;
+            b.addChild(wart);
+        }
+        let disc: Sprite = new Sprite();
+        disc.graphics.lineStyle(1, 0xFFF2C4, 1);
+        disc.graphics.beginFill(0x1A0A00, 0.9);
+        disc.graphics.drawCircle(0, 0, 8);
+        disc.graphics.endFill();
+        disc.x = C + 13;
+        disc.y = C + 13;
+        b.addChild(disc);
+        let t: TextField = new TextField();
+        t.name = "ioYard2Count";
+        let f: TextFormat = new TextFormat("Verdana", 9, 0xFFF2C4, true);
+        f.align = TextFormatAlign.CENTER;
+        t.defaultTextFormat = f;
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.width = 22;
+        t.height = 14;
+        t.x = C + 2;
+        t.y = C + 6;
+        b.addChild(t);
+        b.visible = false;
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            UI_WORKERS.PopupHide();
+            if (ice) {
+                MUSHROOMS.ioBreakAll();
+            } else {
+                MUSHROOMS.ioPickAll();
+            }
+        });
+        b.addEventListener(MouseEvent.MOUSE_OVER, (e: MouseEvent): void => {
+            if (ice) {
+                UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("io_yard2_ice_btn", { "v1": MUSHROOMS.ioIceLeft() }) + "</b><br>" + KEYS.Get("io_yard2_ice_tip1") + "<br>" + KEYS.Get("io_yard2_ice_tip2"));
+            } else {
+                UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("io_yard2_warts_btn", { "v1": MUSHROOMS.ioWartsLeft() }) + "</b><br>" + KEYS.Get("io_yard2_warts_tip1") + "<br>" + KEYS.Get("io_yard2_warts_tip2"));
+            }
+        });
+        b.addEventListener(MouseEvent.MOUSE_OUT, (e: MouseEvent): void => {
+            UI_WORKERS.PopupHide();
+        });
+        return b;
     }
 
     /** A tip for the button, pointing at it from the left like the workers' own. */
@@ -166,6 +346,9 @@ export class UI_WORKERS extends ASObject {
         i = param1;
         return (param1: MouseEvent = null): void => {
             if (UI_WORKERS._workers[i]) {
+                if (GLOBAL.INFERNO_ONLY && UI_WORKERS._workers[i].purchased && UI_WORKERS.ioClick(i)) {
+                    return;
+                }
                 if (UI_WORKERS._workers[i].purchased) {
                     QUEUE.JumpToWorker(i);
                 } else {
@@ -205,7 +388,89 @@ export class UI_WORKERS extends ASObject {
         if (_loc1_) {
             UI_WORKERS.Render();
         }
+        if (GLOBAL.INFERNO_ONLY) {
+            UI_WORKERS.ioTimes();
+            // (QoL #25, #589: the runs of picks go on as workers come free; their buttons kept current)
+            MUSHROOMS.ioYardTick();
+            UI_WORKERS.ioYardButtons();
+        }
         UI_WORKERS.Resize();
+    }
+
+    /** The building a worker's job is on (not a wart), or null. */
+    private static ioJobBuilding(i: int): BFOUNDATION {
+        let job: any = QUEUE._stack ? QUEUE._stack[i] : null;
+        let b: BFOUNDATION = job && job.active ? as3.as(job.building, BFOUNDATION) : null;
+        return b && b._type != 7 ? b : null;
+    }
+
+    /**
+     * Inferno-only (QoL #17): a worker's click goes to the building it works on (the camera there, its panel open:
+     * Speed up a click away); an idle worker's opens the build menu. A job with the free time or less left is
+     * finished there and then (QoL #15). False: as before (to the worker, as for a wart).
+     */
+    private static ioClick(i: int): boolean {
+        let slot: any = UI_WORKERS._workers[i];
+        if (!slot.active) {
+            if (GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+                BUILDINGS.Show();
+                return true;
+            }
+            return false;
+        }
+        let b: BFOUNDATION = UI_WORKERS.ioJobBuilding(i);
+        if (!b) {
+            return false;
+        }
+        let left: int = BUILDINGINFO.ioJobLeft(b);
+        if (left > 0 && left <= GLOBAL.ioCloseEnough) {
+            GLOBAL._selectedBuilding = b;
+            STORE.CalcCost("SP1");
+            STORE.BuyB("SP1");
+            return true;
+        }
+        MAP.FocusTo(b._mc.x | 0, b._mc.y | 0, 0.5);
+        BASE.BuildingSelect(b);
+        return true;
+    }
+
+    /** Inferno-only (QoL #16): the time left under each busy worker ("Free" once it can be finished for nothing). */
+    private static ioTimes(): void {
+        for (let i: int = 0; i < UI_WORKERS._workers.length; i++) {
+            let slot: any = UI_WORKERS._workers[i];
+            let mc: MovieClip = slot.mc;
+            let label: TextField = as3.as(mc.getChildByName("ioWorkerTime"), TextField);
+            let b: BFOUNDATION = slot.purchased ? UI_WORKERS.ioJobBuilding(i) : null;
+            let left: int = b ? BUILDINGINFO.ioJobLeft(b) : 0;
+            if (left <= 0) {
+                if (label) {
+                    label.visible = false;
+                }
+                continue;
+            }
+            if (!label) {
+                label = new TextField();
+                label.name = "ioWorkerTime";
+                let f: TextFormat = new TextFormat("Verdana", 9, 0xFFF4E0, true);
+                f.align = TextFormatAlign.CENTER;
+                label.defaultTextFormat = f;
+                label.selectable = false;
+                label.mouseEnabled = false;
+                label.width = 48;
+                label.height = 14;
+                label.x = -4;
+                label.y = 29;
+                label.filters = [new GlowFilter(0x000000, 1, 3, 3, 8, 1)];
+                mc.addChild(label);
+            }
+            let free: boolean = left <= GLOBAL.ioCloseEnough;
+            let text: string = free ? KEYS.Get("io_worker_free_label") : GLOBAL.ioDuration(left);
+            if (label.text != text) {
+                label.text = text;
+            }
+            label.textColor = (free ? 0x9CFF6A : 0xFFF4E0) >>> 0;
+            label.visible = true;
+        }
     }
 
     public static Resize(): void {
@@ -243,8 +508,25 @@ export class UI_WORKERS extends ASObject {
                 _loc2_.mc.gotoAndStop(3);
                 _loc2_.mc.label_txt.htmlText = "<b>" + KEYS.Get("ui_worker_hireicon") + "</b>";
             }
+            // Inferno-only (10 October): no worker to hire here (every one is there from the start), so a slot
+            // left by a sacrificed worker is not shown
+            _loc2_.mc.visible = !GLOBAL.INFERNO_ONLY || Boolean(_loc2_.purchased);
             _loc1_++;
         }
+    }
+
+    /** Inferno-only: a worker went (IoWorkerFun, sacrificed): the slots shown again from the queue. */
+    public static ioRefresh(): void {
+        let i: int = 0;
+        while (UI_WORKERS._workers && i < UI_WORKERS._workers.length) {
+            let slot: any = UI_WORKERS._workers[i];
+            let job: any = QUEUE._stack ? QUEUE._stack[i] : null;
+            slot.purchased = Boolean(job);
+            slot.active = job ? Boolean(job.active) : false;
+            i++;
+        }
+        UI_WORKERS.Render();
+        UI_WORKERS.Update();
     }
 
     public static PopupShow(param1: int, param2: int, param3: string, param4: int): void {

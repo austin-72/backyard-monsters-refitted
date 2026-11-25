@@ -35,7 +35,8 @@ export class CREEPS extends ASObject {
     private static _lastCacheClear: int;
 
     // Performance optimization: Batch processing arrays
-    private static _aliveCreeps: Vector<MonsterBase>;
+    // (Inferno-only, 21 October: a plain list, filled each step without a Vector's checks for each of thousands)
+    private static _aliveCreeps: MonsterBase[];
     private static _deadCreeps: Vector<string>;
     private static _visibleCreepCount: int;
     private static _overlapProcessingIndex: int;
@@ -51,7 +52,7 @@ export class CREEPS extends ASObject {
             CREEPS._cacheHits = 0;
             CREEPS._cacheMisses = 0;
             CREEPS._lastCacheClear = 0;
-            CREEPS._aliveCreeps = new Vector<MonsterBase>(0, false, MonsterBase);
+            CREEPS._aliveCreeps = [];
             CREEPS._deadCreeps = new Vector<string>(0, false, String);
             CREEPS._visibleCreepCount = 0;
             CREEPS._overlapProcessingIndex = 0;
@@ -130,15 +131,18 @@ export class CREEPS extends ASObject {
             CREEPS._lastCacheClear = _loc1_;
         }
 
-        as3.vsetLength(CREEPS._aliveCreeps, 0);
+        CREEPS._aliveCreeps.length = 0;
         as3.vsetLength(CREEPS._deadCreeps, 0);
         CREEPS._visibleCreepCount = 0;
 
+        // (Inferno-only, 21 October: crowds, MonsterBase.ioLodBegin)
+        MonsterBase.ioLodBegin();
         // Phase 1: Separate alive/dead creeps and tick alive ones
         let creepId: string = null;
         let creep: MonsterBase = null;
         for (creepId in CREEPS._creeps) {
-            creep = as3.cast(CREEPS._creeps[creepId], MonsterBase);
+            let found: any = CREEPS._creeps[creepId];
+            creep = found instanceof MonsterBase ? found : as3.cast(found, MonsterBase);
 
             if (!creep) {
                 CREEPS._deadCreeps.push(creepId);
@@ -160,6 +164,8 @@ export class CREEPS extends ASObject {
             CREEPS._aliveCreeps.push(creep);
         }
 
+        MonsterBase.ioLodEnd();
+
         // Phase 2: Clean up dead creeps (batch operation)
         let deadId: string = null;
         for (deadId of (CREEPS._deadCreeps ?? [])) {
@@ -180,6 +186,10 @@ export class CREEPS extends ASObject {
             if (creep._creatureID && (creep._creatureID.substr(0, 1) == "G" || (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) && !creep.isDisposable)) {
                 --CREEPS._flungCount;
                 ATTACK._creaturesFlung.Add(-1);
+            }
+            // Inferno-only quest book: an attacking monster lost (a flawless win loses none)
+            if (GLOBAL.INFERNO_ONLY && creep.health <= 0 && !creep.isDisposable && (GLOBAL.mode == GLOBAL.e_BASE_MODE.ATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.IATTACK || GLOBAL.mode == GLOBAL.e_BASE_MODE.IWMATTACK)) {
+                ++ATTACK.ioLost;
             }
             delete CREEPS._creeps[deadId];
         }
@@ -216,7 +226,7 @@ export class CREEPS extends ASObject {
 
         // Process a batch of creeps
         while (processed < CREEPS.OVERLAP_BATCH_SIZE && CREEPS._overlapProcessingIndex < CREEPS._aliveCreeps.length) {
-            creep = as3.vget(CREEPS._aliveCreeps, CREEPS._overlapProcessingIndex);
+            creep = CREEPS._aliveCreeps[CREEPS._overlapProcessingIndex];
 
             if (!creep || !creep._tmpPoint || !creep._creatureID) {
                 CREEPS._overlapProcessingIndex++;
@@ -305,6 +315,11 @@ export class CREEPS extends ASObject {
             if (!BYMConfig.instance.RENDERER_ON) {
                 param2.addChild(_loc12_.graphic);
             }
+        } else if (GLOBAL.INFERNO_ONLY) {
+            // (18 October, SUSPECTED-BUGS.md: counted before it was made, so a champion that wasn't made still seemed
+            // to be on the field and the attack couldn't end by itself) not counted
+            --CREEPS._creepCount;
+            --CREEPS._flungCount;
         }
         GLOBAL.eventDispatcher.dispatchEvent(new CreepEvent(CreepEvent.ATTACKING_MONSTER_SPAWNED, _loc12_));
         return _loc12_;

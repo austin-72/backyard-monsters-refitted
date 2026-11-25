@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { Vector, int } from "as3";
-import { BASE, BDECORATION, BFOUNDATION, BUILDINGS, EnumInvasionType, GLOBAL, InstanceManager, InventoryManager, SecNum } from "@game";
+import { BASE, BDECORATION, BFOUNDATION, BUILDINGS, EnumInvasionType, GLOBAL, InstanceManager, InventoryManager, SecNum, BUILDINGSPOPUP } from "@game";
 
 export class BTOTEM extends BDECORATION {
     public static readonly BTOTEM_WMI1: int = 121;
@@ -64,7 +64,8 @@ export class BTOTEM extends BDECORATION {
 
         BUILDINGS._buildingID = totemType;
         BUILDINGS.Show();
-        BUILDINGS._mc.SwitchB(4, 4, 0);
+        // (Inferno-only, 16 October: the totems are on the Decorations' Trophies tab)
+        BUILDINGS._mc.SwitchB(4, GLOBAL.INFERNO_ONLY ? BUILDINGSPOPUP.IO_TAB_TROPHIES : 4, 0);
     }
 
     public static UpgradeTotem(): void {

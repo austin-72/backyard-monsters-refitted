@@ -1,5 +1,4 @@
 import { logger } from "../utils/logger.js";
-import { Filter as BadWords } from "bad-words";
 
 import { User } from "../database/models/user.model.js";
 import { postgres, redis } from "../server.js";
@@ -13,6 +12,7 @@ import {
   validateChannel,
 } from "./chatChannels.js";
 import { getHistory, pushMessage } from "./chatHistory.js";
+import { sanitizeEmotes } from "./chatEmotes.js";
 import {
   ErrorCode,
   send,
@@ -27,8 +27,11 @@ import {
   unsubscribeFromChannel,
 } from "./chatTransport.js";
 import { ALLIANCE_CHANNEL_ALIAS } from "../config/ChatConfig.js";
-import { calculateBaseLevel } from "../services/base/calculateBaseLevel.js";
+import { tagsOfUsers, type MemberTag } from "../services/alliance/allianceTag.js";
+import { isHidden, onlineNow } from "../services/user/presence.js";
+import { refreshDisplayName } from "./chatIdentity.js";
 import { newLineId, rolesOf } from "./chatModeration.js";
+import { chatColorsOf } from "../services/yard/dave.js";
 import { ChannelType } from "../enums/Chat.js";
 import { questChat } from "../services/quests/questProgress.js";
 
@@ -36,8 +39,6 @@ interface ResolvedChannel {
   key: string;
   info: ChannelInfo;
 }
-
-const filter = new BadWords();
 
 /**
  * Chat flood limit: one line every RATE_LIMIT_MS on average, with a burst of up to RATE_LIMIT_BURST
@@ -164,38 +165,50 @@ export const leaveAllChannels = (client: ChatClient) => {
  * @returns {Promise<HistoryEntry[]>} Entries ordered oldest to newest.
  */
 export const getChannelHistory = async (channel: string, info: ChannelInfo): Promise<HistoryEntry[]> => {
-  if (info.type !== ChannelType.Alliance) return await getHistory(channel);
+  if (info.type !== ChannelType.Alliance) return await withIdentity(await getHistory(channel));
 
   const em = postgres.orm.em.fork();
   const entries = await getAllianceMessages(info.allianceId, em);
-  return await withLevels(entries);
+  return await withIdentity(entries);
 };
 
 /**
- * Alliance lines carry the author's yard level, "[12] Name", as Global's do (the feed stores only the
- * author): one query for the authors of the lines in it. Shouts are sentences and stay as they are.
+ * Stored lines, Global's and an alliance's, show their authors as they are now (13 October): the name alone (lines
+ * from before carry "[12] Name"), the author's alliance tag now, whether they are online now, their staff role and
+ * their name's colour. One query for the authors of the lines in it. Shouts are sentences and stay as they are.
  */
-const withLevels = async (entries: HistoryEntry[]): Promise<HistoryEntry[]> => {
+const withIdentity = async (entries: HistoryEntry[]): Promise<HistoryEntry[]> => {
   const ids = [...new Set(entries.filter((e) => e.messageType === AllianceMessageType.MESSAGE && e.userId > 0).map((e) => e.userId))];
   if (!ids.length) return entries;
   try {
     const rows = await postgres.em
       .getConnection()
-      .execute<{ userid: number; username: string; points: string | null; basevalue: string | null }[]>(
-        `SELECT u.userid, u.username, s.points, s.basevalue
-           FROM bym."user" u LEFT JOIN bym.save s ON s.basesaveid = u.save_basesaveid
-          WHERE u.userid IN (${ids.map(() => "?").join(",")})`,
+      .execute<{ userid: number; username: string }[]>(
+        `SELECT u.userid, u.username FROM bym."user" u WHERE u.userid IN (${ids.map(() => "?").join(",")})`,
         ids
       );
-    const names = new Map(rows.map((r) => [Number(r.userid), `[${calculateBaseLevel(r.points ?? "0", r.basevalue ?? "0")}] ${r.username}`]));
+    const names = new Map(rows.map((r) => [Number(r.userid), r.username]));
     const roles = await rolesOf(rows.map((r) => ({ userid: Number(r.userid), username: r.username })));
+    const colors = await chatColorsOf(ids).catch(() => new Map<number, string>());
+    const tags = await tagsOfUsers(ids).catch(() => new Map<number, MemberTag>());
+    const online = await onlineNow();
     return entries.map((e) => {
       if (e.messageType !== AllianceMessageType.MESSAGE || !names.has(e.userId)) return e;
+      const { role: _r, color: _c, allianceId: _a, allianceTag: _t, ...rest } = e;
       const role = roles.get(e.userId);
-      return { ...e, displayName: names.get(e.userId)!, ...(role && { role }) };
+      const color = colors.get(e.userId);
+      const tag = tags.get(e.userId);
+      return {
+        ...rest,
+        displayName: names.get(e.userId)!,
+        online: online.has(e.userId),
+        ...(role && { role }),
+        ...(color && { color }),
+        ...(tag && { allianceId: tag.allianceId, allianceTag: tag.tag }),
+      };
     });
   } catch (err) {
-    logger.warn(`Chat: alliance history levels failed: ${err}`);
+    logger.warn(`Chat: history names failed: ${err}`);
     return entries;
   }
 };
@@ -211,6 +224,9 @@ const withLevels = async (entries: HistoryEntry[]): Promise<HistoryEntry[]> => {
  * @param {string} channel - The channel to post into.
  * @param {string} body - The raw message text as sent by the client.
  */
+/** When each player's next chat line is due (13 October), across their connections: the flood limit's state. */
+const floodByUser = new Map<number, number>();
+
 export const postMessage = async (client: ChatClient, channel: string, body: string) => {
   const info = client.channels.get(channel);
 
@@ -230,14 +246,23 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
 
   // Muted from the admin panel (services/admin/admin.ts): the line is not posted and only the
   // speaker is told why.
+  // (13 October) banned or deleted from the admin panel: nothing posted (chat has its own sign-in)
+  if ((await redis.get(`chat:banned:${client.userId}`)) === "1") {
+    trace("refused, banned");
+    send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.Muted, minutes: 0 });
+    return;
+  }
   const mutedUntil = Number((await redis.get(`chat:mute:${client.userId}`)) ?? 0);
   if (mutedUntil > now) {
     trace("refused, muted");
-    send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.Muted, minutes: Math.ceil((mutedUntil - now) / 60_000) });
+    // (QoL #262: with the reason given, if any)
+    const reason = (await redis.get(`chat:mutereason:${client.userId}`).catch(() => null)) ?? undefined;
+    send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.Muted, minutes: Math.ceil((mutedUntil - now) / 60_000), reason });
     return;
   }
 
-  const due = Math.max(now, client.lastMsgAt) + RATE_LIMIT_MS;
+  // (13 October: kept by player, not by connection: signing in to chat again started a fresh burst each time)
+  const due = Math.max(now, client.lastMsgAt, floodByUser.get(client.userId) ?? 0) + RATE_LIMIT_MS;
   if (due - now > RATE_LIMIT_MS * RATE_LIMIT_BURST) {
     trace("refused, rate limited");
     send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.RateLimited });
@@ -245,11 +270,33 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
   }
 
   client.lastMsgAt = due;
+  floodByUser.set(client.userId, due);
+  if (floodByUser.size > 5000) for (const [id, at] of floodByUser) if (at < now) floodByUser.delete(id);
 
   // (control characters and line breaks never reach anyone; the game shows the text as text, not markup)
-  const messageBody = filter.clean(String(body ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, MAX_MSG_LEN).trim());
+  // (Inferno-only, 7 October, the user's call: no word filter on what players write to each other.)
+  // (14 October: emotes, [e:id], the game's own and at most 5 a line: chatEmotes.ts)
+  const messageBody = sanitizeEmotes(String(body ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").slice(0, MAX_MSG_LEN).trim());
 
   if (!messageBody) return;
+
+  // (13 October: the speaker's alliance tag as it is now, at most 10 seconds old: joined, left, or set by the leader)
+  await refreshDisplayName(client).catch(() => undefined);
+
+  // (18 October, SUSPECTED-BUGS.md) an alliance's chat only while still in it: a kicked player whose eviction
+  // message didn't get through kept reading and writing it until they reconnected
+  if (info.type === ChannelType.Alliance) {
+    const rows = (await postgres.orm.em
+      .getConnection()
+      .execute(`SELECT alliance_id FROM bym."user" WHERE userid = ?`, [client.userId], "all")
+      .catch(() => null)) as { alliance_id: number | null }[] | null;
+    if (rows && Number(rows[0]?.alliance_id ?? 0) !== Number(info.allianceId)) {
+      trace("refused, no longer in that alliance");
+      leaveChannel(client, channel);
+      send(client.ws, { type: ServerMessageType.Error, code: ErrorCode.NotInChannel });
+      return;
+    }
+  }
 
   const fields = {
     userId: client.userId,
@@ -258,6 +305,8 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
     body: messageBody,
     messageType: AllianceMessageType.MESSAGE,
     ...(client.role && { role: client.role }),
+    ...(client.color && { color: client.color }),
+    ...(client.allianceId && client.allianceTag && { allianceId: client.allianceId, allianceTag: client.allianceTag }),
   };
 
   let entry: HistoryEntry;
@@ -275,11 +324,29 @@ export const postMessage = async (client: ChatClient, channel: string, body: str
     await pushMessage(channel, entry);
   }
 
+  // Inferno-only (QoL #149): "@all" or "@officers" from the alliance's leader or an officer calls those members (the
+  // line counts as a mention for them); anyone else's is an ordinary line
+  let ping: "all" | "officers" | undefined;
+  if (info.type === ChannelType.Alliance) {
+    const m = /(^|\s)@(all|officers)\b/i.exec(messageBody);
+    if (m) {
+      const rows = (await postgres.em
+        .getConnection()
+        .execute(`SELECT alliance_role FROM bym."user" WHERE userid = ?`, [client.userId])
+        .catch(() => [])) as { alliance_role: string | null }[];
+      const r = rows[0]?.alliance_role;
+      if (r === "leader" || r === "officer") ping = m[2].toLowerCase() === "all" ? "all" : "officers";
+    }
+  }
+
   const outgoing: ServerMessage = {
     type: ServerMessageType.Message,
     channel,
     ...entry,
     userId: client.userId,
+    // (speaking: online, unless appearing offline)
+    online: !(await isHidden(client.userId)),
+    ...(ping && { ping }),
   };
 
   trace(`delivered (${messageBody.length} characters)`);

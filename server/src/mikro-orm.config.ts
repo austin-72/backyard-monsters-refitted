@@ -91,6 +91,16 @@ export default defineConfig({
   password: process.env.DB_PASSWORD,
   // (20: 10 was easily taken by a few slow requests at once; DB_POOL_MAX to change it)
   pool: { min: 2, max: Number(process.env.DB_POOL_MAX) || 20 },
+  // (9 October, bug reports 84 and 85: requests that hung for over 100 seconds, which the proxy answered with HTTP
+  // 524.) A request now gives up, with an error the server records, rather than wait for ever: 30 seconds for a
+  // connection when all of the pool's are in use, 30 seconds for a row another transaction has locked; and a
+  // connection left in a transaction doing nothing for 2 minutes (its locks held all the while) is closed by the
+  // database. middleware/slowRequests.ts notes what a request still waiting after 15 seconds waits on.
+  driverOptions: {
+    connectionTimeoutMillis: 30_000,
+    lock_timeout: 30_000,
+    idle_in_transaction_session_timeout: 120_000,
+  },
   migrations: {
     path: path.join(import.meta.dirname, "./database/migrations"),
     pathTs: path.join(import.meta.dirname, "./database/migrations"),

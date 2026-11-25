@@ -1,11 +1,11 @@
 import * as as3 from "as3";
 import { int } from "as3";
 import { Bitmap, BitmapData, DisplayObject } from "flash/display";
-import { MouseEvent, TimerEvent } from "flash/events";
+import { KeyboardEvent, MouseEvent, TimerEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { TextField } from "flash/text";
+import { TextField, TextFieldType } from "flash/text";
 import { Timer } from "flash/utils";
-import { ATTACK, CATAPULTITEM, CATAPULTPOPUP_view, CHAMPIONBUTTON, GLOBAL, ImageCache, KEYS, POPUPSETTINGS, ResourceBombs, UI2 } from "@game";
+import { ATTACK, CATAPULTITEM, CATAPULTPOPUP_view, CHAMPIONBUTTON, GLOBAL, ImageCache, IoGauntlet, IoHotkeys, IoToast, KEYS, POPUPSETTINGS, ResourceBombs, SiegeWeapons, UI2 } from "@game";
 
 export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
     static {
@@ -81,6 +81,11 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
         this._t = new Timer(100);
         this._t.addEventListener(TimerEvent.TIMER, as3.bind(this, this.testMouseOff));
         ResourceBombs._mc = this;
+        // (Inferno-only, QoL #362: Esc puts an aimed bomb away, Q aims the last one again)
+        if (GLOBAL.INFERNO_ONLY && !CATAPULTPOPUP._ioKeysOn && GLOBAL._ROOT && GLOBAL._ROOT.stage) {
+            CATAPULTPOPUP._ioKeysOn = true;
+            GLOBAL._ROOT.stage.addEventListener(KeyboardEvent.KEY_DOWN, CATAPULTPOPUP.ioOnKey, false, 50);
+        }
         this.Update();
         this.Hide();
     }
@@ -92,9 +97,17 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
             if (b.Enabled) {
                 this.Hide();
                 ResourceBombs._bombid = b._bombid;
-                this._imageContainer.txtName.htmlText = "<font color=\"#FF0000\">Cancel</font>";
+                this._imageContainer.txtName.htmlText = "<font color=\"#FF0000\">" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("btn_cancel") : "Cancel") + "</font>";
                 this.Update();
                 this.Fire(param1);
+                // (Inferno-only, QoL #362: once a session, the keys that go with it)
+                if (GLOBAL.INFERNO_ONLY && ResourceBombs._state == 1 && !CATAPULTPOPUP._ioKeysTold) {
+                    CATAPULTPOPUP._ioKeysTold = true;
+                    IoToast.Show(KEYS.Get("io_bat2_cat_keys"), 5000);
+                }
+            } else if (GLOBAL.INFERNO_ONLY && b._props && b._props.used) {
+                // (QoL #362: why it doesn't go: that row was fired already)
+                IoToast.Show(KEYS.Get("io_bat2_cat_fired"), 3000);
             }
         };
     }
@@ -136,7 +149,7 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
         if (GLOBAL.INFERNO_ONLY) {
             this._mc.tTitleTwig.htmlText = KEYS.Get("#w_decoy#");
             this._mc.tTitlePebble.htmlText = KEYS.Get("#w_jars#");
-            this._mc.tTitlePutty.htmlText = "Sulfur Bomb";
+            this._mc.tTitlePutty.htmlText = KEYS.Get("io_t3k_sulfur_bomb"); // (QoL #235)
             // The title boxes were sized for "Twigs" and wrap: "Marilyn Monstroe" showed as "Marilyn".
             CATAPULTPOPUP.ioFitTitle(this._mc.tTitleTwig);
             CATAPULTPOPUP.ioFitTitle(this._mc.tTitlePebble);
@@ -150,9 +163,9 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
             _loc4_.Update();
         }
         if (ResourceBombs._state == 0) {
-            this._imageContainer.txtName.htmlText = "<font color=\"#FFFFFF\">Catapult</font>";
+            this._imageContainer.txtName.htmlText = "<font color=\"#FFFFFF\">" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("#b_catapult#") : "Catapult") + "</font>";
         } else if (ResourceBombs._state == 1) {
-            this._imageContainer.txtName.htmlText = "<font color=\"#FF0000\">Cancel</font>";
+            this._imageContainer.txtName.htmlText = "<font color=\"#FF0000\">" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("btn_cancel") : "Cancel") + "</font>";
         }
     }
 
@@ -185,7 +198,7 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
     }
 
     public fired(): void {
-        this._imageContainer.txtName.htmlText = "<font color=\"#FFFFFF\">Catapult</font>";
+        this._imageContainer.txtName.htmlText = "<font color=\"#FFFFFF\">" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("#b_catapult#") : "Catapult") + "</font>";
     }
 
     public Show(param1: MouseEvent = null): void {
@@ -213,7 +226,7 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
         }
         if (ResourceBombs._state != 0) {
             ResourceBombs.BombRemove();
-            this._imageContainer.txtName.htmlText = "<font color=\"#FFFFFF\">Catapult</font>";
+            this._imageContainer.txtName.htmlText = "<font color=\"#FFFFFF\">" + (GLOBAL.INFERNO_ONLY ? KEYS.Get("#b_catapult#") : "Catapult") + "</font>";
             return;
         }
         this.addChild(this._mc);
@@ -230,6 +243,12 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
         }
         if (ResourceBombs._state == 0) {
             if (ResourceBombs._bombid && !ResourceBombs._bombs[ResourceBombs._bombid].used && ResourceBombs.canAfford(ResourceBombs._bombs[ResourceBombs._bombid])) {
+                // (Inferno-only, QoL #602: in the Gauntlet, asked first while the Purist Trophy can still be won)
+                if (IoGauntlet.askBeforeCatapult((): void => {
+                    this.Fire();
+                })) {
+                    return;
+                }
                 ResourceBombs.BombAdd(ResourceBombs._bombs[ResourceBombs._bombid]);
             }
         } else {
@@ -248,6 +267,93 @@ export class CATAPULTPOPUP extends CATAPULTPOPUP_view {
 
     public CanUse(): boolean {
         return true;
+    }
+
+    // ---- Inferno-only (QoL #362): the catapult's keys in an attack
+    /** The stage's key listener is on (once: it works on whichever catapult is up, ResourceBombs._mc). */
+    private static _ioKeysOn: boolean = false;
+
+    /** The keys were told about this session (a note the first time a bomb is aimed). */
+    private static _ioKeysTold: boolean = false;
+
+    /**
+     * Esc while a bomb is aimed: put away (before Esc's other uses: IoEscape's listener comes after this one). Q: the
+     * last bomb chosen (the one on the catapult's button) aimed again; "Already fired this attack" when its row went.
+     */
+    private static ioOnKey(e: KeyboardEvent): void {
+        let mc: CATAPULTPOPUP = ResourceBombs._mc;
+        if (!GLOBAL.INFERNO_ONLY || !mc || !mc.stage || !mc._mc || !mc._mc.visible || e.ctrlKey || e.altKey || e.shiftKey || (e as any).metaKey) {
+            return;
+        }
+        let m: string = GLOBAL.mode;
+        let modes: any = GLOBAL.e_BASE_MODE;
+        if (m != modes.ATTACK && m != modes.IATTACK && m != modes.WMATTACK && m != modes.IWMATTACK) {
+            return;
+        }
+        let focus: any = mc.stage.focus;
+        if (focus instanceof TextField && (focus as TextField).type == TextFieldType.INPUT) {
+            return;
+        }
+        if (!IoHotkeys.nothingOpen()) {
+            return;
+        }
+        if (e.keyCode == 27 && ResourceBombs._state == 1) {
+            ResourceBombs.BombRemove();
+            mc.Update();
+            e.stopImmediatePropagation();
+            return;
+        }
+        if (e.keyCode == 81 && ResourceBombs._state == 0) {
+            mc.ioRearm();
+        }
+    }
+
+    /** Q (QoL #362): the last bomb chosen aimed again, as choosing it on the catapult does. False if it can't be. */
+    public ioRearm(): boolean {
+        let p: any = ResourceBombs._bombs && ResourceBombs._bombid ? ResourceBombs._bombs[ResourceBombs._bombid] : null;
+        if (!p || ResourceBombs._state != 0) {
+            return false;
+        }
+        if (p.used) {
+            IoToast.Show(KEYS.Get("io_bat2_cat_fired"), 3000);
+            return false;
+        }
+        if (p.catapultLevel > GLOBAL._attackersCatapult) {
+            IoToast.Show(KEYS.Get("bomb_catapult_level", { "v1": p.catapultLevel }), 3000);
+            return false;
+        }
+        if (!ResourceBombs.canAfford(p)) {
+            let short: int = ResourceBombs.shortOf(p);
+            if (short > 0) {
+                IoToast.Show(KEYS.Get("bomb_need_resources", { "v1": KEYS.Get(as3.str(GLOBAL._resourceNames[short - 1])) }), 3000);
+            }
+            return false;
+        }
+        if (p.kind == "decoy" && SiegeWeapons.activeWeapon) {
+            return false;
+        }
+        // (as opening the catapult does: the Flinger's load back in the bar, a champion not sent, no drop zone,
+        // no siege weapon in hand)
+        for (let id in ATTACK._flingerBucket) {
+            if (ATTACK._flingerBucket[id].Get() > 0 && id.substr(0, 1) != "G") {
+                ATTACK._curCreaturesAvailable[id] += ATTACK._flingerBucket[id].Get();
+                ATTACK._flingerBucket[id].Set(0);
+            }
+        }
+        for (let b of as3.values(UI2._top ? UI2._top._creatureButtons : [])) {
+            if (b instanceof CHAMPIONBUTTON && b._sent) {
+                (as3.as(b, CHAMPIONBUTTON)).deSelectSend();
+            }
+            b.Update();
+        }
+        ATTACK.RemoveDropZone();
+        if (UI2._top && UI2._top._siegeweapon) {
+            UI2._top._siegeweapon.Cancel();
+        }
+        this.Hide();
+        this.Fire();
+        this.Update();
+        return (ResourceBombs._state as number) == 1;
     }
 
     public Center(): void {

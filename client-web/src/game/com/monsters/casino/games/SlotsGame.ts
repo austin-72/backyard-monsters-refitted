@@ -5,8 +5,9 @@ import { MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
 import { Matrix } from "flash/geom";
 import { TextField, TextFormatAlign } from "flash/text";
-import { BetSelector, CASINO, CasinoUI, CasinoWindow, ImageCache, SOUNDS } from "@game";
+import { BetSelector, CASINO, CasinoUI, CasinoWindow, GLOBAL, ImageCache, IoAutoPlay, KEYS, SOUNDS } from "@game";
 
+// (QoL #235: the Pit's texts in the player's language: keys io_t3c_*, the games' names left as they are)
 /**
  * Magma Slots: three reels in the chest of a Moloch idol. The server draws a stop on each reel
  * (server/src/services/casino/games/slots.ts) from the reels' fixed strips (casino/state); the reels
@@ -23,7 +24,7 @@ import { BetSelector, CASINO, CasinoUI, CasinoWindow, ImageCache, SOUNDS } from 
  */
 export class SlotsGame extends Sprite {
     static {
-        as3.fields(this, { _win: null, _bet: null, _spin: null, _cabinet: null, _reels: null, _bmd: null, _jackpot: null, _jackpotNote: null, _line: null, _lever: null, _leverT: 0, _spinning: null, _winCells: null, _pulse: 0, _rain: null, _rainLayer: null, _celebrate: 0, _banner: null, _serverCredits: -1, _mode: null, _lines: null, _tease: null, _teaseColor: 16756784, _teaseFx: null, _teaseSpots: null, _autoBtn: null, _autoToggles: null, _auto: 0, _autoCount: 25, _autoWait: 0, _favorBtn: null });
+        as3.fields(this, { _win: null, _bet: null, _spin: null, _cabinet: null, _reels: null, _bmd: null, _jackpot: null, _jackpotNote: null, _line: null, _lever: null, _leverT: 0, _spinning: null, _winCells: null, _pulse: 0, _rain: null, _rainLayer: null, _celebrate: 0, _banner: null, _serverCredits: -1, _mode: null, _lines: null, _tease: null, _teaseColor: 16756784, _teaseFx: null, _teaseSpots: null, _autoBtn: null, _autoToggles: null, _auto: 0, _autoCount: 25, _autoWait: 0, _ioAutoNet: 0, _favorBtn: null, _winGlow: null, _teaseFxColor: -1, _teaseGlow: null, _payShiny: null, _payRows: null });
     }
 
     public static readonly SYMBOLS: any[] = ["wormzer", "balthazar", "grokus", "valgos", "zagnoid", "malphus", "spurtz"];
@@ -56,6 +57,9 @@ export class SlotsGame extends Sprite {
     private _bmd: any;
     private _jackpot: TextField;
     private _jackpotNote: TextField;
+    /** Korath's Fortune's pay table: each row's pay in Shiny at the bet chosen. */
+    private _payShiny: any[];
+    private _payRows: any[];
     private _line: Shape;
     private _lever: Sprite;
     private _leverT: int;
@@ -84,7 +88,12 @@ export class SlotsGame extends Sprite {
     private _auto: int;
     private _autoCount: int;
     private _autoWait: int;
+    /** Inferno-only (QoL #388): what the AUTO run has won (+) or lost (-), for its stop rules. */
+    private _ioAutoNet: int;
     private _favorBtn: Sprite;
+    private _winGlow: GlowFilter;
+    private _teaseFxColor: int;
+    private _teaseGlow: GlowFilter;
 
     public $ctor(win?: CasinoWindow, mode: string = "slots"): void {
         let s: string = null;
@@ -96,6 +105,7 @@ export class SlotsGame extends Sprite {
         this._tease = [];
         this._teaseSpots = [];
         this._autoToggles = [];
+        this._winGlow = new GlowFilter(0xFFB030, 1, 18, 18, 3, 2);
         super.$ctor();
         this._win = win;
         this._mode = mode;
@@ -103,17 +113,21 @@ export class SlotsGame extends Sprite {
         let i: int = 0;
         // controls
         let p: Sprite = as3.as(this.addChild(CasinoUI.panel(210, 400)), Sprite);
-        let back: Sprite = CasinoUI.button("LOBBY", 90, 26, as3.bind(win, win.toLobby), true, 12);
+        let back: Sprite = CasinoUI.button(KEYS.Get("io_t3c_lobby"), 90, 26, as3.bind(win, win.toLobby), true, 12);
         back.x = 10;
         back.y = 10;
         p.addChild(back);
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #389: QUICK, the reels stop on the result as soon as it comes, as SPIN does while they turn)
+            CasinoUI.ioQuickToggle(p, this._mode);
+        }
         p.addChild(CasinoUI.at(CasinoUI.label(this.fortune ? "KORATH'S FORTUNE" : "MAGMA SLOTS", 14, CasinoUI.GOLD, true, 190, TextFormatAlign.CENTER), 10, 44));
-        p.addChild(CasinoUI.at(CasinoUI.label("BET", 11, CasinoUI.EMBER, true, 190), 12, 68));
+        p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_bet_label"), 11, CasinoUI.EMBER, true, 190), 12, 68));
         this._bet = new BetSelector(190);
         this._bet.x = 10;
         this._bet.y = 82;
         p.addChild(this._bet);
-        this._spin = CasinoUI.button("SPIN", 128, 40, as3.bind(this, this.onSpin), true, 20);
+        this._spin = CasinoUI.button(KEYS.Get("io_t3c_spin"), 128, 40, as3.bind(this, this.onSpin), true, 20);
         this._spin.x = 10;
         this._spin.y = 206;
         p.addChild(this._spin);
@@ -134,26 +148,49 @@ export class SlotsGame extends Sprite {
             i++;
         }
         this.chooseAutoCount();
-        p.addChild(CasinoUI.at(CasinoUI.label(this.fortune ? "THREE ON A LINE (x LINE BET)" : "THREE ON THE LINE PAY", 10, CasinoUI.EMBER, true, 190), 12, 272));
         let r: any = this.rules();
         let rows: any[] = [];
         for (const $value of as3.values(SlotsGame.SYMBOLS)) {
             s = as3.str($value);
-            rows.push([s, 3, s == "wormzer" ? "JACKPOT" : CasinoUI.mult(Number(r ? Number(r.pays[s]) : 0))]);
+            rows.push([s, 3, s == "wormzer" ? -1 : Number(r ? Number(r.pays[s]) : 0)]);
         }
-        rows.push(["spurtz", 2, CasinoUI.mult(Number(r ? Number(r.two_spurtz) : 1))]);
+        rows.push(["spurtz", 2, Number(r ? Number(r.two_spurtz) : 1)]);
+        if (this.fortune) {
+            // Korath's Fortune (10 October: the table said "250x" of a line's bet, a fifth of the stake, which
+            // read as 250 times the bet): what each line pays as a share of the whole bet and in Shiny at the bet
+            // chosen. The bet is split over the five lines; every line that wins pays.
+            let lines: int = this.lineSet().length | 0;
+            p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_pay_per_line"), 10, CasinoUI.EMBER, true, 130), 12, 268));
+            p.addChild(CasinoUI.at(CasinoUI.label("SHINY", 9, CasinoUI.EMBER, true, 50, TextFormatAlign.RIGHT), 148, 269));
+            p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_split_lines", { "v1": lines }), 9, 0xB8A890, false, 190), 12, 279));
+            this._payShiny = [];
+            this._payRows = rows;
+        } else {
+            p.addChild(CasinoUI.at(CasinoUI.label(KEYS.Get("io_t3c_three_line"), 10, CasinoUI.EMBER, true, 190), 12, 272));
+        }
         i = 0;
         while (i < rows.length) {
             let row: Sprite = as3.as(p.addChild(new Sprite()), Sprite);
             row.x = 12;
-            row.y = 287 + i * 13;
+            row.y = (this.fortune ? 293 : 287) + i * 13;
             let k: int = 0;
             while (k < rows[i][1]) {
                 CasinoUI.picture(row, this.symbolKey(as3.str(rows[i][0])), k * 14, 0, 13, 13);
                 k++;
             }
-            row.addChild(CasinoUI.at(CasinoUI.label(rows[i][1] == 2 ? "two " + this.symbolName("spurtz") : this.symbolName(as3.str(rows[i][0])), 10, 15260872, false, 100), 50, -2));
-            row.addChild(CasinoUI.at(CasinoUI.label(as3.str(rows[i][2]), 10, (rows[i][0] == "wormzer" && rows[i][1] == 3 ? 0xD090FF : CasinoUI.GOLD) >>> 0, true, 70, TextFormatAlign.RIGHT), 116, -2));
+            let name: string = rows[i][1] == 2 ? KEYS.Get("io_t3c_two_sym", { "v1": this.symbolName("spurtz") }) : this.symbolName(as3.str(rows[i][0]));
+            let jackpotRow: boolean = rows[i][0] == "wormzer" && rows[i][1] == 3;
+            let color: uint = (jackpotRow ? 0xD090FF : CasinoUI.GOLD) >>> 0;
+            if (this.fortune) {
+                // name, then the line's pay in Shiny for the bet chosen (showJackpot keeps it current)
+                row.addChild(CasinoUI.at(CasinoUI.label(name, 9, 15260872, false, 92), 44, -1));
+                let shiny: TextField = CasinoUI.label(jackpotRow ? KEYS.Get("io_t3c_jackpot") : "", 9, color, true, 56, TextFormatAlign.RIGHT);
+                row.addChild(CasinoUI.at(shiny, 130, -1));
+                this._payShiny.push(shiny);
+            } else {
+                row.addChild(CasinoUI.at(CasinoUI.label(name, 10, 15260872, false, 100), 50, -2));
+                row.addChild(CasinoUI.at(CasinoUI.label(jackpotRow ? KEYS.Get("io_t3c_jackpot") : CasinoUI.mult(Number(rows[i][2])), 10, color, true, 70, TextFormatAlign.RIGHT), 116, -2));
+            }
             i++;
         }
         // the cabinet and its reels
@@ -213,7 +250,7 @@ export class SlotsGame extends Sprite {
         // the reels themselves: a click stops them at once
         this._cabinet.addEventListener(MouseEvent.CLICK, as3.bind(this, this.onCabinetClick));
         if (!this.fortune) {
-            this._favorBtn = CasinoUI.button("FREE SPIN", 112, 30, as3.bind(this, this.onFavor), true, 13);
+            this._favorBtn = CasinoUI.button(KEYS.Get("io_t3c_free_spin"), 112, 30, as3.bind(this, this.onFavor), true, 13);
             this._favorBtn.x = SlotsGame.CX + 8;
             this._favorBtn.y = 10;
             this.addChild(this._favorBtn);
@@ -317,17 +354,39 @@ export class SlotsGame extends Sprite {
     private showJackpot(): void {
         let st: any = CASINO.state;
         let pool: number = Number(st ? Number(st.jackpot) : 0);
-        this._jackpot.text = CasinoUI.number(Math.floor(pool));
+        // (called on every idle frame: set only when changed, 9 October)
+        CasinoUI.setText(this._jackpot, CasinoUI.number(Math.floor(pool)));
         let r: any = this.rules();
         let full: int = r ? r.jackpot_full_bet | 0 : 100;
         // (Korath's Fortune: the line's bet, a fifth of the stake, wins its share)
         let lines: int = (this.fortune ? this.lineSet().length : 1) | 0;
         let bet: number = this._bet.value / lines;
         let all: string = CasinoUI.number(full * lines);
-        this._jackpotNote.text = (this.fortune ? "ON A LINE " : "") + (bet == full ? "THIS BET WINS ALL OF IT" : (bet > full ? "THIS BET WINS IT " + CasinoUI.mult(bet / full).toUpperCase() + " OVER" : "THIS BET WINS " + Math.max(1, Math.round(bet * 100 / full)) + "% OF IT - ALL FROM " + all + " SHINY"));
+        if (this.fortune) {
+            // (a line of three Korath wins the line's share: said as that, 10 October)
+            CasinoUI.setText(this._jackpotNote, bet == full ? KEYS.Get("io_t3c_fjp_all") : (bet > full ? KEYS.Get("io_t3c_fjp_over", { "v1": CasinoUI.mult(bet / full).toUpperCase() }) : KEYS.Get("io_t3c_fjp_part", { "v1": Math.max(1, Math.round(bet * 100 / full)), "v2": all })));
+            this.showPays(bet);
+        } else {
+            CasinoUI.setText(this._jackpotNote, bet == full ? KEYS.Get("io_t3c_jp_all") : (bet > full ? KEYS.Get("io_t3c_jp_over", { "v1": CasinoUI.mult(bet / full).toUpperCase() }) : KEYS.Get("io_t3c_jp_part", { "v1": Math.max(1, Math.round(bet * 100 / full)), "v2": all })));
+        }
         if (this._favorBtn) {
             let f: any = CASINO.state ? CASINO.state.favor : null;
             this._favorBtn.visible = Boolean(f && f.enabled && f.ready);
+        }
+    }
+
+    /** Korath's Fortune's pay table at a line's bet: what each winning line pays, in Shiny (a part: paid as one more with its chance). */
+    private showPays(lineBet: number): void {
+        if (!this._payShiny) {
+            return;
+        }
+        let i: int = 0;
+        while (i < this._payRows.length) {
+            let m: number = Number(this._payRows[i][2]);
+            if (m >= 0) {
+                CasinoUI.setText(this._payShiny[i], CasinoUI.shiny(lineBet * m));
+            }
+            i++;
         }
     }
 
@@ -418,7 +477,25 @@ export class SlotsGame extends Sprite {
     /** AUTO: a run of spins at this bet (stopped by AUTO again, a jackpot, a big win or the Shiny running out). */
     private onAuto(e: MouseEvent = null): void {
         if (this._auto > 0) {
-            this.stopAuto("Auto-spin stopped.");
+            this.stopAuto(KEYS.Get("io_t3c_autospin_stop"));
+            return;
+        }
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #388: the run's rules first, the Pit's auto play sheet: the spins (the count chosen here), and stop
+            // when down by, or on a win of)
+            IoAutoPlay.sheet(this, this._mode, (rounds: int): void => {
+                if (!this.parent || this._auto > 0) {
+                    return;
+                }
+                this._autoCount = rounds;
+                this.chooseAutoCount();
+                this._ioAutoNet = 0;
+                this._auto = this._autoCount;
+                this._autoWait = 0;
+                if (!this._spinning) {
+                    this.nextAuto();
+                }
+            }, this._autoCount);
             return;
         }
         this._auto = this._autoCount;
@@ -441,7 +518,7 @@ export class SlotsGame extends Sprite {
             return;
         }
         if (CASINO.credits() < this._bet.value) {
-            this.stopAuto("Auto-spin stopped: not enough Shiny for the next spin.");
+            this.stopAuto(KEYS.Get("io_t3c_autospin_shiny"));
             return;
         }
         this._auto--;
@@ -556,7 +633,11 @@ export class SlotsGame extends Sprite {
             this._teaseFx.graphics.drawRoundRect(x, y, SlotsGame.REEL_W - 6, SlotsGame.ROW - 6, 12, 12);
             this._teaseFx.graphics.endFill();
         }
-        this._teaseFx.filters = [new GlowFilter(this._teaseColor, 1, 12, 12, 2, 2)];
+        // (its glow set once for the tease's colour, not a new one every frame; 9 October)
+        if (this._teaseFxColor != this._teaseColor) {
+            this._teaseFxColor = this._teaseColor;
+            this._teaseFx.filters = [new GlowFilter(this._teaseColor, 1, 12, 12, 2, 2)];
+        }
     }
 
     private onSpin(e: MouseEvent = null, favor: boolean = false): void {
@@ -568,18 +649,30 @@ export class SlotsGame extends Sprite {
             return;
         }
         if (e != null && this._auto > 0) {
-            this.stopAuto("Auto-spin stopped.");
+            this.stopAuto(KEYS.Get("io_t3c_autospin_stop"));
         }
         let st: any = CASINO.state;
         if (!st || st.closed || st.shiny_locked) {
-            this._win.message(st && st.closed ? String(st.closed) : "The Pit is not open.", CasinoUI.LOSS);
+            this._win.message(st && st.closed ? String(st.closed) : KEYS.Get("io_t3c_not_open"), CasinoUI.LOSS);
             this.stopAuto();
             return;
         }
         bet = favor ? st.favor.bet | 0 : this._bet.value;
         if (!favor && CASINO.credits() < bet) {
-            this._win.message("You do not have enough Shiny for that bet.", CasinoUI.LOSS);
+            this._win.message(KEYS.Get("io_t3c_no_shiny_bet"), CasinoUI.LOSS);
             SOUNDS.Play("error1");
+            this.stopAuto();
+            return;
+        }
+        // (QoL #385: a spin of more than half the Shiny asked about first, once; an AUTO run waits for the answer
+        // and goes on after a Yes)
+        let autoLeft: int = this._auto;
+        if (!favor && CASINO.ioAskBig(this._mode, bet, (): void => {
+            if (this.parent && !this._spinning) {
+                this._auto = autoLeft;
+                this.onSpin();
+            }
+        })) {
             this.stopAuto();
             return;
         }
@@ -591,7 +684,7 @@ export class SlotsGame extends Sprite {
             this._favorBtn.visible = false;
         }
         this.clearWin();
-        this._spinning = { "bet": bet, "r": null, "at": 0, "t": 0, "quick": false, "favor": favor, "extra": 0 };
+        this._spinning = { "bet": bet, "r": null, "at": 0, "t": 0, "quick": CasinoUI.ioQuick(this._mode), "favor": favor, "extra": 0 };
         for (let reel of as3.values(this._reels)) {
             reel.state = "spin";
             reel.v = 0;
@@ -609,6 +702,9 @@ export class SlotsGame extends Sprite {
         };
         send((r: any): void => {
             if (!this.parent || !this._spinning) {
+                if (!this.parent) {
+                    CASINO.late(r);
+                }
                 return;
             }
             if (r.error) {
@@ -718,8 +814,13 @@ export class SlotsGame extends Sprite {
             }
             if (this._tease.length) {
                 let tg: number = 0.6 + 0.4 * Math.sin(sp.t / 3);
+                // (one filter, its strength changed: a new one on every cell every frame; 9 October)
+                if (!this._teaseGlow || this._teaseGlow.color != this._teaseColor) {
+                    this._teaseGlow = new GlowFilter(this._teaseColor, tg, 16, 16, 3, 2);
+                }
+                this._teaseGlow.alpha = tg;
                 for (let tc of as3.values(this._tease)) {
-                    tc.filters = [new GlowFilter(this._teaseColor, tg, 16, 16, 3, 2)];
+                    tc.filters = [this._teaseGlow];
                 }
                 this.drawTease(sp.t | 0);
             }
@@ -753,8 +854,12 @@ export class SlotsGame extends Sprite {
         if (this._winCells.length) {
             this._pulse++;
             let g: number = 0.55 + 0.45 * Math.sin(this._pulse / 4);
-            for (let c of as3.values(this._winCells)) {
-                c.filters = [new GlowFilter(0xFFB030, g, 18, 18, 3, 2)];
+            // (one glow, set every third frame: 9 October, a new filter every frame before)
+            if (this._pulse % 3 == 1) {
+                this._winGlow.alpha = g;
+                for (let c of as3.values(this._winCells)) {
+                    c.filters = [this._winGlow];
+                }
             }
             this._line.alpha = g;
             for (let wl of as3.values(this._lines)) {
@@ -783,8 +888,8 @@ export class SlotsGame extends Sprite {
             i--;
         }
         // SPIN stops the reels while they turn
-        CasinoUI.relabel(this._spin, this._spinning ? "STOP" : "SPIN");
-        CasinoUI.relabel(this._autoBtn, this._auto > 0 || (this._autoWait > 0) ? "STOP " + (this._auto + (this._spinning ? 1 : 0)) : "AUTO");
+        CasinoUI.relabel(this._spin, this._spinning ? KEYS.Get("io_t3c_stop") : KEYS.Get("io_t3c_spin"));
+        CasinoUI.relabel(this._autoBtn, this._auto > 0 || (this._autoWait > 0) ? KEYS.Get("io_acc_auto_stop_n", { "v1": this._auto + (this._spinning ? 1 : 0) }) : "AUTO");
         if (!this._spinning && this._celebrate == 0) {
             this.showJackpot();
         }
@@ -801,6 +906,15 @@ export class SlotsGame extends Sprite {
             return;
         }
         let bet: int = r.bet | 0;
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #388: the run's own stop rules)
+            this._ioAutoNet = (this._ioAutoNet + (r.payout | 0) - bet) | 0;
+            let why: string = IoAutoPlay.check(this._mode, this._ioAutoNet, ((r.payout | 0) - bet) | 0);
+            if (why) {
+                this.stopAuto(why);
+                return;
+            }
+        }
         if (r.line == "jackpot") {
             this.stopAuto();
         } else if ((r.payout | 0) >= bet * CasinoWindow.BIG_WIN) {
@@ -819,7 +933,7 @@ export class SlotsGame extends Sprite {
         }
         let favor: string = r.free ? "Moloch's Favor: " : "";
         if (r.line == "none") {
-            this._win.message(favor + "Nothing on the line." + (r.free ? " Moloch smiles again tomorrow." : ""), CasinoUI.ASH);
+            this._win.message(favor + KEYS.Get("io_t3c_nothing_line") + (r.free ? " " + KEYS.Get("io_t3c_smiles") : ""), CasinoUI.ASH);
             return;
         }
         this._line.visible = true;
@@ -834,10 +948,10 @@ export class SlotsGame extends Sprite {
         if (r.line == "jackpot") {
             this.jackpot(r.jackpot_won | 0);
         } else if (r.line == "two_spurtz") {
-            this._win.message(favor + (r.free ? "two Spurtz, +" + CasinoUI.number(payout) + " Shiny" : "Two Spurtz: your " + CasinoUI.number(bet) + " Shiny back."), CasinoUI.GOLD);
+            this._win.message(favor + (r.free ? KEYS.Get("io_t3c_two_spurtz_free", { "v1": CasinoUI.number(payout) }) : KEYS.Get("io_t3c_two_spurtz", { "v1": CasinoUI.number(bet) })), CasinoUI.GOLD);
             SOUNDS.Play("purchasepopup");
         } else {
-            this._win.message(favor + "Three " + CASINO.MONSTER_NAMES[r.symbols[0]] + ": " + CasinoUI.mult(Number(r.multiplier)) + ", +" + CasinoUI.number(payout) + " Shiny", CasinoUI.WIN);
+            this._win.message(favor + KEYS.Get("io_t3c_three_win", { "v1": String(CASINO.MONSTER_NAMES[r.symbols[0]]), "v2": CasinoUI.mult(Number(r.multiplier)), "v3": CasinoUI.number(payout) }), CasinoUI.WIN);
             SOUNDS.Play(Number(r.multiplier) >= 25 ? "chaching" : "purchasepopup");
             this._win.bigWin(payout, bet);
         }
@@ -853,7 +967,7 @@ export class SlotsGame extends Sprite {
         }
         let wins: any[] = as3.as(r.wins, Array);
         if (!wins || !wins.length) {
-            this._win.message("Nothing on the lines.", CasinoUI.ASH);
+            this._win.message(KEYS.Get("io_t3c_nothing_lines"), CasinoUI.ASH);
             return;
         }
         let set: any[] = this.lineSet();
@@ -882,20 +996,24 @@ export class SlotsGame extends Sprite {
             this.jackpot(r.jackpot_won | 0);
             return;
         }
-        let n: string = wins.length == 1 ? "1 line" : wins.length + " lines";
+        let n: string = wins.length == 1 ? KEYS.Get("io_t3c_line_one") : KEYS.Get("io_t3c_line_n", { "v1": wins.length });
         if (payout > bet) {
-            this._win.message(n + (best ? " (three " + this.symbolName(as3.str(best.symbols[0])) + ")" : "") + ": +" + CasinoUI.number(payout) + " Shiny on " + CasinoUI.number(bet), CasinoUI.WIN);
-            SOUNDS.Play(payout >= bet * 5 ? "chaching" : "purchasepopup");
+            this._win.message(best ? KEYS.Get("io_t3c_fwin_best", { "v1": n, "v2": this.symbolName(as3.str(best.symbols[0])), "v3": CasinoUI.number(payout), "v4": CasinoUI.number(bet) }) : KEYS.Get("io_t3c_fwin", { "v1": n, "v2": CasinoUI.number(payout), "v3": CasinoUI.number(bet) }), CasinoUI.WIN);
+            if (payout >= bet * 5) {
+                CasinoUI.ioWinSound(payout >= bet * 10);
+            } else {
+                SOUNDS.Play("purchasepopup");
+            }
             this._win.bigWin(payout, bet);
         } else {
             // (a line of two Spurtz pays its fifth back: said as it is)
-            this._win.message(n + ": " + CasinoUI.number(payout) + " of your " + CasinoUI.number(bet) + " Shiny back.", payout == bet ? CasinoUI.GOLD : CasinoUI.ASH);
+            this._win.message(KEYS.Get("io_t3c_fback", { "v1": n, "v2": CasinoUI.number(payout), "v3": CasinoUI.number(bet) }), payout == bet ? CasinoUI.GOLD : CasinoUI.ASH);
         }
     }
 
     private jackpot(won: int): void {
-        this._win.message("JACKPOT! Three " + this.symbolName("wormzer") + ": +" + CasinoUI.number(won) + " Shiny", 13668607);
-        SOUNDS.Play("chaching");
+        this._win.message(KEYS.Get("io_t3c_jp_msg", { "v1": this.symbolName("wormzer"), "v2": CasinoUI.number(won) }), 13668607);
+        CasinoUI.ioWinSound(true);
         this._celebrate = 200;
         CasinoUI.removeAll(this._banner);
         let bg: Shape = as3.as(this._banner.addChild(new Shape()), Shape);
@@ -904,7 +1022,7 @@ export class SlotsGame extends Sprite {
         bg.graphics.drawRoundRect(-200, -50, 400, 100, 24, 24);
         bg.graphics.endFill();
         bg.filters = [new GlowFilter(0xB060FF, 1, 30, 30, 2, 2)];
-        this._banner.addChild(CasinoUI.at(CasinoUI.title("JACKPOT!", 40, 400), -200, -48));
+        this._banner.addChild(CasinoUI.at(CasinoUI.title(KEYS.Get("io_t3c_jp_title"), 40, 400), -200, -48));
         this._banner.addChild(CasinoUI.at(CasinoUI.label("+" + CasinoUI.number(won) + " SHINY", 22, 16777215, true, 400, TextFormatAlign.CENTER), -200, 8));
         this._banner.x = 350;
         this._banner.y = 200;

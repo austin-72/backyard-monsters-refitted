@@ -4,7 +4,6 @@ import { Bitmap, BitmapData, DisplayObject, Sprite } from "flash/display";
 import { GlowFilter } from "flash/filters";
 import { Point, Rectangle } from "flash/geom";
 import { TextField, TextFormat } from "flash/text";
-import { getTimer } from "flash/utils";
 import { BFOUNDATION, BYMConfig, GLOBAL, ImageText, KEYS, MAP, bmp_healthbarlarge, bmp_healthbarsmall, bmp_overlaytext, bmp_progressbarlarge } from "@game";
 
 export class BuildingOverlay extends ASObject {
@@ -77,6 +76,9 @@ export class BuildingOverlay extends ASObject {
         _loc3_ = as3.cast(BuildingOverlay._buildings[param1._id].container, Sprite);
         _loc3_.mouseEnabled = false;
         _loc3_.mouseChildren = false;
+        // Inferno-only (from the base game's pull request #292): shown only while it has something to show
+        // (a label, a progress bar or a health bar); most buildings have none, and every shown one is drawn
+        _loc3_.visible = false;
         _loc2_ = _loc3_.addChild(new Bitmap(BuildingOverlay._buildings[param1._id].bmdtext));
         _loc2_.x = -26 + _loc4_.x + (51 - BuildingOverlay.labelWidth) * 0.5;
         _loc2_.y = -32 + _loc4_.y;
@@ -109,7 +111,6 @@ export class BuildingOverlay extends ASObject {
         let _loc11_: int = 0;
         let _loc3_: int = -1;
         let _loc4_: string = "";
-        let _loc7_: int = getTimer();
         if (!BuildingOverlay._buildings[param1._id]) {
             BuildingOverlay.Setup(param1);
         }
@@ -206,6 +207,10 @@ export class BuildingOverlay extends ASObject {
                 _loc8_.indexhp = -1;
                 _loc5_ = as3.cast(_loc8_.bmdhp, BitmapData);
                 _loc5_.fillRect(_loc5_.rect, 0);
+            }
+            let shown: boolean = _loc8_.indextext != "" || _loc8_.indexprogress != -1 || _loc8_.indexhp != -1;
+            if (_loc8_.container.visible != shown) {
+                _loc8_.container.visible = shown;
             }
         }
     }

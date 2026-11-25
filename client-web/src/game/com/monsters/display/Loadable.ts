@@ -4,7 +4,7 @@ import { Loader } from "flash/display";
 
 export class Loadable extends ASObject {
     static {
-        as3.fields(this, { callbacks: null, tries: 0, loadState: 0, loader: null, key: null, tryLimit: 5, shouldPrepend: true, priority: 0 });
+        as3.fields(this, { callbacks: null, tries: 0, loadState: 0, loader: null, key: null, tryLimit: 5, shouldPrepend: true, priority: 0, ioBmd: null });
     }
 
     public callbacks: any[];
@@ -15,6 +15,8 @@ export class Loadable extends ASObject {
     public tryLimit: uint;
     public shouldPrepend: boolean;
     public priority: int;
+    /** Inferno-only (14 October): a picture made here, not loaded (a champion's skin: IoSkins), the loader unused. */
+    public ioBmd: any;
 
     public $ctor(): void {
         super.$ctor();

@@ -527,7 +527,7 @@ export class QUESTS extends ASObject {
     }
 
     public static Show(param1: MouseEvent = null): void {
-        // Inferno-only: the Quests button opens the quest book (com/monsters/quests/IoQuestBook.as)
+        // Inferno-only: the Quests button opens the quest book (com/monsters/quests/IoQuestBook.ts)
         if (GLOBAL.INFERNO_ONLY && !QUESTS._ioOld) {
             IoQuestBook.Show();
             return;

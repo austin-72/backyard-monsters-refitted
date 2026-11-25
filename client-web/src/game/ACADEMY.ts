@@ -1,7 +1,7 @@
 import * as as3 from "as3";
 import { ASObject, Vector, int } from "as3";
 import { MouseEvent } from "flash/events";
-import { ACADEMYPOPUP, BASE, BFOUNDATION, BUILDING26, CREATURELOCKER, GLOBAL, InstanceManager, KEYS, LOGGER, POPUPS, SOUNDS, SecNum, popup_monster } from "@game";
+import { ACADEMYPOPUP, BASE, BFOUNDATION, BUILDING26, CREATURELOCKER, GLOBAL, InstanceManager, KEYS, LOGGER, POPUPS, SOUNDS, SecNum, popup_monster, IoSocial, IoShop } from "@game";
 
 export class ACADEMY extends ASObject {
     public static readonly ID: int = 26;
@@ -58,6 +58,8 @@ export class ACADEMY extends ASObject {
         let _loc3_: boolean = false;
         let _loc4_: string = "";
         let _loc5_: string = KEYS.Get("acad_status_level", { "v1": GLOBAL.player.m_upgrades[param1].level });
+        // (Inferno-only, QoL #354: the refusal still shows what the next training costs)
+        let ioCost: boolean = false;
         // Inferno-only: a training under way that no Academy claims (its mark was lost) is this one's, so it
         // counts as busy. Each Academy still trains its own monster: two Academies, two trainings.
         if (GLOBAL.INFERNO_ONLY && Boolean(ACADEMY._building) && !ACADEMY._building._upgrading && ACADEMY.ioUnclaimedTraining() != null) {
@@ -79,8 +81,10 @@ export class ACADEMY extends ASObject {
                                 if (!param2) {
                                     BASE.Charge(3, Number(_loc6_[0]));
                                     // Admin test mode: trained at once (done on the next tick).
-                                    GLOBAL.player.m_upgrades[param1].time = new SecNum(Number(GLOBAL.Timestamp() + (GLOBAL.ioTestMode() ? 0 : _loc6_[1])));
-                                    GLOBAL.player.m_upgrades[param1].duration = _loc6_[1];
+                                    // (Inferno-only, 22 October: a fifth less with an Academy Scholarship running: IoShop)
+                                    let ioTrain: number = GLOBAL.INFERNO_ONLY ? IoShop.trainTime(Number(_loc6_[1])) : Number(_loc6_[1]);
+                                    GLOBAL.player.m_upgrades[param1].time = new SecNum(Number(GLOBAL.Timestamp() + (GLOBAL.ioTestMode() ? 0 : ioTrain)));
+                                    GLOBAL.player.m_upgrades[param1].duration = ioTrain;
                                     ACADEMY._building._upgrading = param1;
                                     BASE.Save();
                                     LOGGER.Stat([11, Number(param1.substr(1)) | 0, GLOBAL.player.m_upgrades[param1].level + 1]);
@@ -94,6 +98,11 @@ export class ACADEMY extends ASObject {
                             _loc3_ = true;
                             _loc4_ = KEYS.Get("acad_err_upgrade");
                             _loc5_ = KEYS.Get("acad_err_upgrade");
+                            // (Inferno-only, QoL #355: which Academy level it takes; the cost is shown, #354)
+                            if (GLOBAL.INFERNO_ONLY) {
+                                _loc4_ = _loc5_ = KEYS.Get("io_acad_needs", { "v1": GLOBAL.player.m_upgrades[param1].level | 0 });
+                                ioCost = true;
+                            }
                             // (Inferno-only: every monster goes to 6 now, so 5 is "train the Academy first")
                             if (BASE.isInfernoMainYardOrOutpost && GLOBAL.player.m_upgrades[param1].level >= (GLOBAL.INFERNO_ONLY && CREATURELOCKER.ioReachesLevel6(param1) ? 6 : 5)) {
                                 _loc3_ = true;
@@ -119,11 +128,17 @@ export class ACADEMY extends ASObject {
         } else {
             _loc3_ = true;
             _loc4_ = KEYS.Get("acad_err_busy");
+            // (Inferno-only, QoL #355: busy with what, and for how long)
+            let busyWith: string = GLOBAL.INFERNO_ONLY && ACADEMY._building ? ACADEMY._building._upgrading : null;
+            if (busyWith && busyWith != param1 && GLOBAL.player.m_upgrades[busyWith] && GLOBAL.player.m_upgrades[busyWith].time) {
+                _loc4_ = _loc5_ = KEYS.Get("io_acad_busy", { "v1": KEYS.Get(as3.str(CREATURELOCKER._creatures[busyWith].name)), "v2": (GLOBAL.player.m_upgrades[busyWith].level | 0) + 1, "v3": GLOBAL.ToTime((GLOBAL.player.m_upgrades[busyWith].time.Get() - GLOBAL.Timestamp()) | 0, true) });
+                ioCost = true;
+            }
             if (GLOBAL.player.m_upgrades[param1].time) {
                 _loc5_ = KEYS.Get("acad_err_trainingstatus", { "v1": GLOBAL.player.m_upgrades[param1].level + 1, "v2": GLOBAL.ToTime((GLOBAL.player.m_upgrades[param1].time.Get() - GLOBAL.Timestamp()) | 0) });
             }
         }
-        return { "error": _loc3_, "errorMessage": _loc4_, "status": _loc5_ };
+        return { "error": _loc3_, "errorMessage": _loc4_, "status": _loc5_, "ioCostShown": ioCost };
     }
 
     public static CancelMonsterUpgrade(param1: string): void {
@@ -143,7 +158,7 @@ export class ACADEMY extends ASObject {
                 break;
             }
         }
-        BASE.Fund(3, Number(CREATURELOCKER._creatures[param1].trainingCosts[GLOBAL.player.m_upgrades[param1].level - 1][0]));
+        BASE.Fund(3, Number(CREATURELOCKER._creatures[param1].trainingCosts[GLOBAL.player.m_upgrades[param1].level - 1][0]), GLOBAL.INFERNO_ONLY);
         BASE.Save();
     }
 
@@ -162,7 +177,11 @@ export class ACADEMY extends ASObject {
         delete GLOBAL.player.m_upgrades[monsterID].time;
         delete GLOBAL.player.m_upgrades[monsterID].duration;
         ++GLOBAL.player.m_upgrades[monsterID].level;
-        if (GLOBAL.player.monsterListByID(monsterID)) {
+        if (GLOBAL.INFERNO_ONLY) {
+            // Inferno-only (14 October, QoL #284): as an instant training does, the housed monsters' health
+            // grows with their new top health (they looked wounded until a reload).
+            GLOBAL.player.upgradeHealthData(monsterID);
+        } else if (GLOBAL.player.monsterListByID(monsterID)) {
             GLOBAL.player.monsterListByID(monsterID).level = GLOBAL.player.m_upgrades[monsterID].level | 0;
         }
         stat = as3.cast(CREATURELOCKER._creatures[monsterID].props.cResource, Array);
@@ -192,10 +211,15 @@ export class ACADEMY extends ASObject {
             monsterName = KEYS.Get(as3.str(CREATURELOCKER._creatures[monsterID].name));
             popupMC = new popup_monster();
             popupMC.tText.htmlText = KEYS.Get("acad_pop_complete", { "v1": monsterName });
-            popupMC.bAction.SetupKey("btn_warnyourfriends");
-            popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
-            popupMC.bAction.Highlight = true;
-            popupMC.bSpeedup.visible = false;
+            if (GLOBAL.INFERNO_ONLY) {
+                // (QoL #140: Train next level and Share in chat; "Warn your friends" posted to a page there isn't)
+                IoSocial.ioWarnTrained(popupMC, monsterID, monsterName, GLOBAL.player.m_upgrades[monsterID].level | 0);
+            } else {
+                popupMC.bAction.SetupKey("btn_warnyourfriends");
+                popupMC.bAction.addEventListener(MouseEvent.CLICK, Post);
+                popupMC.bAction.Highlight = true;
+                popupMC.bSpeedup.visible = false;
+            }
             POPUPS.Push(popupMC, null, null, null, "" + monsterID + "-150.png");
         }
     }
@@ -213,8 +237,28 @@ export class ACADEMY extends ASObject {
         }
         if (GLOBAL.INFERNO_ONLY) {
             ACADEMY.ioReconcile();
+            // (QoL #358: each training's countdown over its Academy)
+            ACADEMY.ioAcademyTimers();
         }
         ACADEMY.Update();
+    }
+
+    /** Inferno-only (QoL #358): "Korath Lv 4  6h 12m" over each Academy while it trains (its mark: ioReconcile). */
+    private static ioAcademyTimers(): void {
+        let keep: any[] = [];
+        if (CREATURELOCKER.ioLabelsShown()) {
+            let now: int = GLOBAL.Timestamp();
+            for (let academy of (InstanceManager.getInstancesByClass(BUILDING26) ?? [])) {
+                let id: string = academy._upgrading;
+                let up: any = id ? GLOBAL.player.m_upgrades[id] : null;
+                if (!up || !up.time || !CREATURELOCKER._creatures[id]) {
+                    continue;
+                }
+                keep.push(academy);
+                CREATURELOCKER.ioBuildingLabel("academy", academy, KEYS.Get("io_mon2_timer_train", { "v1": KEYS.Get(CREATURELOCKER.getShortCreatureName(id)), "v2": (up.level | 0) + 1, "v3": GLOBAL.ioDuration(up.time.Get() - now) }));
+            }
+        }
+        CREATURELOCKER.ioKeepLabels("academy", keep);
     }
 
     /* Inferno-only: is this monster training (its training time set)? */

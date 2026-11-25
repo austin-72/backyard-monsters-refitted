@@ -58,6 +58,9 @@ export class Graphics extends ASObject {
   get $isEmpty(): boolean { return this.$cmds.length === 0; }
 
   clear(): void {
+    // (already empty: nothing changes, so nothing is drawn again; games clear a shape every frame whether or not
+    // it held anything)
+    if (!this.$cmds.length && !this.$segments) return;
     this.$ver++;
     this.$cmds = [];
     this.$segments = null;

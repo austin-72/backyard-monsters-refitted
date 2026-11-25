@@ -9,6 +9,7 @@ import { publishAllianceShout } from "../../chat/chatShouts.js";
 import { postgres } from "../../server.js";
 import { logger } from "../../utils/logger.js";
 import { composeShout } from "./shoutText.js";
+import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 
 interface AllianceMessageDraft {
   allianceId: number;
@@ -42,6 +43,12 @@ const FEED_FIELDS = [
 ] as const;
 
 export const ALLIANCE_MESSAGE_LIMIT = 50;
+/**
+ * (Inferno-only, QoL #147, 14 October) Members' own lines are kept apart from the notices (joined, left, power-ups,
+ * pins...): 200 of them, and the notices' 50 no longer push them out. The feed was 50 of both together, so a busy
+ * day of notices wiped the conversation.
+ */
+export const ALLIANCE_CHAT_LIMIT = 200;
 
 /**
  * Drops an alliance's oldest entries once it holds more than
@@ -56,6 +63,14 @@ export const ALLIANCE_MESSAGE_LIMIT = 50;
  * @returns {Promise<number>} How many entries were removed.
  */
 const cutAllianceMessages = async (alliance_id: number, em: EntityManagerType = postgres.em) => {
+  if (infernoOnlyConfig.enabled) {
+    let removed = 0;
+    const lines = await em.findOne(AllianceMessage, { alliance_id, messageType: AllianceMessageType.MESSAGE }, { fields: ["id"], orderBy: { id: "DESC" }, offset: ALLIANCE_CHAT_LIMIT });
+    if (lines) removed += await em.nativeDelete(AllianceMessage, { alliance_id, messageType: AllianceMessageType.MESSAGE, id: { $lte: lines.id } });
+    const notices = await em.findOne(AllianceMessage, { alliance_id, messageType: { $ne: AllianceMessageType.MESSAGE } }, { fields: ["id"], orderBy: { id: "DESC" }, offset: ALLIANCE_MESSAGE_LIMIT });
+    if (notices) removed += await em.nativeDelete(AllianceMessage, { alliance_id, messageType: { $ne: AllianceMessageType.MESSAGE }, id: { $lte: notices.id } });
+    return removed;
+  }
   const findOptions = {
     fields: ["id"],
     orderBy: { id: "DESC" },
@@ -161,11 +176,16 @@ export const announceShout = async (shout: ShoutDraft) =>
  * @returns {AllianceFeed} Entries ordered oldest to newest.
  */
 export const getAllianceMessages = async (allianceId: number, em: EntityManagerType = postgres.em): AllianceFeed => {
-  const rows = await em.find(
-    AllianceMessage,
-    { alliance_id: allianceId },
-    { orderBy: { id: "DESC" }, limit: ALLIANCE_MESSAGE_LIMIT, fields: FEED_FIELDS }
-  );
+  const rows = infernoOnlyConfig.enabled
+    ? [
+        ...(await em.find(AllianceMessage, { alliance_id: allianceId, messageType: AllianceMessageType.MESSAGE }, { orderBy: { id: "DESC" }, limit: ALLIANCE_CHAT_LIMIT, fields: FEED_FIELDS })),
+        ...(await em.find(AllianceMessage, { alliance_id: allianceId, messageType: { $ne: AllianceMessageType.MESSAGE } }, { orderBy: { id: "DESC" }, limit: ALLIANCE_MESSAGE_LIMIT, fields: FEED_FIELDS })),
+      ].sort((a, b) => b.id - a.id)
+    : await em.find(
+        AllianceMessage,
+        { alliance_id: allianceId },
+        { orderBy: { id: "DESC" }, limit: ALLIANCE_MESSAGE_LIMIT, fields: FEED_FIELDS }
+      );
 
   const entries = rows.toReversed().map(({ id, author, targetAlliance, messageType, body, created_at }) => {
     const { userid, username, pic_square } = author;

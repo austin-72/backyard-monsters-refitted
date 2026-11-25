@@ -3,7 +3,7 @@ import { ASObject, int, uint } from "as3";
 import { Bitmap, BitmapData, MovieClip, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { TextField, TextFieldType, TextFormat, TextFormatAlign } from "flash/text";
-import { BASE, CREATURELOCKER, GLOBAL, ImageCache, IoPets, KEYS, POPUPS, POPUPSETTINGS, SOUNDS } from "@game";
+import { BASE, CREATURELOCKER, GLOBAL, ImageCache, IoKit, IoPets, KEYS, POPUPS, POPUPSETTINGS, SOUNDS } from "@game";
 
 /**
  * Inferno-only: the Pets tab of the Buildings menu's Decorations (BUILDINGSPOPUP.SwitchB): a card for each
@@ -11,6 +11,10 @@ import { BASE, CREATURELOCKER, GLOBAL, ImageCache, IoPets, KEYS, POPUPS, POPUPSE
  * the yard and in storage, Buy (for Shiny, after a yes; at most IoPets.perKind of one monster), Out / Store (bring
  * one out into the yard, at most IoPets.maxOut out at once, or put one away; one put away isn't refunded) and
  * Name (each of them can have a name, shown over it in the yard). Only in your own main yard.
+ *
+ * (QoL #135) Also the D.A.V.E. Club's Pets tab (IoTerrainPopup, the same cards). With IoPets.maxOut out already, Out
+ * is Swap: pick the pet that goes into storage and this one comes out, in one go. (QoL #503) The names window has
+ * Return / Release for each pet (IoPets.askRelease).
  */
 export class IoPetsPanel extends ASObject {
     public static readonly PER_PAGE: int = 10;
@@ -25,7 +29,8 @@ export class IoPetsPanel extends ASObject {
     /** Fills the menu's thumbnail area with a page of pet cards; returns how many pages there are. */
     public static fill(holder: MovieClip, page: int, refresh: Function): int {
         if (!IoPets.ownYard()) {
-            let away: TextField = as3.as(holder.addChild(IoPetsPanel.label("Pets live in your main yard: buy them and bring them out there.", 13, 3355443, true, 640, TextFormatAlign.CENTER)), TextField);
+            let away: TextField = as3.as(holder.addChild(IoPetsPanel.label(KEYS.Get("io_t3t_pets_away"), 13, 3355443, true, 640, TextFormatAlign.CENTER)), TextField);
+            GLOBAL.ioFitText(away, 9);
             away.y = 140;
             return 1;
         }
@@ -94,19 +99,20 @@ export class IoPetsPanel extends ASObject {
         out = as3.cast(have[0], Array);
         stored = as3.cast(have[1], Array);
         owned = out.length + stored.length > 0;
-        let status: TextField = as3.as(c.addChild(IoPetsPanel.label(owned ? "Out " + out.length + " · Stored " + stored.length : "A pet for your yard", 10, (owned ? 0x2C4A0C : 0x666666) >>> 0, owned, IoPetsPanel.CARD_W, TextFormatAlign.CENTER)), TextField);
+        let status: TextField = as3.as(c.addChild(IoPetsPanel.label(owned ? KEYS.Get("io_t3t_pets_counts", { "v1": out.length, "v2": stored.length }) : KEYS.Get("io_t3t_pets_for_yard"), 10, (owned ? 0x2C4A0C : 0x666666) >>> 0, owned, IoPetsPanel.CARD_W, TextFormatAlign.CENTER)), TextField);
+        GLOBAL.ioFitText(status, 7);
         status.y = 92;
         full = out.length + stored.length >= IoPets.perKind;
 
-        let buy: Sprite = as3.as(c.addChild(IoPetsPanel.button(full ? "You have " + IoPets.perKind : "Buy · " + IoPets.price + " Shiny", (IoPetsPanel.CARD_W - 8) | 0, 20, (e: MouseEvent): void => {
+        let buy: Sprite = as3.as(c.addChild(IoPetsPanel.button(full ? KEYS.Get("io_t3t_pets_have", { "v1": IoPets.perKind }) : KEYS.Get("io_t3t_pets_buy", { "v1": IoPets.price }), (IoPetsPanel.CARD_W - 8) | 0, 20, (e: MouseEvent): void => {
             if (full) {
                 return;
             }
             if (BASE._credits.Get() < IoPets.price) {
-                POPUPS.DisplayGetShiny();
+                POPUPS.ioShinyNeed(IoPets.price);
                 return;
             }
-            GLOBAL.Message("<b>Buy a " + IoPetsPanel.monsterName(monster) + " pet</b> for " + IoPets.price + " Shiny?<br><br>It wanders your main yard, just for looks. " + IoPets.maxOut + " pets can be out at once; the others wait in storage. You can give it a name (Name).", "Buy", (): void => {
+            GLOBAL.Message(KEYS.Get("io_t3t_pets_buy_ask", { "v1": IoPetsPanel.monsterName(monster), "v2": IoPets.price, "v3": IoPets.maxOut }), KEYS.Get("io_t3t_pets_buy_btn"), (): void => {
                 IoPets.buy(monster, (error: string): void => {
                     if (error) {
                         GLOBAL.Message(error);
@@ -115,11 +121,11 @@ export class IoPetsPanel extends ASObject {
                     SOUNDS.Play("purchasepopup");
                     let nowHave: any[] = IoPetsPanel.mine(monster);
                     if (IoPets.outCount() >= IoPets.maxOut && nowHave[1].length > stored.length) {
-                        GLOBAL.Message("Your new " + IoPetsPanel.monsterName(monster) + " is in storage: " + IoPets.maxOut + " pets are out in your yard already. Store one of them to bring it out.");
+                        GLOBAL.Message(KEYS.Get("io_t3t_pets_new_stored", { "v1": IoPetsPanel.monsterName(monster), "v2": IoPets.maxOut }));
                     }
                     refresh();
                 });
-            }, null, "No", (): void => {
+            }, null, KEYS.Get("io_t3t_pets_no"), (): void => {
             });
         })), Sprite);
         buy.x = 4;
@@ -127,12 +133,18 @@ export class IoPetsPanel extends ASObject {
         buy.name = "ioPetBuy";
         IoPetsPanel.enable(buy, !full);
 
-        let bringOut: Sprite = as3.as(c.addChild(IoPetsPanel.button("Out", 36, 20, (e: MouseEvent): void => {
+        // (QoL #135: with as many out as can be, Out is Swap: one goes into storage and this one comes out)
+        let swapping: boolean = GLOBAL.INFERNO_ONLY && IoPets.outCount() >= IoPets.maxOut;
+        let bringOut: Sprite = as3.as(c.addChild(IoPetsPanel.button(swapping ? KEYS.Get("io_club2_pet_swap") : KEYS.Get("io_t3t_pets_out"), 36, 20, (e: MouseEvent): void => {
             if (!stored.length) {
                 return;
             }
+            if (swapping) {
+                IoPetsPanel.swap(monster, stored[0] | 0, refresh);
+                return;
+            }
             if (IoPets.outCount() >= IoPets.maxOut) {
-                GLOBAL.Message("Only " + IoPets.maxOut + " pets can be out in your yard at once: store one of them first.");
+                GLOBAL.Message(KEYS.Get("io_t3t_pets_max_out", { "v1": IoPets.maxOut }));
                 return;
             }
             IoPets.place(stored[0] | 0, true, IoPetsPanel.done(refresh));
@@ -142,13 +154,13 @@ export class IoPetsPanel extends ASObject {
         bringOut.name = "ioPetOut";
         IoPetsPanel.enable(bringOut, stored.length > 0);
 
-        let putAway: Sprite = as3.as(c.addChild(IoPetsPanel.button("Store", 36, 20, (e: MouseEvent): void => {
+        let putAway: Sprite = as3.as(c.addChild(IoPetsPanel.button(KEYS.Get("io_t3t_pets_store"), 36, 20, (e: MouseEvent): void => {
             if (!out.length) {
                 return;
             }
-            GLOBAL.Message("Put your " + IoPetsPanel.monsterName(monster) + " in storage?<br><br>It leaves the yard; bring it out again whenever you like. (No Shiny back.)", "Store", (): void => {
+            GLOBAL.Message(KEYS.Get("io_t3t_pets_store_ask", { "v1": IoPetsPanel.monsterName(monster) }), KEYS.Get("io_t3t_pets_store"), (): void => {
                 IoPets.place(out[out.length - 1] | 0, false, IoPetsPanel.done(refresh));
-            }, null, "No", (): void => {
+            }, null, KEYS.Get("io_t3t_pets_no"), (): void => {
             });
         })), Sprite);
         putAway.x = 42;
@@ -156,7 +168,7 @@ export class IoPetsPanel extends ASObject {
         putAway.name = "ioPetStore";
         IoPetsPanel.enable(putAway, out.length > 0);
 
-        let naming: Sprite = as3.as(c.addChild(IoPetsPanel.button("Name", 36, 20, (e: MouseEvent): void => {
+        let naming: Sprite = as3.as(c.addChild(IoPetsPanel.button(KEYS.Get("io_t3t_pets_name"), 36, 20, (e: MouseEvent): void => {
             if (owned) {
                 IoPetsPanel.names(monster, refresh);
             }
@@ -185,7 +197,8 @@ export class IoPetsPanel extends ASObject {
         if (!list.length) {
             return;
         }
-        let W: int = 300;
+        // (QoL #503: wider, for Return / Release on each row)
+        let W: int = (GLOBAL.INFERNO_ONLY ? 390 : 300) | 0;
         let rowH: int = 30;
         let Hh: int = (86 + list.length * rowH) | 0;
         let box: Sprite = new Sprite();
@@ -194,12 +207,14 @@ export class IoPetsPanel extends ASObject {
         box.graphics.beginFill(16181706, 1);
         box.graphics.drawRoundRect(-W / 2, -Hh / 2, W, Hh, 14, 14);
         box.graphics.endFill();
-        let title: TextField = as3.as(box.addChild(IoPetsPanel.label("Name your " + IoPetsPanel.monsterName(monster) + (list.length > 1 ? " pets" : " pet"), 13, 2824716, true, (W - 20) | 0, TextFormatAlign.CENTER)), TextField);
+        let title: TextField = as3.as(box.addChild(IoPetsPanel.label(KEYS.Get(list.length > 1 ? "io_t3t_pets_name_n" : "io_t3t_pets_name_one", { "v1": IoPetsPanel.monsterName(monster) }), 13, 2824716, true, (W - 20) | 0, TextFormatAlign.CENTER)), TextField);
+        GLOBAL.ioFitText(title, 9);
         title.x = -W / 2 + 10;
         title.y = -Hh / 2 + 10;
         fields = [];
         for (let i: int = 0; i < list.length; i++) {
-            let tag: TextField = as3.as(box.addChild(IoPetsPanel.label((i + 1) + (list[i][2] | 0 ? " (out)" : " (stored)"), 11, 7031334, true, 80, TextFormatAlign.LEFT)), TextField);
+            let tag: TextField = as3.as(box.addChild(IoPetsPanel.label(KEYS.Get(list[i][2] | 0 ? "io_t3t_pets_tag_out" : "io_t3t_pets_tag_stored", { "v1": i + 1 }), 11, 7031334, true, 80, TextFormatAlign.LEFT)), TextField);
+            GLOBAL.ioFitText(tag, 8);
             tag.x = -W / 2 + 16;
             tag.y = -Hh / 2 + 44 + i * rowH;
             let f: TextField = new TextField();
@@ -219,8 +234,20 @@ export class IoPetsPanel extends ASObject {
             f.y = -Hh / 2 + 40 + i * rowH;
             box.addChild(f);
             fields.push(f);
+            if (GLOBAL.INFERNO_ONLY) {
+                let one: any[] = list[i];
+                let give: Sprite = as3.as(box.addChild(IoPetsPanel.button(IoPets.releaseLabel(one, true), 96, 22, (e: MouseEvent): void => {
+                    IoPets.askRelease(one, (error: string): void => {
+                        IoPetsPanel.closeNames();
+                        refresh();
+                    });
+                })), Sprite);
+                give.name = "ioPetRelease" + i;
+                give.x = -W / 2 + 286;
+                give.y = -Hh / 2 + 40 + i * rowH;
+            }
         }
-        let save: Sprite = as3.as(box.addChild(IoPetsPanel.button("Save", 90, 24, (e: MouseEvent): void => {
+        let save: Sprite = as3.as(box.addChild(IoPetsPanel.button(KEYS.Get("io_t3t_pets_save"), 90, 24, (e: MouseEvent): void => {
             let todo: any[] = null;
             let next: Function = null;
             todo = [];
@@ -252,11 +279,72 @@ export class IoPetsPanel extends ASObject {
         save.name = "ioPetNamesSave";
         save.x = -100;
         save.y = Hh / 2 - 36;
-        let close: Sprite = as3.as(box.addChild(IoPetsPanel.button("Close", 90, 24, (e: MouseEvent): void => {
+        let close: Sprite = as3.as(box.addChild(IoPetsPanel.button(KEYS.Get("btn_close"), 90, 24, (e: MouseEvent): void => {
             IoPetsPanel.closeNames();
         })), Sprite);
         close.x = 10;
         close.y = Hh / 2 - 36;
+        IoPetsPanel._names = box;
+        GLOBAL.BlockerAdd(GLOBAL._layerTop);
+        GLOBAL._layerTop.addChild(box);
+        POPUPSETTINGS.AlignToCenter(box);
+    }
+
+    /**
+     * QoL #135: Swap: the pets out in the yard, one button each; the one picked goes into storage and the stored pet
+     * `inId` comes out (two requests, one after the other). Close leaves things as they are.
+     */
+    public static swap(monster: string, inId: int, refresh: Function): void {
+        IoPetsPanel.closeNames();
+        let out: any[] = [];
+        for (let p of as3.values(IoPets.pets)) {
+            if (p[2] | 0) {
+                out.push(p);
+            }
+        }
+        if (!out.length) {
+            IoPets.place(inId, true, IoPetsPanel.done(refresh));
+            return;
+        }
+        let W: int = 300;
+        let rowH: int = 28;
+        let Hh: int = (96 + out.length * rowH) | 0;
+        let box: Sprite = new Sprite();
+        box.name = "ioPetSwap";
+        box.graphics.lineStyle(2, 8017200, 1);
+        box.graphics.beginFill(16181706, 1);
+        box.graphics.drawRoundRect(-W / 2, -Hh / 2, W, Hh, 14, 14);
+        box.graphics.endFill();
+        let title: TextField = as3.as(box.addChild(IoPetsPanel.label(KEYS.Get("io_club2_pet_swap_title", { "v1": IoPetsPanel.monsterName(monster) }), 12, 2824716, true, (W - 20) | 0, TextFormatAlign.CENTER)), TextField);
+        title.wordWrap = true;
+        title.multiline = true;
+        title.height = 36;
+        title.x = -W / 2 + 10;
+        title.y = -Hh / 2 + 10;
+        for (let i: int = 0; i < out.length; i++) {
+            let p: any[] = out[i];
+            let who: string = (p.length > 3 && p[3] ? String(p[3]) + " (" + IoPetsPanel.monsterName(String(p[1])) + ")" : IoPetsPanel.monsterName(String(p[1])));
+            let pick: Sprite = as3.as(box.addChild(IoPetsPanel.button(who, 220, 22, (e: MouseEvent): void => {
+                IoPetsPanel.closeNames();
+                IoPets.place(p[0] | 0, false, (error: string): void => {
+                    if (error) {
+                        GLOBAL.Message(error);
+                        refresh();
+                        return;
+                    }
+                    IoPets.place(inId, true, IoPetsPanel.done(refresh));
+                });
+            })), Sprite);
+            pick.name = "ioPetSwapPick" + i;
+            pick.x = -110;
+            pick.y = -Hh / 2 + 52 + i * rowH;
+        }
+        let close: Sprite = as3.as(box.addChild(IoPetsPanel.button(KEYS.Get("btn_close"), 90, 24, (e: MouseEvent): void => {
+            IoPetsPanel.closeNames();
+        })), Sprite);
+        close.name = "ioPetSwapClose";
+        close.x = -45;
+        close.y = Hh / 2 - 34;
         IoPetsPanel._names = box;
         GLOBAL.BlockerAdd(GLOBAL._layerTop);
         GLOBAL._layerTop.addChild(box);
@@ -310,15 +398,15 @@ export class IoPetsPanel extends ASObject {
         b = new Sprite();
         b.buttonMode = true;
         b.mouseChildren = false;
+        // (11 October: the game's own yellow stock button)
+        let face: MovieClip = IoKit.stockFace(b, width, height, true);
         draw = (fill: uint): void => {
-            b.graphics.clear();
-            b.graphics.lineStyle(1, 8022570, 1);
-            b.graphics.beginFill(fill, 1);
-            b.graphics.drawRoundRect(0, 0, width, height, 6, 6);
-            b.graphics.endFill();
+            IoKit.stockState(face, fill != 0xFFE94D, true);
         };
         draw(0xFFE94D);
         let t: TextField = as3.as(b.addChild(IoPetsPanel.label(text, 10, 2236962, true, width, TextFormatAlign.CENTER)), TextField);
+        // (QoL #235: a longer translation drawn smaller to fit the button)
+        GLOBAL.ioFitText(t, 7);
         t.y = ((height - 17) / 2) | 0;
         b.addEventListener(MouseEvent.ROLL_OVER, (e: MouseEvent): void => {
             draw(0xFFF59A);

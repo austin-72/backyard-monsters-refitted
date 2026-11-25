@@ -4,7 +4,7 @@ import { BitmapData, DisplayObject, Sprite } from "flash/display";
 import { Event } from "flash/events";
 import { ColorMatrixFilter, GlowFilter } from "flash/filters";
 import { Point, Rectangle } from "flash/geom";
-import { ATTACK, BTOWER, BuildingAssetContainer, CREATURES, FIREBALL, FIREBALLS, GLOBAL, IAttackable, MAP, MathUtils, MonsterBase, SOUNDS, SPRITES, SecNum, Spurtz, Targeting } from "@game";
+import { ATTACK, BTOWER, BuildingAssetContainer, CREATURES, FIREBALL, FIREBALLS, GLOBAL, IAttackable, IoReplayPlayer, MAP, MathUtils, MonsterBase, SOUNDS, SPRITES, SecNum, Spurtz, Targeting } from "@game";
 
 export class SpurtzCannon extends BTOWER {
     static {
@@ -209,7 +209,9 @@ export class SpurtzCannon extends BTOWER {
         let _loc3_: number = Math.atan2(_loc2_._startPoint.x - _loc2_._targetPoint.x, _loc2_._startPoint.y - _loc2_._targetPoint.y);
         let _loc4_: number = _loc3_ * (180 / Math.PI);
         this.dealAoEDamage(_loc2_);
-        if (Math.random() > this._chanceToSpawnSpurtz) {
+        // (Inferno-only, 22 October: not in a replay, where the towers only show their shots: the Spurtz it spawned
+        // were real defenders, chasing the replay's monsters, and piled up with each seek)
+        if (Math.random() > this._chanceToSpawnSpurtz && !(GLOBAL.INFERNO_ONLY && IoReplayPlayer.playing)) {
             this.spawnSpurtzAt(_loc2_._tmpX | 0, _loc2_._tmpY | 0, _loc4_, _loc2_._graphic.scaleX);
         }
     }

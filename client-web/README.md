@@ -1,7 +1,9 @@
-# Backyard Monsters Refitted: browser client
+# Backyard Monsters Refitted: the game in the browser
 
-The Flash client (`client/`) converted to TypeScript and running in a browser
-without Flash. It talks to the unchanged BYMR server.
+The game, made for the browser: TypeScript (`src/game`) on a Flash-compatible
+runtime of its own (`src/as3`, `src/flash`), with its art in `public/`. It began
+as the Flash client converted from ActionScript; since 10 October 2026 the
+TypeScript is the source (see "The sources" below and `../WEB-CLIENT.md`).
 
 - `DESIGN.md`: how it works and the decisions to review
 - `DEVIATIONS.md`: every known difference from the Flash client
@@ -24,7 +26,7 @@ SERVER_URL=https://server.bymrefitted.com/ CDN_URL=https://cdn.bymrefitted.com/ 
 `SERVER_URL` and `CDN_URL` replace the Flash build's `CONFIG::SERVER_URL` and
 `CONFIG::CDN_URL` defines (the values above are the defaults). The output in
 `dist/` is a static site: `index.html` (a fixed loader), `version.json`, the
-content-hashed bundle `game.<hash>.js` and the converted assets.
+content-hashed bundle `game.<hash>.js` and the art (`public/`).
 Host it anywhere; the server already allows cross-origin requests. Set
 `MINIFY=1` for a minified bundle.
 
@@ -100,9 +102,11 @@ message window in full screen, the "away too long" stop and the logged-out stop,
 focus holds, typing arrives, and closing it releases the game's field.
 
 `npm run publish` copies `dist/` into `../server/public/web` (`--root` also makes the site's front
-page open the game; `--target <folder>` publishes elsewhere).
+page open the game; `--target <folder>` publishes elsewhere). It only copies: it does not stamp or build.
+For a release use `../publish-web.cmd` or `../publish-web.sh`, which run, in order, `npm run stamp`,
+`RELEASE=1 npm run build`, `npm run publish -- --root` and `npm run check` (`../WEB-CLIENT.md`, "Publishing").
 
-`npm run watch` rebuilds on every change to `client/scripts` and publishes to
+`npm run watch` rebuilds on every change to `src/`, `public/` or `index.html` and publishes to
 `../server/public/web-dev` (`--target web` for the live folder, `--no-publish` to only rebuild
 `dist/`). Open the page with `?watch=1` and it reloads itself after each build.
 
@@ -121,19 +125,16 @@ EMAIL=... PASSWORD=... node tools/test/base.mjs 12 1280 800   # log in via token
 STEPS="c:1015,565 w:1000 s:menu" node tools/test/base.mjs     # click, wait, screenshot to /tmp/step-menu.png
 ```
 
-## Converting again (until the TypeScript cutover)
+## The sources
 
-While development continues in AS3, regenerate the TypeScript and assets from
-the Flash sources:
-
-```sh
-npm run convert      # client/scripts -> src/game (needs ../playerglobal.swc from the AIR/Flex SDK)
-npm run assets       # client/scripts/_assets/assets.swf -> public/swf, [Embed] files -> public/embed
-```
-
-Do not edit `src/game` by hand before the cutover: it is overwritten. Deliberate
-replacements belong in `tools/as3-to-ts/overrides/` (copied over the output).
-After the cutover, `src/game` is the source and these tools are retired.
+`src/game` is the game, edited by hand. It was converted from the Flash client's
+ActionScript (`tools/as3-to-ts`, retired with the ActionScript on 10 October
+2026) and keeps that shape: write new code the same way (`../WEB-CLIENT.md`,
+"Made for the browser", has the rules: modules in `src/game/index.ts`, classes
+found by name in `src/game/registry.ts`, embedded files in `public/embed/_assets`).
+`public/swf` is the original Flash library's art as data (read out of
+`assets.swf` by the retired `tools/swf-assets`). `npm run stamp` writes the
+build stamp into `src/game/IOBuild.ts`; `publish-web` runs it at every release.
 
 `npm run typecheck` runs the TypeScript compiler; about 120 errors remain
 (see `DESIGN.md`). The build itself does not type-check.

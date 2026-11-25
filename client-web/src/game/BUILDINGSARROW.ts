@@ -17,7 +17,17 @@ export class BUILDINGSARROW extends MovieClip {
 
     public $ctor(): void {
         super.$ctor();
-        this.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.Wobble));
+        // (Inferno-only, 18 October: listened to only while on the stage: an every-frame listener keeps its object, and
+        // through it the whole Mail or Buildings window, for the rest of the session, still ticking)
+        this.addEventListener(Event.ADDED_TO_STAGE, (e: Event): void => {
+            this.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.Wobble));
+        });
+        this.addEventListener(Event.REMOVED_FROM_STAGE, (e: Event): void => {
+            this.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.Wobble));
+        });
+        if (this.stage) {
+            this.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.Wobble));
+        }
     }
 
     public Trigger(param1: boolean = false): any {

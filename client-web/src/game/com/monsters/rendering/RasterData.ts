@@ -8,7 +8,7 @@ import { Point, Rectangle } from "flash/geom";
 
 export class RasterData extends ASObject {
     static {
-        as3.fields(this, { _id: 0, _data: null, _pt: null, _depth: NaN, _rect: null, _blendMode: null, _filter: null, _scaleX: 0, _scaleY: 0, _alpha: 0, _visible: false, _unSorted: false, _cleared: false, _rsHas: false, _rsFrame: 0, _rsX: NaN, _rsY: NaN, _rsW: NaN, _rsH: NaN, _rsVer: NaN, _rsData: null, _rsAlpha: 0, _rsBlend: null, _rsFilter: null, _rsDepth: NaN, _ioBm: null, _ipX0: 0, _ipY0: 0, _ipX1: 0, _ipY1: 0, _ipSeen: -10, _ipSx: 0, _ipSy: 0 });
+        as3.fields(this, { _id: 0, _data: null, _pt: null, _depth: NaN, _rect: null, _blendMode: null, _filter: null, _scaleX: 0, _scaleY: 0, _alpha: 0, _visible: false, _unSorted: false, _cleared: false, _rsHas: false, _rsFrame: 0, _rsX: NaN, _rsY: NaN, _rsW: NaN, _rsH: NaN, _rsVer: NaN, _rsData: null, _rsAlpha: 0, _rsBlend: null, _rsFilter: null, _rsDepth: NaN, _ioBm: null, _ipX0: 0, _ipY0: 0, _ipX1: 0, _ipY1: 0, _ipSeen: -10, _ipSx: 0, _ipSy: 0, _ioFoot: NaN, _ioFlat: false, _ioTy: 0, _ioTs: 0 });
     }
 
     public static readonly s_rasterData: Vector<RasterData> = new Vector<RasterData>(0, false, RasterData);
@@ -60,6 +60,15 @@ export class RasterData extends ASObject {
     public _ipSeen: int;
     public _ipSx: number;
     public _ipSy: number;
+    /**
+     * Inferno-only (14 October): the yard's tilt (IoTilt, Renderer.ioTilt). _ioFoot: where it stands, the canvas y of
+     * its ground point (NaN: the bottom of its picture); _ioFlat: it lies on the ground (squashed with it, as a
+     * shadow or the ground itself; everything unsorted is); _ioTy, _ioTs: its real y and scale while drawn tilted.
+     */
+    public _ioFoot: number;
+    public _ioFlat: boolean;
+    public _ioTy: number;
+    public _ioTs: number;
 
     public $ctor(param1?: IBitmapDrawable, param2?: Point, param3?: number, param4: string = null, param5: boolean = false): void {
         this._id = (RasterData.s_id++) >>> 0;
@@ -263,6 +272,15 @@ export class RasterData extends ASObject {
         }
         if (param1 && this._data instanceof BitmapData) {
             (as3.as(this._data, BitmapData)).dispose();
+        }
+        // (Inferno-only, 26 October: the shadow's picture for drawing it with the others, Renderer.ioShadowPic)
+        let shf: any = Object(this)["_ioShF"];
+        if (shf) {
+            Object(this)["_ioShF"] = null;
+            try {
+                shf.bd.dispose();
+            } catch (er) {
+            }
         }
         this._data = null;
         this._pt = null;

@@ -1,6 +1,6 @@
 import { ASObject, int } from "as3";
 import { Point } from "flash/geom";
-import { BASE, BFOUNDATION, BTOTEM, BaseTemplateNode, GRID, PlannerTemplate, SecNum } from "@game";
+import { BASE, BFOUNDATION, BTOTEM, BaseTemplateNode, GRID, IoTrophies, PlannerTemplate, SecNum } from "@game";
 
 export class InventoryManager extends ASObject {
     public $ctor(param1?: InstanceEnforcer): void {
@@ -12,7 +12,7 @@ export class InventoryManager extends ASObject {
             BASE._buildingsStored["b" + param1] = new SecNum(0);
         }
         BASE._buildingsStored["b" + param1].Add(1);
-        if (BTOTEM.IsTotem(param1) || BTOTEM.IsTotem2(param1)) {
+        if (BTOTEM.IsTotem(param1) || BTOTEM.IsTotem2(param1) || IoTrophies.IsTrophy(param1)) {
             BASE._buildingsStored["bl" + param1] = new SecNum(param2);
         }
     }

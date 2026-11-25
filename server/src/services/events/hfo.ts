@@ -1,3 +1,4 @@
+import { HFO_LAST_SURGE, waveMinSeconds } from "./waveTimes.js";
 import type { User } from "../../database/models/user.model.js";
 import { noteMilestone } from "../../chat/chatBroadcasts.js";
 import { Save } from "../../database/models/save.model.js";
@@ -8,6 +9,7 @@ import { Status } from "../../enums/StatusCodes.js";
 import { postgres, redis } from "../../server.js";
 import { getCurrentDateTime } from "../../utils/getCurrentDateTime.js";
 import { logger } from "../../utils/logger.js";
+import { buildingProps } from "../anticheat/saveChecks.js";
 
 /**
  * Hell Freezes Over (the user's hell_freezes_over.md, 1 October): a one-time story event in the player's main
@@ -19,7 +21,8 @@ import { logger } from "../../utils/logger.js";
  *  - It starts for a player (on a load of their own yard, build mode) once every Inferno monster on Strongbox
  *    pages 1-5 is unlocked (Rimegrave and the ice cretins aside) and one page-5 champion (Korath, Drull or
  *    Ashkarr) is at Academy level 2 or more. That moment is t0.
- *  - Day N starts on a load of the yard, no earlier than t0 + N days, and only once day N-1's tasks are done:
+ *  - Day N starts on a load of the yard (QoL #108: or while the player is in it, when the game asks: hfoStatus
+ *    `moveOn`), no earlier than t0 + N days, and only once day N-1's tasks are done:
  *      Day 1: small ice patches (6 at once, 1 more every 2 hours, 12 in all); all 12 cleared.
  *      Day 2: 5 big patches that can't be broken; a worker sent to try each of them.
  *      Day 3: every defence tower iced; all of them freed. That opens the waves at once (no wait).
@@ -214,11 +217,21 @@ const towersDone = (state: HfoState) => {
   if (!iced) return false;
   const thawed = new Set(state.towers.thawed);
   // (the 4 lines are dealt with the first 4 towers freed; a yard with fewer towers is not held up by them)
-  return iced.every((id) => thawed.has(id)) && (heardAll(state, "d3") || iced.length < HFO.LINES.d3);
+  // (18 October, SUSPECTED-BUGS.md: a tower recycled while iced is freed with no line, so with 4 iced and one gone
+  // only 3 lines were ever dealt and the waves never opened) every tower freed is enough: each freed with a line
+  // got one, as many as there are
+  return iced.every((id) => thawed.has(id));
 };
 
 /** When the next day may start (by time), or null (Day 3: the waves open as soon as it is done). */
 export const nextDayAt = (state: HfoState) => (state.day < 3 ? state.t0 + (state.day + 1) * HFO.DAY : null);
+
+/**
+ * May the next day start now (its time has come and the current day is done, or an admin's "Next day now")? Asked
+ * at a load of the yard (hfoFlag) and, QoL #108, by the game while the player is in the yard (hfoStatus `moveOn`).
+ */
+const mayMoveOn = (state: HfoState, now: number): boolean =>
+  state.day < 4 && (Boolean(state.force) || (dayDone(state) && (state.day === 3 || now >= (nextDayAt(state) ?? Infinity))));
 
 /** On a load of the yard: the next day starts if its time has come and the current day is done. */
 const advance = (state: HfoState, now: number): boolean => {
@@ -310,10 +323,14 @@ export const hfoView = (state: HfoState, now = getCurrentDateTime()) => {
     waves,
     current: currentWave(state),
     tries: HFO.TRIES,
+    // (QoL #109: each wave's prize, for the event's wave list and the last try's warning)
+    prizes: Array.from({ length: HFO.WAVES }, (_, i) => waveShiny(i + 1)),
     fight: state.fight ? { wave: state.fight.wave, id: state.fight.id, replay: state.fight.replay } : null,
     last: state.last,
     done: state.done,
     seen: state.seen,
+    // (QoL #108: an admin's "Next day now" is waiting: the game asks for the next day without a reload)
+    force: state.force ? 1 : 0,
   };
 };
 
@@ -328,7 +345,7 @@ export const hfoFlag = async (user: User, atLoad: boolean, testMode = false): Pr
   if (atLoad && !state && !user.save) await postgres.em.populate(user, ["save"]);
   if (atLoad) {
     const startNow = !state && !testMode && (await hfoEnabled()) && qualifies(user.save);
-    const moveOn = !!state && state.day < 4 && (state.force || (dayDone(state) && (state.day === 3 || now >= (nextDayAt(state) ?? Infinity))));
+    const moveOn = !!state && mayMoveOn(state, now);
     if (startNow || moveOn) {
       state = await withHfo(user.userid, async (stored, _em, put) => {
         let s = stored;
@@ -347,6 +364,12 @@ export const hfoFlag = async (user: User, atLoad: boolean, testMode = false): Pr
 
 /** Rimegrave may be unlocked: the player won all 13 waves. */
 export const hfoChampionFree = async (userid: number) => Boolean((await readHfo(userid))?.done);
+
+/** Has the player won Hell Freezes Over's last wave (wave 13)? Its frozen ground and the Frozen Monster Invasions open then. */
+export const hfoFinalWaveWon = async (userid: number) => {
+  const state = await readHfo(userid);
+  return Boolean(state && (state.done || state.waves?.[String(HFO.WAVES)]?.won));
+};
 
 // ---------------------------------------------------------------------------------------------
 // The game's requests (controllers/events/hfo.ts)
@@ -416,11 +439,15 @@ export const hfoTry = (user: User, id: number) =>
 
 /** Day 3: the towers the game iced (once). */
 export const hfoTowers = (user: User, raw: unknown) =>
-  withHfo(user.userid, async (state) => {
+  withHfo(user.userid, async (state, em) => {
     if (!state) throw notStarted();
     let frozen = false;
     if (state.day === 3 && !state.towers.iced) {
-      state.towers.iced = [...new Set(parseList(raw).map(toInt).filter((id) => id > 0))].slice(0, 500);
+      const sent = [...new Set(parseList(raw).map(toInt).filter((id) => id > 0))].slice(0, 500);
+      // (18 October, SUSPECTED-BUGS.md: the towers were whatever the game sent, so an empty list opened the waves
+      // at once) an empty list is checked against the main yard's own defence towers, as stored
+      const stored = sent.length ? null : await storedTowers(em, user.userid);
+      state.towers.iced = stored && stored.length ? stored : sent;
       if (towersDone(state)) {
         // no defence towers to free: the waves open now
         state.day = 4;
@@ -450,6 +477,24 @@ export const hfoThaw = (user: User, id: number, gone: boolean) =>
     }
     return { line, frozen, hfo: hfoView(state) };
   });
+
+/** (18 October) The main yard's defence towers as stored (the main building table's "tower" kind), or null. */
+const storedTowers = async (em: Em, userid: number): Promise<number[] | null> => {
+  const table = buildingProps()?.main;
+  if (!table) return null;
+  const rows = await sqlAll<{ buildingdata: Record<string, { t?: unknown; id?: unknown }> | null }>(em, `SELECT buildingdata FROM bym.save WHERE userid = ? AND type = ? LIMIT 1`, [userid, BaseType.MAIN]);
+  const data = rows[0]?.buildingdata;
+  if (!data || typeof data !== "object") return null;
+  const ids: number[] = [];
+  for (const [key, b] of Object.entries(data)) {
+    // (the game's defence towers: the tower kind, not the Compound (128) or a monster bunker (22): IoHfo.defenceTowers)
+    const t = Number(b?.t);
+    if (t === 22 || t === 128 || table[String(t)]?.type !== "tower") continue;
+    const id = toInt(b?.id ?? key);
+    if (id > 0) ids.push(id);
+  }
+  return [...new Set(ids)].slice(0, 500);
+};
 
 /** A wave whose end never came: lost. */
 const settle = (state: HfoState) => {
@@ -500,6 +545,14 @@ export const hfoWaveEnd = async (user: User, wave: number, id: number, won: bool
     state.fight = null;
     const s = waveOf(state, wave);
     let paid = 0;
+    const took = getCurrentDateTime() - fight.at;
+    const least = waveMinSeconds(HFO_LAST_SURGE, wave);
+    // (18 October: a win reported sooner than the wave can last, or after its window (a fight left hours ago, which
+    // the status settles as lost), counts as lost; it was taken on the game's word)
+    if (won && (took < least || took > HFO.FIGHT_WINDOW)) {
+      logger.warn(`Hell Freezes Over: player #${user.userid} (${user.username}) reported wave ${wave} won after ${took}s (it takes ${least}s to ${HFO.FIGHT_WINDOW}s): counted as lost`);
+      won = false;
+    }
     if (won) {
       const first = !s.won;
       s.won ??= getCurrentDateTime();
@@ -527,10 +580,16 @@ export const hfoSeen = (user: User, what: string) =>
     return { hfo: hfoView(state) };
   });
 
-/** The event window (and anything else that wants it now). */
-export const hfoStatus = async (user: User) => {
+/**
+ * The event window (and anything else that wants it now). `moveOn` (QoL #108): the game is in the player's yard and
+ * the next day's time has come: it starts now, by the same rule as at a load (no reload needed). Nothing moves on
+ * otherwise (the day's work not done, the time not come), and never past Day 3 (its last tower opens the waves).
+ */
+export const hfoStatus = async (user: User, moveOn = false) => {
   const state = await withHfo(user.userid, async (s) => {
-    if (s?.fight && getCurrentDateTime() - s.fight.at > HFO.FIGHT_WINDOW) settle(s);
+    const now = getCurrentDateTime();
+    if (s?.fight && now - s.fight.at > HFO.FIGHT_WINDOW) settle(s);
+    if (moveOn && s && mayMoveOn(s, now) && advance(s, now)) logger.info(`Hell Freezes Over: player #${user.userid} is on day ${s.day} (in the yard)`);
     return s;
   });
   return { enabled: await hfoEnabled(), hfo: state ? hfoView(state) : null };

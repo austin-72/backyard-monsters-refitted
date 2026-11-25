@@ -10,9 +10,13 @@ import { generateBaseId } from "../../utils/generateBaseId.js";
 import { tribeSaveHandler } from "../maproom/tribeSaveHandler.js";
 import { generateNoise, getTerrainHeight } from "../maproom/v2/generateMap.js";
 import { logger } from "../../utils/logger.js";
+import { clearTestTot } from "../events/trickOrTreat.js";
 import { isAdmin, logAdminAction } from "./admin.js";
 import { isWildAttackActive } from "../base/isAttackActive.js";
 import { clearTestGauntlet } from "../events/gauntlet.js";
+import { petsConfig } from "../../config/PetsConfig.js";
+import { listPets, petsEnabled, petsForGame, petsInfo } from "../pets/pets.js";
+import { hfoAdminNextDay } from "../events/hfo.js";
 
 /**
  * Inferno-only admin test mode: a switch next to the game's Admin button. While it is on, the admin has
@@ -30,10 +34,57 @@ import { clearTestGauntlet } from "../events/gauntlet.js";
  * leaderboards. All snapshot and restore work is done in SQL, inside the database, in one transaction,
  * with the snapshot row locked, so two switch-offs at once (a login and the switch) restore once.
  * While it is on, other players can't attack the admin's yards (they hold the test shiny and resources).
+ *
+ * 15 October (QoL #395): more tools, on the admin's own main yard only: the Under Hall's level, any building's
+ * level, and a pet given. Pets are rows of bym.pet, not in the saves: switching off takes away every pet of the
+ * admin's made since the snapshot was taken (given here, or bought with the test shiny).
  */
 
 const KEY = (userid: number) => `admin:testmode:${userid}`;
 export const TEST_USERS_KEY = "admin:testmode:users";
+
+/**
+ * Inferno-only (QoL #397): the account's Hell Freezes Over progress (user.hfo, which the snapshot doesn't cover) as it
+ * was before a fast-forward moved it on, put back when test mode ends. Written once per test (the first fast-forward).
+ */
+const HFO_KEY = (userid: number) => `admin:testmode:hfo:${userid}`;
+
+/**
+ * Inferno-only (QoL #396): the test profile. "full" (the switch's own): unlimited shiny and resources, everything built
+ * and trained at once (the game's flag io_testmode). "real": the account's own shiny and resources, real costs, waits
+ * and prompts (the game's flag io_testreal); attacks are still practice and the account is still put back at the end.
+ */
+export type TestProfile = "full" | "real";
+
+/** The profile test mode was switched on with (kept with its start time; "full" when not known). */
+export const testModeProfile = async (userid: number): Promise<TestProfile> => {
+  try {
+    return JSON.parse(String(await redis.get(KEY(userid)))).profile === "real" ? "real" : "full";
+  } catch {
+    return "full";
+  }
+};
+
+/** QoL #396: the game's flags while test mode is on (services/user/playerFlags.ts): io_testmode, or io_testreal. */
+export const testModeFlags = async (userid: number): Promise<Record<string, number>> =>
+  (await testModeProfile(userid)) === "real" ? { io_testreal: 1 } : { io_testmode: 1 };
+
+/** QoL #397: Hell Freezes Over's progress put back as it was before a fast-forward (when one moved it), once. */
+const restoreHfoSnapshot = async (userid: number) => {
+  try {
+    const raw = await redis.get(HFO_KEY(userid));
+    if (!raw) return;
+    const kept = JSON.parse(raw) as { hfo: unknown };
+    await postgres.em.getConnection().execute(
+      `UPDATE bym."user" SET hfo = CAST(? AS jsonb) WHERE userid = ? RETURNING userid`,
+      [kept.hfo == null ? null : typeof kept.hfo === "string" ? kept.hfo : JSON.stringify(kept.hfo), userid],
+      "all"
+    );
+    await redis.del(HFO_KEY(userid));
+  } catch (err) {
+    logger.error(`Test mode: Hell Freezes Over progress of #${userid} not put back: ${err}`);
+  }
+};
 
 /** What the admin has while testing. */
 export const TEST_SHINY = 9_999_999;
@@ -64,6 +115,10 @@ export const isTestMode = async (user?: User | null): Promise<boolean> => {
   (user as unknown as { __ioTest?: boolean }).__ioTest = on;
   return on;
 };
+
+/** Inferno-only (QoL #278): test mode is on, from Redis's list of testers (cheap; for the quest counters). */
+export const inTestModeQuick = async (userid: number): Promise<boolean> =>
+  Number(await redis.sismember(TEST_USERS_KEY, String(userid)).catch(() => 0)) === 1;
 
 /** Users in test mode, for queries that must leave them out (the leaderboards). */
 export const testModeUserIds = async (): Promise<number[]> =>
@@ -116,14 +171,20 @@ const inTransaction = async (statements: [string, unknown[]][], lock?: [string, 
     return true;
   });
 
-export const startTestMode = async (user: User) => {
+export const startTestMode = async (user: User, profile: TestProfile = "full") => {
   if (!isAdmin(user)) throw new Error("Admins only.");
   if (await isTestModeOn(user.userid)) return;
+  // (QoL #397: a fast-forward's left from a test that ended badly goes back first, before the snapshot)
+  await restoreHfoSnapshot(user.userid);
 
   const saveId = (user.save as unknown as { basesaveid?: number })?.basesaveid;
   if (!saveId) throw new Error("No main yard.");
   // Moloch's Gauntlet: a fresh test ladder each time.
   await clearTestGauntlet(user.userid);
+  // The Frozen Monster Invasion: fresh test progress each time (services/events/fmi.ts, state.test).
+  await postgres.em.getConnection().execute(`UPDATE bym."user" SET fmi = fmi - 'test' WHERE userid = ? AND fmi IS NOT NULL RETURNING userid`, [user.userid], "all");
+  // Trick or Treat: fresh test doors each time (services/events/trickOrTreat.ts, state.test).
+  await clearTestTot(user.userid);
 
   await inTransaction([
     [
@@ -137,20 +198,23 @@ export const startTestMode = async (user: User) => {
     // Unlimited while testing: more shiny and resources than anything costs. Only when this transaction
     // took the snapshot (taken_at = now(), its start): a second switch-on at the same moment waits for
     // the first, inserts nothing, and must not count the test values as the account's own.
-    [
-      `UPDATE bym.save
-          SET credits = ?,
-              resources = coalesce(resources, '{}'::jsonb) || jsonb_build_object('r1', ?::bigint, 'r2', ?::bigint, 'r3', ?::bigint, 'r4', ?::bigint)
-        WHERE basesaveid = ?
-          AND EXISTS (SELECT 1 FROM bym.admin_test_snapshot t WHERE t.userid = ? AND t.taken_at = now())`,
-      [TEST_SHINY, TEST_RESOURCES, TEST_RESOURCES, TEST_RESOURCES, TEST_RESOURCES, saveId, user.userid],
-    ],
+    // (QoL #396: not for the "real" profile, which plays with the account's own)
+    ...(profile === "real"
+      ? []
+      : ([[
+          `UPDATE bym.save
+              SET credits = ?,
+                  resources = coalesce(resources, '{}'::jsonb) || jsonb_build_object('r1', ?::bigint, 'r2', ?::bigint, 'r3', ?::bigint, 'r4', ?::bigint)
+            WHERE basesaveid = ?
+              AND EXISTS (SELECT 1 FROM bym.admin_test_snapshot t WHERE t.userid = ? AND t.taken_at = now())`,
+          [TEST_SHINY, TEST_RESOURCES, TEST_RESOURCES, TEST_RESOURCES, TEST_RESOURCES, saveId, user.userid],
+        ]] as [string, unknown[]][])),
   ]);
 
-  await redis.set(KEY(user.userid), JSON.stringify({ since: getCurrentDateTime() }));
+  await redis.set(KEY(user.userid), JSON.stringify({ since: getCurrentDateTime(), profile }));
   await redis.sadd(TEST_USERS_KEY, String(user.userid));
   await clearRankingCaches();
-  await logAdminAction(user, "testModeOn", null, "admin test mode on (snapshot taken)");
+  await logAdminAction(user, "testModeOn", null, profile === "real" ? "admin test mode on, real costs (snapshot taken)" : "admin test mode on (snapshot taken)");
 };
 
 /**
@@ -165,12 +229,16 @@ export const endTestMode = async (user: User, reason: string) => {
     // Redis may still say on (the database was put back, or a crash between the two): tidy it.
     await redis.del(KEY(user.userid));
     await redis.srem(TEST_USERS_KEY, String(user.userid));
+    // (QoL #397: and a fast-forward's Hell Freezes Over progress, if it wasn't put back)
+    await restoreHfoSnapshot(user.userid);
     return false;
   }
 
   const saveCols = await columns("save");
   const cellCols = await columns("world_map_cell");
   const uid = user.userid;
+  // (QoL #395: pets made while testing go; only where the pets table is there, with its created_at)
+  const petCols = await columns("pet").catch(() => [] as string[]);
 
   // The snapshot row is locked first; a second switch-off at the same moment waits, then finds it gone
   // and does nothing (without the lock it would delete every outpost as "made while testing").
@@ -248,6 +316,13 @@ export const endTestMode = async (user: User, reason: string) => {
           WHERE m.saveuserid = ? AND m.type = '${BaseType.MAIN}' AND jsonb_typeof(m.outposts) = 'array'`,
         [uid],
       ],
+      ...(petCols.includes("created_at") && petCols.includes("user_id")
+        ? ([[
+            `DELETE FROM bym.pet p USING bym.admin_test_snapshot t
+              WHERE t.userid = ? AND p.user_id = t.userid AND p.created_at >= t.taken_at`,
+            [uid],
+          ]] as [string, unknown[]][])
+        : []),
       [`DELETE FROM bym.admin_test_snapshot WHERE userid = ?`, [uid]],
     ],
     [`SELECT userid FROM bym.admin_test_snapshot WHERE userid = ? FOR UPDATE`, [uid]]
@@ -255,6 +330,8 @@ export const endTestMode = async (user: User, reason: string) => {
 
   await redis.del(KEY(user.userid));
   await redis.srem(TEST_USERS_KEY, String(user.userid));
+  // (QoL #397: Hell Freezes Over's progress as it was before a fast-forward, when one moved it)
+  await restoreHfoSnapshot(user.userid);
   // Moloch's Gauntlet: the test ladder goes with test mode.
   await clearTestGauntlet(user.userid).catch((error) => logger.error(`Gauntlet test ladder not cleared for #${user.userid}: ${error}`));
   if (!restored) return false;
@@ -380,4 +457,141 @@ export const wildCell = async (user: User, x: number, y: number) => {
   await postgres.em.flush();
   await logAdminAction(user, "testWildCell", null, `test mode: made ${x},${y} wild`);
   return { baseid: cell.baseid };
+};
+
+// ---------------------------------------------------------------------------------------------
+// 15 October, QoL #395: the admin's own main yard (restored with it when test mode ends)
+// ---------------------------------------------------------------------------------------------
+
+const UNDER_HALL = 14;
+const MAX_LEVEL = 50;
+
+/** The admin's own main yard, as saved now. */
+const ownMainYard = async (user: User) => {
+  const basesaveid = (user.save as unknown as { basesaveid?: number })?.basesaveid;
+  if (!basesaveid) throw new TestModeError("No main yard.");
+  const em = postgres.em.fork();
+  // (user.save is the account's main yard, as setProtection and startTestMode take it; and it is the admin's own)
+  const save = await em.findOne(Save, { basesaveid, saveuserid: user.userid });
+  if (!save) throw new TestModeError("No main yard.");
+  return { em, save };
+};
+
+/**
+ * One building of the admin's main yard set to a level (`which`: its id, or "hall" for the Under Hall). Its
+ * countdowns and health go (it stands finished, at full health); the game loads the yard again afterwards.
+ */
+export const setBuildingLevel = async (user: User, which: number | "hall", level: number) => {
+  if (!Number.isInteger(level) || level < 1 || level > MAX_LEVEL) throw new TestModeError(`A level from 1 to ${MAX_LEVEL}.`);
+  const { em, save } = await ownMainYard(user);
+  const data = (save.buildingdata ?? {}) as Record<string, Record<string, unknown>>;
+  const id = which === "hall"
+    ? Object.keys(data).find((k) => data[k] && Number(data[k].t) === UNDER_HALL)
+    : Object.keys(data).find((k) => Number(k) === which || Number(data[k]?.id) === which);
+  if (id === undefined || !data[id] || typeof data[id].t !== "number") {
+    throw new TestModeError(which === "hall" ? "Your main yard has no Under Hall." : "That building is not in your main yard (as saved).");
+  }
+  const { cB: _cB, cU: _cU, hp: _hp, ...rest } = data[id];
+  const before = Number(data[id].l) || 1;
+  save.buildingdata = { ...data, [id]: { ...rest, l: level } } as never;
+  em.persist(save);
+  await em.flush();
+  await logAdminAction(user, "testBuildingLevel", null, `test mode: building ${id} (type ${data[id].t}) level ${before} -> ${level}`);
+  return { id: Number(id), t: Number(data[id].t), level };
+};
+
+/** A pet of this monster for the admin (out in the yard if there's room). Taken away when test mode ends. */
+export const givePet = async (user: User, monster: string) => {
+  if (!petsEnabled()) throw new TestModeError("Pets are off on this server.");
+  if (!petsConfig.monsters.includes(monster)) throw new TestModeError(`${monster} can't be a pet (${petsConfig.monsters.join(", ")}).`);
+  const em = postgres.em.fork();
+  const owned = await listPets(user.userid);
+  if (owned.length >= petsConfig.maxOwned) throw new TestModeError(`You have ${owned.length} pets: that's as many as one keeper can have.`);
+  if (owned.filter((p) => p.monster === monster).length >= petsConfig.maxPerKind) throw new TestModeError(`You have ${petsConfig.maxPerKind} of these already.`);
+  const out = owned.filter((p) => p.out).length < petsConfig.maxOut;
+  await em.getConnection().execute(`INSERT INTO bym.pet (user_id, monster, "out") VALUES (?, ?, ?) RETURNING id`, [user.userid, monster, out], "all");
+  await logAdminAction(user, "testGivePet", null, `test mode: a ${monster} pet (taken away when test mode ends)`);
+  return { ...(await petsInfo(user.userid)), pets: petsForGame(await listPets(user.userid)), out: out ? 1 : 0 };
+};
+
+// ---------------------------------------------------------------------------------------------
+// 15 October, QoL #397: fast-forward on the server too (the admin's own account, test mode on)
+// ---------------------------------------------------------------------------------------------
+
+/** At most this many hours at once (the game's Fast-forward asks 1 to 720). */
+const FF_MAX_HOURS = 24 * 30;
+
+/**
+ * Moves the admin's own main yard `hours` on, as saved, for what the game's own fast-forward can't keep (it moves the
+ * clock on screen until the yard is loaded again): damage protection runs down, Strongbox unlocks and Academy training
+ * under way are that much nearer done, and (24 hours or more) Hell Freezes Over's next day starts on the next load.
+ * The game saves the yard first and loads it again afterwards. The yard is put back with the snapshot when test mode
+ * ends, and Hell Freezes Over's progress (not in the snapshot) is kept first and put back then too.
+ */
+export const serverFastForward = async (user: User, hours: number) => {
+  if (!Number.isInteger(hours) || hours < 1 || hours > FF_MAX_HOURS) throw new TestModeError(`From 1 to ${FF_MAX_HOURS} hours.`);
+  const seconds = hours * 3600;
+  const now = getCurrentDateTime();
+  const { em, save } = await ownMainYard(user);
+  const done: string[] = [];
+
+  // damage protection: what is left of it, less the hours (none left: off)
+  const prot = Number(save.protected) || 0;
+  if (prot > now) {
+    const left = prot - seconds;
+    save.protected = left > now ? left : 0;
+    done.push(left > now ? `protection ${Math.round((left - now) / 3600)} hours left` : "protection ran out");
+  }
+
+  // the Strongbox: an unlock under way ({t: 1, s: start, e: end}) ends that much sooner
+  const locker = { ...((save.lockerdata ?? {}) as Record<string, Record<string, unknown>>) };
+  let unlocks = 0;
+  for (const [id, entry] of Object.entries(locker)) {
+    if (!entry || typeof entry !== "object" || Number(entry.t) !== 1 || !Number.isFinite(Number(entry.e))) continue;
+    locker[id] = { ...entry, e: Number(entry.e) - seconds, ...(Number.isFinite(Number(entry.s)) ? { s: Number(entry.s) - seconds } : {}) };
+    unlocks++;
+  }
+  if (unlocks) {
+    save.lockerdata = locker as never;
+    done.push(`${unlocks} Strongbox unlock(s) moved on`);
+  }
+
+  // the Academy: training under way ({level, time: its end, duration}) ends that much sooner (the game reads a time
+  // of 162 hours or less as "from now", so an end time stays a time)
+  const academy = { ...((save.academy ?? {}) as Record<string, Record<string, unknown>>) };
+  let trainings = 0;
+  for (const [id, entry] of Object.entries(academy)) {
+    const time = Number(entry && typeof entry === "object" ? entry.time : NaN);
+    if (!Number.isFinite(time) || time <= 60 * 60 * 162) continue;
+    academy[id] = { ...entry, time: Math.max(60 * 60 * 162 + 1, time - seconds) };
+    trainings++;
+  }
+  if (trainings) {
+    save.academy = academy as never;
+    done.push(`${trainings} Academy training(s) moved on`);
+  }
+
+  em.persist(save);
+  await em.flush();
+
+  // Hell Freezes Over: a day or more, and it's on a day: the next one starts on the next load (one a time)
+  if (hours >= 24) {
+    try {
+      const rows = await postgres.em.getConnection().execute<{ hfo: unknown }[]>(`SELECT hfo FROM bym."user" WHERE userid = ?`, [user.userid]);
+      const hfo = rows[0]?.hfo ?? null;
+      const onDay = Number((typeof hfo === "string" ? JSON.parse(hfo) : (hfo as { day?: number } | null))?.day);
+      if (hfo && Number.isFinite(onDay) && onDay < 4) {
+        // (kept once, before the first change: put back when test mode ends)
+        await redis.send("SET", [HFO_KEY(user.userid), JSON.stringify({ hfo }), "NX"]);
+        const day = await hfoAdminNextDay(user.userid);
+        done.push(day >= 4 ? "Hell Freezes Over: the waves open on the next load" : `Hell Freezes Over: day ${day} starts on the next load`);
+      }
+    } catch (err) {
+      // (not started, or already on its waves: nothing to move)
+      done.push(`Hell Freezes Over: ${(err as Error).message}`);
+    }
+  }
+
+  await logAdminAction(user, "testFastForward", null, `test mode: ${hours} hours on the server (${done.length ? done.join("; ") : "nothing to move"})`);
+  return { hours, done };
 };

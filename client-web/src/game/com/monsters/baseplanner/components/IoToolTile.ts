@@ -3,6 +3,7 @@ import { int } from "as3";
 import { Bitmap, BitmapData, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { TextField, TextFormat, TextFormatAlign } from "flash/text";
+import { GLOBAL } from "@game";
 
 /**
  * Inferno-only Yard Planner toolbar tile, in the style of the original tool icons: a white icon with a
@@ -55,6 +56,34 @@ export class IoToolTile extends Sprite {
         this.addEventListener(MouseEvent.ROLL_OVER, as3.bind(this, this.onOver));
         this.addEventListener(MouseEvent.ROLL_OUT, as3.bind(this, this.onOut));
         this.refresh();
+    }
+
+    /**
+     * (QoL #695: a caption that changes, "Walls (N left)") New caption text; `width` (0: the tile's) lets it run over
+     * the gaps either side of the tile, and it gets smaller if it still doesn't fit.
+     */
+    public setCaption(text: string, width: int = 0): void {
+        if (!this._caption) {
+            return;
+        }
+        let w: int = (width > 0 ? width : IoToolTile.W) | 0;
+        this._caption.width = w;
+        this._caption.x = ((IoToolTile.W - w) / 2) | 0;
+        this._caption.text = text;
+        let f: TextFormat = this._caption.getTextFormat();
+        f.size = 9;
+        this._caption.setTextFormat(f);
+        GLOBAL.ioFitText(this._caption, 7);
+        // (still too long at the smallest size: on two lines, which the toolbar's row has room for)
+        let wrap: boolean = this._caption.textWidth > w - 4;
+        this._caption.wordWrap = wrap;
+        this._caption.height = wrap ? 23 : 14;
+        this._caption.y = wrap ? 25 : 27;
+        this.refresh();
+    }
+
+    public get caption(): string {
+        return this._caption ? this._caption.text : "";
     }
 
     public set active(param1: boolean) {

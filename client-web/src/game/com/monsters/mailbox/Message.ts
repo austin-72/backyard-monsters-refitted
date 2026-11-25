@@ -1,7 +1,8 @@
 import * as as3 from "as3";
-import { uint } from "as3";
+import { int, uint } from "as3";
 import { StageDisplayState } from "flash/display";
 import { Event, FullScreenEvent, IOErrorEvent, KeyboardEvent, MouseEvent, TimerEvent } from "flash/events";
+import { TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { Timer } from "flash/utils";
 import { FriendPicker, GLOBAL, KEYS, LOGGER, MapRoomManager, Message_CLIPB, SOUNDS, URLLoaderApi, com_monsters_maproom_advanced_MapRoom as MapRoom, frame } from "@game";
 
@@ -116,7 +117,49 @@ export class Message extends Message_CLIPB {
         }
     }
 
+    /** Inferno-only (QoL #531): the most a letter can say; the server refuses more (580 characters). */
+    public static readonly IO_MAX: int = 580;
+
+    private _ioLeft: TextField;
+
+    /**
+     * Inferno-only (QoL #531): a letter's box takes at most IO_MAX characters (a longer reply was refused by the
+     * server, and the text lost: bug #431), and says how many are left once 100 or fewer are. Kept up by the
+     * window's Validate timer. Returns the count's field (made the first time).
+     */
+    public static ioCount(field: TextField, counter: TextField): TextField {
+        if (!GLOBAL.INFERNO_ONLY || !field) {
+            return counter;
+        }
+        if (field.maxChars != Message.IO_MAX) {
+            field.maxChars = Message.IO_MAX;
+        }
+        if (!counter) {
+            counter = new TextField();
+            counter.name = "ioMailLeft";
+            counter.selectable = false;
+            counter.mouseEnabled = false;
+            let f: TextFormat = new TextFormat("Verdana", 10, 0x8A1A00, true);
+            f.align = TextFormatAlign.RIGHT;
+            counter.defaultTextFormat = f;
+            counter.width = 150;
+            counter.height = 16;
+        }
+        let left: int = (Message.IO_MAX - field.text.length) | 0;
+        counter.text = KEYS.Get("io_mail_left", { "v1": Math.max(0, left) });
+        counter.visible = field.visible && left <= 100;
+        if (field.parent && counter.parent != field.parent) {
+            field.parent.addChild(counter);
+        } else if (counter.parent && counter.parent.getChildIndex(counter) != counter.parent.numChildren - 1) {
+            counter.parent.setChildIndex(counter, (counter.parent.numChildren - 1) | 0);
+        }
+        counter.x = field.x + field.width - counter.width - 4;
+        counter.y = field.y + field.height - counter.height;
+        return counter;
+    }
+
     public Validate(...rest: any[]): void {
+        this._ioLeft = Message.ioCount(this.body_txt, this._ioLeft);
         let _loc2_: boolean = true;
         if (!this.picker.currentSelection) {
             _loc2_ = false;

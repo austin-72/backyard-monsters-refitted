@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { ASObject, int, uint } from "as3";
 import { MouseEvent } from "flash/events";
 import { Point } from "flash/geom";
-import { BASE, CUSTOMATTACKS, GLOBAL, KEYS, MAP, MONSTERBAITERPOPUP, SOUNDS, UI2, WMATTACK } from "@game";
+import { BASE, CUSTOMATTACKS, GLOBAL, IoBaiter, IoBaiterWindow, KEYS, MAP, MONSTERBAITERPOPUP, SOUNDS, UI2, WMATTACK } from "@game";
 
 export class MONSTERBAITER extends ASObject {
     public static readonly TYPE: uint = 19;
@@ -50,6 +50,12 @@ export class MONSTERBAITER extends ASObject {
                 if (MONSTERBAITER._attPrep == 1) {
                     UI2._warning.Update("<font size=\"28\">" + KEYS.Get("msg_dontpanic") + "</font>");
                     MONSTERBAITER._attPrep = 0;
+                    // (Inferno-only, 22 November: the Inferno's baiter sends its own wave: any monster, at any level)
+                    if (GLOBAL.INFERNO_ONLY) {
+                        IoBaiter.launch();
+                        ++MONSTERBAITER._frameNumber;
+                        return;
+                    }
                     _loc1_ = [].concat();
                     for (_loc2_ in MONSTERBAITER._queue) {
                         if (MONSTERBAITER._queue[_loc2_] > 0) {
@@ -73,6 +79,9 @@ export class MONSTERBAITER extends ASObject {
                     }
                     --MONSTERBAITER._attPrep;
                 }
+            }
+            if (GLOBAL.INFERNO_ONLY) {
+                IoBaiter.tick();
             }
             ++MONSTERBAITER._frameNumber;
         }
@@ -115,6 +124,17 @@ export class MONSTERBAITER extends ASObject {
     }
 
     public static Setup(param1: any = null): void {
+        if (typeof param1 == "string") {
+            try {
+                param1 = JSON.parse(param1);
+            } catch (e) {
+                param1 = null;
+            }
+        }
+        // (Inferno-only, 22 November: the Inferno's wave, its settings and saved waves)
+        if (GLOBAL.INFERNO_ONLY) {
+            IoBaiter.load(param1 ? param1.io : null, param1 ? param1.queue : null);
+        }
         if (param1) {
             if (Boolean(param1.queue) && param1.queue != undefined) {
                 if (param1.queue.C100 != undefined) {
@@ -149,10 +169,19 @@ export class MONSTERBAITER extends ASObject {
     }
 
     public static Export(): any {
+        if (GLOBAL.INFERNO_ONLY) {
+            return { "queue": MONSTERBAITER._queue, "attackDir": MONSTERBAITER._attackDir, "musk": MONSTERBAITER._musk, "io": IoBaiter.exportData() };
+        }
         return { "queue": MONSTERBAITER._queue, "attackDir": MONSTERBAITER._attackDir, "musk": MONSTERBAITER._musk };
     }
 
     public static Show(): void {
+        if (GLOBAL.INFERNO_ONLY) {
+            SOUNDS.Play("click1");
+            MONSTERBAITER.Update();
+            IoBaiterWindow.Show();
+            return;
+        }
         if (!MONSTERBAITER._mc) {
             SOUNDS.Play("click1");
             GLOBAL.BlockerAdd();

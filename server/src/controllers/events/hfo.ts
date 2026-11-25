@@ -20,7 +20,7 @@ import {
  * Hell Freezes Over (services/events/hfo.ts): the game's requests. Every answer carries the player's progress
  * as the flag io_hfo does (`hfo`), so the game is never behind.
  *
- *   POST /hfo/status                         the event window
+ *   POST /hfo/status    advance              the event window (advance=1: the next day starts if it may, QoL #108)
  *   POST /hfo/spawn     kind, patches        patches the game placed ([[x, y, frame], ...])
  *   POST /hfo/clear     id                   a small patch cleared (line: the worker's Day 1 line)
  *   POST /hfo/try       id                   a big patch tried (line: Day 2)
@@ -47,7 +47,8 @@ const handle =
 
 const num = (value: unknown) => Math.round(Number(value)) || 0;
 
-export const hfoStatusController = handle(async (user) => hfoStatus(user));
+// (QoL #108: advance=1, the game in the player's yard asks for the next day once its time has come)
+export const hfoStatusController = handle(async (user, b) => hfoStatus(user, String(b.advance ?? "") === "1"));
 export const hfoSpawnController = handle(async (user, b) => hfoSpawn(user, String(b.kind ?? ""), b.patches));
 export const hfoClearController = handle(async (user, b) => hfoClear(user, num(b.id)));
 export const hfoTryController = handle(async (user, b) => hfoTry(user, num(b.id)));

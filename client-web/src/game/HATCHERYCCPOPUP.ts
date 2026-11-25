@@ -2,12 +2,13 @@ import * as as3 from "as3";
 import { Vector, int } from "as3";
 import { Bitmap, BitmapData, Graphics, MovieClip, Shape, Sprite } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
-import { Point } from "flash/geom";
-import { BASE, BRESOURCE, BUILDING13, CREATURELOCKER, CREATURES, Circ, GLOBAL, HATCHERYCC, HATCHERYCCPOPUP_CLIP, HOUSING, HatcheryCCMonsterIcon_CLIP, ImageCache, InstanceManager, IoLockIcon, KEYS, POPUPS, POPUPSETTINGS, ResourcePackages, SOUNDS, STORE, ScrollSet, SubscriptionHandler, TweenLite, frame } from "@game";
+import { ColorTransform, Point } from "flash/geom";
+import { GlowFilter } from "flash/filters";
+import { BASE, BRESOURCE, BUILDING13, CREATURELOCKER, CREATURES, Circ, GLOBAL, HATCHERYCC, HATCHERYCCPOPUP_CLIP, HOUSING, HatcheryCCMonsterIcon_CLIP, ImageCache, InstanceManager, IoLockIcon, IoPhoneText, IoPinchZoom, IoQuests, KEYS, POPUPS, POPUPSETTINGS, ResourcePackages, SOUNDS, STORE, ScrollSet, SubscriptionHandler, TweenLite, frame } from "@game";
 
 export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
     static {
-        as3.fields(this, { _tick: 0, _monsterID: "", _monsterIndex: 0, _scrollSet: null, _scrollSetContainer: null, _monsterSlots: null, _guidePage: 1, _ioArrows: null });
+        as3.fields(this, { _tick: 0, _monsterID: "", _monsterIndex: 0, _scrollSet: null, _scrollSetContainer: null, _monsterSlots: null, _guidePage: 1, _ioArrows: null, _ioRemoveId: null, _ioPicked: null, _ioPickedTile: null, _ioPickedFilters: null });
     }
 
     /** Inferno-only: the monster list's columns (the art has room for five). */
@@ -16,6 +17,8 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
     /** One column: an icon (66) and the gap (5). */
     private static readonly IO_COLUMN: int = 71;
     private _tick: int;
+
+    private _ioRemoveId: string;
     private _monsterID: string;
     private _monsterIndex: int;
     private _scrollSet: ScrollSet;
@@ -45,6 +48,11 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             this.bSpeedup.addEventListener(MouseEvent.CLICK, STORE.Show(3, 2, ["HODI", "HOD2I", "HOD3I"]));
         }
         this.bSpeedup.buttonMode = true;
+        // Inferno-only (14 October, QoL #8): a monster hatches in about a second here, so Incubator Overdrive
+        // (4x faster for an hour, for Shiny) can't speed anything up: no Speed Up button.
+        if (GLOBAL.INFERNO_ONLY && GLOBAL.ioHatchSeconds <= 5) {
+            this.bSpeedup.visible = false;
+        }
         this.bFinish.tName.htmlText = "<b>" + KEYS.Get("str_finishnow") + "</b>";
         this.bFinish.mouseChildren = false;
         this.bFinish.addEventListener(MouseEvent.CLICK, as3.bind(this, this.FinishNow));
@@ -92,6 +100,9 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
                 _loc10_.x = _loc4_.x + _loc2_ % _loc5_ * (_loc10_.mcMonster.width + _loc6_);
                 _loc10_.y = _loc4_.y + Math.floor(_loc2_ / _loc5_) * (_loc10_.mcMonster.height + _loc6_);
                 (_loc11_ = as3.cast(_loc10_.mcMonster, MovieClip)).addEventListener(MouseEvent.MOUSE_OVER, this.MonsterInfo(as3.str(_loc7_[_loc9_].id)));
+                if (GLOBAL.INFERNO_ONLY) {
+                    _loc11_.name = "ioHatchMonster:" + _loc1_;
+                }
                 this.monsterCanvas.addChild(_loc10_);
                 this._monsterSlots.push(_loc10_);
                 _loc11_.addEventListener(MouseEvent.MOUSE_OVER, this.MonsterInfo(as3.str(_loc7_[_loc9_].id)));
@@ -133,6 +144,10 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         this.mcMonsterInfo.goo_txt.htmlText = "<b>" + KEYS.Get("mon_att_cost", { "v1": KEYS.Get(BRESOURCE.GetResourceNameKey(3)) }) + "</b>";
         this.mcMonsterInfo.housing_txt.htmlText = "<b>" + KEYS.Get("mon_att_housing") + "</b>";
         this.mcMonsterInfo.time_txt.htmlText = "<b>" + KEYS.Get("mon_att_time") + "</b>";
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #351: damage per second where the hatching time was)
+            this.mcMonsterInfo.time_txt.htmlText = "<b>" + KEYS.Get("io_mon2_dps_short") + "</b>";
+        }
         this.hatlabel1_txt.htmlText = "<b>" + KEYS.Get("hcc_hatcherynum", { "v1": 1 }) + "</b>";
         this.hatlabel2_txt.htmlText = "<b>" + KEYS.Get("hcc_hatcherynum", { "v1": 2 }) + "</b>";
         this.hatlabel3_txt.htmlText = "<b>" + KEYS.Get("hcc_hatcherynum", { "v1": 3 }) + "</b>";
@@ -141,6 +156,9 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         this.tHousingLabel.htmlText = "<b>" + KEYS.Get("hcc_housingspace") + "</b>";
         this.tGooLabel.htmlText = "<b>" + KEYS.Get("hcc_goousage") + "</b>";
         this.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ClearEvents));
+        this.addEventListener(Event.REMOVED_FROM_STAGE, (e: Event): void => {
+            this.ClearEvents(null);
+        });
         (as3.as(this.mcFrame, frame)).Setup(true, null);
     }
 
@@ -275,11 +293,22 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         this.mcMonsterInfo.tResource.htmlText = KEYS.Get("mon_att_costvalue", { "v1": GLOBAL.FormatNumber(CREATURES.GetProperty(creatureID, "cResource")), "v2": v2 });
         this.mcMonsterInfo.tStorage.htmlText = KEYS.Get("mon_att_housingvalue", { "v1": CREATURES.GetProperty(creatureID, "cStorage") });
         this.mcMonsterInfo.tTime.htmlText = GLOBAL.ToTime(CREATURES.GetProperty(creatureID, "cTime") | 0, true);
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #351: its damage per second, the bar against the strongest)
+            let ioMaxDps: number = CREATURELOCKER.ioMaxDps(CREATURELOCKER.GetAppropriateCreatures());
+            TweenLite.to(this.mcMonsterInfo.bTime.mcBar, 0.4, { "width": ioMaxDps > 0 ? 100 / ioMaxDps * Math.abs(CREATURELOCKER.ioDps(creatureID)) : 0, "ease": Circ.easeInOut, "delay": 0.25 });
+            this.mcMonsterInfo.tTime.htmlText = CREATURELOCKER.ioDpsText(creatureID);
+        }
         let level: int = 1;
         if (Boolean(GLOBAL.player.m_upgrades[creatureID]) && GLOBAL.player.m_upgrades[creatureID].level > 1) {
             level = GLOBAL.player.m_upgrades[creatureID].level | 0;
         }
         this.mcMonsterInfo.tDescription.htmlText = "<b>" + KEYS.Get("hatcherypopup_level", { "v1": level }) + " " + KEYS.Get(as3.str(creature.name)) + "</b><br>" + KEYS.Get(as3.str(creature.description));
+        if (GLOBAL.INFERNO_ONLY) {
+            // (QoL #352: what it goes for, under its name)
+            this.mcMonsterInfo.tDescription.htmlText = "<b>" + KEYS.Get("hatcherypopup_level", { "v1": level }) + " " + KEYS.Get(as3.str(creature.name)) + "</b><br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(creatureID) + "</font><br>" + KEYS.Get(as3.str(creature.description));
+            GLOBAL.ioFitHeight(this.mcMonsterInfo.tDescription, 9);
+        }
         if (Boolean(CREATURELOCKER._lockerData[creatureID]) && CREATURELOCKER._lockerData[creatureID].t == 2) {
             this.mcMonsterInfo.mcLocked.visible = false;
         } else {
@@ -297,10 +326,47 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         this.mcMonsterInfo.visible = false;
     }
 
+    // ---- Inferno-only (QoL #552): a finger's first tap on a monster shows its stats (they were the mouse's hover
+    // only, so a finger read them by spending Magma); the second tap on it adds. The mouse is unchanged.
+    /** The monster tapped once (null: none), its tile, and the tile's own filters (a locked one's grey). */
+    private _ioPicked: string;
+
+    private _ioPickedTile: MovieClip;
+
+    private _ioPickedFilters: any[];
+
+    private static readonly IO_PICK_GLOW: GlowFilter = new GlowFilter(0xFFC000, 1, 8, 8, 4, 2);
+
+    /** QoL #552: a finger on `id` not tapped before: its stats, and nothing more (true). */
+    private ioTapFirst(id: string, tile: MovieClip): boolean {
+        if (!GLOBAL.INFERNO_ONLY || !IoPinchZoom.fingerDown || this._ioPicked == id) {
+            return false;
+        }
+        if (this._ioPickedTile) {
+            this._ioPickedTile.filters = this._ioPickedFilters || [];
+        }
+        this._ioPicked = id;
+        this._ioPickedTile = tile;
+        this._ioPickedFilters = tile ? tile.filters : null;
+        if (tile) {
+            tile.filters = (this._ioPickedFilters || []).concat([HATCHERYCCPOPUP.IO_PICK_GLOW]);
+        }
+        this.MonsterInfoB(id);
+        if (CREATURELOCKER._lockerData[id] && CREATURELOCKER._lockerData[id].t == 2) {
+            this.mcMonsterInfo.tDescription.htmlText += "<br><font color=\"#B26A00\"><b>" + KEYS.Get("io_ph_tap_add") + "</b></font>";
+            GLOBAL.ioFitHeight(this.mcMonsterInfo.tDescription, IoPhoneText.smallest(9));
+        }
+        return true;
+    }
+
     public QueueAdd(param1: string): Function {
         let targetID: string = null;
         targetID = param1;
         return (param1: MouseEvent = null): void => {
+            // (QoL #552: a finger's first tap on it shows its stats; the next one adds)
+            if (this.ioTapFirst(targetID, param1 ? as3.as(param1.currentTarget, MovieClip) : null)) {
+                return;
+            }
             if (!SubscriptionHandler.instance.isSubscriptionActive && SubscriptionHandler.isEnabledForAll && BASE.isInfernoCreep(targetID)) {
                 SubscriptionHandler.instance.showPromoPopup();
                 return;
@@ -309,6 +375,9 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             this._monsterID = targetID;
             this.QueueAddTick();
             this.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.QueueAddTick));
+            if (GLOBAL.INFERNO_ONLY && this.stage) {
+                this.stage.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ClearEvents));
+            }
         };
     }
 
@@ -343,6 +412,38 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             this.Update();
             GLOBAL._bHatcheryCC.Tick(1);
         }
+    }
+
+    /**
+     * Inferno-only (QoL #29, Refill army): one `param1` queued in the Incubation Control Station with its window
+     * closed, as QueueAddTick does it (paid in Magma; onto the last entry when it is the same monster and under the
+     * limit, else a new entry of the 7). False (nothing taken) when it is locked, there is no room, no Magma, or it
+     * needs the subscription. The caller saves and ticks the Station.
+     */
+    public static ioQueueOne(param1: string): boolean {
+        let hcc: any = GLOBAL._bHatcheryCC;
+        if (!GLOBAL.INFERNO_ONLY || !hcc || !hcc._monsterQueue || !(CREATURELOCKER._lockerData[param1] && CREATURELOCKER._lockerData[param1].t == 2)) {
+            return false;
+        }
+        if (!SubscriptionHandler.instance.isSubscriptionActive && SubscriptionHandler.isEnabledForAll && BASE.isInfernoCreep(param1)) {
+            return false;
+        }
+        let inferno: boolean = BASE.isInfernoCreep(param1);
+        let cost: number = CREATURES.GetProperty(param1, "cResource");
+        if (!BASE.Charge(4, cost, true, inferno)) {
+            return false;
+        }
+        let q: any[] = hcc._monsterQueue;
+        if (q.length > 0 && q[q.length - 1][0] == param1 && q[q.length - 1][1] < HATCHERYCC.queueLimit) {
+            ++q[q.length - 1][1];
+        } else if (q.length < 7) {
+            q.push([param1, 1]);
+        } else {
+            return false;
+        }
+        BASE.Charge(4, cost, false, inferno);
+        IoQuests.event("ics_queue");
+        return true;
     }
 
     private FinishNow(param1: MouseEvent): void {
@@ -384,6 +485,10 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
     private Charge(param1: string): void {
         let _loc2_: boolean = BASE.isInfernoCreep(param1);
         BASE.Charge(4, CREATURES.GetProperty(param1, "cResource"), false, _loc2_);
+        // Inferno-only quest book: a monster queued in the Incubator Control Center
+        if (GLOBAL.INFERNO_ONLY) {
+            IoQuests.event("ics_queue");
+        }
         ResourcePackages.Create(_loc2_ ? 8 : 4, GLOBAL._bHatcheryCC, CREATURES.GetProperty(param1, "cResource") | 0, true);
         BASE.Save();
     }
@@ -394,8 +499,14 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         return (param1: MouseEvent = null): void => {
             this._tick = 0;
             this._monsterIndex = n;
+            let q0: any[] = GLOBAL._bHatcheryCC ? GLOBAL._bHatcheryCC._monsterQueue : null;
+            this._ioRemoveId = q0 && q0.length >= n ? String(q0[n - 1][0]) : null;
             this.QueueRemoveTick();
             this.addEventListener(Event.ENTER_FRAME, as3.bind(this, this.QueueRemoveTick));
+            // Inferno-only (10 October): let go anywhere (not only over the window) ends the hold
+            if (GLOBAL.INFERNO_ONLY && this.stage) {
+                this.stage.addEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ClearEvents));
+            }
         };
     }
 
@@ -405,8 +516,13 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             return;
         }
         let _loc2_: any[] = GLOBAL._bHatcheryCC._monsterQueue;
+        // Inferno-only (10 October): a hold empties that slot and stops there (not on into the next kind)
+        if (GLOBAL.INFERNO_ONLY && this._tick > 1 && (_loc2_.length < this._monsterIndex || String(_loc2_[this._monsterIndex - 1][0]) != this._ioRemoveId)) {
+            this.ClearEvents(null);
+            return;
+        }
         if (_loc2_.length >= this._monsterIndex) {
-            BASE.Fund(4, CREATURES.GetProperty(as3.str(_loc2_[this._monsterIndex - 1][0]), "cResource"), false, null, BASE.isInfernoCreep(as3.str(_loc2_[this._monsterIndex - 1][0])));
+            BASE.Fund(4, CREATURES.GetProperty(as3.str(_loc2_[this._monsterIndex - 1][0]), "cResource"), GLOBAL.INFERNO_ONLY, null, BASE.isInfernoCreep(as3.str(_loc2_[this._monsterIndex - 1][0])));
             --_loc2_[this._monsterIndex - 1][1];
             if (_loc2_[this._monsterIndex - 1][1] <= 0) {
                 _loc2_.splice(this._monsterIndex - 1, 1);
@@ -421,6 +537,9 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
     private ClearEvents(param1: MouseEvent): void {
         this.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.QueueAddTick));
         this.removeEventListener(Event.ENTER_FRAME, as3.bind(this, this.QueueRemoveTick));
+        if (this.stage) {
+            this.stage.removeEventListener(MouseEvent.MOUSE_UP, as3.bind(this, this.ClearEvents));
+        }
     }
 
     public StopProduction(param1: int): Function {
@@ -432,7 +551,7 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             let _loc3_: any = InstanceManager.getInstancesByClass(BUILDING13);
             for (_loc4_ of as3.values(_loc3_)) {
                 if (_loc4_._inProduction != "" && _loc2_ == n) {
-                    BASE.Fund(4, CREATURES.GetProperty(as3.str(_loc4_._inProduction), "cResource"), false, null, BASE.isInfernoCreep(as3.str(_loc4_._inProduction)));
+                    BASE.Fund(4, CREATURES.GetProperty(as3.str(_loc4_._inProduction), "cResource"), GLOBAL.INFERNO_ONLY, null, BASE.isInfernoCreep(as3.str(_loc4_._inProduction)));
                     _loc4_._inProduction = "";
                     _loc4_.ResetProduction();
                 }
@@ -534,6 +653,11 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             _loc5_ = 100;
         }
         this.mcGoo.mcBar.width = _loc5_;
+        if (GLOBAL.INFERNO_ONLY) {
+            // Inferno-only: this bar is the yard's magma (an Inferno yard's 4th resource), so magma's orange, not
+            // the art's putty green (as mcMagma's below)
+            this.mcGoo.mcBar.transform.colorTransform = new ColorTransform(0, 0, 0, 1, 0xf2, 0x7a, 0x12, 0);
+        }
         this.txtGoo.htmlText = "<b>" + KEYS.Get("hat_gooremaining", { "v1": GLOBAL.FormatNumber(Number(BASE._resources.r4.Get())) }) + "</b>";
         GLOBAL.ioFitText(this.txtGoo);
         // (Inferno-only: "remaining" wrapped out of sight)
@@ -554,6 +678,11 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
             }
             this.mcMagma.mcBar.width = _loc5_;
             this.txtMagma.htmlText = "<b>" + KEYS.Get("hat_magmaremaining", { "v1": GLOBAL.FormatNumber(Number(BASE._iresources.r4.Get())) }) + "</b>";
+            if (GLOBAL.INFERNO_ONLY) {
+                // Inferno-only: magma's bar in magma's orange (the art's is the putty bar's green), its text fitted
+                this.mcMagma.mcBar.transform.colorTransform = new ColorTransform(0, 0, 0, 1, 0xf2, 0x7a, 0x12, 0);
+                GLOBAL.ioFitText(this.txtMagma);
+            }
             this.bTopupMagma.gotoAndStop(1);
             if (BASE._iresources.r4.Get() < BASE._iresources.r4max * 0.1) {
                 this.bTopupMagma.gotoAndStop(2);

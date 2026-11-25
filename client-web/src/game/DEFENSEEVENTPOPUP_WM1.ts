@@ -5,7 +5,7 @@ import { MouseEvent } from "flash/events";
 import { DEFENSEEVENTPOPUP_CLIP, GLOBAL, ImageCache, KEYS, POPUPS, SPECIALEVENT } from "@game";
 
 /*
- * This is the original DEFENSEEVENTPOPUP.as class for Wild Monster Invasion 1.
+ * This is the original DEFENSEEVENTPOPUP.ts class for Wild Monster Invasion 1.
  * The original developers rewrote this class when Wild Monster Invasion 2 was released
  * instead of creating a new class.
  *

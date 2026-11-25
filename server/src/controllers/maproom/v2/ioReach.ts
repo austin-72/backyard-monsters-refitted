@@ -7,7 +7,7 @@ import { MapRoomVersion } from "../../../enums/MapRoom.js";
 import { permissionErr } from "../../../errors/errors.js";
 import { userCell } from "./cells/userCell.js";
 import { rangeYards } from "../../../services/maproom/v2/validateRange.js";
-import { openEntries, openExits, portalsFor, underworldOn } from "../../../services/maproom/v2/underworld.js";
+import { hexDistanceWrapped, isOver, openEntries, openExits, portalsFor, underworldOn } from "../../../services/maproom/v2/underworld.js";
 import { underworldConfig } from "../../../config/UnderworldConfig.js";
 
 const SAVE_FIELDS = [
@@ -22,6 +22,7 @@ const SAVE_FIELDS = [
   "save.monsters",
   "save.damage",
   "save.destroyed",
+  "save.savetime",
   "save.points",
   "save.basevalue",
   "save.attackid",
@@ -36,7 +37,9 @@ const SAVE_FIELDS = [
  *  - `entry`: by portal number, the player's overworld yards that may have it in range: [baseid, cells away] (the
  *    game checks their range, Declare War included);
  *  - `exit`: by portal number, the player's underworld outposts next to its underworld end: [baseid, cells away];
- *  - `cells`: those yards as getarea sends them (their monsters to attack with), by baseid.
+ *  - `cells`: those yards as getarea sends them (their monsters to attack with), by baseid;
+ *  - `near` (QoL #339, 14 October): by portal number, the player's nearest overworld yard: [x, y, cells away, its
+ *    Flinger range], for the portal's bubble to say what it would take.
  */
 export const ioReach: KoaController = async (ctx) => {
   if (!underworldOn()) throw permissionErr();
@@ -68,6 +71,17 @@ export const ioReach: KoaController = async (ctx) => {
     list.forEach(({ yard }) => wanted.add(yard.baseid));
   }
 
+  const near: Record<number, [number, number, number, number]> = {};
+  for (const p of portalsFor(worldid)) {
+    let best: [number, number, number, number] | null = null;
+    for (const yard of yards) {
+      if (!isOver(yard.x, yard.y)) continue;
+      const d = hexDistanceWrapped(yard.x, yard.y, p.x, p.y);
+      if (!best || d < best[2]) best = [yard.x, yard.y, d, Math.max(0, yard.range)];
+    }
+    if (best) near[p.i] = best;
+  }
+
   const cells: Record<string, { x: number; y: number; data: unknown }> = {};
   if (wanted.size) {
     const rows = await postgres.em.find(
@@ -92,5 +106,6 @@ export const ioReach: KoaController = async (ctx) => {
     entry,
     exit,
     cells,
+    near,
   };
 };

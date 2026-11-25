@@ -5,17 +5,25 @@ import { postgres } from "../../server.js";
 import { isAdmin } from "../../services/admin/admin.js";
 import {
   endTestMode,
+  givePet,
   isTestMode,
+  serverFastForward,
+  setBuildingLevel,
   setProtection,
   startTestMode,
   takeCell,
   TestModeError,
+  testModeProfile,
   wildCell,
 } from "../../services/admin/testMode.js";
 
 /**
  * POST admin/testmode (from the game, logged in): the admin test mode switch and its tools.
- * Body: action = status | on | off | protection (on=1|0) | takecell (x, y) | wildcell (x, y).
+ * Body: action = status | on | off | protection (on=1|0) | takecell (x, y) | wildcell (x, y) |
+ * (15 October, QoL #395, the admin's own main yard, test mode on) halllevel (level) | buildinglevel (id, level) |
+ * pet (monster) | (QoL #397) fastforward (hours: the main yard as saved, and Hell Freezes Over's day).
+ * (QoL #396) on takes profile = full (the default: unlimited and instant) | real (the account's own shiny and
+ * resources, real costs); status and on answer it as `profile`.
  * Answers {error: 0, on, ...} or {error: "message"} (shown in the game).
  */
 export const adminTestMode: KoaController = async (ctx) => {
@@ -36,11 +44,12 @@ export const adminTestMode: KoaController = async (ctx) => {
 
     switch (action) {
       case "status":
-        ctx.body = { error: 0, on };
+        ctx.body = { error: 0, on, profile: on ? await testModeProfile(user.userid) : null };
         return;
       case "on":
-        await startTestMode(user);
-        ctx.body = { error: 0, on: true };
+        // (QoL #396: the profile it is switched on with; one already on keeps its own)
+        await startTestMode(user, String(body.profile ?? "") === "real" ? "real" : "full");
+        ctx.body = { error: 0, on: true, profile: await testModeProfile(user.userid) };
         return;
       case "off":
         await endTestMode(user, "switched off in the game");
@@ -59,6 +68,19 @@ export const adminTestMode: KoaController = async (ctx) => {
         return;
       case "wildcell":
         ctx.body = { error: 0, on, ...(await wildCell(user, int(body.x), int(body.y))) };
+        return;
+      case "halllevel":
+        ctx.body = { error: 0, on, ...(await setBuildingLevel(user, "hall", int(body.level))) };
+        return;
+      case "buildinglevel":
+        ctx.body = { error: 0, on, ...(await setBuildingLevel(user, int(body.id), int(body.level))) };
+        return;
+      case "pet":
+        ctx.body = { error: 0, on, ...(await givePet(user, String(body.monster ?? "").slice(0, 16))) };
+        return;
+      case "fastforward":
+        // (QoL #397: the admin's own main yard and Hell Freezes Over day only)
+        ctx.body = { error: 0, on, ...(await serverFastForward(user, int(body.hours))) };
         return;
       default:
         throw new TestModeError(`Unknown action ${action}.`);

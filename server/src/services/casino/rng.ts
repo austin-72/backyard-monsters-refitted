@@ -8,7 +8,8 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
  *   HMAC_SHA256(key = server seed, message = "<client seed>:<nonce>:<block>")
  * for block 0, 1, 2, ... taken four at a time: each group of four bytes makes a number in [0, 1)
  * (b0 / 256 + b1 / 256^2 + b2 / 256^3 + b3 / 256^4). Once the server seed is rotated out it is shown,
- * and anyone can recompute every past bet from it.
+ * and anyone can recompute every past bet from it (but a bet of a player whose Pit history is down may have luck:
+ * services/casino/luck.ts, config `luck`).
  */
 
 /** A fresh secret server seed (64 hex characters). */

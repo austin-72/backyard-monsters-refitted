@@ -20,6 +20,16 @@ export class Tutorial extends ASObject {
     }
 
     public static ShowIfNeeded(): void {
+        if (GLOBAL.INFERNO_ONLY && GLOBAL._mr2TutorialId < 2) {
+            // (24 October: a player's first visit showed the stock game's 2012 introduction: overworld pictures, and
+            // "the Flinger in your Main Yard now has increased range!" to someone who had just started. The Inferno's
+            // own guide to the map (the "?" button's, QoL #647) instead, once, as that introduction was.)
+            GLOBAL._mr2TutorialId = 2;
+            BASE.Save();
+            Tutorial.Hide();
+            Tutorial.ioHelpPage(1);
+            return;
+        }
         if (GLOBAL._mr2TutorialId < 2) {
             Tutorial.Hide();
             Tutorial._instance = new Tutorial();
@@ -27,8 +37,39 @@ export class Tutorial extends ASObject {
     }
 
     public static ForceShowAll(): void {
+        // (Inferno-only, QoL #647: the map room's "?" (MapRoomPopup.Help) is a guide to the map as it is today, page by
+        // page, instead of the stock game's 2012 introduction; since 24 October a first visit shows it too: ShowIfNeeded)
+        if (GLOBAL.INFERNO_ONLY) {
+            Tutorial.Hide();
+            Tutorial.ioHelpPage(1);
+            return;
+        }
         GLOBAL._mr2TutorialId = 0;
         Tutorial.ShowIfNeeded();
+    }
+
+    /** QoL #647: the help's pages (io_acc_maphelp_t1 / io_acc_maphelp_1 ...). */
+    private static readonly IO_HELP_PAGES: int = 7;
+
+    /**
+     * QoL #647: page `n` of the map room's help: zoom and moving around, finding places, filters and Targets, attacking
+     * and taking over, outposts, the Depths and their portals, moving the main yard. Next and Previous go through them;
+     * Close (or the x) ends it.
+     */
+    private static ioHelpPage(n: int): void {
+        let pages: int = Tutorial.IO_HELP_PAGES;
+        n = Math.max(1, Math.min(pages, n)) | 0;
+        let last: boolean = n >= pages;
+        let text: string = "<b>" + KEYS.Get("io_acc_maphelp_t" + n) + "</b> <font color=\"#8A6A48\">" + KEYS.Get("io_acc_maphelp_of", { "v1": n, "v2": pages }) + "</font><br><br>" + KEYS.Get("io_acc_maphelp_" + n);
+        SOUNDS.Play("click1");
+        let m: any = GLOBAL.Message(text, KEYS.Get(last ? "btn_close" : "btn_next"), last ? null : (): void => {
+            Tutorial.ioHelpPage((n + 1) | 0);
+        }, null, n > 1 ? KEYS.Get("btn_previous") : null, n > 1 ? (): void => {
+            Tutorial.ioHelpPage((n - 1) | 0);
+        } : null);
+        if (m) {
+            m.name = "ioMapHelp" + n;
+        }
     }
 
     public static Hide(): void {

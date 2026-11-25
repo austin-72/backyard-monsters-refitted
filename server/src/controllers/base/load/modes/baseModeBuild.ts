@@ -13,6 +13,7 @@ import { joinOrCreateWorld } from "../../../../services/maproom/v2/joinOrCreateW
 import { MapRoomVersion } from "../../../../enums/MapRoom.js";
 import { Maproom } from "../../../../database/models/maproom.model.js";
 import { Reward } from "../../../../enums/Rewards.js";
+import { liveAttackOn, liveAttacksOn } from "../../../../services/replays/liveAttacks.js";
 
 /**
  * Inferno-only: there is no Map Room 1 and no Town Hall 6 gate. The first time a save is
@@ -90,7 +91,9 @@ export const baseModeBuild = async (user: User, baseid: string) => {
 
   // Default mode only runs once on initial base load
   if (baseid === BaseMode.DEFAULT) {
-    if (isAttackActive(userSave)) throw baseUnderAttackErr();
+    refuseUnderAttack(userSave);
+    // (18 October: under an attack the player watches, nothing of the yard is written: it is the attacker's)
+    if (await liveAttackOn(userSave)) return userSave;
 
     await ensureInfernoWorld(user, userSave);
 
@@ -105,15 +108,28 @@ export const baseModeBuild = async (user: User, baseid: string) => {
   }
 
   if (baseid !== userSave.baseid) {
-    const baseSave = await postgres.em.findOne(Save, { baseid });
+    // (18 October: the player's own copy, when a yard was made twice: the other was a tribe's, a permission error)
+    const baseSave =
+      (await postgres.em.findOne(Save, { baseid, userid: user.userid }, { orderBy: { basesaveid: "asc" } })) ??
+      (await postgres.em.findOne(Save, { baseid }, { orderBy: { basesaveid: "asc" } }));
 
     if (!baseSave) throw new Error(`Base save not found for baseid: ${baseid}`);
     if (baseSave.userid !== user.userid) throw permissionErr();
-    if (isAttackActive(baseSave)) throw baseUnderAttackErr();
+    refuseUnderAttack(baseSave);
 
     return baseSave;
   }
 
-  if (isAttackActive(userSave)) throw baseUnderAttackErr();
+  refuseUnderAttack(userSave);
   return userSave;
+};
+
+/**
+ * A yard under attack can't be opened by its owner (the attack's saves and the owner's would write over each other).
+ * (18 October, the user's) With live attacks on it can: the owner watches the attack instead (baseLoad says so,
+ * io_watch, and the owner's saves of it are refused while it runs: services/replays/liveAttacks.ts).
+ */
+const refuseUnderAttack = (save: Save) => {
+  if (liveAttacksOn()) return;
+  if (isAttackActive(save)) throw baseUnderAttackErr();
 };

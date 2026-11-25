@@ -1,3 +1,4 @@
+import { parseCrest } from "../../services/alliance/allianceCrest.js";
 import { UniqueConstraintViolationException } from "@mikro-orm/core";
 
 import { Status } from "../../enums/StatusCodes.js";
@@ -19,8 +20,8 @@ import type { KoaController } from "../../utils/KoaController.js";
 
 /**
  * Creates an alliance in the user's world, with them as leader. Rejects if they
- * are already in an alliance, have no world, the name is taken, or either the
- * name or description trips the profanity filter.
+ * are already in an alliance, have no world, the name is taken, or the name breaks
+ * the naming rules (length, first character).
  *
  * @param {Context} ctx - Koa context.
  */
@@ -46,6 +47,7 @@ export const createAlliance: KoaController = async (ctx) => {
   const allianceData = {
     name: data.alliance_name,
     image: data.alliance_image,
+    crest: parseCrest(data.alliance_crest) ?? null,
     description: data.alliance_desc,
     leader_userid: user.userid,
     leader_name: user.username,
@@ -74,6 +76,7 @@ export const createAlliance: KoaController = async (ctx) => {
       alliance_id: alliance.id,
       name: alliance.name,
       image: alliance.image,
+      crest: alliance.crest ?? null,
       description: alliance.description,
       leader: user.username,
       world_id: alliance.world_id,
