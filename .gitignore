@@ -60,3 +60,8 @@ commit-message.txt
 commit-message.last.txt
 publish-github.log
 bymr-upload/
+
+# Players' own kits (pictures of their outposts, private to each player) and the admin page's backups of
+# the kit list: made by the server as it runs, never published.
+server/public/assets/kits/player/
+server/public/assets/kits/.inferno-kits.*.json
