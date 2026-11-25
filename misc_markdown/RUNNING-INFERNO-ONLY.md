@@ -249,6 +249,10 @@ built in, `GLOBAL.INFERNO_ONLY = true` in `GLOBAL.ts`). There is nothing for pla
 2. Run `publish-web.cmd` (Linux / Mac: `./publish-web.sh`), or in VS Code `Ctrl+Shift+B` > **BYMR - Release**.
    The first run installs the build tools (`npm install`).
 
+On Windows, `publish-web.cmd` also backs the database up and updates the server (Docker) first, and publishes
+the project to GitHub after (`UPDATES.md`). `set SKIP_SERVER=1` and `set SKIP_GITHUB=1` before it publish only
+the game (on your own server, set `SKIP_GITHUB=1`, or change the repository at the top of the script).
+
 `publish-web` gives the release a new build stamp itself, then builds the game (`RELEASE=1`), copies it into
 `server/public/web`, makes the site's front page open it, and compares the build stamps (`npm run check`).
 `stamp-build` is not needed first. (**BYMR - Release** still runs `stamp-build.cmd` and then

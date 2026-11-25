@@ -1,7 +1,18 @@
 {
   "title": "Changelog",
-  "updated": "2026-11-24",
+  "updated": "2026-11-25",
   "entries": [
+    {
+      "date": "2026-11-25",
+      "headline": "Fireblack walls get a new look",
+      "items": [
+        {
+          "area": "Buildings",
+          "title": "Fireblack walls' new look",
+          "text": "Level 5 Fireblack walls have new art: smoked black glass in a thick stone frame, with magma swirling differently from block to block, a great black spike on top and four smaller ones at the corners."
+        }
+      ]
+    },
     {
       "date": "2026-11-24",
       "headline": "Towers go higher: Sharpshooter and Blast Tower to level 10, the others to level 8",

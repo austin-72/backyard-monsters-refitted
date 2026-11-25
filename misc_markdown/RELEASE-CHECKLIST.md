@@ -43,7 +43,9 @@ The kits are not affected: they are built into the client and also live in
 Run `publish-web.cmd` (Linux/macOS: `./publish-web.sh`), or Ctrl+Shift+B > **BYMR - Release**, which runs
 `stamp-build.cmd` and then `publish-web.cmd`. `publish-web` stamps the build itself with the date and time
 (`npm run stamp`, into `client-web\src\game\IOBuild.ts`), builds the game and publishes it into
-`server\public\web\` (see `WEB-CLIENT.md`, "Publishing"); `stamp-build` is not needed first. The server reads the
+`server\public\web\` (see `WEB-CLIENT.md`, "Publishing"); `stamp-build` is not needed first. On Windows it also
+backs the database up and updates the server first, and publishes the project to GitHub after: on your own
+server, `set SKIP_GITHUB=1` first, or change the repository at the top of `publish-web.cmd`. The server reads the
 stamp from `server\public\web\version.json` and logs `Published browser client build: <stamp>`; from then on a
 client with an older stamp is asked to reload, on the login screen if it is just starting, at its next yard change
 if it was already running. Nothing to configure and nothing to bump by hand. Players open

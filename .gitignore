@@ -49,7 +49,7 @@ server/public/web-dev/
 client-web/tools/*-balance/account-backup-*.json
 client-web/tools/fmi-balance/levels.json
 
-# Never published (publish-to-github.bat leaves them out too): personal files, database dumps, a list of
+# Never published (publish-web.cmd leaves them out of GitHub too): personal files, database dumps, a list of
 # possible exploits on a live server, and the publish script's own files and published copy.
 vidya/
 .github/@bymr-inferno-mr2/
@@ -57,5 +57,6 @@ vidya/
 firewall-event-*.json
 SUSPECTED-BUGS.md
 commit-message.txt
+commit-message.last.txt
 publish-github.log
 bymr-upload/

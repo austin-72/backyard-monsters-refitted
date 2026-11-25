@@ -267,7 +267,7 @@ The server lists the top-level folders of `server/public` once, at start-up
 
 **Fix.**
 - Publish again from a terminal so its messages stay visible: `publish-web.cmd` (Linux/macOS:
-  `./publish-web.sh`).
+  `./publish-web.sh`). To publish only the game, `set SKIP_SERVER=1` and `set SKIP_GITHUB=1` first.
 - Without Docker: restart the server once after the first publish.
 - With Docker: if the container was made before `docker-compose.yml` bound `./public/web`, run
   `docker compose up -d` once to re-create it.

@@ -90,7 +90,7 @@ The browser client is part of this project (it used to be a separate add-on):
 | `client-web/src/player`, `src/main.ts` | the page round the game: canvas, input, resizing, phones, settings |
 | `client-web/public` | the art: `swf/` (the original library: shapes, sprites, fonts), `embed/_assets` (pictures, sounds) |
 | `client-web/tools` | build, watch, publish, stamp, check; `test/` the browser tests |
-| `publish-web.cmd`, `publish-web.sh` | stamp the build, build the browser client and copy it to `server/public/web` |
+| `publish-web.cmd`, `publish-web.sh` | stamp the build, build the browser client and copy it to `server/public/web` (`publish-web.cmd` also backs up, updates the server and publishes to GitHub: "Publishing") |
 | `watch-web.cmd`, `watch-web.sh` | rebuild and publish to `server/public/web-dev` on every change |
 | `WEB-CLIENT.md` | this file |
 | `stamp-build.cmd`, `stamp-build.sh` | write the build stamp (date and time) into `client-web/src/game/IOBuild.ts` on its own (`publish-web` does this itself) |
@@ -100,6 +100,9 @@ The browser client is part of this project (it used to be a separate add-on):
 ## Publishing
 
 - **By hand:** run `publish-web.cmd` (Windows) or `./publish-web.sh`. Nothing is needed before it.
+  `publish-web.cmd` also backs the database up and updates the server (Docker) first, and publishes the
+  project to GitHub after (`UPDATES.md`); `set SKIP_SERVER=1` and `set SKIP_GITHUB=1` before it publish only
+  the game. `publish-web.sh` publishes only the game.
 - **VS Code:** **BYMR - Release** runs `stamp-build.cmd` and then `publish-web.cmd`. The stamp is written
   twice (the second one wins); that is harmless.
 

@@ -32,7 +32,7 @@ The public server is **https://inferno.maproom2.com**.
 
 Open it in a current browser (Chrome, Edge, Firefox or Safari) and play. There is nothing to install and
 nothing to update: every visit loads the current build. It also works on phones and tablets; see
-`WEB-CLIENT.md` for details. The game is made for the browser only: no Flash version is built any more.
+[WEB-CLIENT.md](./misc_markdown/WEB-CLIENT.md) for details. The game is made for the browser only: no Flash version is built any more.
 
 Accounts are made in the game itself (email and password). They belong to this server only and are not
 shared with the main Backyard Monsters Refitted servers.
@@ -63,8 +63,18 @@ starts the game from that link and registers earns you both 250 shiny, paid when
 | Getting the game | Download a client, update it yourself | Played in the browser (TypeScript, no Flash), always the current build |
 
 **New in the game:**
-- **Monsters and towers:** Korath and Drull as monsters, Rezghul (bought with magma), Ashkarr, Clinkerjaw,
-  Flickerfiend, Fusebug and Emberghoul; the Cinder Coil and the Obsidian Mortar.
+- **Monsters:** Korath and Drull as monsters, Rezghul (bought with magma, and he teleports), Ashkarr, the
+  Basilisk, Clinkerjaw, Flickerfiend, Fusebug and Emberghoul. Valgos, Malphus, Grokus, Clinkerjaw and the
+  Emberghoul each have a favourite target of their own (Malphus even walks around your towers' reach).
+- **Defenses:** the Cinder Coil and the Obsidian Mortar; the Sharpshooter and the Blast Tower go to level 10,
+  the Quake Tower, Magma Tower, Cinder Coil and Obsidian Mortar to level 8; walls to level 5 (Studded Iron and
+  Fireblack), upgraded all at once for resources or Shiny; heavy traps that only champions set off; and
+  calcification, rings of bone that protect towers, Resource Pods and the Under Hall.
+- **The Monster Baiter:** send any overworld monster or champion at any level, the Inferno monsters you have
+  unlocked, and more, at your own yard. Practice raids put the yard back exactly as it was afterwards, and
+  every raid ends with a report.
+- **The Devil's Contract:** three bargains a day, each a boon with a price.
+- **The Soul Crucible:** pour a resource you have too much of into its fire and take another back.
 - **The Brimstone Pit** (a building): games played with Shiny, among them Magma Drop, Brimstone
   Scratchers, Higher or Lower, Wormzer Roulette, Bone Pile, Cinderjack, Magma Slots, Devil's Dice, The
   Undertaker's Offer, Balthazar's Ascent, Magma Derby and Korath's Fortune. More games open as the Pit
@@ -79,9 +89,9 @@ starts the game from that link and registers earns you both 250 shiny, paid when
   and Attacks on me, with replays to watch, share in chat or download.
 - **Alliances:** a window with Overview, Board, Outposts, Members, Power-Ups, Recruit, Invites and Browse;
   officers; tags and crests; relocation invites between members. They rank by empire value.
-- **Your yard:** pets, the D.A.V.E. Club (yard grounds, signs, champion skins), animated decorations,
-  overworld decorations, the Yard Planner working in the Inferno (with export and import), the Incubation
-  Control Station, General Store and Monster Juicer in the Inferno, and worker sacrifice for Shiny.
+- **Your yard:** pets, the D.A.V.E. Club (yard grounds, signs, champion skins), animated decorations, the
+  Champion Statue, overworld decorations, the Yard Planner working in the Inferno (with export and import), the
+  Incubation Control Station, General Store and Monster Juicer in the Inferno, and worker sacrifice for Shiny.
 - **Play:** keyboard shortcuts in the yard, the map and attacks; saved logins on the login page; one play
   session at a time, with a choice to play here; the page's own settings (resolution, volume, ask before
   spending Shiny, reduce motion).
@@ -95,27 +105,27 @@ in-game Change Log (top bar) lists what changed each day.
 
 | Document | What it covers |
 |---|---|
-| [RUNNING-INFERNO-ONLY.md](./RUNNING-INFERNO-ONLY.md) | Setting the server up with Docker, backups, building the client, going public |
-| [CONFIG.md](./CONFIG.md) | Every config file, what it controls, and what an operator usually changes |
-| [RELEASE-CHECKLIST.md](./RELEASE-CHECKLIST.md) | What to check and set before other people play on it |
-| [UPDATES.md](./UPDATES.md) | How to put out an update: the server, the game, the Change Log, the notes and GitHub |
-| [GOING-PUBLIC-CLOUDFLARE.md](./GOING-PUBLIC-CLOUDFLARE.md) | Running behind a Cloudflare tunnel |
-| [ADMIN-GUIDE.md](./ADMIN-GUIDE.md) | The operator's daily work: bug and cheat reports, bans, compensation, announcements, maintenance, backups |
-| [OPERATIONS-LOGS-AND-SECRETS.md](./OPERATIONS-LOGS-AND-SECRETS.md) | Logs, secrets, admins and moderators |
-| [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) | Problems an operator meets, and their fixes |
-| [WEB-CLIENT.md](./WEB-CLIENT.md) | The browser client: publishing, watch mode, phones, working on the game's code |
-| [BUG-REPORTS.md](./BUG-REPORTS.md) | How the automatic bug reports work |
+| [RUNNING-INFERNO-ONLY.md](./misc_markdown/RUNNING-INFERNO-ONLY.md) | Setting the server up with Docker, backups, building the client, going public |
+| [CONFIG.md](./misc_markdown/CONFIG.md) | Every config file, what it controls, and what an operator usually changes |
+| [RELEASE-CHECKLIST.md](./misc_markdown/RELEASE-CHECKLIST.md) | What to check and set before other people play on it |
+| [UPDATES.md](./misc_markdown/UPDATES.md) | How to put out an update: the server, the game, the Change Log, the notes and GitHub |
+| [GOING-PUBLIC-CLOUDFLARE.md](./misc_markdown/GOING-PUBLIC-CLOUDFLARE.md) | Running behind a Cloudflare tunnel |
+| [ADMIN-GUIDE.md](./misc_markdown/ADMIN-GUIDE.md) | The operator's daily work: bug and cheat reports, bans, compensation, announcements, maintenance, backups |
+| [OPERATIONS-LOGS-AND-SECRETS.md](./misc_markdown/OPERATIONS-LOGS-AND-SECRETS.md) | Logs, secrets, admins and moderators |
+| [TROUBLESHOOTING.md](./misc_markdown/TROUBLESHOOTING.md) | Problems an operator meets, and their fixes |
+| [WEB-CLIENT.md](./misc_markdown/WEB-CLIENT.md) | The browser client: publishing, watch mode, phones, working on the game's code |
+| [BUG-REPORTS.md](./misc_markdown/BUG-REPORTS.md) | How the automatic bug reports work |
 | [SECURITY.md](./SECURITY.md) | How to report a security problem |
 
 The settings are in several files, not one. Most of the game's numbers are in
 `server/src/config/InfernoOnlyConfig.ts`; the Brimstone Pit, the Devil's Arcade, alliances, pets, replays and
 the Depths of Hell have config files of their own next to it; the server's address, ports, database and
-secrets are in `server/.env`. `CONFIG.md` lists them all. Most settings reach the client as flags on every
+secrets are in `server/.env`. [CONFIG.md](./misc_markdown/CONFIG.md) lists them all. Most settings reach the client as flags on every
 yard load, so changing a number needs a server restart (with Docker, `docker compose up --build -d`) and no
 new client. Your own server's address is given to the game when it is published (`SERVER_URL` for
-`publish-web`; see RUNNING-INFERNO-ONLY.md). `publish-web` stamps the build itself and builds the game made to
+`publish-web`; see [RUNNING-INFERNO-ONLY.md](./misc_markdown/RUNNING-INFERNO-ONLY.md)). `publish-web` stamps the build itself and builds the game made to
 load fast (minified, its art in one file, compressed ahead, kept by browsers until the next build):
-WEB-CLIENT.md "Publishing".
+[WEB-CLIENT.md](./misc_markdown/WEB-CLIENT.md), "Publishing".
 
 The base project's setup guides still apply to everything this fork did not touch:
 [server and database](https://github.com/bym-refitted/backyard-monsters-refitted/wiki/Server-&-Database-Setup),
