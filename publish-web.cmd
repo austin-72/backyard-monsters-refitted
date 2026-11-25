@@ -149,6 +149,8 @@ rem   server\data          local database files
 rem   .env, dump.rdb, *.dump, *.log   secrets, database files and logs
 rem   SUSPECTED-BUGS.md    lists possible exploits, some not fixed yet, on a server that is live
 rem   firewall-event-*.json           Cloudflare security exports
+rem   server\public\assets\kits\player   players' own kits (pictures of their outposts, private to each)
+rem   .inferno-kits.*.json            the admin page's backups of the kit list
 rem   server\src\scripts\anticheat\priv   the private anticheat scripts
 rem   client-web\tools\*-balance       the balance runs (they can hold a test account's backup)
 rem Left out because nothing needs them to build or run the game (25 November):
@@ -170,10 +172,11 @@ robocopy "%SRC%" "%DST%" /MIR /R:1 /W:1 /NFL /NDL /NJH /NP ^
   /XD "%SRC%\.github" "%SRC%\vidya" "%SRC%\client" "%SRC%\art" "%SRC%\sandbox-tools" "%SRC%\.vscode" ^
       "%SRC%\bymr-upload" "%SRC%\server\logs" "%SRC%\server\backups" "%SRC%\server\data" ^
       "%SRC%\server\public\web" "%SRC%\server\public\web-dev" "%SRC%\server\public\client" ^
-      "%SRC%\server\public\assets\archived" "%SRC%\server\src\scripts\anticheat\priv" ^
+      "%SRC%\server\public\assets\archived" "%SRC%\server\public\assets\kits\player" ^
+      "%SRC%\server\src\scripts\anticheat\priv" ^
       "%SRC%\client-web\tools\test" "%SRC%\client-web\tools\video" "%SRC%\client-web\tools\trophy-art" ^
       "%SRC%\client-web\tools\hfo-balance" "%SRC%\client-web\tools\fmi-balance" node_modules dist .git ^
-  /XF .env dump.rdb *.dump *.log bymr-stable.swf firewall-event-*.json CLAUDE.md ^
+  /XF .env dump.rdb *.dump *.log bymr-stable.swf firewall-event-*.json CLAUDE.md .inferno-kits.*.json ^
       "%SRC%\SUSPECTED-BUGS.md" "%SRC%\HANDOFF.md" "%SRC%\INFERNO-ONLY-NOTES.md" "%SRC%\NOTES-INDEX.md" ^
       "%SRC%\hell_freezes_over.md" "%SRC%\commit-message.txt" "%SRC%\commit-message.last.txt" ^
       "%SRC%\make-upload-zips.cmd" "%SRC%\make-upload-zips.mjs" "%SRC%\make-upload-zips.sh" ^
@@ -212,7 +215,8 @@ rem Stop publishing anything that .gitignore now excludes (the file stays in thi
 for /f "delims=" %%F in ('git ls-files -ci --exclude-standard') do git rm -q --cached "%%F"
 
 rem ---- 3. A last check: nothing of the server's own data is about to be published.
-git diff --cached --quiet -- ":(glob)**/.env" ":(glob)**/*.dump" ":(glob)**/dump.rdb" ":(glob)**/bymr.jsonl*" ":(glob)**/firewall-event-*.json" "vidya" "server/logs" "server/backups" "server/data" "SUSPECTED-BUGS.md"
+rem (--diff-filter=d: taking one of these off GitHub is fine; adding or changing one is not.)
+git diff --cached --quiet --diff-filter=d -- ":(glob)**/.env" ":(glob)**/*.dump" ":(glob)**/dump.rdb" ":(glob)**/bymr.jsonl*" ":(glob)**/firewall-event-*.json" "vidya" "server/logs" "server/backups" "server/data" "server/public/assets/kits/player" ":(glob)**/.inferno-kits.*.json" "SUSPECTED-BUGS.md"
 if errorlevel 1 goto :private
 
 git diff --cached --quiet
@@ -237,6 +241,6 @@ exit /b 1
 
 :private
 echo STOPPED: files that must stay private were about to be published. Nothing was published to GitHub.
-git diff --cached --name-only -- ":(glob)**/.env" ":(glob)**/*.dump" ":(glob)**/dump.rdb" ":(glob)**/bymr.jsonl*" ":(glob)**/firewall-event-*.json" "vidya" "server/logs" "server/backups" "server/data" "SUSPECTED-BUGS.md"
+git diff --cached --name-only --diff-filter=d -- ":(glob)**/.env" ":(glob)**/*.dump" ":(glob)**/dump.rdb" ":(glob)**/bymr.jsonl*" ":(glob)**/firewall-event-*.json" "vidya" "server/logs" "server/backups" "server/data" "server/public/assets/kits/player" ":(glob)**/.inferno-kits.*.json" "SUSPECTED-BUGS.md"
 git reset -q
 exit /b 1

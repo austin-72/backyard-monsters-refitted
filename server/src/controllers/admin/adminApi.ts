@@ -63,6 +63,7 @@ import { endTestMode, inTestModeQuick, testModeUserIds } from "../../services/ad
 import { playerActions, shinyLedger, yardBackups } from "../../services/admin/playerRecords.js";
 import { ONLINE_SECONDS, onlineNow, presenceSince } from "../../services/user/presence.js";
 import { bugSamples, fixedBuildKey } from "../../services/admin/bugReports.js";
+import { FeedbackRefused, deleteFeedback, feedbackById, feedbackCounts, feedbackPicture, listFeedback, updateFeedback } from "../../services/feedback/playerFeedback.js";
 import { refreshChatUser } from "../../chat/chatControl.js";
 import { questAdminForce, questAdminReset, questAdminView } from "../../services/quests/questProgress.js";
 import { deleteAccount } from "../../services/admin/deleteAccount.js";
@@ -1084,6 +1085,45 @@ const actions: Record<string, Action> = {
     await redis.del(`bug:samples:${id}`).catch(() => 0);
     await redis.del(fixedBuildKey(id)).catch(() => 0);
     await logAdminAction(admin, "bug-delete", null, `#${id}: ${bug.title}`);
+    return {};
+  },
+
+  // (25 November) What players sent from the game's right-click menu: bug reports and suggestions
+  // (services/feedback/playerFeedback.ts). The list is without its pictures: feedbackPicture gets one.
+  feedback: async (_admin, body) => {
+    const status = str(body.status, 12) || "open";
+    const kind = str(body.kind, 8);
+    return { reports: await listFeedback(status, kind), counts: await feedbackCounts() };
+  },
+  feedbackPicture: async (_admin, body) => {
+    const id = int(body.id);
+    const image = await feedbackPicture(id, str(body.which, 8) === "picture" ? "picture" : "shot");
+    if (!image) throw new AdminError("No picture.");
+    return { image };
+  },
+  feedbackSet: async (admin, body) => {
+    const id = int(body.id);
+    const change: { status?: string; reply?: string; note?: string } = {};
+    if (body.status !== undefined) change.status = str(body.status, 12);
+    if (body.reply !== undefined) change.reply = String(body.reply ?? "").slice(0, 2000);
+    if (body.note !== undefined) change.note = String(body.note ?? "").slice(0, 2000);
+    let row;
+    try {
+      row = await updateFeedback(id, change, admin.username);
+    } catch (e) {
+      if (e instanceof FeedbackRefused) throw new AdminError(e.message);
+      throw e;
+    }
+    if (!row) throw new AdminError("No such report.");
+    const what = [change.status !== undefined ? `status ${change.status}` : "", change.reply !== undefined ? "answer" : "", change.note !== undefined ? "note" : ""].filter(Boolean).join(", ");
+    await logAdminAction(admin, "feedback-set", { userid: row.userid, username: row.username }, `#${id} (${row.kind}): ${what}`);
+    return { report: row };
+  },
+  feedbackDelete: async (admin, body) => {
+    const id = int(body.id);
+    const row = await feedbackById(id);
+    if (!row || !(await deleteFeedback(id))) throw new AdminError("No such report.");
+    await logAdminAction(admin, "feedback-delete", { userid: row.userid, username: row.username }, `#${id} (${row.kind}): ${row.text.slice(0, 80)}`);
     return {};
   },
 

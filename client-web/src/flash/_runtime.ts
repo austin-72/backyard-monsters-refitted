@@ -22,4 +22,9 @@ export const runtimeHooks = {
    * so its menu and settings stay reachable); null: the player's own container.
    */
   fullScreenTarget: (): HTMLElement | null => null,
+  /**
+   * Inferno-only (25 November): a right-click on the game (the browser's own menu is not shown): where, in client
+   * (CSS) pixels and stage pixels. The game's right-click menu (com/monsters/feedback/IoFeedback.ts) takes it.
+   */
+  contextMenu: (_clientX: number, _clientY: number, _stageX: number, _stageY: number): void => {},
 };

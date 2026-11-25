@@ -1264,6 +1264,7 @@ registerClasses({
     "com.monsters.crucible::IoCrucible": G.IoCrucible,
     "com.monsters.baiter::IoBaiter": G.IoBaiter,
     "com.monsters.baiter::IoBaiterWindow": G.IoBaiterWindow,
+    "com.monsters.feedback::IoFeedback": G.IoFeedback,
     "com.monsters.devil::IoDevilMark": G.IoDevilMark,
     "com.monsters.devil::IoDevil": G.IoDevil,
     "com.monsters.devil::IoDevilWindow": G.IoDevilWindow,

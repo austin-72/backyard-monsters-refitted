@@ -24,7 +24,7 @@ Commands are run in the `server` folder.
 
 1. **Status tab:** players online, server version, published client build. Check that maintenance mode
    is off unless you meant it, and that the announcement is the one you want.
-2. **Bugs tab:** new rows since yesterday (section 3).
+2. **Bugs tab:** new rows since yesterday (section 3). **Feedback tab:** new reports from players (section 3b).
 3. **Reports tab:** open cheat-detection rows and attack-violation reports (section 4).
 4. **Backups:** a new `bym-<date>.dump` in `server\backups` (or your `BACKUP_DIR`), and no
    `LAST-BACKUP-FAILED.txt` (section 9).
@@ -38,7 +38,8 @@ Commands are run in the `server` folder.
 ## 3. Bug reports
 
 Reports arrive by themselves: the game sends every error it hits, and the server records its own
-failures. Players have no bug form in the game. Full details: `BUG-REPORTS.md`.
+failures. Full details: `BUG-REPORTS.md`. What players write themselves (the right-click menu) is in the
+**Feedback** tab (section 3b).
 
 In the **Bugs** tab:
 1. Look at the Open list. Each row is one problem, with how many times, how many players, the last five
@@ -51,6 +52,26 @@ In the **Bugs** tab:
 5. **delete** rows that are not bugs (a dropped connection, someone's scripted test session).
 
 A player's name in a row opens their card, if you need to look at their account.
+
+## 3b. Player feedback (the Feedback tab)
+
+Players right-click anything in the game (or use **Bugs and ideas** in the settings menu on a phone) to
+**Report a bug** or **Suggest a change**, with what they right-clicked highlighted and, if they chose, a
+screenshot (the highlight is drawn on it) and a picture of their own. Reports from an admin's account are marked
+**ADMIN**.
+
+In the **Feedback** tab:
+1. Pick what to list: open (new, read, planned), one status, closed, or all; bugs or suggestions; players or
+   admins only; or search.
+2. Each report has the player's words, what was highlighted, where they were, **screenshot** and **their
+   picture** (shown on a click; click the picture for full size), and their last clicks.
+3. Set the **status** (new, read, planned, done, not planned), write an **answer** if you want one, and a
+   **note** for admins, then **Save**. The player sees the status and the answer under **My reports** in the
+   game; a new answer, or planned / done / not planned, shows as new to them.
+4. **copy as text** for an issue or a message; **delete** removes it for the player too.
+
+A player can send 6 reports in 10 minutes and 30 a day. On the server's computer, `docker compose exec -T web
+bun run feedback` in `server` writes the open reports with their pictures to `server\logs\feedback\`.
 
 ## 4. Cheat reports and refused attacks
 

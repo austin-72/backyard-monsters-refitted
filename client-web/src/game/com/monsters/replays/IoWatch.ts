@@ -564,8 +564,9 @@ export class IoWatch extends ASObject {
     /**
      * Where the chat shows, on the stage: its messages' box (the chat's own mask: the chat itself reaches far past it,
      * its whole history), with its tabs above and the line to type in below.
+     * (Also the right-click menu's screenshots: IoFeedback.)
      */
-    private static chatArea(): Rectangle {
+    public static chatArea(): Rectangle {
         try {
             let box: any = Chat._bymChat.chatBox;
             let mask: DisplayObject = box && box.background ? as3.as(box.background.mcMask, DisplayObject) : null;

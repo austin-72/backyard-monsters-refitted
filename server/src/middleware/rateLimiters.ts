@@ -217,6 +217,20 @@ export const crucibleLimiter = RateLimit.middleware({
   },
 });
 
+/**
+ * Inferno-only (25 November): the game's right-click menu (feedback, feedback/mine): 20 requests a minute per player
+ * (the reports themselves have their own limits: services/feedback/playerFeedback.ts).
+ */
+export const feedbackLimiter = RateLimit.middleware({
+  interval: { min: 1 },
+  max: 20,
+  prefixKey: "feedback",
+  keyGenerator: byUser("feedback"),
+  handler: async (ctx: Context) => {
+    refuse(ctx, Status.OK, { error: "Too many requests. Wait a moment." });
+  },
+});
+
 /** Inferno-only (13 November): the Devil's Contract (devil/*): 30 requests a minute per player. */
 export const devilLimiter = RateLimit.middleware({
   interval: { min: 1 },

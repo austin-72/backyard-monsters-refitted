@@ -90,7 +90,7 @@ export class IoBugReport extends ASObject {
     }
 
     /** "HOUSINGPOPUP > bAscend "Ascend Monsters"": the named things around what was clicked, and its text. */
-    private static describe(target: DisplayObject): string {
+    public static describe(target: DisplayObject): string {
         let parts: any[] = [];
         let text: string = "";
         let o: DisplayObject = target;
@@ -162,8 +162,8 @@ export class IoBugReport extends ASObject {
         return false;
     }
 
-    /** Where the player is, in a line. */
-    private static where(): string {
+    /** Where the player is, in a line (also the right-click menu's reports: IoFeedback). */
+    public static where(): string {
         let yard: string = "other";
         let cell: string = "";
         let popup: string = "";
@@ -189,6 +189,11 @@ export class IoBugReport extends ASObject {
         if (IoBugReport._recent.length > IoBugReport.RECENT_LINES) {
             IoBugReport._recent.shift();
         }
+    }
+
+    /** (25 November) What the player did last, for a report from the right-click menu (IoFeedback): the same as a bug report's. */
+    public static trail(): string {
+        return "Last clicks:\n" + (IoBugReport._clicks.join("\n") || "(none)") + "\n\nLast popups, messages and yards:\n" + (IoBugReport._screens.join("\n") || "(none)") + "\n\nLast requests:\n" + (IoBugReport._requests.join("\n") || "(none)") + "\n\nRecent log:\n" + IoBugReport._recent.join("\n");
     }
 
     public static Send(message: string): void {

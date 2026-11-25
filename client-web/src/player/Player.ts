@@ -593,7 +593,15 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     const delta = ev.deltaY === 0 ? 0 : ev.deltaY < 0 ? 3 : -3;
     mouseEvent(MouseEvent.MOUSE_WHEEL, t, ev, null, delta);
   }, { passive: false });
-  canvas.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  // (Inferno-only, 25 November: a right-click opens the game's own menu (runtimeHooks.contextMenu: report a bug,
+  // suggest a change, ...); Shift with it, the browser's)
+  canvas.addEventListener("contextmenu", (ev) => {
+    if (ev.shiftKey) return;
+    ev.preventDefault();
+    toStage(ev);
+    const sx = player.mouseX, sy = player.mouseY;
+    guard(() => runtimeHooks.contextMenu(ev.clientX, ev.clientY, sx, sy));
+  });
   // iOS: after a tap, Safari moves focus to what was tapped (the canvas), which takes it away from the
   // hidden text input and closes the keyboard that the tap just opened. Cancelling the touch events
   // stops that (pointer events, which the game input uses, are unaffected).
@@ -620,7 +628,15 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     } finally { runtimeHooks.inUserGesture = false; }
   };
   const typingInField = () => stage.$focus instanceof TextField && stage.$focus.$type === "input";
+  // (Inferno-only, 25 November: typing in a box of the page itself (the right-click menu's report, the settings'
+  // account forms) is not the game's: its keys stay there)
+  const pageField = (t: EventTarget | null): boolean => {
+    const e = t as HTMLElement | null;
+    if (!e || e === inputBridge.el || !(e instanceof HTMLElement)) return false;
+    return e instanceof HTMLTextAreaElement || e instanceof HTMLSelectElement || (e instanceof HTMLInputElement && !/^(checkbox|radio|range|button|submit)$/.test(e.type)) || e.isContentEditable;
+  };
   window.addEventListener("keydown", (ev) => {
+    if (pageField(ev.target)) return;
     resumeAudio();
     // Tab when no text field had the focus: the browser's own Tab is stopped even when the game moved the focus
     // into a text field on this key (a form's Tab order: the browser's Tab would take the focus straight back
@@ -630,7 +646,7 @@ export async function startPlayer(o: PlayerOptions): Promise<any> {
     if (ev.key === "Tab" && !wasTyping) ev.preventDefault();
     else if (!typingInField() && (ev.key === "Tab" || ev.key === "Backspace" || ev.key.startsWith("Arrow") || ev.key === " ")) ev.preventDefault();
   });
-  window.addEventListener("keyup", (ev) => keyEvent(KeyboardEvent.KEY_UP, ev));
+  window.addEventListener("keyup", (ev) => { if (!pageField(ev.target)) keyEvent(KeyboardEvent.KEY_UP, ev); });
   window.addEventListener("focus", () => broadcast("activate"));
   window.addEventListener("blur", () => broadcast("deactivate"));
 

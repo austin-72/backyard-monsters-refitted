@@ -345,7 +345,7 @@ export function createShell(root: HTMLElement, parameters: Record<string, string
     // (QoL #198: the Account part only once logged in)
     const g = (window as any).__game;
     const on = !!(g && g.LOGIN && g.LOGIN.token);
-    for (const id of ["bw-acct-h", "bw-acct"]) { const x = panel.querySelector("#" + id) as HTMLElement | null; if (x) x.style.display = on ? "" : "none"; }
+    for (const id of ["bw-acct-h", "bw-acct", "bw-fb-h", "bw-fb"]) { const x = panel.querySelector("#" + id) as HTMLElement | null; if (x) x.style.display = on ? "" : "none"; }
     if (panel.style.display === "") { syncGameRows(); acctRefresh(); wakeGear(); }
   };
   // (Inferno-only, QoL #473: the game's photo mode, while a yard is up: the bar's camera, or Screen > Photo mode)
@@ -378,6 +378,9 @@ export function createShell(root: HTMLElement, parameters: Record<string, string
   };
   (window as any).__bwShell = {
     menu: () => { if (performance.now() - closedAt < 400) return; togglePanel(); },
+    // (25 November: the game's right-click menu)
+    fullscreen: () => goFullscreen(),
+    isFullscreen: () => !!fsElement(),
     gameGear: (on: boolean): boolean => {
       if (!mobile || gear.style.display === "none") return false;
       if (on) gameGearAt = performance.now();
@@ -500,6 +503,12 @@ export function createShell(root: HTMLElement, parameters: Record<string, string
         : IOS && !STANDALONE ? `<div class="bw-hint"><span data-k="io_t3k_sh_ios1">For full screen on iPhone: tap Share, then</span> <b data-k="io_t3k_sh_ios_add">Add to Home Screen</b><span data-k="io_t3k_sh_ios2">, and start the game from the new icon.</span></div>` : ""}
       ${mobile ? `<div class="bw-hint" data-k="io_t3k_sh_touch_hint">Drag with one finger to scroll the map, pinch with two to zoom, or drag with two to move the map without zooming. Double-tap the yard to zoom in, and again to zoom back out.</div>`
         : `<div class="bw-hint" data-k="io_t3k_sh_f10_hint">In full screen, F10 (or the gear that shows at the top corner) opens these settings, and Esc closes them.</div>`}
+      <h3 id="bw-fb-h" data-k="io_fb_h_settings">Bugs and ideas</h3>
+      <div id="bw-fb">
+        <div class="bw-row"><button class="bw-wide" id="bw-fb-bug" data-k="io_fb_bug">Report a bug…</button> <button class="bw-wide" id="bw-fb-idea" data-k="io_fb_idea">Suggest a change…</button></div>
+        <div class="bw-row"><button class="bw-wide" id="bw-fb-mine" data-k="io_fb_mine">My reports</button></div>
+        ${mobile ? `<div class="bw-hint" data-k="io_fb_settings_hint_touch">A screenshot of the game goes with it: tap it to show what you mean.</div>` : `<div class="bw-hint" data-k="io_fb_settings_hint">Or right-click anything in the game: it is highlighted in your report.</div>`}
+      </div>
       <h3 data-k="io_t3k_sh_h_window" ${mobile ? `style="display:none"` : ""}>Window</h3>
       <div class="bw-sizes" ${mobile ? `style="display:none"` : ""}>
         <button data-w="760" data-h="670">760×670 (Flash)</button>
@@ -1031,6 +1040,16 @@ export function createShell(root: HTMLElement, parameters: Record<string, string
 
     // (QoL #473) Photo mode
     q<HTMLButtonElement>("bw-photo").onclick = () => openPhoto();
+    // (25 November) the right-click menu's reports, for touch screens too (com/monsters/feedback/IoFeedback.ts)
+    const feedback = (what: string) => {
+      panel.style.display = "none";
+      const f = (window as any).__game?.IoFeedback;
+      if (!f) return;
+      setTimeout(() => { try { if (what === "mine") f.openMine(); else f.openReport(what); } catch { /* not now */ } }, 30);
+    };
+    q<HTMLButtonElement>("bw-fb-bug").onclick = () => feedback("bug");
+    q<HTMLButtonElement>("bw-fb-idea").onclick = () => feedback("idea");
+    q<HTMLButtonElement>("bw-fb-mine").onclick = () => feedback("mine");
     acctRefresh = () => {
       for (const x of panel.querySelectorAll<HTMLElement>("[data-k]")) {
         if (x.dataset.en == null) x.dataset.en = x.textContent || "";

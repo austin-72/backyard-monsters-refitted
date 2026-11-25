@@ -1346,6 +1346,7 @@ export { IoPets } from "./com/monsters/pets/IoPets";
 export { IoCrucible } from "./com/monsters/crucible/IoCrucible";
 export { IoBaiter } from "./com/monsters/baiter/IoBaiter";
 export { IoBaiterWindow } from "./com/monsters/baiter/IoBaiterWindow";
+export { IoFeedback } from "./com/monsters/feedback/IoFeedback";
 export { IoDevilMark } from "./com/monsters/devil/IoDevilMark";
 export { IoDevil } from "./com/monsters/devil/IoDevil";
 export { IoDevilWindow } from "./com/monsters/devil/IoDevilWindow";

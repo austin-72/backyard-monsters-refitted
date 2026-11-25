@@ -74,6 +74,8 @@ starts the game from that link and registers earns you both 250 shiny, paid when
   unlocked, and more, at your own yard. Practice raids put the yard back exactly as it was afterwards, and
   every raid ends with a report.
 - **The Devil's Contract:** three bargains a day, each a boon with a price.
+- **Right-click anything** to report a bug or suggest a change, with it highlighted on a screenshot; players
+  follow their reports and the team's answers under My reports, and admins answer them in the panel.
 - **The Soul Crucible:** pour a resource you have too much of into its fire and take another back.
 - **The Brimstone Pit** (a building): games played with Shiny, among them Magma Drop, Brimstone
   Scratchers, Higher or Lower, Wormzer Roulette, Bone Pile, Cinderjack, Magma Slots, Devil's Dice, The

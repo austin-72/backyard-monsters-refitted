@@ -79,6 +79,7 @@ const READ_ONLY_ACTIONS = new Set([
   "status", "players", "search", "player", "account", "monsters", "compensatePreview", "quests", "online", "sessions",
   "testModeList", "reports", "cheats", "invites", "cell", "worlds", "bugs", "health", "kitBackups", "designExport",
   "fmi", "fmiPlayer", "fmiControl", "totControl", "wartBloom", "loginHistory", "inactive", "chat", "shinyLedger", "playerActions", "yardBackups", "log",
+  "feedback", "feedbackPicture",
 ]);
 /** (QoL #261) Tools for owners only. */
 const OWNER_ACTIONS = new Set(["setRole"]);

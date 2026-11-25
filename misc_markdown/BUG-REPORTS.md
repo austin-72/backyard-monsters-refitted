@@ -10,9 +10,12 @@ fixes are in `INFERNO-ONLY-NOTES.md`, in the sections whose headings start with 
 ## Where reports come from
 
 **The game sends them by itself.** Every error the game logs, uncaught errors included, is sent quietly to
-the server (`POST /bugreport`). Players see nothing and press nothing. There is no bug form in the game for
-players to fill in: a player who wants to describe a problem in words has to reach the operator another way
-(chat, in-game mail, or whatever contact the server gives).
+the server (`POST /bugreport`). Players see nothing and press nothing.
+
+**Players can also write one.** Since 25 November a right-click anywhere in the game (or **Bugs and ideas** in
+the settings menu) has **Report a bug** and **Suggest a change**: their words, what they highlighted, and a
+screenshot if they want. Those are kept apart, one row each, in the admin panel's **Feedback** tab
+(`ADMIN-GUIDE.md`, section 3b; `server/src/services/feedback/playerFeedback.ts`).
 
 - Client: `client-web/src/game/com/monsters/debug/IoBugReport.ts` (hooked into `LOGGER`).
 - Server: `server/src/controllers/debug/reportBug.ts` and `server/src/services/admin/bugReports.ts`.

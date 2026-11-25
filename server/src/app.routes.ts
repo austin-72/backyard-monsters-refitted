@@ -53,6 +53,7 @@ import {
   attackLogsLimiter,
   petsLimiter,
   crucibleLimiter,
+  feedbackLimiter,
   devilLimiter,
   whosOnlineLimiter,
   allianceBoardLimiter,
@@ -83,6 +84,7 @@ import { resetPassword } from "./controllers/auth/resetPassword.js";
 import { changePassword } from "./controllers/auth/changePassword.js";
 import { community } from "./controllers/community.js";
 import { announcementSeen } from "./controllers/announcementSeen.js";
+import { myFeedback, sendFeedback } from "./controllers/feedback.js";
 import { changeUsername } from "./controllers/auth/changeUsername.js";
 import { getAccount } from "./controllers/auth/getAccount.js";
 import { updateSettings } from "./controllers/auth/updateSettings.js";
@@ -596,5 +598,10 @@ router.get("/api/:apiVersion/events/wmi", apiVersion, logRequest, wildMonsterInv
 router.post("/api/:apiVersion/player/recorddebugdata", apiVersion, debugDataLimiter, recordDebugData);
 // Inferno-only automatic bug reports from the game (services/admin/bugReports.ts).
 router.post("/bugreport", debugDataLimiter, reportBug);
+// Inferno-only (25 November): the game's right-click menu: a bug report or a suggestion from a player, and their own
+// reports with the answers (controllers/feedback.ts, services/feedback/playerFeedback.ts).
+// (no logRequest: its pictures would fill the console)
+router.post("/feedback", verifyUserAuth, feedbackLimiter, sendFeedback);
+router.post("/feedback/mine", verifyUserAuth, feedbackLimiter, logRequest, myFeedback);
 
 export default router;

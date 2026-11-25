@@ -190,6 +190,18 @@
   </div>
 </section>
 
+<section data-tab="Feedback">
+  <div class="card">
+    <h2>Player feedback</h2>
+    <p class="dim">What players sent from the game's right-click menu: bug reports and suggestions, in their own words, with what they highlighted and, when they chose to, a screenshot (the highlight is drawn on it) and a picture of their own. <b class="bad">ADMIN</b> marks one an admin sent. Set a status and write an answer: the player sees both under <i>My reports</i> in the game (a new answer, or <i>planned</i>, <i>done</i> or <i>not planned</i>, shows as new to them). The note is for admins only. On the server's computer, <code>bun run feedback</code> in <code>server</code> writes the open ones out with their pictures (<code>server\logs\feedback</code>).</p>
+    <div class="row"><select id="fbStatus" onchange="loadFeedback()"><option value="open">Open (new, read, planned)</option><option value="new">New</option><option value="seen">Read</option><option value="planned">Planned</option><option value="closed">Closed (done, not planned)</option><option value="done">Done</option><option value="declined">Not planned</option><option value="all">All</option></select>
+      <select id="fbKind" onchange="loadFeedback()"><option value="">bugs and suggestions</option><option value="bug">bugs</option><option value="idea">suggestions</option></select>
+      <select id="fbWho" onchange="renderFeedback()"><option value="">everyone</option><option value="players">players only</option><option value="staff">admins only</option></select>
+      <input id="fbQ" placeholder="Search the text, a name, what was highlighted" oninput="renderFeedback()" style="min-width:260px"> <span id="fbCounts" class="dim"></span></div>
+    <div id="feedback"></div>
+  </div>
+</section>
+
 <section data-tab="Chat">
   <div class="card">
     <h2>Chat</h2>
@@ -256,7 +268,7 @@
 <div id="toast"></div>
 
 <script>
-const TABS = ["Status", "Players", "Reports", "Bugs", "Chat", "Invites", "Map", "Health", "Log"];
+const TABS = ["Status", "Players", "Reports", "Bugs", "Feedback", "Chat", "Invites", "Map", "Health", "Log"];
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const when = (v) => (v ? new Date(v).toLocaleString() : "-");
@@ -288,7 +300,7 @@ function show(tab) {
   if (history.replaceState) history.replaceState(null, "", "#" + tab);
   document.querySelectorAll("section").forEach((s) => s.classList.toggle("on", s.dataset.tab === tab));
   document.querySelectorAll("nav button").forEach((b) => b.classList.toggle("on", b.textContent === tab));
-  ({ Status: loadStatus, Players: () => loadPlayers(false), Reports: loadReports, Bugs: loadBugs, Chat: loadChat, Invites: loadInvites, Map: () => { loadWorlds(); loadKitBackups(); }, Health: loadHealth, Log: () => loadLog(false) }[tab] || (() => {}))();
+  ({ Status: loadStatus, Players: () => loadPlayers(false), Reports: loadReports, Bugs: loadBugs, Feedback: loadFeedback, Chat: loadChat, Invites: loadInvites, Map: () => { loadWorlds(); loadKitBackups(); }, Health: loadHealth, Log: () => loadLog(false) }[tab] || (() => {}))();
 }
 
 // ---- Status, maintenance, announcements
@@ -844,6 +856,60 @@ async function loadReports() {
         <td>${when(r.updated)}</td>
         <td><a onclick="act('reportDismiss',{id:${r.id}},loadReports)">dismiss</a></td></tr>`).join("")}</table>`
     : '<p class="dim">No reports.</p>';
+}
+
+// ---- Feedback (25 November): what players sent from the game's right-click menu (services/feedback/playerFeedback.ts)
+const FB_STATUS = { new: "new", seen: "read", planned: "planned", done: "done", declined: "not planned" };
+let fbRows = [];
+async function loadFeedback() {
+  const { reports, counts } = await api("feedback", { status: $("fbStatus").value, kind: $("fbKind").value });
+  fbRows = reports;
+  $("fbCounts").textContent = `${counts.new} new · ${counts.open} open · ${counts.closed} closed`;
+  renderFeedback();
+}
+function renderFeedback() {
+  const q = $("fbQ").value.trim().toLowerCase(), who = $("fbWho").value;
+  const rows = fbRows.filter((r) => (!who || (who === "staff") === !!r.staff_role) && (!q || [r.text, r.username, r.subject, r.target, r.place, r.reply, r.note].join("\n").toLowerCase().includes(q)));
+  const pre = (x) => `<pre style="white-space:pre-wrap;font-size:12px;margin:4px 0">${esc(x)}</pre>`;
+  $("feedback").innerHTML = rows.length ? rows.map((r) => `<div class="card" style="background:#140c09" id="fb${r.id}">
+      <div class="row" style="margin-top:0"><b>#${r.id}</b> <span>${r.kind === "bug" ? "🐞 Bug" : "💡 Suggestion"}</span>
+        <span class="${r.status === "new" ? "good" : "dim"}">${esc(FB_STATUS[r.status] || r.status)}</span>
+        <a onclick="show('Players');openPlayer(${Number(r.userid)})">${esc(r.username || "#" + r.userid)}</a>${r.staff_role ? ` <b class="bad">ADMIN</b> <span class="dim">(${esc(r.staff_role)})</span>` : ""}
+        <span class="dim" style="margin-left:auto">${when(r.created_at)} · build ${esc(r.build || "?")}${r.how_often ? ` · happens ${esc(r.how_often)}` : ""}</span></div>
+      <div style="font-size:15px;white-space:pre-wrap;margin:6px 0">${esc(r.text)}</div>
+      <div class="dim" style="font-size:12px">Highlighted: ${esc(r.subject || "the whole screen")}${r.target ? ` · <code>${esc(r.target)}</code>` : ""}</div>
+      <div class="dim" style="font-size:12px">Where: ${esc(r.place)}</div>
+      <div class="row">${r.has_shot ? `<a onclick="fbPicture(${r.id},'shot')">screenshot</a>` : '<span class="dim">no screenshot</span>'}${r.has_picture ? ` · <a onclick="fbPicture(${r.id},'picture')">their picture</a>` : ""}
+        · <a onclick="fbCopy(${r.id})">copy as text</a> · <a class="bad" data-write onclick="if(confirm('Delete report #${r.id}? It is gone for the player too.'))act('feedbackDelete',{id:${r.id}},loadFeedback)">delete</a></div>
+      <div id="fbPic${r.id}"></div>
+      <details><summary class="dim" style="font-size:12px">last clicks, popups, requests, log</summary>${pre(r.context + "\n\nclient: " + r.client)}</details>
+      <div class="row">Status <select id="fbSt${r.id}" data-write>${Object.entries(FB_STATUS).map(([k, v]) => `<option value="${k}"${k === r.status ? " selected" : ""}>${v}</option>`).join("")}</select>
+        <span class="dim" style="font-size:12px">${r.handled_by ? `last changed by ${esc(r.handled_by)}, ${when(r.updated_at)}` : ""}${r.reply ? (r.reply_seen ? " · the player has seen the answer" : " · not seen by the player yet") : ""}</span></div>
+      <div class="row" style="align-items:flex-start"><textarea id="fbReply${r.id}" data-write placeholder="The answer the player sees (optional)" style="flex:1;min-height:48px">${esc(r.reply)}</textarea>
+        <textarea id="fbNote${r.id}" data-write placeholder="A note for admins (the player never sees it)" style="flex:1;min-height:48px">${esc(r.note)}</textarea></div>
+      <div class="row"><button class="act" data-write onclick="fbSave(${r.id})">Save</button></div>
+    </div>`).join("") : `<p class="dim">${fbRows.length ? "Nothing matches." : "Nothing here."}</p>`;
+}
+async function fbSave(id) {
+  try {
+    await api("feedbackSet", { id, status: $("fbSt" + id).value, reply: $("fbReply" + id).value, note: $("fbNote" + id).value });
+    toast("Saved.");
+    await loadFeedback();
+  } catch (e) {}
+}
+async function fbPicture(id, which) {
+  const box = $("fbPic" + id);
+  try {
+    const { image } = await api("feedbackPicture", { id, which });
+    box.innerHTML = `<img src="${image}" style="max-width:100%;border:1px solid var(--line);border-radius:6px;cursor:zoom-in;margin:6px 0" title="Open full size">`;
+    box.querySelector("img").onclick = () => { const w = window.open(); if (w) w.document.write(`<title>Report #${id}</title><body style="margin:0;background:#111"><img src="${image}" style="max-width:100%">`); };
+  } catch (e) {}
+}
+async function fbCopy(id) {
+  const r = fbRows.find((x) => x.id === id);
+  if (!r) return;
+  const text = `### Player ${r.kind === "bug" ? "bug report" : "suggestion"} #${r.id} from ${r.username}${r.staff_role ? " (ADMIN)" : ""}\n\n${r.text}\n\n- Highlighted: ${r.subject || "the whole screen"}${r.target ? ` (${r.target})` : ""}\n- Where: ${r.place}\n- Build ${r.build}, ${r.created_at}${r.how_often ? `, happens ${r.how_often}` : ""}\n\n<details><summary>Context</summary>\n\n\`\`\`\n${r.context}\n\`\`\`\n</details>\n`;
+  try { await navigator.clipboard.writeText(text); toast("Copied."); } catch (e) { prompt("Copy:", text); }
 }
 
 // ---- Bugs
