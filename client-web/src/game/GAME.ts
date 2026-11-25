@@ -359,7 +359,10 @@ export class GAME extends Sprite {
             }
             GAME.sharedObj.flush();
         } catch (e) {
-            LOGGER.Log("err", "Error setting token from loader: " + e.message);
+            // (25 November, bug report #102: a browser whose storage is full or blocked, as in some private modes,
+            // can't keep the login (Error #2130): the game plays on, kept in memory. Written down, not reported.)
+            let msg: string = String(e && e.message ? e.message : e);
+            LOGGER.Log(msg.indexOf("#2130") >= 0 ? "log" : "err", "Error setting token from loader: " + msg);
         }
     }
 

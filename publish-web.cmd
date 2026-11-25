@@ -69,7 +69,8 @@ if %TRIES% geq 90 (
   pause
   exit /b 1
 )
-timeout /t 2 /nobreak >nul
+rem (ping, not timeout: timeout refuses to run without a console, e.g. when the script is started by a tool)
+ping -n 3 127.0.0.1 >nul
 goto :waitserver
 :serverup
 echo The server is up.
@@ -124,7 +125,7 @@ echo Published to %REPO% (branch %BRANCH%)
 :done
 echo.
 echo All done.
-timeout /t 10 >nul
+timeout /t 10 >nul 2>nul
 exit /b 0
 
 :github

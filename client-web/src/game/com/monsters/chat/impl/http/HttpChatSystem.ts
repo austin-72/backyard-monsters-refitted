@@ -3,7 +3,7 @@ import { Vector, int } from "as3";
 import { Event, EventDispatcher, HTTPStatusEvent, IOErrorEvent, SecurityErrorEvent, TimerEvent } from "flash/events";
 import { URLLoader, URLRequest, URLRequestMethod, URLVariables } from "flash/net";
 import { Dictionary, Timer, getTimer, setTimeout } from "flash/utils";
-import { BYMChat, Channel, Chat, ChatEvent, ChatWire, ClientMessageType, GLOBAL, IAuthenticationSystem, IChatSystem, IoServerHold, LOGGER, ServerMessageType } from "@game";
+import { BYMChat, Channel, Chat, ChatEvent, ChatWire, ClientMessageType, GLOBAL, IAuthenticationSystem, IChatSystem, IoBugReport, IoServerHold, LOGGER, ServerMessageType } from "@game";
 
 /**
  * The chat protocol over plain HTTP polling, for servers that can only be reached through a web
@@ -334,7 +334,9 @@ export class HttpChatSystem extends EventDispatcher implements IChatSystem {
             }
             this._outgoing = sending.concat(this._outgoing);
             if (++this._failures == 8) {
-                LOGGER.Log("err", "HttpChatSystem: chat polling keeps failing: " + why + " | " + this._failures + " in a row, last answer " + (this._lastGood > 0 ? (((getTimer() - this._lastGood) / 1000) | 0) + " s ago" : "never") + ", this one after " + (getTimer() - startedAt) + " ms" + (this._sid != null ? ", session " + this._sid.substr(0, 6) : ", no session yet") + (this._loggedIn ? ", logged in" : ", not logged in"));
+                // (25 November, bug reports #101 and #103: when the player's other requests are failing or crawling
+                // too, it is their connection: written down, not reported)
+                LOGGER.Log(GLOBAL.INFERNO_ONLY && IoBugReport.connectionPoor() ? "log" : "err", "HttpChatSystem: chat polling keeps failing: " + why + " | " + this._failures + " in a row, last answer " + (this._lastGood > 0 ? (((getTimer() - this._lastGood) / 1000) | 0) + " s ago" : "never") + ", this one after " + (getTimer() - startedAt) + " ms" + (this._sid != null ? ", session " + this._sid.substr(0, 6) : ", no session yet") + (this._loggedIn ? ", logged in" : ", not logged in"));
             }
             setTimeout(as3.bind(this, this.poll), Math.min(5000, 400 * this._failures));
         };

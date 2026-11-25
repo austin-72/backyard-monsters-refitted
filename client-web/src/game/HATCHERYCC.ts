@@ -44,7 +44,27 @@ export class HATCHERYCC extends ASObject {
 
     public static Tick(): void {
         if (HATCHERYCC._mc) {
+            // (25 November, bug report #99: the window stayed open into a yard with no ICS, an outpost taken over,
+            // and its queue was read from a building that isn't there: it is closed instead)
+            if (!GLOBAL._bHatcheryCC) {
+                HATCHERYCC.ioDrop();
+                return;
+            }
             HATCHERYCC._mc.Update();
+        }
+    }
+
+    /** The window let go without a sound or a deselect (its yard is gone): taken off its layer if still on it. */
+    public static ioDrop(): void {
+        let mc: HATCHERYCCPOPUP = HATCHERYCC._mc;
+        HATCHERYCC._mc = null;
+        // (its blocker only if it is still on screen: a yard change rebuilds the layers and their blockers)
+        if (HATCHERYCC._open && mc && mc.stage) {
+            GLOBAL.BlockerRemove();
+        }
+        HATCHERYCC._open = false;
+        if (mc && mc.parent) {
+            mc.parent.removeChild(mc);
         }
     }
 }

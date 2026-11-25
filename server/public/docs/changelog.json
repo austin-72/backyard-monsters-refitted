@@ -4,12 +4,17 @@
   "entries": [
     {
       "date": "2026-11-25",
-      "headline": "Fireblack walls get a new look",
+      "headline": "Fireblack walls get a new look; a fix for the ICS window",
       "items": [
         {
           "area": "Buildings",
           "title": "Fireblack walls' new look",
           "text": "Level 5 Fireblack walls have new art: smoked black glass in a thick stone frame, with magma swirling differently from block to block, a great black spike on top and four smaller ones at the corners."
+        },
+        {
+          "area": "Fixes",
+          "title": "The ICS window after changing yards",
+          "text": "With the Incubation Control Station's window open, moving to another yard (for example an outpost you had just taken over) could stop the game with an error, and the window then sometimes wouldn't open again. It now closes with the yard and opens normally afterwards."
         }
       ]
     },

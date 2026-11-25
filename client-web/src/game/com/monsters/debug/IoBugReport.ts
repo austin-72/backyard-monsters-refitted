@@ -139,6 +139,29 @@ export class IoBugReport extends ASObject {
         IoBugReport.push(IoBugReport._requests, IoBugReport.stamp() + " " + line + ms + " ms", (IoBugReport.TRAIL + 2) | 0);
     }
 
+    /**
+     * 25 November (bug reports #101 and #103): the player's connection looks bad, so a request failing is likely
+     * the connection, not a bug: of the last 6 requests other than chat's, one got no answer or took 10 s or more.
+     */
+    public static connectionPoor(): boolean {
+        let seen: int = 0;
+        for (let i: int = IoBugReport._requests.length - 1; i >= 0 && seen < 6; i--) {
+            let line: string = as3.str(IoBugReport._requests[i]);
+            if (line.indexOf("/chat/") != -1) {
+                continue;
+            }
+            seen++;
+            if (line.indexOf(" no answer ") != -1) {
+                return true;
+            }
+            let m: any[] = line.match(/ (\d+) ms( x\d+)?$/);
+            if (m && (m[1] | 0) >= 10000) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** Where the player is, in a line. */
     private static where(): string {
         let yard: string = "other";
