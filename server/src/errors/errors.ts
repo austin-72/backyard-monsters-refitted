@@ -609,3 +609,73 @@ export const giftSelfErr = () =>
     data: {},
     isClientFriendly: true,
   });
+
+export const saveExportDisabledErr = () =>
+  new ClientSafeError({
+    message: "Save exports are not set up on this server. Please contact the server operator.",
+    status: Status.SERVICE_UNAVAILABLE,
+    data: {},
+    isClientFriendly: true,
+  });
+
+export const noSaveToExportErr = () =>
+  new ClientSafeError({
+    message: "You do not have a yard to export yet. Load the game once to create one.",
+    status: Status.NOT_FOUND,
+    data: {},
+    isClientFriendly: true,
+  });
+
+/*
+ * Save code errors are raised by the register route, which the game's register screen
+ * calls. They are not client friendly so the interceptor sends them as HTTP 200 with the
+ * message: some Flash runtimes can't read the body of an error status, and the player
+ * would only see a generic failure.
+ */
+export const saveImportDisabledErr = () =>
+  new ClientSafeError({
+    message: "This server does not accept save codes. Register without one.",
+    status: Status.FORBIDDEN,
+    data: {},
+    isClientFriendly: false,
+  });
+
+export const saveCodeInvalidErr = () =>
+  new ClientSafeError({
+    message: "That save code is not valid. Copy the whole code from your save file and try again.",
+    status: Status.BAD_REQUEST,
+    data: {},
+    isClientFriendly: false,
+  });
+
+export const saveCodeVersionErr = () =>
+  new ClientSafeError({
+    message: "That save code was made by a different version of the game. Ask the server operator to update the server.",
+    status: Status.BAD_REQUEST,
+    data: {},
+    isClientFriendly: false,
+  });
+
+export const saveCodeUntrustedErr = () =>
+  new ClientSafeError({
+    message: "That save code was not exported from a server this server accepts saves from.",
+    status: Status.FORBIDDEN,
+    data: {},
+    isClientFriendly: false,
+  });
+
+export const saveCodeSignatureErr = () =>
+  new ClientSafeError({
+    message: "That save code has been changed or damaged. Export a new one and paste it without editing.",
+    status: Status.BAD_REQUEST,
+    data: {},
+    isClientFriendly: false,
+  });
+
+export const saveAlreadyImportedErr = () =>
+  new ClientSafeError({
+    message: "The account this save belongs to has already been imported on this server. Each account can only be imported once.",
+    status: Status.CONFLICT,
+    data: {},
+    isClientFriendly: false,
+  });

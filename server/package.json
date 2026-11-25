@@ -21,6 +21,8 @@
     "consumer:create": "bun src/scripts/api-consumers.ts create",
     "consumer:list": "bun src/scripts/api-consumers.ts list",
     "consumer:revoke": "bun src/scripts/api-consumers.ts revoke",
+    "keys:save-export": "bun src/scripts/save-export-key.ts",
+    "save:transfer": "bun src/scripts/save-transfer.ts",
     "typecheck": "bunx tsc --noEmit"
   },
   "engines": {

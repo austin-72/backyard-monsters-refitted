@@ -57,6 +57,9 @@ package {
 
         public static var supportedLangsLoaded:Boolean = false;
 
+        // Set by the server's init response: whether the register screen offers the save code field.
+        public static var saveImportEnabled:Boolean = false;
+
         public static var _localMode:int = BYMConfig.k_sLOCAL_MODE_PREVIEW;
 
         public static var _version:SecNum = new SecNum(128);
@@ -479,6 +482,7 @@ package {
                         GLOBAL.eventDispatcher.dispatchEvent(new Event("initError"));
                         return;
                     }
+                    GLOBAL.saveImportEnabled = serverData.saveImport === true;
                     GLOBAL.LanguageSetup();
                     if (serverData.hasOwnProperty("debugMode")) {
                         _aiDesignMode = serverData.debugMode;

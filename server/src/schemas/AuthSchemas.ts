@@ -1,4 +1,5 @@
 import z from "zod";
+import { MAX_SAVE_CODE_LENGTH } from "../config/SaveTransferConfig.js";
 import { SessionType } from "../enums/SessionType.js";
 
 const emailError = "Invalid email address";
@@ -66,6 +67,8 @@ export const UserRegistrationSchema = z.object({
   username: usernameSchema,
   email: emailSchema,
   password: passwordSchema,
+  /** A save code exported from the source server, on servers with imports enabled. Blank means none. */
+  saveCode: z.string().max(MAX_SAVE_CODE_LENGTH).trim().optional(),
 });
 
 /**

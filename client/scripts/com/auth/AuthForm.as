@@ -49,6 +49,32 @@ package com.auth {
 
         private var passwordValue:String = "";
 
+        // Save code field: shown on the register form when the server accepts imports.
+        private var saveCodeInput:TextField;
+
+        private var saveCodeBorder:Sprite;
+
+        private var saveCodeValue:String = "";
+
+        private const SAVE_CODE_PLACEHOLDER:String = "Save code to import (optional)";
+
+        // Space the save code field takes up: one field plus the gap below it.
+        private const SAVE_CODE_SPACE:Number = 55;
+
+        // How far the form moves up while the save code field is shown, so it still fits.
+        private const SAVE_CODE_LIFT:Number = 40;
+
+        // Pasted text longer than this is treated as a save code and kept out of the field.
+        private const SAVE_CODE_PASTE_LENGTH:int = 100;
+
+        private const FORM_Y:Number = 45;
+
+        private var submitButtonY:Number;
+
+        private var linkContainer:Sprite;
+
+        private var linkContainerY:Number;
+
         private var emailErrorText:TextField;
 
         private var passwordErrorText:TextField;
@@ -208,7 +234,7 @@ package com.auth {
 
             formContainer.graphics.drawRect(0, 0, formWidth, formHeight);
             formContainer.x = 155;
-            formContainer.y = 45;
+            formContainer.y = FORM_Y;
             contentContainer.addChild(formContainer);
 
             // Y-position for the first input field
@@ -233,9 +259,61 @@ package com.auth {
             submitButton.y = startY + 28;
             formContainer.addChild(submitButton);
             submitButton.addEventListener(MouseEvent.CLICK, submitButtonClickHandler);
+            submitButtonY = submitButton.y;
+
+            createSaveCodeField();
 
             // Link
             FormNavigate();
+        }
+
+        /*
+         * Creates the save code field, hidden until the register form is shown on a server
+         * that accepts imports. It sits below the password field; updateFormFields makes
+         * room for it.
+         *
+         * A save code runs to tens of thousands of characters, more than a text field should
+         * lay out. Once pasted, the code is kept in saveCodeValue and the field only says
+         * that one was added. Clicking back into the field clears it for a new paste.
+         */
+        private function createSaveCodeField():void {
+            saveCodeInput = createInputField(350, 35, SAVE_CODE_PLACEHOLDER);
+            saveCodeInput.x = (formContainer.width - saveCodeInput.width) / 2;
+            saveCodeInput.y = passwordInput.y + SAVE_CODE_SPACE;
+            saveCodeInput.addEventListener(Event.CHANGE, function(event:Event):void {
+                    var text:String = saveCodeInput.text;
+                    saveCodeValue = text;
+
+                    if (text.length > SAVE_CODE_PASTE_LENGTH) {
+                        saveCodeInput.text = "Save code added (" + text.length + " characters)";
+                    }
+                });
+            saveCodeInput.addEventListener(FocusEvent.FOCUS_IN, function(event:FocusEvent):void {
+                    if (saveCodeValue.length > SAVE_CODE_PASTE_LENGTH) {
+                        saveCodeValue = "";
+                        saveCodeInput.text = "";
+                    }
+                });
+            formContainer.addChild(saveCodeInput);
+
+            saveCodeBorder = CreateBorder(saveCodeInput);
+
+            saveCodeInput.visible = false;
+            saveCodeBorder.visible = false;
+        }
+
+        /*
+         * Whether the save code field is in use: on the register form, on a server that accepts imports.
+         */
+        private function get showSaveCode():Boolean {
+            return isRegisterForm && GLOBAL.saveImportEnabled;
+        }
+
+        /*
+         * The save code the player entered, without surrounding whitespace. Empty when there is none.
+         */
+        private function get enteredSaveCode():String {
+            return saveCodeValue.replace(/^\s+|\s+$/g, "");
         }
 
         private function Loading():void {
@@ -590,7 +668,7 @@ package com.auth {
         }
 
         private function FormNavigate():void {
-            var linkContainer:Sprite = new Sprite();
+            linkContainer = new Sprite();
             linkContainer.buttonMode = true;
             linkContainer.useHandCursor = true;
             linkContainer.mouseChildren = false;
@@ -609,6 +687,7 @@ package com.auth {
 
             linkContainer.x = (formContainer.width - linkContainer.width) / 2;
             linkContainer.y = submitButton.y + submitButton.height + 15;
+            linkContainerY = linkContainer.y;
             mousePointerCursor(linkContainer);
 
             formContainer.addChild(linkContainer);
@@ -626,6 +705,14 @@ package com.auth {
                 usernameInput.y = emailInput.y - usernameInput.height - 20;
                 CreateBorder(usernameInput);
             }
+
+            // Make room for the save code field below the password, lifting the form so it still fits
+            var shift:Number = showSaveCode ? SAVE_CODE_SPACE : 0;
+            saveCodeInput.visible = showSaveCode;
+            saveCodeBorder.visible = showSaveCode;
+            submitButton.y = submitButtonY + shift;
+            linkContainer.y = linkContainerY + shift;
+            formContainer.y = FORM_Y - (showSaveCode ? SAVE_CODE_LIFT : 0);
         }
 
         private function updateLinkText():void {
@@ -674,6 +761,10 @@ package com.auth {
                     if (isUsernameValid) {
                         var newUser:Array = [["username", usernameValue], ["email", emailValue], ["password", passwordValue], ["last_name", ""], ["pic_square", ""]];
 
+                        if (showSaveCode && enteredSaveCode) {
+                            newUser.push(["saveCode", enteredSaveCode]);
+                        }
+
                         new URLLoaderApi().load(GLOBAL._apiURL + "player/register", newUser, registerNewUser, function(event:IOErrorEvent):void {
                                 GLOBAL.Message("An error occurred during registration on the server.");
                             });
@@ -706,7 +797,16 @@ package com.auth {
                 GLOBAL.Message(serverData.error);
                 return;
             }
-            GLOBAL.Message("You have successfully registered an account. Please login to continue.");
+            if (serverData.importedSave) {
+                var imported:Object = serverData.importedSave;
+                GLOBAL.Message("You have successfully registered an account with " + imported.username + "'s yard from " + imported.from + ". Please login to continue.");
+            }
+            else {
+                GLOBAL.Message("You have successfully registered an account. Please login to continue.");
+            }
+
+            saveCodeValue = "";
+            saveCodeInput.text = SAVE_CODE_PLACEHOLDER;
             isRegisterForm = false;
             updateState();
         }

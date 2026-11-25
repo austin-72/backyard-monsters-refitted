@@ -15,6 +15,11 @@
 # API_PORT, CHAT_WS_PORT, CDN_URL, SERVER_URL, USE_VERSION_MANAGEMENT, SESSION_LIFETIME, WEB_URL,
 # DISCORD_TOKEN, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD.
 #
+# Save import (optional): set SAVE_IMPORT=enabled and SAVE_IMPORT_SOURCE_KEYS to the source server's
+# public key to let players paste a save code when registering. SAVE_EXPORT_PRIVATE_KEY lets players
+# export signed saves from this server (generate one with:
+# docker compose -f docker-compose.selfhost.yml run --rm web bun run keys:save-export).
+#
 # ENV=local (the default) skips JWT signature checks, so treat it as a private server.
 # ENV=production verifies tokens but requires players to link a Discord account to log in,
 # which needs DISCORD_TOKEN.
@@ -53,6 +58,10 @@ x-server: &server
     SMTP_PORT: ${SMTP_PORT:-}
     SMTP_USER: ${SMTP_USER:-}
     SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SAVE_EXPORT_PRIVATE_KEY: ${SAVE_EXPORT_PRIVATE_KEY:-}
+    SAVE_EXPORT_ISSUER: ${SAVE_EXPORT_ISSUER:-}
+    SAVE_IMPORT: ${SAVE_IMPORT:-disabled}
+    SAVE_IMPORT_SOURCE_KEYS: ${SAVE_IMPORT_SOURCE_KEYS:-}
 
 services:
   # Creates the schema and runs migrations, then exits

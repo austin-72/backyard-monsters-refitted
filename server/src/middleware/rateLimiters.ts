@@ -249,3 +249,18 @@ export const loginLimiter = RateLimit.middleware({
     ctx.body = { error: "Too many login attempts. Please try again later." };
   },
 });
+
+/**
+ * Rate limit for save exports - 10 per hour per user. Each export reads and
+ * signs the whole yard.
+ */
+export const saveExportLimiter = RateLimit.middleware({
+  interval: { min: 60 },
+  max: 10,
+  prefixKey: "save-export",
+  keyGenerator: byUser("save-export"),
+  handler: async (ctx: Context) => {
+    ctx.status = Status.TOO_MANY_REQUESTS;
+    ctx.body = { error: "Too many save exports. Please try again later." };
+  },
+});

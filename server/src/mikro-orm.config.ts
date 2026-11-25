@@ -30,6 +30,7 @@ import { BaseUpdate } from "./database/models/baseupdate.model.js";
 import { NeighbourAttack } from "./database/models/neighbourattack.model.js";
 import { NeighbourLink } from "./database/models/neighbourlink.model.js";
 import { NeighbourCandidate } from "./database/models/neighbourcandidate.view.js";
+import { SaveImport } from "./database/models/saveimport.model.js";
 
 /**
  * List of entities to be used with MikroORM.
@@ -62,6 +63,7 @@ const entities = [
   NeighbourLink,
   NeighbourCandidate,
   Event,
+  SaveImport,
 ];
 
 const envFile = path.resolve(import.meta.dirname, "../.env");

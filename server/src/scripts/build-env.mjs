@@ -1,11 +1,11 @@
 import { open, readFile } from 'fs/promises'
-import { randomBytes } from 'crypto';
+import { randomBytes, generateKeyPairSync } from 'crypto';
 
 /**
  * Environment file setup utility for build processes
  * 
  * Automatically creates a .env file from example.env template with a randomly 
- * generated SECRET_KEY if .env doesn't already exist. This ensures the 
+ * generated SECRET_KEY and save export signing key if .env doesn't already exist. This ensures the 
  * application has the required environment configuration before compilation.
  * 
  * @async
@@ -18,15 +18,17 @@ import { randomBytes } from 'crypto';
     const fh = await open(".env", "wx");
     const exampleEnv = await readFile("example.env", "utf8");
     const secretKey = randomBytes(32).toString("hex");
-    const populatedSecretKey = exampleEnv.replace(
-      "SECRET_KEY=",
-      `SECRET_KEY=${secretKey}`
-    );
+    const saveExportKey = generateKeyPairSync("ed25519").privateKey
+      .export({ format: "der", type: "pkcs8" })
+      .toString("base64");
+    const populatedSecretKey = exampleEnv
+      .replace("SECRET_KEY=", `SECRET_KEY=${secretKey}`)
+      .replace("SAVE_EXPORT_PRIVATE_KEY=", `SAVE_EXPORT_PRIVATE_KEY=${saveExportKey}`);
 
     await fh.write(populatedSecretKey, 0, "utf8");
     await fh.close();
     
-    console.log("✅ Created .env file with generated SECRET_KEY");
+    console.log("✅ Created .env file with generated SECRET_KEY and SAVE_EXPORT_PRIVATE_KEY");
   } catch (err) {
     if (err.code === "EEXIST") {
       console.log(".env file already exists, skipping.");

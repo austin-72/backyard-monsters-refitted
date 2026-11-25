@@ -1,13 +1,19 @@
 import bcrypt from "bcrypt";
+import { UniqueConstraintViolationException } from "@mikro-orm/core";
 import type { KoaController } from "../../utils/KoaController.js";
 import { postgres } from "../../server.js";
 import { User } from "../../database/models/user.model.js";
 import { FilterFrontendKeys } from "../../utils/FrontendKey.js";
-import { emailUniqueErr, usernameUniqueErr } from "../../errors/errors.js";
+import { emailUniqueErr, saveAlreadyImportedErr, usernameUniqueErr } from "../../errors/errors.js";
 import { logger } from "../../utils/logger.js";
 import { Status } from "../../enums/StatusCodes.js";
 import { UserRegistrationSchema } from "../../schemas/AuthSchemas.js";
 import { BYMR_CDN } from "../../services/discord/fetchDiscordAvatar.js";
+import {
+  applyImportedSave,
+  readSaveCodeForRegistration,
+  type ImportedSaveSummary,
+} from "../../services/saveTransfer/importSave.js";
 
 /**
  * Controller to handle user registration.
@@ -16,12 +22,19 @@ import { BYMR_CDN } from "../../services/discord/fetchDiscordAvatar.js";
  * password, saves the user to the database, and returns the filtered user information.
  * If registration fails, it throws an authentication failure error.
  *
+ * On servers with save imports enabled, the player may also send a save code exported
+ * from the source server. It is verified before anything is created, and the account and
+ * its imported yard are then created together, so a failed import never leaves an
+ * account behind.
+ *
  * @param {Context} ctx - The Koa context object.
  * @returns {Promise<void>} - A promise that resolves when the controller is complete.
  * @throws {Error} - Throws an error if registration fails or if the request body is invalid.
  */
 export const register: KoaController = async (ctx) => {
-  const registeredUser = UserRegistrationSchema.parse(ctx.request.body);
+  const { saveCode, ...registeredUser } = UserRegistrationSchema.parse(ctx.request.body);
+
+  const importedSave = saveCode ? await readSaveCodeForRegistration(saveCode) : null;
 
   // Find user by username or email
   const existingUser = await postgres.em.findOne(User, {
@@ -42,20 +55,52 @@ export const register: KoaController = async (ctx) => {
 
   const hash = await bcrypt.hash(registeredUser.password!, 10);
 
-  // Create new user record
-  const user = postgres.em.create(User, {
-    ...registeredUser,
-    pic_square: `${BYMR_CDN}/assets/bym-refitted-assets/placeholder.jpg`,
-    password: hash,
-  });
+  let user: User;
+  let imported: ImportedSaveSummary | null;
 
-  postgres.em.persist(user);
-  await postgres.em.flush();
+  try {
+    ({ user, imported } = await postgres.em.transactional(async (em) => {
+      // Create new user record
+      const created = em.create(User, {
+        ...registeredUser,
+        pic_square: `${BYMR_CDN}/assets/bym-refitted-assets/placeholder.jpg`,
+        password: hash,
+      });
+
+      em.persist(created);
+      await em.flush();
+
+      return {
+        user: created,
+        imported: importedSave ? await applyImportedSave(em, created, importedSave) : null,
+      };
+    }));
+  } catch (err) {
+    // Two registrations with the same save code at once: only the first commits.
+    if (err instanceof UniqueConstraintViolationException && err.message.includes("save_import")) {
+      throw saveAlreadyImportedErr();
+    }
+
+    throw err;
+  }
+
   const filteredUser = FilterFrontendKeys(user);
   logger.info(
     `User ${filteredUser.username} registered successfully | ID: ${filteredUser.userid} | Email: ${filteredUser.email} | IP Address: ${ctx.ip}`
   );
 
+  if (importedSave) {
+    logger.info("User {username} imported the save of {sourceUsername} (source ID {sourceUserid}) | ID: {userid}", {
+      event: "save-import",
+      username: user.username,
+      userid: user.userid,
+      sourceUsername: importedSave.account.username,
+      sourceUserid: importedSave.account.userid,
+      exportId: importedSave.exportId,
+      keyId: importedSave.issuer.keyId,
+    });
+  }
+
   ctx.status = Status.OK;
-  ctx.body = { user: filteredUser };
+  ctx.body = { user: filteredUser, ...(imported && { importedSave: imported }) };
 };

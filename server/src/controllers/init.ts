@@ -3,6 +3,7 @@ import { devConfig } from "../config/GameConfig.js";
 import { Status } from "../enums/StatusCodes.js";
 import type { KoaController } from "../utils/KoaController.js";
 import { isAcceptedVersion } from "../config/VersionManifestConfig.js";
+import { isSaveImportEnabled } from "../config/SaveTransferConfig.js";
 
 export const InitSchema = z.object({
   apiVersion: z.string().optional().default(""),
@@ -19,5 +20,6 @@ export const init: KoaController = async (ctx) => {
   }
 
   ctx.status = Status.OK;
-  ctx.body = { debugMode: devConfig.debugMode };
+  // saveImport tells the register screen whether to offer the save code field
+  ctx.body = { debugMode: devConfig.debugMode, saveImport: isSaveImportEnabled() };
 };
