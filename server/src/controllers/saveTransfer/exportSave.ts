@@ -5,11 +5,7 @@ import { buildSaveExport } from "../../services/saveTransfer/exportSave.js";
 import { logger } from "../../utils/logger.js";
 
 /**
- * Controller to export the authenticated player's own yard as a signed save code.
- *
- * The code is one line of text. The player pastes it when registering on a custom server
- * that imports from this server, which checks its signature against this server's
- * public key (GET /saveexport/key).
+ * Controller to export the authenticated player's yard as a signed save code.
  *
  * @param {Context} ctx - The Koa context object.
  * @returns {Promise<void>} - A promise that resolves when the controller is complete.

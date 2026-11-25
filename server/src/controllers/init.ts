@@ -20,6 +20,5 @@ export const init: KoaController = async (ctx) => {
   }
 
   ctx.status = Status.OK;
-  // saveImport tells the register screen whether to offer the save code field
   ctx.body = { debugMode: devConfig.debugMode, saveImport: isSaveImportEnabled() };
 };

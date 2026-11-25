@@ -22,10 +22,8 @@ import {
  * password, saves the user to the database, and returns the filtered user information.
  * If registration fails, it throws an authentication failure error.
  *
- * On servers with save imports enabled, the player may also send a save code exported
- * from the source server. It is verified before anything is created, and the account and
- * its imported yard are then created together, so a failed import never leaves an
- * account behind.
+ * When save imports are enabled, a save code can be sent with the registration. It is
+ * verified first, then the account and its imported yard are created in one transaction.
  *
  * @param {Context} ctx - The Koa context object.
  * @returns {Promise<void>} - A promise that resolves when the controller is complete.
@@ -76,7 +74,6 @@ export const register: KoaController = async (ctx) => {
       };
     }));
   } catch (err) {
-    // Two registrations with the same save code at once: only the first commits.
     if (err instanceof UniqueConstraintViolationException && err.message.includes("save_import")) {
       throw saveAlreadyImportedErr();
     }

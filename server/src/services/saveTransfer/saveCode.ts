@@ -17,23 +17,9 @@ import {
 } from "../../errors/errors.js";
 import { getImportSourceKeys, getSigningKey } from "./saveSigningKeys.js";
 
-/*
- * A save code is one line of text with four dot-separated fields after the prefix:
- *
- *   bymr-save.1.<keyId>.<payload>.<signature>
- *
- * - keyId: 16 hex characters identifying the signing key
- * - payload: base64url of the gzipped JSON payload
- * - signature: base64url Ed25519 signature of everything before the last dot
- *
- * Every character is a letter, digit, "-", "_" or ".", so the code survives being
- * copied, pasted, posted in a form or saved to a text file unchanged.
- */
-
 /**
- * The whole code in one pattern: version, key id, payload, signature. No field's
- * characters include ".", so matching takes time proportional to the code's length
- * whatever an unauthenticated caller sends.
+ * bymr-save.<version>.<keyId>.<payload>.<signature>, where payload is gzipped JSON and
+ * signature covers everything before the last dot, both base64url.
  */
 const SAVE_CODE = new RegExp(`^${SAVE_CODE_PREFIX}\\.(\\d{1,4})\\.([0-9a-f]{16})\\.([A-Za-z0-9_-]+)\\.([A-Za-z0-9_-]+)$`);
 
@@ -57,13 +43,10 @@ export const encodeSaveCode = (payload: SaveCodePayload): string => {
 };
 
 /**
- * Checks a pasted save code and returns its contents.
+ * Verifies a pasted save code and returns its contents. The payload is only read once
+ * the signature checks out.
  *
- * In order: the code's shape, its version, that it was signed by one of the source
- * server's keys, and the signature. Only then is the payload decompressed and validated.
- *
- * @param {string} input - The code as the player pasted it. Whitespace, including line
- * breaks a text editor may have added, is ignored.
+ * @param {string} input - The code as pasted. Whitespace is ignored.
  * @returns {SaveCodePayload} The verified payload.
  * @throws {ClientSafeError} Describing the first check that failed.
  */
@@ -90,7 +73,7 @@ export const decodeSaveCode = (input: string): SaveCodePayload => {
   try {
     isSigned = verify(null, Buffer.from(signed, "utf8"), publicKey, Buffer.from(signature, "base64url"));
   } catch {
-    // A signature of the wrong length makes some runtimes throw rather than return false.
+    isSigned = false;
   }
 
   if (!isSigned) throw saveCodeSignatureErr();
@@ -106,7 +89,6 @@ export const decodeSaveCode = (input: string): SaveCodePayload => {
 
   const parsed = SaveCodePayloadSchema.safeParse(json);
 
-  // Signed by a trusted key, so a mismatch here means a bug in the exporting server.
   if (!parsed.success || parsed.data.issuer.keyId !== keyId || parsed.data.version !== SAVE_CODE_VERSION) {
     throw saveCodeInvalidErr();
   }

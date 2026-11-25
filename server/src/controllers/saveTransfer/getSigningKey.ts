@@ -5,10 +5,7 @@ import { getSigningKey } from "../../services/saveTransfer/saveSigningKeys.js";
 import { getIssuerName } from "../../services/saveTransfer/exportSave.js";
 
 /**
- * Public controller returning the key this server signs save codes with.
- *
- * Operators of servers that import from this one put the public key in their
- * SAVE_IMPORT_SOURCE_KEYS, so they only accept codes this server made.
+ * Public controller returning the public key this server signs save codes with.
  *
  * @param {Context} ctx - The Koa context object.
  * @returns {Promise<void>} - A promise that resolves when the controller is complete.

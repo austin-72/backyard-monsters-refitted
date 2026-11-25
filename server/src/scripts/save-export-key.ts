@@ -5,11 +5,6 @@ import { computeKeyId } from "../services/saveTransfer/saveSigningKeys.js";
  * Generates an Ed25519 key pair for signing save exports.
  *
  * Usage: bun run keys:save-export
- *
- * Put SAVE_EXPORT_PRIVATE_KEY in this server's .env and keep it secret: anyone holding it
- * can forge exports from this server. The public key is safe to share: servers that import
- * from this one put it in SAVE_IMPORT_SOURCE_KEYS. It is also served at
- * GET /api/<version>/saveexport/key once the server is running.
  */
 const { privateKey, publicKey } = generateKeyPairSync("ed25519");
 

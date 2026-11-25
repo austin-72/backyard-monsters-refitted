@@ -1,9 +1,8 @@
 import { Migration } from "@mikro-orm/migrations";
 
 /**
- * Creates bym.save_import, which records every source account imported on this server
- * so each can be imported only once. There is deliberately no foreign key to bym.user:
- * the row must outlive the account it created.
+ * Creates bym.save_import. It has no foreign key to bym.user, so a row outlives the
+ * account it created and that source account can't be imported again.
  */
 export class CreateSaveImportTable extends Migration {
   async up(): Promise<void> {

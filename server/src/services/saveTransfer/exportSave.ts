@@ -15,7 +15,7 @@ import { getSigningKey } from "./saveSigningKeys.js";
 import { encodeSaveCode } from "./saveCode.js";
 
 /**
- * The name written into this server's exports, so a custom server can show where a save came from.
+ * The name written into this server's exports.
  *
  * @returns {string} SAVE_EXPORT_ISSUER, else SERVER_URL, else BASE_URL:PORT.
  */
@@ -25,9 +25,7 @@ export const getIssuerName = (): string =>
   `${process.env.BASE_URL ?? "http://localhost"}:${process.env.PORT ?? 3001}`;
 
 /**
- * Copies the portable keys off a save, normalised by PortableSaveSchema (for example,
- * points and basevalue are always strings) so every export has the same shape. Empty
- * columns are left out, so the importing server keeps its new-player default for them.
+ * Copies the portable fields off a save, leaving out empty ones.
  *
  * @param {Save} save - A main or inferno save.
  * @returns {PortableSave} The portable part of the save.
@@ -45,9 +43,7 @@ const pickPortable = (save: Save): PortableSave => {
 };
 
 /**
- * Builds and signs an export of the player's main yard, inferno yard and account
- * progress. Nothing identifying beyond their user id and username is included -
- * no email address, password hash or Discord details.
+ * Builds and signs an export of the player's main yard, inferno yard and account progress.
  *
  * @param {User} user - The authenticated player.
  * @returns {Promise<{ code: string; payload: SaveCodePayload }>} The signed save code and what it contains.

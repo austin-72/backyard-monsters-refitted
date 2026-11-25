@@ -14,9 +14,7 @@ import type { PostgresEM } from "../../types/PostgresEM.js";
 import { decodeSaveCode } from "./saveCode.js";
 
 export interface ImportedSaveSummary {
-  /** The server the save came from. */
   from: string;
-  /** The player's username on that server. */
   username: string;
   townHallLevel: number | null;
 }
@@ -41,8 +39,7 @@ export const readSaveCodeForRegistration = async (code: string): Promise<SaveCod
 };
 
 /**
- * Writes the portable fields of a save code onto a save. Nulls are skipped, keeping the
- * new save's default: exports leave empty columns out, and champion can't be null.
+ * Writes the portable fields of a save code onto a save, keeping its defaults for nulls.
  *
  * @param {Save} save - The destination save.
  * @param {PortableSave} portable - The verified portable fields.
@@ -56,10 +53,7 @@ const applyPortable = (save: Save, portable: PortableSave) => {
 };
 
 /**
- * Starts an imported yard on Map Room 1, since a world position can't carry over between
- * servers. Resources above the normal cap (only possible on Map Room 3) are brought down
- * to it, as when leaving Map Room 3. The MR2 unlock is kept, so the player can join a map
- * room in game.
+ * Starts an imported yard on Map Room 1, capping Map Room 3 resources as leaving MR3 does.
  *
  * @param {Save} save - The imported main save.
  * @param {PortableSave} portable - The fields it was imported from.
@@ -75,12 +69,8 @@ const startOnMapRoom1 = (save: Save, portable: PortableSave) => {
 };
 
 /**
- * Gives a newly registered account the yard from a verified save code, and records the
- * import so the source account can't be imported again.
- *
- * Runs inside the registration transaction: if anything fails, neither the account nor
- * the import record is kept. If two registrations race with the same source account,
- * the save_import primary key lets only one of them commit.
+ * Gives a newly registered account the yard from a verified save code and records the
+ * import. Runs inside the registration transaction.
  *
  * @param {PostgresEM} em - The registration transaction's entity manager.
  * @param {User} user - The account just created, already flushed so it has a user id.
@@ -92,7 +82,7 @@ export const applyImportedSave = async (em: PostgresEM, user: User, payload: Sav
 
   const mainSave = await Save.createMainSave(em, user);
 
-  // Created before the main save is written: createInfernoSave resets the main save's iresources.
+  // createInfernoSave resets the main save's iresources, so it runs before main is applied
   if (inferno) applyPortable(await Save.createInfernoSave(em, user), inferno);
 
   applyPortable(mainSave, main);

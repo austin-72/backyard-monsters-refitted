@@ -67,7 +67,6 @@ export const UserRegistrationSchema = z.object({
   username: usernameSchema,
   email: emailSchema,
   password: passwordSchema,
-  /** A save code exported from the source server, on servers with imports enabled. Blank means none. */
   saveCode: z.string().max(MAX_SAVE_CODE_LENGTH).trim().optional(),
 });
 

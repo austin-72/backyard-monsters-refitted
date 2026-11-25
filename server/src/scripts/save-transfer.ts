@@ -8,17 +8,7 @@ import type { JsonObject } from "../types/JsonObject.js";
 
 /**
  * Tests save transfer against running servers, without the launcher or the game client.
- *
- *   bun run save:transfer export  --server <url> --email <email> --password <password> [--out <file>]
- *   bun run save:transfer inspect --file <file> (--server <url> | --key <public key>)
- *   bun run save:transfer import  --server <url> --file <file> --username <name> --email <email> --password <password>
- *
- * export   Signs in and saves the account's save code to a file, like the launcher's Export save button.
- * inspect  Verifies a save code against a server's public key and prints what it contains. Changes nothing.
- * import   Registers a new account with the save code, like the game's register screen.
- *
- * --server is a server's base URL, e.g. http://localhost:3001. --api-version defaults to v1, which
- * works while version management is off; otherwise pass the game version the server expects.
+ * See docs/save-transfer.md.
  */
 
 const USAGE = `Usage:
@@ -117,7 +107,6 @@ const commands: Record<string, () => Promise<void>> = {
 
     if (!exported.data.code) fail(`Export failed: ${exported.data.error ?? exported.status}`);
 
-    // The name comes from the server's response, so keep it to characters that can't leave this folder
     const safe = (text: unknown) => String(text).replace(/[^a-zA-Z0-9_-]/g, "_");
     const out = values.out ?? `bym-save-${safe(login.data.username)}-${safe(String(exported.data.exportedAt).slice(0, 10))}.bymsave`;
 

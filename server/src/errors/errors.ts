@@ -626,11 +626,9 @@ export const noSaveToExportErr = () =>
     isClientFriendly: true,
   });
 
-/*
- * Save code errors are raised by the register route, which the game's register screen
- * calls. They are not client friendly so the interceptor sends them as HTTP 200 with the
- * message: some Flash runtimes can't read the body of an error status, and the player
- * would only see a generic failure.
+/**
+ * Save code errors are not client friendly, so the register screen receives them as
+ * HTTP 200 with the message. Some Flash runtimes can't read the body of an error status.
  */
 export const saveImportDisabledErr = () =>
   new ClientSafeError({

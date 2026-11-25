@@ -251,8 +251,7 @@ export const loginLimiter = RateLimit.middleware({
 });
 
 /**
- * Rate limit for save exports - 10 per hour per user. Each export reads and
- * signs the whole yard.
+ * Rate limit for save exports - 10 per hour per user.
  */
 export const saveExportLimiter = RateLimit.middleware({
   interval: { min: 60 },

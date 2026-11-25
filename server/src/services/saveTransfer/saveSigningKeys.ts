@@ -5,15 +5,12 @@ import { logger } from "../../utils/logger.js";
 export interface SigningKey {
   privateKey: KeyObject;
   publicKey: KeyObject;
-  /** The public key as base64 DER (SPKI), the form SAVE_IMPORT_SOURCE_KEYS takes. */
   publicKeyBase64: string;
   keyId: string;
 }
 
 /**
- * Short, stable identifier for a public key: the first 16 hex characters of the
- * SHA-256 of its SPKI DER encoding. It only routes a file to the right key;
- * the signature itself is always checked against the full key.
+ * The first 16 hex characters of the SHA-256 of a public key's SPKI DER encoding.
  *
  * @param {KeyObject} publicKey - An Ed25519 public key.
  * @returns {string} The key id.
@@ -25,8 +22,7 @@ export const computeKeyId = (publicKey: KeyObject): string => {
 };
 
 /**
- * Parses a private key from the environment. Accepts a PEM block (with real or
- * escaped newlines) or the base64 PKCS#8 DER that `bun run keys:save-export` prints.
+ * Parses a private key given as base64 PKCS#8 DER or a PEM block.
  *
  * @param {string} raw - The SAVE_EXPORT_PRIVATE_KEY value.
  * @returns {KeyObject} The private key.
@@ -44,8 +40,7 @@ let signingKey: SigningKey | null | undefined;
 /**
  * This server's export signing key, read once from SAVE_EXPORT_PRIVATE_KEY.
  *
- * @returns {SigningKey | null} The key, or null when exports are not configured
- * (missing, unreadable or not an Ed25519 key - the reason is logged once).
+ * @returns {SigningKey | null} The key, or null when it is missing or invalid.
  */
 export const getSigningKey = (): SigningKey | null => {
   if (signingKey !== undefined) return signingKey;
@@ -98,13 +93,8 @@ const parsePublicKey = (raw: string): KeyObject => {
 let sourceKeys: Map<string, KeyObject> | undefined;
 
 /**
- * The public keys of the server players import from, keyed by key id.
- *
- * Read once from SAVE_IMPORT_SOURCE_KEYS: the source server's public key, as served at
- * GET /api/:apiVersion/saveexport/key, or several separated by commas if that server
- * has rotated its key. All the keys must belong to the one source server, because
- * imports are counted by the source account's user id alone. Entries that fail to
- * parse or are not Ed25519 are skipped with an error in the log.
+ * The source server's public keys by key id, read once from SAVE_IMPORT_SOURCE_KEYS.
+ * Unreadable or non-Ed25519 entries are logged and skipped.
  *
  * @returns {Map<string, KeyObject>} Source keys by key id.
  */

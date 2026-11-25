@@ -49,7 +49,6 @@ package com.auth {
 
         private var passwordValue:String = "";
 
-        // Save code field: shown on the register form when the server accepts imports.
         private var saveCodeInput:TextField;
 
         private var saveCodeBorder:Sprite;
@@ -58,13 +57,11 @@ package com.auth {
 
         private const SAVE_CODE_PLACEHOLDER:String = "Save code to import (optional)";
 
-        // Space the save code field takes up: one field plus the gap below it.
         private const SAVE_CODE_SPACE:Number = 55;
 
-        // How far the form moves up while the save code field is shown, so it still fits.
         private const SAVE_CODE_LIFT:Number = 40;
 
-        // Pasted text longer than this is treated as a save code and kept out of the field.
+        // Longer pastes are kept in saveCodeValue rather than laid out in the field
         private const SAVE_CODE_PASTE_LENGTH:int = 100;
 
         private const FORM_Y:Number = 45;
@@ -268,13 +265,8 @@ package com.auth {
         }
 
         /*
-         * Creates the save code field, hidden until the register form is shown on a server
-         * that accepts imports. It sits below the password field; updateFormFields makes
-         * room for it.
-         *
-         * A save code runs to tens of thousands of characters, more than a text field should
-         * lay out. Once pasted, the code is kept in saveCodeValue and the field only says
-         * that one was added. Clicking back into the field clears it for a new paste.
+         * Creates the save code field below the password, shown on the register form when
+         * the server accepts imports.
          */
         private function createSaveCodeField():void {
             saveCodeInput = createInputField(350, 35, SAVE_CODE_PLACEHOLDER);
@@ -303,14 +295,14 @@ package com.auth {
         }
 
         /*
-         * Whether the save code field is in use: on the register form, on a server that accepts imports.
+         * Whether the save code field is shown.
          */
         private function get showSaveCode():Boolean {
             return isRegisterForm && GLOBAL.saveImportEnabled;
         }
 
         /*
-         * The save code the player entered, without surrounding whitespace. Empty when there is none.
+         * The entered save code, trimmed. Empty when there is none.
          */
         private function get enteredSaveCode():String {
             return saveCodeValue.replace(/^\s+|\s+$/g, "");
@@ -706,7 +698,6 @@ package com.auth {
                 CreateBorder(usernameInput);
             }
 
-            // Make room for the save code field below the password, lifting the form so it still fits
             var shift:Number = showSaveCode ? SAVE_CODE_SPACE : 0;
             saveCodeInput.visible = showSaveCode;
             saveCodeBorder.visible = showSaveCode;
