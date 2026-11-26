@@ -534,7 +534,8 @@ export const infernoOnlyConfig = {
     days: 7,
     waves: 32,
     firstMonth: "2026-10",
-    showDaysBefore: 7,
+    // (26 November, 72's suggestion from the right-click menu: 3 days before, was 7)
+    showDaysBefore: 3,
   },
 
   /**
@@ -616,7 +617,9 @@ export const infernoOnlyConfig = {
    */
   gauntlet: {
     enabled: true,
-    showDaysBefore: 7,
+    // (26 November, 72's suggestion from the right-click menu: "Make these buttons only show 3 days before the event
+    // begins instead of 7d": 3, was 7; the Frozen Monster Invasion's too, Trick or Treat's was 3 already)
+    showDaysBefore: 3,
     days: 7,
     stages: 13,
     winPercent: 90,

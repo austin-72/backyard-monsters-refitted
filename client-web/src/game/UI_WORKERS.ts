@@ -5,7 +5,7 @@ import { GlowFilter } from "flash/filters";
 import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno } from "@game";
+import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, UI_BOTTOM, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno } from "@game";
 
 export class UI_WORKERS extends ASObject {
     private static _do: DisplayObject = null;
@@ -110,7 +110,18 @@ export class UI_WORKERS extends ASObject {
         if (!UI_WORKERS._mc) {
             return;
         }
-        let r: Rectangle = UI_WORKERS._workers && UI_WORKERS._workers.length >= 5 ? as3.cast(UI_WORKERS._workers[4].mc, DisplayObject).getBounds(UI_WORKERS._mc) : new Rectangle(0, 20 + 4 * UI_WORKERS._workerMCOffset, 40, 40);
+        UI_WORKERS.ioSpaceWorkers();
+        // (26 November: under the last worker shown, a 6th or 7th too, and never above the 5th's place)
+        let last: int = 4;
+        if (UI_WORKERS._workers) {
+            for (let k: int = UI_WORKERS._workers.length - 1; k > 4; k--) {
+                if (UI_WORKERS._workers[k].mc.visible) {
+                    last = k;
+                    break;
+                }
+            }
+        }
+        let r: Rectangle = UI_WORKERS._workers && UI_WORKERS._workers.length > last ? as3.cast(UI_WORKERS._workers[last].mc, DisplayObject).getBounds(UI_WORKERS._mc) : new Rectangle(0, 20 + 4 * UI_WORKERS._workerMCOffset, 40, 40);
         // Top to bottom: Hellgate Defense, Moloch's Gauntlet, the Frozen Monster Invasion, Hell Freezes Over; each
         // moves up into the place of one above it that is hidden (the invasion's takes the Gauntlet's: they are
         // a week apart, each hidden until a week before it starts).
@@ -294,21 +305,10 @@ export class UI_WORKERS extends ASObject {
             }
             _loc1_ = 0;
             while (_loc1_ < UI_WORKERS._maxWorkers) {
-                if (GLOBAL.InfernoMode()) {
-                    _loc2_ = new icon_worker_inferno();
-                } else {
-                    _loc2_ = new icon_worker();
-                }
-                _loc2_.y = 20 + _loc1_ * UI_WORKERS._workerMCOffset;
-                _loc2_.mouseChildren = false;
-                _loc2_.addEventListener(MouseEvent.CLICK, UI_WORKERS.MouseClicked(_loc1_));
-                _loc2_.addEventListener(MouseEvent.MOUSE_OVER, UI_WORKERS.MouseOver(_loc1_));
-                _loc2_.addEventListener(MouseEvent.MOUSE_OUT, UI_WORKERS.MouseOut);
-                _loc2_.buttonMode = true;
-                UI_WORKERS._mc.addChild(_loc2_);
-                UI_WORKERS._workers.push({ "purchased": false, "active": false, "id": 0, "message": "", "mc": _loc2_ });
+                UI_WORKERS.ioAddSlot();
                 _loc1_++;
             }
+            UI_WORKERS.ioMoreSlots();
             UI_WORKERS._do = GLOBAL._layerUI.addChild(UI_WORKERS._mc);
         }
         UI_WORKERS.ioPlaceExtra();
@@ -316,6 +316,80 @@ export class UI_WORKERS extends ASObject {
         if (!UI2._showBottom) {
             UI_WORKERS.Hide();
         }
+    }
+
+    /**
+     * (26 November) With a 6th and 7th worker the column is longer: on a short screen its buttons are moved closer
+     * together (down to 36 apart, from 45) so that they and the buttons under them (Pick all warts, the events')
+     * stay above the menu at the bottom (Buildings, Quests, Store, Map).
+     */
+    private static ioSpaceWorkers(): void {
+        if (!UI_WORKERS._workers || !UI_WORKERS._mc) {
+            return;
+        }
+        let step: number = UI_WORKERS._workerMCOffset;
+        let n: int = UI_WORKERS._workers.length;
+        if (GLOBAL.INFERNO_ONLY && n > 5) {
+            try {
+                let menu: DisplayObject = UI_BOTTOM._mc;
+                if (menu && menu.stage && menu.visible && UI_WORKERS._mc.stage) {
+                    let top: number = UI_WORKERS._mc.globalToLocal(new Point(0, menu.getBounds(menu.stage).y)).y;
+                    let under: number = UI_WORKERS.IO_EXTRA_GAP;
+                    for (let y of as3.values([UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
+                        if (y && y.visible) {
+                            under += UI_WORKERS.IO_YARD_STEP;
+                        }
+                    }
+                    for (let b of as3.values([UI_WORKERS._ioExtra0, UI_WORKERS._ioExtra, UI_WORKERS._ioExtraTot, UI_WORKERS._ioExtraFmi, UI_WORKERS._ioExtra2])) {
+                        if (b && b.visible) {
+                            under += 66;
+                        }
+                    }
+                    let room: number = top - 20 - under - 46;
+                    step = Math.max(36, Math.min(UI_WORKERS._workerMCOffset, Math.floor(room / Math.max(1, n - 1))));
+                }
+            } catch (e) {
+            }
+        }
+        for (let i: int = 0; i < n; i++) {
+            let y: number = 20 + i * step;
+            if (UI_WORKERS._workers[i].mc.y != y) {
+                UI_WORKERS._workers[i].mc.y = y;
+            }
+        }
+    }
+
+    /** One worker's button, under the ones there are. */
+    private static ioAddSlot(): void {
+        let i: int = UI_WORKERS._workers.length;
+        let mc: MovieClip = GLOBAL.InfernoMode() ? new icon_worker_inferno() : new icon_worker();
+        mc.y = 20 + i * UI_WORKERS._workerMCOffset;
+        mc.mouseChildren = false;
+        mc.addEventListener(MouseEvent.CLICK, UI_WORKERS.MouseClicked(i));
+        mc.addEventListener(MouseEvent.MOUSE_OVER, UI_WORKERS.MouseOver(i));
+        mc.addEventListener(MouseEvent.MOUSE_OUT, UI_WORKERS.MouseOut);
+        mc.buttonMode = true;
+        UI_WORKERS._mc.addChild(mc);
+        UI_WORKERS._workers.push({ "purchased": false, "active": false, "id": 0, "message": "", "mc": mc });
+    }
+
+    /**
+     * Inferno-only (26 November, 72's report from the right-click menu: "When you have a 6th worker (temporary from
+     * store) he doesn't show here. And if you have a 7th (devils contract) he doesn't show either."): the main yard's
+     * column had 5 buttons whatever the workers; the Apprentice (the Store's) and the Devil's Second Shift worker are
+     * a 6th and a 7th in the queue. A button for each worker the queue has, made when one comes (true when one was).
+     */
+    private static ioMoreSlots(): boolean {
+        if (!GLOBAL.INFERNO_ONLY || !UI_WORKERS._mc || GLOBAL.mode != GLOBAL.e_BASE_MODE.BUILD || !BASE.isMainYard || !QUEUE._stack) {
+            return false;
+        }
+        let added: boolean = false;
+        while (UI_WORKERS._workers.length < QUEUE._stack.length) {
+            UI_WORKERS.ioAddSlot();
+            added = true;
+        }
+        UI_WORKERS._maxWorkers = UI_WORKERS._workers.length;
+        return added;
     }
 
     private static MouseOver(param1: int): Function {
@@ -333,7 +407,8 @@ export class UI_WORKERS extends ASObject {
             } else {
                 _loc3_ = KEYS.Get("ui_worker_hire");
             }
-            UI_WORKERS.PopupShow((UI_WORKERS._mc.x - 5) | 0, (UI_WORKERS._mc.y + UI_WORKERS._workerMCOffset / 2 + i * UI_WORKERS._workerMCOffset + UI_WORKERS._workerMCOffset * 0.5) | 0, as3.str(_loc3_), i);
+            // (26 November: from the button's own place: the column can be closer together, ioSpaceWorkers)
+            UI_WORKERS.PopupShow((UI_WORKERS._mc.x - 5) | 0, (UI_WORKERS._mc.y + _loc2_.mc.y - 20 + UI_WORKERS._workerMCOffset) | 0, as3.str(_loc3_), i);
         };
     }
 
@@ -363,6 +438,9 @@ export class UI_WORKERS extends ASObject {
         let _loc4_: any = null;
         let _loc1_: boolean = false;
         let _loc2_: int = 0;
+        if (UI_WORKERS._workers && UI_WORKERS.ioMoreSlots()) {
+            _loc1_ = true;
+        }
         while (_loc2_ < UI_WORKERS._workers.length) {
             _loc3_ = UI_WORKERS._workers[_loc2_];
             if (Boolean(QUEUE._stack) && Boolean(QUEUE._stack[_loc2_])) {

@@ -15,13 +15,17 @@ export class MUSHROOMS extends ASObject {
 
     // ---- Inferno-only: the Wart Bloom (server: services/events/wartBloom.ts). Every weekend, Friday 6 pm to
     // Sunday midnight Central, warts grow 3 times as fast in the main yard: each second in a bloom counts 3
-    // times towards the next wart (one per WART_SECONDS, at most 10 in the yard), offline time too. In a
+    // times towards the next wart (one per WART_SECONDS, at most WART_MAX in the yard), offline time too. In a
     // bloom they also grow while the yard is open (ioTick), not only when it loads.
     /** One wart per this many seconds of growth (the stock rate: 4.8 hours). */
     public static readonly WART_SECONDS: int = 17280;
 
-    /** At most this many warts in a yard. */
-    public static readonly WART_MAX: int = 10;
+    /**
+     * At most this many warts in a yard. (26 November, 72's suggestion from the right-click menu: "Make the maximum
+     * amount of warts on a yard cap at 20": was 10, as the stock game's mushrooms; a new yard's first patch is 20,
+     * and a yard keeps at most 20 on record.)
+     */
+    public static readonly WART_MAX: int = 20;
 
     private static _ioTimer: Timer = null;
 
@@ -301,11 +305,13 @@ export class MUSHROOMS extends ASObject {
             }
             if (spawnCount > 0) {
                 BASE._lastSpawnedMushroom = GLOBAL.Timestamp();
-                if (spawnCount > 10) {
-                    spawnCount = 10;
+                // (Inferno-only, 26 November: up to WART_MAX, 20; the stock game's 10)
+                let ioMax: int = GLOBAL.INFERNO_ONLY ? MUSHROOMS.WART_MAX : 10;
+                if (spawnCount > ioMax) {
+                    spawnCount = ioMax;
                 }
-                if (mushroomCount + spawnCount > 10) {
-                    spawnCount = (10 - mushroomCount) | 0;
+                if (mushroomCount + spawnCount > ioMax) {
+                    spawnCount = (ioMax - mushroomCount) | 0;
                 }
                 if (spawnCount > 0) {
                     MUSHROOMS.Spawn(spawnCount);

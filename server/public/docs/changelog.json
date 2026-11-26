@@ -1,7 +1,28 @@
 {
   "title": "Changelog",
-  "updated": "2026-11-25",
+  "updated": "2026-11-26",
   "entries": [
+    {
+      "date": "2026-11-26",
+      "headline": "Room for 20 warts, a button for every worker, event buttons nearer the day",
+      "items": [
+        {
+          "area": "Yard",
+          "title": "Up to 20 warts",
+          "text": "Your yard now holds up to 20 warts at a time instead of 10, so a long time away (or a Wart Bloom weekend) grows more of them before the yard is full."
+        },
+        {
+          "area": "Fixes",
+          "title": "A 6th and 7th worker in the workers' column",
+          "text": "With the Store's Apprentice or the Devil's Second Shift worker, the extra workers had no button in the workers' column on the right. Every worker now has one, with the time left on its job; on a short screen the column moves its buttons a little closer together to stay above the menu at the bottom."
+        },
+        {
+          "area": "Events",
+          "title": "Event buttons 3 days ahead",
+          "text": "The buttons for Moloch's Gauntlet and the Frozen Monster Invasion now appear in the workers' column 3 days before the event starts, instead of a week before."
+        }
+      ]
+    },
     {
       "date": "2026-11-25",
       "headline": "Right-click to report a bug or suggest a change; Fireblack walls get a new look; a fix for the ICS window",

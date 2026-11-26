@@ -17,7 +17,7 @@ Almost everything runs on UTC; the Wart Bloom follows US Central time. [When thi
 
 ## The Wart Bloom {#wart-bloom}
 
-- **Every weekend, from Friday 6 pm until Sunday midnight (US Central time),** warts grow three times as fast in your main yard: one every 1.6 hours, up to 10. Never in outposts.
+- **Every weekend, from Friday 6 pm until Sunday midnight (US Central time),** warts grow three times as fast in your main yard: one every 1.6 hours, up to 20. Never in outposts.
 - Offline time counts, and while your yard is open new warts keep popping up.
 - Global chat says when the bloom starts and how long it lasts. While it's on, a chip under the top bar says how long is left (click it for the end in your own time) and how many warts are in your yard, and warns when the yard is full, since a full yard wastes the bloom's growth.
 
@@ -26,7 +26,7 @@ Almost everything runs on UTC; the Wart Bloom follows US Central time. [When thi
 - **Every month, for the first 7 days (UTC):** a ladder of 13 Moloch yards fought in order, from your main yard. Your progress is your own and starts again each month.
 - **Win at 90% destroyed.** Damage stays between tries; you get 3 tries per gate, then the yard heals and that gate's reward is lost for the month (you still have to beat it to go on).
 - **Rewards:** 5 Shiny per gate and 150 more for the last (up to 215 a month), plus resources rising to 30 million bone, coal and sulfur and 15 million magma at gate 13. No loot from the yards themselves.
-- **The Gauntlet's button** sits in the workers' column while it's open and in the week before; its tip says when it opens or closes, in your own time, and the window counts down. The first visit home after it opens, and once on its last day, the game reminds you, with how many gates are left.
+- **The Gauntlet's button** sits in the workers' column while it's open and in the 3 days before; its tip says when it opens or closes, in your own time, and the window counts down. The first visit home after it opens, and once on its last day, the game reminds you, with how many gates are left.
 - **The window** shows the gate to fight and its prize, the army you'd attack with and a map of the gate's layout, and this month's Shiny: claimed, still to win and lost. After an attack it says how much of the gate you destroyed, how much breaks it, the attempts left and the prize still waiting.
 - Catapult shots cost their resources in the Gauntlet, as in any attack, and End Attack reminds you it uses an attempt.
 

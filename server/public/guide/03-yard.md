@@ -2,7 +2,7 @@
 
 ## Warts {#warts}
 
-- **Warts instead of mushrooms.** Crimson, lava-cracked warts grow in your main yard by themselves: one about every 4.8 hours, up to 10 at a time, offline time included. A worker picks them, and about one in four is a golden wart worth 3 or 8 Shiny.
+- **Warts instead of mushrooms.** Crimson, lava-cracked warts grow in your main yard by themselves: one about every 4.8 hours, up to 20 at a time, offline time included. A worker picks them, and about one in four is a golden wart worth 3 or 8 Shiny.
 - **Pick all warts:** the wart button in the workers' column sends your idle workers to every wart in the yard, one after another, with one summary of the golden ones at the end.
 - Every weekend the **Wart Bloom** makes them grow three times as fast (see [Events and rewards](13-events.md#wart-bloom)).
 

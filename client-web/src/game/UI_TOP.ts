@@ -1463,8 +1463,9 @@ export class UI_TOP extends UI_TOP_CLIP {
         if (this._ioTd) {
             this._ioTd.visible = false;
         }
-        // (10 October: while closed, only shown from a week before it opens)
-        let soon: boolean = Boolean(status) && !status.open && Number(status.opensAt) > 0 && Number(status.opensAt) - GLOBAL.Timestamp() <= (status.showDaysBefore != null ? Number(status.showDaysBefore) : 7) * 86400;
+        // (10 October: while closed, only shown from a week before it opens; 26 November: 3 days, the server's
+        // showDaysBefore)
+        let soon: boolean = Boolean(status) && !status.open && Number(status.opensAt) > 0 && Number(status.opensAt) - GLOBAL.Timestamp() <= (status.showDaysBefore != null ? Number(status.showDaysBefore) : 3) * 86400;
         this._ioGauntlet.visible = Boolean(status) && (status.open || soon) && own && TUTORIAL._stage >= 200;
         this._ioGauntlet.alpha = Number(status && status.open ? 1 : 0.6);
         this._ioGauntlet.mcSpinner.visible = this._ioGauntlet.visible && status && status.open && (status.stage | 0) <= (status.stages | 0);
