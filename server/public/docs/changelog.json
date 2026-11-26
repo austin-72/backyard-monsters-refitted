@@ -9,7 +9,7 @@
         {
           "area": "Interface",
           "title": "Right-click: report a bug or suggest a change",
-          "text": "Right-click anything in the game for a new menu. Report a bug or suggest a change: what you right-clicked is highlighted on a screenshot (make the highlight bigger or smaller, click the picture to pick something else, or drag to draw a box), and you can leave the screenshot out, hide the chat in it or add a picture of your own. My reports shows what you sent, what the team decided and their answer. The menu also copies the text under the pointer or your game info for asking for help, saves a screenshot of the whole screen, and has full screen, settings and reload. On a phone or tablet, the same reports are under Bugs and ideas in the settings menu."
+          "text": "Right-click anything in the game, or the page around it, for a new menu: it names what you right-clicked (a button, a building, a monster, a window) and outlines it. Report a bug or suggest a change: what you right-clicked is highlighted on a screenshot (make the highlight bigger or smaller, click the picture to pick something else, or drag to draw a box), and you can leave the screenshot out, hide the chat in it or add a picture of your own. My reports shows what you sent, what the team decided and their answer. The menu also copies the text under the pointer or your game info for asking for help, saves a screenshot of the whole screen, and has full screen, settings and reload. On a phone or tablet, the same reports are under Bugs and ideas in the settings menu."
         },
         {
           "area": "Buildings",

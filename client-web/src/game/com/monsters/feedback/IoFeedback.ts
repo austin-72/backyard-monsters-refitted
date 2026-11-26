@@ -147,6 +147,7 @@ export class IoFeedback extends ASObject {
         runtimeHooks.contextMenu = (cx: number, cy: number, sx: number, sy: number): void => {
             IoFeedback.openMenu(cx, cy, sx, sy);
         };
+        document.addEventListener("contextmenu", (e: any): void => IoFeedback.pageMenu(e));
         document.addEventListener("pointerdown", (e: any): void => {
             if (IoFeedback._menu && !IoFeedback._menu.contains(e.target)) {
                 IoFeedback.closeMenu();
@@ -188,6 +189,15 @@ export class IoFeedback extends ASObject {
     private static className(o: any): string {
         let c: string = getQualifiedClassName(o) || "";
         return c.substr(c.lastIndexOf(":") + 1);
+    }
+
+    /** What a click at (x, y) on the stage would hit (the tests: rightclick-sweep). */
+    public static hitAt(x: number, y: number): any {
+        try {
+            return pickAt(IoFeedback.stage() as any, x, y).target;
+        } catch (e) {
+            return null;
+        }
     }
 
     /** The deepest visible thing drawn at (x, y) on the stage, under c. */
@@ -353,8 +363,12 @@ export class IoFeedback extends ASObject {
             if (cls == "UI_MENU") {
                 return IoFeedback.t("io_fb_area_menu", "the menu at the bottom");
             }
-            if (p == (POPUPS as any)._mc) {
-                return IoFeedback.t("io_fb_area_window", "the window");
+            if (cls == "UI_MISSIONMENU") {
+                return IoFeedback.t("io_fb_area_quests", "the quest panel");
+            }
+            if (p == (POPUPS as any)._mc || (p.parent && [GLOBAL._layerWindows, GLOBAL._layerMessages, GLOBAL._layerTop].indexOf(p.parent as any) >= 0)) {
+                let title: string = IoFeedback.titleOf(p);
+                return title ? IoFeedback.t("io_fb_area_window_named", "the “#v1#” window", { "v1": title }) : IoFeedback.t("io_fb_area_window", "the window");
             }
             if (GLOBAL._layerMap && p == (GLOBAL._layerMap as any)) {
                 return IoFeedback.t("io_fb_area_yard", "the yard");
@@ -367,28 +381,331 @@ export class IoFeedback extends ASObject {
         return s.length > n ? s.substr(0, n - 1) + "…" : s;
     }
 
+    /** The visible texts on the stage and their boxes, for one right-click (textUnder). */
+    private static _texts: any[] = null;
+
+    private static visibleTexts(): any[] {
+        if (IoFeedback._texts) {
+            return IoFeedback._texts;
+        }
+        let out: any[] = [];
+        let stage: Stage = IoFeedback.stage();
+        let walk: (d: any, depth: number) => void = (d: any, depth: number): void => {
+            if (!d || !d.visible || d.alpha <= 0.02 || depth > 40 || out.length > 3000) {
+                return;
+            }
+            if (d instanceof TextField) {
+                let t: string = String(d.text || "").replace(/\s+/g, " ").trim();
+                if (t) {
+                    try {
+                        let b: Rectangle = d.getBounds(stage);
+                        out.push({ "t": t, "r": [b.x, b.y, b.width, b.height] });
+                    } catch (e) {
+                    }
+                }
+                return;
+            }
+            if (d instanceof DisplayObjectContainer) {
+                for (let i: number = 0; i < d.numChildren; i++) {
+                    walk(d.getChildAt(i), depth + 1);
+                }
+            }
+        };
+        if (stage) {
+            walk(stage, 0);
+        }
+        IoFeedback._texts = out;
+        return out;
+    }
+
+    /** Words drawn inside o's box (a see-through button over a heading, a tab over its name), or "". */
+    private static textUnder(o: DisplayObject): string {
+        let b: Rectangle = null;
+        try {
+            b = o.getBounds(IoFeedback.stage());
+        } catch (e) {
+            return "";
+        }
+        // (a button's size only: a big area holds many words, none of them its name)
+        if (b.width * b.height > 60000 || b.height > 120) {
+            return "";
+        }
+        let best: string = "";
+        let bestArea: number = 0;
+        for (let x of IoFeedback.visibleTexts()) {
+            let r: number[] = x.r;
+            let cx: number = r[0] + r[2] / 2;
+            let cy: number = r[1] + r[3] / 2;
+            if (cx < b.x || cy < b.y || cx > b.x + b.width || cy > b.y + b.height || r[2] * r[3] > b.width * b.height * 1.5 + 200) {
+                continue;
+            }
+            if (!/[^\d\s.,:%+\-×x\/]/.test(x.t)) {
+                continue;
+            }
+            if (r[2] * r[3] > bestArea) {
+                bestArea = r[2] * r[3];
+                best = x.t;
+            }
+        }
+        return best;
+    }
+
+    /** "ioClArea:Fixes" -> "Fixes", "bPrevious" -> "Previous", "ioAttackLogs" -> "Attack Logs"; "" for names that say nothing. */
+    private static nameWords(name: string): string {
+        name = String(name || "");
+        if (!name || /^instance\d+$/.test(name)) {
+            return "";
+        }
+        let colon: number = name.indexOf(":");
+        if (colon >= 0 && /[A-Za-z]/.test(name.substr(colon + 1))) {
+            return name.substr(colon + 1).replace(/_/g, " ").trim();
+        }
+        let w: string = name.replace(/_?\d+$/, "").replace(/^(io|mc|bt|btn|b|m|_)(?=[A-Z_])/, "").replace(/_CLIP$/i, "").replace(/^_+/, "");
+        w = w.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ").trim();
+        if (!w || /^(hit|mc hit|bg|background|frame|clip|icon|mc|mc icon|button|btn|base|art|graphic|image|img|holder|container|canvas|shape|sprite|content|inner|mask|glare|overlay)$/i.test(w)) {
+            return "";
+        }
+        return w.charAt(0).toUpperCase() + w.substr(1);
+    }
+
+    /** A class's name in words: "icon_worker_inferno" -> "Worker", "BUILDINGSPOPUP" -> "BUILDINGS". */
+    private static classWords(o: DisplayObject): string {
+        let cls: string = IoFeedback.className(o);
+        if (IoFeedback.GENERIC.test(cls) || /^(ChatBox|ChatBox_CLIP|mc|icon|StoneButton|Button|ScrollSet|popup_bg)$/i.test(cls)) {
+            return "";
+        }
+        let w: string = cls.replace(/^Io/, "").replace(/^icon_/i, "").replace(/_(inferno|clip|mc)$/i, "").replace(/(POPUP|Popup|Window)$/, "");
+        w = w.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/_/g, " ").trim();
+        let parts: string[] = w.split(/\s+/);
+        if (parts.length > 3) {
+            w = parts.slice(parts.length - 3).join(" ");
+        }
+        return w ? w.charAt(0).toUpperCase() + w.substr(1) : "";
+    }
+
+    /** Whether o takes clicks: a button, or anything listening for them. */
+    private static takesClicks(o: DisplayObject): boolean {
+        if (o instanceof Button || o instanceof SimpleButton || (o instanceof Sprite && as3.cast(o, Sprite).buttonMode)) {
+            return true;
+        }
+        try {
+            let d: any = o;
+            return !!(d.hasEventListener && (d.hasEventListener("click") || d.hasEventListener("mouseDown") || d.hasEventListener("mouseUp")));
+        } catch (e) {
+            return false;
+        }
+    }
+
+    /** The window o is in (a child of the windows' layer), or null. */
+    private static windowOf(o: DisplayObject): DisplayObject {
+        let layers: any[] = [GLOBAL._layerWindows, GLOBAL._layerMessages, GLOBAL._layerTop];
+        for (let p: DisplayObject = o; p && p.parent && !(p instanceof Stage); p = p.parent) {
+            if (layers.indexOf(p.parent) >= 0) {
+                return p;
+            }
+        }
+        return null;
+    }
+
+    /** A window's title: its heading (the biggest words near its top), or "". */
+    private static titleOf(w: DisplayObject): string {
+        try {
+            let any: any = w;
+            if (any.tA && any.tA.text && String(any.tA.text).trim()) {
+                return IoFeedback.cut(String(any.tA.text).replace(/\s+/g, " ").trim(), 40);
+            }
+            let st1: Stage = IoFeedback.stage();
+            let b: Rectangle = w.getBounds(st1);
+            // (its own words only, not those of what is behind it; its box on the stage)
+            let own: any[] = [];
+            let walk: (d: any, depth: number) => void = (d: any, depth: number): void => {
+                if (!d || !d.visible || depth > 30 || own.length > 400) {
+                    return;
+                }
+                if (d instanceof TextField) {
+                    let t0: string = String(d.text || "").replace(/\s+/g, " ").trim();
+                    if (t0) {
+                        let rb: Rectangle = d.getBounds(st1);
+                        own.push({ "t": t0, "r": [rb.x, rb.y, rb.width, rb.height] });
+                    }
+                    return;
+                }
+                if (d instanceof DisplayObjectContainer) {
+                    for (let i: number = 0; i < d.numChildren; i++) {
+                        walk(d.getChildAt(i), depth + 1);
+                    }
+                }
+            };
+            walk(w, 0);
+            let bx0: number = Math.max(0, b.x);
+            let by0: number = Math.max(0, b.y);
+            b = new Rectangle(bx0, by0, Math.min(st1.stageWidth, b.x + b.width) - bx0, Math.min(st1.stageHeight, b.y + b.height) - by0);
+            let best: string = "";
+            let bestH: number = 0;
+            for (let x of own) {
+                let r: number[] = x.r;
+                if (r[0] < b.x - 2 || r[0] + r[2] > b.x + b.width + 2 || r[1] < b.y - 2 || r[1] > b.y + Math.min(90, b.height * 0.25) || !/[A-Za-zÀ-ÿ]/.test(x.t) || x.t.length > 40) {
+                    continue;
+                }
+                if (r[3] > bestH + 1) {
+                    bestH = r[3];
+                    best = x.t;
+                }
+            }
+            return best;
+        } catch (e) {
+            return "";
+        }
+    }
+
+    /** A monster's name for its code ("IC5" -> "Pokey"), or "" when it isn't one. */
+    private static monsterName(code: string): string {
+        try {
+            let all: any = CREATURELOCKER._creatures;
+            let c: any = all && code ? all[code] : null;
+            return c && c.name ? String(KEYS.Get(String(c.name))) : "";
+        } catch (e) {
+            return "";
+        }
+    }
+
+    /** The words just right of o on its line (a checkbox's label), or "". */
+    private static textBeside(o: DisplayObject): string {
+        let b: Rectangle = null;
+        try {
+            b = o.getBounds(IoFeedback.stage());
+        } catch (e) {
+            return "";
+        }
+        let best: string = "";
+        let bestGap: number = 170;
+        for (let x of IoFeedback.visibleTexts()) {
+            let r: number[] = x.r;
+            let cy: number = r[1] + r[3] / 2;
+            let gap: number = r[0] - (b.x + b.width);
+            if (cy < b.y - 2 || cy > b.y + b.height + 2 || gap < -4 || gap >= bestGap || !/[A-Za-zÀ-ÿ]/.test(x.t)) {
+                continue;
+            }
+            bestGap = gap;
+            best = x.t;
+        }
+        return best;
+    }
+
     /** What o is, in the player's words, and whether that says something (a button, a building, a window...). */
     private static labelOf(o: DisplayObject): any {
         let thing: string = IoFeedback.gameThingOf(o);
         if (thing) {
             return { "label": thing, "strong": true };
         }
-        if (o == (POPUPS as any)._mc) {
-            let w: string = POPUPS.ioShowing();
-            return { "label": IoFeedback.t("io_fb_what_window", "Window: #v1#", { "v1": w.replace(/^\s*/, "") }), "strong": true };
+        let T: (k: string, en: string, v?: any) => string = IoFeedback.t;
+        let win: DisplayObject = IoFeedback.windowOf(o);
+        if (o == (POPUPS as any)._mc || (win && o == win)) {
+            let title: string = IoFeedback.titleOf(o) || IoFeedback.classWords(o) || POPUPS.ioShowing().replace(/^\s*/, "");
+            return { "label": T("io_fb_what_window", "Window: #v1#", { "v1": title }), "strong": true };
         }
-        if (o instanceof Button || o instanceof SimpleButton || (o instanceof Sprite && as3.cast(o, Sprite).buttonMode)) {
-            let txt: string = IoFeedback.textIn(o);
+        let name: string = String((o as any).name || "");
+        // (a building's tile in a menu: its _buildingProps)
+        let bp: any = (o as any)._buildingProps;
+        if (bp && bp.name && !(o as any)._lvl) {
+            try {
+                return { "label": String(KEYS.Get(String(bp.name))), "strong": true };
+            } catch (e) {
+            }
+        }
+        // (a monster's tile: its code in its name, "ioHatchMonster:IC5")
+        let code: string = name.indexOf(":") >= 0 ? name.substr(name.indexOf(":") + 1) : "";
+        let mon: string = IoFeedback.monsterName(code);
+        if (mon) {
+            return { "label": mon, "strong": true };
+        }
+        let slot: any = /^slot(\d+)$/i.exec(name);
+        if (slot) {
+            return { "label": T("io_fb_what_slot", "Slot #v1#", { "v1": (slot[1] | 0) + 1 }), "strong": true };
+        }
+        // (the Soul Crucible's resources: ioCrucibleFrom0..3, ioCrucibleTo0..3)
+        let res: any = /(From|To)([0-3])$/.exec(name);
+        if (res && /crucible/i.test(name)) {
+            let rn0: string = "";
+            try {
+                rn0 = KEYS.Get(String(GLOBAL._resourceNames[res[2] | 0]));
+            } catch (e) {
+            }
+            if (rn0) {
+                return { "label": res[1] == "From" ? T("io_fb_what_res_from", "Pour in: #v1#", { "v1": rn0 }) : T("io_fb_what_res_to", "Take out: #v1#", { "v1": rn0 }), "strong": true };
+            }
+        }
+        // (the resource bar's rows)
+        let row: any = /^mcR([1-4])$/.exec(name) || (o.parent ? /^mcR([1-4])$/.exec(String((o.parent as any).name || "")) : null);
+        if (row && IoFeedback.areaOf(o) == T("io_fb_area_top", "the top bar")) {
+            let rn: string = "";
+            try {
+                rn = KEYS.Get(String(GLOBAL._resourceNames[(row[1] | 0) - 1]));
+            } catch (e) {
+            }
+            if (rn) {
+                return { "label": T("io_fb_what_resource", "#v1# (the resource bar)", { "v1": rn }), "strong": true };
+            }
+        }
+        if (o instanceof TextField && String(as3.cast(o, TextField).type) == "input") {
+            let a0: string = IoFeedback.areaOf(o);
+            return { "label": a0 ? T("io_fb_what_input_in", "The text box in #v1#", { "v1": a0 }) : T("io_fb_what_input", "A text box"), "strong": true };
+        }
+        let box: Rectangle = null;
+        try {
+            box = o.getBounds(IoFeedback.stage());
+        } catch (e) {
+        }
+        let thin: boolean = !!box && ((box.width <= 16 && box.height >= box.width * 1.8) || (box.height <= 12 && box.width >= box.height * 3));
+        if (IoFeedback.takesClicks(o)) {
+            if (/scroll/i.test(name) || /scroll/i.test(IoFeedback.className(o)) || /scroll/i.test(String(o.parent ? IoFeedback.className(o.parent) : "")) || (thin && !IoFeedback.textIn(o))) {
+                return { "label": T("io_fb_what_scroll", "A scroll bar"), "strong": true };
+            }
+            // (a close button: by its name, or a small square button at a window's top right corner)
+            let corner: boolean = false;
+            if (win && box && box.width <= 40 && box.height <= 40 && Math.abs(box.width - box.height) <= 8 && !IoFeedback.textIn(o)) {
+                try {
+                    // (the window's box on the stage: a planner's canvas reaches far beyond it)
+                    let st0: Stage = IoFeedback.stage();
+                    let wb0: Rectangle = win.getBounds(st0);
+                    let wx: number = Math.max(0, wb0.x);
+                    let wy: number = Math.max(0, wb0.y);
+                    let ww: number = Math.min(st0.stageWidth, wb0.x + wb0.width) - wx;
+                    let wh: number = Math.min(st0.stageHeight, wb0.y + wb0.height) - wy;
+                    corner = box.x + box.width / 2 > wx + ww * 0.85 && box.y + box.height / 2 < wy + Math.min(80, wh * 0.2);
+                } catch (e) {
+                }
+            }
+            if (corner || (/close/i.test(name) && !/disclose/i.test(name))) {
+                let wt: string = win ? IoFeedback.titleOf(win) : "";
+                return { "label": wt ? T("io_fb_what_close_of", "The close button of “#v1#”", { "v1": wt }) : T("io_fb_what_close", "A close button"), "strong": true };
+            }
+            // (a big area that takes clicks, a list or a board: what it is part of)
+            if (box && ((box.width * box.height > 60000 && box.height > 60) || box.height > 150)) {
+                let where: string = IoFeedback.areaOf(o);
+                let nw: string = IoFeedback.nameWords(name);
+                if (where || nw) {
+                    return { "label": nw && !where ? nw : T("io_fb_what_contents", "The contents of #v1#", { "v1": where }), "strong": true };
+                }
+            }
+            // (a small square, a checkbox or a switch, is named by the words beside it)
+            let small: boolean = !!box && box.width <= 32 && box.height <= 32;
+            let txt: string = IoFeedback.textIn(o) || IoFeedback.textUnder(o) || (small ? IoFeedback.textBeside(o) : "") || IoFeedback.nameWords(name) || IoFeedback.classWords(o);
+            txt = IoFeedback.monsterName(txt) || txt;
+            // (only a number on it, a badge's count: its name says more)
+            if (txt && !/[A-Za-zÀ-ÿ]/.test(txt)) {
+                txt = IoFeedback.nameWords(name) || IoFeedback.classWords(o) || txt;
+            }
             if (txt) {
-                return { "label": IoFeedback.t("io_fb_what_button", "Button “#v1#”", { "v1": IoFeedback.cut(txt, 40) }), "strong": true };
+                return { "label": T("io_fb_what_button", "Button “#v1#”", { "v1": IoFeedback.cut(txt, 40) }), "strong": true };
             }
             let area: string = IoFeedback.areaOf(o);
-            return { "label": area ? IoFeedback.t("io_fb_what_button_in", "A button in #v1#", { "v1": area }) : IoFeedback.t("io_fb_what_button_plain", "A button"), "strong": true };
+            return { "label": area ? T("io_fb_what_button_in", "A button in #v1#", { "v1": area }) : T("io_fb_what_button_plain", "A button"), "strong": true };
         }
         if (o instanceof TextField) {
             let txt: string = IoFeedback.textIn(o);
             if (txt) {
-                return { "label": IoFeedback.t("io_fb_what_text", "Text “#v1#”", { "v1": IoFeedback.cut(txt, 50) }), "strong": false };
+                return { "label": T("io_fb_what_text", "Text “#v1#”", { "v1": IoFeedback.cut(txt, 50) }), "strong": false };
             }
         }
         let cls: string = IoFeedback.className(o);
@@ -396,11 +713,19 @@ export class IoFeedback extends ASObject {
             let area0: string = IoFeedback.areaOf(o);
             return { "label": area0.charAt(0).toUpperCase() + area0.substr(1), "strong": false };
         }
-        if (!IoFeedback.GENERIC.test(cls) && !/^(ChatBox|ChatBox_CLIP|mc|icon|StoneButton)$/.test(cls)) {
-            return { "label": cls.replace(/^Io/, "").replace(/_/g, " "), "strong": /POPUP|Window|Popup|Panel|Bar$|Menu/.test(cls) };
+        // (a tile or a card: the words on it, when it is small enough for them to be its name)
+        if (box && box.width * box.height <= 40000 && o instanceof DisplayObjectContainer) {
+            let words: string = IoFeedback.textIn(o);
+            if (words && /[A-Za-zÀ-ÿ]/.test(words)) {
+                return { "label": "“" + IoFeedback.cut(words, 40) + "”", "strong": false };
+            }
+        }
+        let cw: string = IoFeedback.classWords(o);
+        if (cw) {
+            return { "label": cw, "strong": /(POPUP|Window|Popup|Panel|Bar|Menu)$/.test(cls) };
         }
         let area: string = IoFeedback.areaOf(o);
-        return { "label": area ? IoFeedback.t("io_fb_what_part_of", "Part of #v1#", { "v1": area }) : IoFeedback.t("io_fb_what_part", "Part of the screen"), "strong": false };
+        return { "label": area ? T("io_fb_what_part_of", "Part of #v1#", { "v1": area }) : T("io_fb_what_part", "Part of the screen"), "strong": false };
     }
 
     /**
@@ -410,6 +735,7 @@ export class IoFeedback extends ASObject {
     private static partsAt(x: number, y: number): any {
         let stage: Stage = IoFeedback.stage();
         let out: Part[] = [];
+        IoFeedback._texts = null;
         if (!stage) {
             return { "parts": out, "pick": -1 };
         }
@@ -422,13 +748,15 @@ export class IoFeedback extends ASObject {
         }
         let deepest: DisplayObject = null;
         if (hit && !(hit instanceof Stage)) {
-            deepest = hit instanceof DisplayObjectContainer ? IoFeedback.deepestAt(as3.cast(hit, DisplayObjectContainer), x, y) || hit : hit;
+            // (a SimpleButton draws its states without making them its children: the button itself)
+            deepest = hit instanceof DisplayObjectContainer && !(hit instanceof SimpleButton) ? IoFeedback.deepestAt(as3.cast(hit, DisplayObjectContainer), x, y) || hit : hit;
         } else {
             deepest = IoFeedback.deepestAt(stage, x, y);
         }
         let sw: number = stage.stageWidth;
         let sh: number = stage.stageHeight;
         let pick: number = -1;
+        let strong: boolean[] = [];
         // (on the yard, nothing of the interface over it: the building there, then nothing of the yard's picture)
         let map: DisplayObject = GLOBAL._layerMap ? as3.as(GLOBAL._layerMap, DisplayObject) : null;
         let inMap: (o: DisplayObject) => boolean = (o: DisplayObject): boolean => !!(o && map && (o == map || (map instanceof DisplayObjectContainer && as3.cast(map, DisplayObjectContainer).contains(o))));
@@ -436,7 +764,9 @@ export class IoFeedback extends ASObject {
         let building: any = onMap ? IoFeedback.buildingAt(x, y) : null;
         if (building) {
             let hb: Rectangle = building._mcHit.getBounds(stage);
-            out.push({ o: building._mcHit, r: [hb.x, hb.y, hb.width, hb.height], label: IoFeedback.buildingName(building), target: "building " + building._type + " (id " + building._id + ")" });
+            let bx: number = Math.max(0, hb.x);
+            let by: number = Math.max(0, hb.y);
+            out.push({ o: building._mcHit, r: [bx, by, Math.min(sw, hb.x + hb.width) - bx, Math.min(sh, hb.y + hb.height) - by], label: IoFeedback.buildingName(building), target: "building " + building._type + " (id " + building._id + ")" });
             pick = 0;
             return { "parts": out, "pick": pick, "deepest": deepest };
         }
@@ -463,16 +793,18 @@ export class IoFeedback extends ASObject {
             let last: Part = out.length ? out[out.length - 1] : null;
             if (last && Math.abs(last.r[0] - r[0]) < 3 && Math.abs(last.r[1] - r[1]) < 3 && Math.abs(last.r[2] - r[2]) < 3 && Math.abs(last.r[3] - r[3]) < 3) {
                 // (the same box: the better name kept)
-                if (l.strong && pick != out.length - 1) {
+                if (l.strong && !strong[out.length - 1]) {
                     last.label = l.label;
                     last.o = o;
                     last.target = IoBugReport.describe(o);
+                    strong[out.length - 1] = true;
                     if (pick < 0) {
                         pick = out.length - 1;
                     }
                 }
                 continue;
             }
+            strong.push(!!l.strong);
             out.push({ o: o, r: r, label: l.label, target: IoBugReport.describe(o) });
             if (l.strong && pick < 0) {
                 pick = out.length - 1;
@@ -481,6 +813,27 @@ export class IoFeedback extends ASObject {
                 break;
             }
         }
+        // (a part of a button or a building with no name of its own: an icon, a picture, a tip: named by the button, and the
+        // smallest such is what is highlighted first)
+        for (let i: number = 0; i < out.length; i++) {
+            if (strong[i]) {
+                continue;
+            }
+            for (let j: number = i + 1; j < out.length; j++) {
+                if (!strong[j]) {
+                    continue;
+                }
+                let a: number[] = out[i].r;
+                let b: number[] = out[j].r;
+                let inside: boolean = a[0] >= b[0] - 2 && a[1] >= b[1] - 2 && a[0] + a[2] <= b[0] + b[2] + 2 && a[1] + a[3] <= b[1] + b[3] + 2;
+                if (inside && out[j].o && (IoFeedback.takesClicks(out[j].o) || IoFeedback.gameThingOf(out[j].o))) {
+                    out[i].label = out[j].label;
+                    strong[i] = true;
+                }
+                break;
+            }
+        }
+        pick = strong.indexOf(true);
         // (nothing of its own there, as on a window's dimmed background or an empty part of it: the window on screen)
         if (!out.length) {
             try {
@@ -578,6 +931,51 @@ export class IoFeedback extends ASObject {
         IoFeedback._glow = g;
     }
 
+    private static showGlowClient(c: number[]): void {
+        IoFeedback.hideGlow();
+        let g: any = document.createElement("div");
+        g.className = "iofb-glow";
+        Object.assign(g.style, { left: c[0] - 2 + "px", top: c[1] - 2 + "px", width: c[2] + "px", height: c[3] + "px" });
+        document.body.appendChild(g);
+        IoFeedback._glow = g;
+    }
+
+    /**
+     * A right-click on the page around the game (its header and buttons, the settings): the menu, about the page's
+     * button or words there. Text boxes keep the browser's menu (paste), and so does Shift.
+     */
+    private static pageMenu(e: any): void {
+        let t: any = e.target;
+        if (!t || !t.closest || e.shiftKey || e.defaultPrevented) {
+            return;
+        }
+        let p: any = (globalThis as any).__player;
+        if ((p && t == p.canvas) || t.closest(".iofb-menu, .iofb-shade")) {
+            return;
+        }
+        if (t.closest("input, textarea, select, [contenteditable=true]")) {
+            return;
+        }
+        e.preventDefault();
+        let el: any = t.closest("button, a, [title], [aria-label], label, h1, h2, h3, [data-k]");
+        let label: string = "";
+        let words: string = "";
+        let rect: number[] = null;
+        if (el) {
+            words = String(el.textContent || "").replace(/\s+/g, " ").trim();
+            let name: string = String(el.getAttribute("aria-label") || el.getAttribute("title") || words || "").trim();
+            if (name) {
+                label = el.tagName == "BUTTON" || el.tagName == "A" ? IoFeedback.t("io_fb_what_button", "Button “#v1#”", { "v1": IoFeedback.cut(name, 40) }) : IoFeedback.cut(name, 50);
+            }
+            let b: any = el.getBoundingClientRect();
+            if (b.width > 2 && b.height > 2) {
+                rect = [b.left, b.top, b.width, b.height];
+            }
+        }
+        let id: string = el ? String(el.id || el.getAttribute("data-k") || el.tagName.toLowerCase()) : "page";
+        IoFeedback.openMenu(e.clientX, e.clientY, 0, 0, { "label": label || IoFeedback.t("io_fb_what_page", "The page around the game"), "target": "page: " + id, "text": IoFeedback.cut(words, 200), "rect": rect });
+    }
+
     private static hideGlow(): void {
         if (IoFeedback._glow) {
             IoFeedback._glow.remove();
@@ -587,22 +985,32 @@ export class IoFeedback extends ASObject {
 
     // ------------------------------------------------------------------ the menu
 
-    private static openMenu(cx: number, cy: number, sx: number, sy: number): void {
+    private static openMenu(cx: number, cy: number, sx: number, sy: number, dom: any = null): void {
         IoFeedback.closeMenu();
         if (IoFeedback._dialog) {
             return;
         }
         let shot: Shot = IoFeedback.takeShot();
         let at: any = { "parts": [], "pick": -1 };
-        try {
-            at = IoFeedback.partsAt(sx, sy);
-        } catch (e) {
-        }
-        let part: Part = at.pick >= 0 ? at.parts[at.pick] : null;
+        let part: Part = null;
         let text: string = "";
-        try {
-            text = at.deepest ? IoFeedback.textIn(at.deepest, 3) : "";
-        } catch (e) {
+        // (the page's own buttons and words around the game: named by their title or words, outlined on the page)
+        let domLabel: string = "";
+        let domTarget: string = "";
+        if (dom) {
+            domLabel = dom.label;
+            domTarget = dom.target;
+            text = dom.text;
+        } else {
+            try {
+                at = IoFeedback.partsAt(sx, sy);
+            } catch (e) {
+            }
+            part = at.pick >= 0 ? at.parts[at.pick] : null;
+            try {
+                text = at.deepest ? IoFeedback.textIn(at.deepest, 3) : "";
+            } catch (e) {
+            }
         }
         let logged: boolean = IoFeedback.loggedIn();
         let shell: any = (globalThis as any).__bwShell;
@@ -612,8 +1020,8 @@ export class IoFeedback extends ASObject {
         m.setAttribute("role", "menu");
         m.addEventListener("contextmenu", (e: any): void => e.preventDefault());
         let html: string = "";
-        if (part) {
-            html += "<div class=\"iofb-about\">" + IoFeedback.esc(IoFeedback.t("io_fb_about", "About")) + ": <b>" + IoFeedback.esc(part.label) + "</b></div>";
+        if (part || domLabel) {
+            html += "<div class=\"iofb-about\">" + IoFeedback.esc(IoFeedback.t("io_fb_about", "About")) + ": <b>" + IoFeedback.esc(part ? part.label : domLabel) + "</b></div>";
         }
         let item: (id: string, icon: string, label: string, on: boolean, extra?: string) => string = (id: string, icon: string, label: string, on: boolean, extra: string = ""): string => {
             return "<button role=\"menuitem\" data-a=\"" + id + "\"" + (on ? "" : " disabled") + "><i>" + icon + "</i><span>" + IoFeedback.esc(label) + "</span>" + extra + "</button>";
@@ -645,6 +1053,8 @@ export class IoFeedback extends ASObject {
         m.style.top = Math.max(4, Math.min(cy, window.innerHeight - h - 4)) + "px";
         if (part) {
             IoFeedback.showGlow(part.r);
+        } else if (dom && dom.rect) {
+            IoFeedback.showGlowClient(dom.rect);
         }
         m.addEventListener("click", (e: any): void => {
             let b: any = e.target && e.target.closest ? e.target.closest("button[data-a]") : null;
@@ -654,7 +1064,7 @@ export class IoFeedback extends ASObject {
             let a: string = String(b.getAttribute("data-a"));
             IoFeedback.closeMenu();
             if (a == "bug" || a == "idea") {
-                IoFeedback.openReport(a, shot, at.parts, at.pick);
+                IoFeedback.openReport(a, shot, at.parts, at.pick, domLabel, domTarget);
             } else if (a == "mine") {
                 IoFeedback.openMine();
             } else if (a == "copytext") {
@@ -797,7 +1207,7 @@ export class IoFeedback extends ASObject {
      * The report form: kind "bug" or "idea". From the menu with the screenshot taken at the right-click and what was
      * under the pointer; from the settings menu (touch screens) with neither (a screenshot is taken now).
      */
-    public static openReport(kind: string, shot: Shot = null, parts: Part[] = null, pick: number = -1): void {
+    public static openReport(kind: string, shot: Shot = null, parts: Part[] = null, pick: number = -1, pageLabel: string = "", pageTarget: string = ""): void {
         IoFeedback.closeMenu();
         if (!IoFeedback.loggedIn()) {
             IoFeedback.toast(IoFeedback.t("io_fb_login_first", "Log in to send a report"));
@@ -883,6 +1293,8 @@ export class IoFeedback extends ASObject {
                 w = T("io_fb_what_box", "A box you drew");
             } else if (sel >= 0 && parts[sel]) {
                 w = parts[sel].label;
+            } else if (pageLabel) {
+                w = pageLabel;
             } else {
                 w = T("io_fb_about_screen", "The whole screen");
             }
@@ -952,6 +1364,8 @@ export class IoFeedback extends ASObject {
                     parts = at.parts;
                     sel = at.pick;
                     box = null;
+                    pageLabel = "";
+                    pageTarget = "";
                 }
                 down = null;
                 say();
@@ -1004,8 +1418,8 @@ export class IoFeedback extends ASObject {
                 "kind": kind,
                 "text": words,
                 "howOften": kind == "bug" ? q("iofb-often").value : "",
-                "subject": box ? T("io_fb_what_box", "A box you drew") : part ? part.label : "",
-                "target": part ? part.target : "",
+                "subject": box ? T("io_fb_what_box", "A box you drew") : part ? part.label : pageLabel,
+                "target": part ? part.target : pageTarget,
                 "highlight": r && shot ? { "pic": IoFeedback.toPic(shot, r).map((n: number): number => Math.round(n)), "stage": r.map((n: number): number => Math.round(n)) } : null,
                 "place": IoFeedback.where(),
                 "context": IoBugReport.trail().substr(0, 7000),
