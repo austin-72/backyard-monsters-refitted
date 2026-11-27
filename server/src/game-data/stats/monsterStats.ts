@@ -741,6 +741,10 @@ if (infernoOnlyConfig.enabled && infernoOnlyConfig.rezghul.enabled && monsterSta
     bucket: [200],
     zombieHealthMultiplier: [0.75],
     zombieDamageMultiplier: [1, 1, 1.05, 1.1, 1.15, 1.2],
+    // 27 November (Goldair1's suggestion): a quarter less damage (was 700-1200); what his side attacks, as Clinkerjaw
+    // (client: IoTargets), else anything nearest (was 4: defences)
+    damage: [525, 600, 675, 750, 825, 900],
+    targetGroup: [1],
   });
 }
 

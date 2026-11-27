@@ -6,7 +6,7 @@ The Inferno roster grew from eight monsters to sixteen.
 
 - **Korath, Drull and Ashkarr are monsters you hatch,** not champions in a cage: unlock them on Strongbox page 5, hatch them with magma, house them in the Compound and fling them like any other. Housing: Korath 400, Drull 400, Ashkarr 350.
 - Korath burns what he hits, throws fireballs at flyers from level 4 and stomps from level 5.
-- **Rezghul in the Inferno:** Strongbox page 4 after King Wormzer, 500,000 magma to hatch, 200 housing, trained up to level 6. He raises your side's fallen monsters during a battle, with 75% of their health (champions 25%).
+- **Rezghul in the Inferno:** Strongbox page 4 after King Wormzer, 500,000 magma to hatch, 200 housing, trained up to level 6. He raises your side's fallen monsters during a battle, with 75% of their health (champions 25%). He goes for what your other monsters are attacking (or whatever is nearest them) within 10 blocks, as Clinkerjaw does, and anything nearest when none of them is near; 525 damage at level 1 up to 900 at level 6.
 - **Unlocked the fair way.** Korath, Drull, Rezghul and Ashkarr have to be unlocked in the Strongbox like everyone else.
 - Every Inferno monster trains to level 6 in a level 5 Academy. Champions list the abilities they get at each level.
 - The Quest Book's "Something in the Ashes" says something has been watching you fight: win battle after battle, and in time it may decide to fight at your side.

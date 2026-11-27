@@ -12,7 +12,7 @@ import { ASObject } from "as3";
  *    server knows what "the one it serves" is. Keep the MARKER format exactly: IOBUILD:<digits>:
  */
 export class IOBuild extends ASObject {
-    public static readonly MARKER: string = "IOBUILD:202611270116:";
+    public static readonly MARKER: string = "IOBUILD:202611270209:";
 
     public static get stamp(): number {
         return Number(IOBuild.MARKER.split(":")[1]);

@@ -137,6 +137,81 @@ export class IoPinchZoom extends ASObject {
     }
 
     /**
+     * 27 November (the user's: "check anywhere in game that has a scroll bar and ensure it works for pc and mobile"):
+     * the mouse wheel for a list that scrolls itself. The stock lists (ScrollSet, ScrollSetV, ScrollSetH) had a bar to
+     * drag and a finger's swipe, but the wheel over them did nothing. While `owner` is on the stage, a turn of the
+     * wheel with the pointer over `area` (its bounds; or a function giving it) calls by(steps): +1 a notch towards the end (down, or right),
+     * -1 back. Only from inside the window `owner` is in (a window opened over it keeps its own wheel), and only one
+     * list takes a turn. by returns whether it moved.
+     */
+    public static wheel(owner: DisplayObject, area: any, by: Function): void {
+        if (!GLOBAL.INFERNO_ONLY || !owner || !area || by == null) {
+            return;
+        }
+        let stage: Stage = null;
+        let onWheel = (e: MouseEvent): void => {
+            let ev: any = e;
+            // (`area` may be a function giving it, for a list whose mask changes)
+            let a: DisplayObject = typeof area == "function" ? area() : area;
+            if (!e || e.delta == 0 || ev.$ioWheeled || !owner.stage || !a || !a.stage || !IoPinchZoom.shown(owner)) {
+                return;
+            }
+            // (its bounds: a list's mask is often no hit area of its own)
+            if (!a.getBounds(a.stage).contains(e.stageX, e.stageY)) {
+                return;
+            }
+            // (from inside its own window: the one of the game's layers it is in)
+            let root: DisplayObject = owner;
+            while (root.parent && root.parent.parent && !IoPinchZoom.isLayer(root.parent)) {
+                root = root.parent;
+            }
+            let inside: boolean = false;
+            for (let o: DisplayObject = as3.as(e.target, DisplayObject); o; o = o.parent) {
+                if (o === root) {
+                    inside = true;
+                    break;
+                }
+            }
+            if (!inside) {
+                return;
+            }
+            if (by(e.delta > 0 ? -1 : 1)) {
+                ev.$ioWheeled = true;
+            }
+        };
+        let on = (e: Event = null): void => {
+            if (!stage && owner.stage) {
+                stage = owner.stage;
+                stage.addEventListener(MouseEvent.MOUSE_WHEEL, onWheel);
+            }
+        };
+        let off = (e: Event = null): void => {
+            if (stage) {
+                stage.removeEventListener(MouseEvent.MOUSE_WHEEL, onWheel);
+                stage = null;
+            }
+        };
+        owner.addEventListener(Event.ADDED_TO_STAGE, on);
+        owner.addEventListener(Event.REMOVED_FROM_STAGE, off);
+        on();
+    }
+
+    /** The game's layers (its windows, its HUD, its messages, the top): a window is a child of one. */
+    private static isLayer(o: DisplayObject): boolean {
+        return o === GLOBAL._layerWindows || o === GLOBAL._layerUI || o === GLOBAL._layerTop || o === GLOBAL._layerMessages || o === GLOBAL._layerMap;
+    }
+
+    /** Seen: it and every parent visible, none faded out. */
+    private static shown(o: DisplayObject): boolean {
+        for (let p: DisplayObject = o; p; p = p.parent) {
+            if (!p.visible || p.alpha <= 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * QoL #545: swipe to scroll, for a list that scrolls itself (the stock ScrollSet, ScrollSetV and ScrollSetH lists
      * and IoScrollPane do it already): a finger dragging `target` up or down (`horizontal`: sideways) calls by(d)
      * with how far it moved since the last call (target's parent's pixels; up or left negative), once it has moved

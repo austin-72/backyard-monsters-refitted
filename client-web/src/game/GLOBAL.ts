@@ -1062,9 +1062,18 @@ export class GLOBAL extends ASObject {
         if (!GLOBAL.INFERNO_ONLY || !field) {
             return;
         }
+        let f: any = field;
+        // (27 November: the same text again keeps where it was scrolled to: the Academy writes its monster's text
+        // every second, and took it back to the top each time; a countdown in it changing is still the same text)
+        let shape: string = String(field.htmlText).replace(/[0-9]+/g, "#");
+        let keepAt: int = shape == f.ioMoreShape ? Math.max(1, f.ioMoreAt | 0) | 0 : 1;
+        f.ioMoreShape = shape;
+        f.ioMoreAt = keepAt;
         field.scrollV = 1;
         GLOBAL.ioFitHeight(field, smallest);
-        let f: any = field;
+        if (keepAt > 1) {
+            field.scrollV = Math.min(keepAt, field.maxScrollV);
+        }
         let host: DisplayObjectContainer = field.parent;
         let more: boolean = field.maxScrollV > 1;
         let arrow: Sprite = f.ioMore;
@@ -1083,6 +1092,7 @@ export class GLOBAL extends ASObject {
             g.endFill();
             let flip = (): void => {
                 arrow.scaleY = field.scrollV >= field.maxScrollV ? -1 : 1;
+                f.ioMoreAt = field.scrollV;
             };
             f.ioMoreFlip = flip;
             arrow.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
@@ -1094,7 +1104,18 @@ export class GLOBAL extends ASObject {
                 if (field.maxScrollV > 1 && field.stage && field.hitTestPoint(e.stageX, e.stageY, false)) {
                     field.scrollV = field.scrollV + (e.delta > 0 ? -1 : 1);
                     flip();
+                    (e as any).$ioWheeled = true;
                 }
+            });
+            // (27 November: on a phone, a finger dragging the text scrolls it too, a line every 12 pixels)
+            let moved: number = 0;
+            IoPinchZoom.swipe(field, (d: number): void => {
+                moved += d;
+                while (Math.abs(moved) >= 12) {
+                    field.scrollV = field.scrollV + (moved > 0 ? -1 : 1);
+                    moved += moved > 0 ? -12 : 12;
+                }
+                flip();
             });
             f.ioMore = arrow;
         }

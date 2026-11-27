@@ -173,6 +173,10 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
                 _loc7_ += "<br><font color=\"#CC0000\">" + KEYS.Get("mon_locked") + "</font>";
             }
             _loc6_.tLabel.htmlText = as3.str(_loc7_);
+            if (GLOBAL.INFERNO_ONLY) {
+                // (27 November: "Fusebug / Can start · 19.2K Sulfur" ran onto a third line, cut off: drawn smaller to fit)
+                GLOBAL.ioFitHeight(_loc6_.tLabel, 9);
+            }
             _loc6_.addEventListener(MouseEvent.MOUSE_DOWN, this.Show(_loc1_));
             _loc6_.buttonMode = true;
             _loc6_.mouseChildren = false;
@@ -395,7 +399,6 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
      * (Later the same day: the synergy is in the description, as in the Academy and the Incubators: ioInfoHtml.)
      */
     private ioFitTexts(): void {
-        this.tDescription.scrollV = 1;
         this.tCosts.scrollV = 1;
         GLOBAL.ioFitHeight(this.tCosts, 9);
         // (its arrow and wheel scrolling: GLOBAL.ioScrollMore, shared with the Academy and the Incubation Control Station)

@@ -13,6 +13,8 @@ import { BASE, BFOUNDATION, BTOWER, CREEPS, GLOBAL, ILootable, KEYS, MONSTERBUNK
  *                      (avoidsDefenses: his paths pay for every step inside it, PATHING's ioDanger).
  *   Clinkerjaw (IC12)  what is nearest to his own side's monsters or what they are attacking, no further than 10
  *                      blocks from him; anything nearest when there is nothing there.
+ *   Rezghul (C19)      as Clinkerjaw (27 November, Goldair1's suggestion: a necromancer going for defences felt
+ *                      wrong; he stays behind his side, raising its dead).
  *   Grokus (IC6)       resources and defenses: whichever is nearest. Half damage to defenses.
  *   Emberghoul (IC20)  anything nearest; but hurt (below his full health), anything out of reach of every defense
  *                      within 15 blocks of him first (and, when he is first hurt, he leaves a target in reach for one).
@@ -35,6 +37,8 @@ export class IoTargets extends ASObject {
     public static readonly CLINKERJAW: string = "IC12";
 
     public static readonly EMBERGHOUL: string = "IC20";
+
+    public static readonly REZGHUL: string = "C19";
 
     /** The storage Valgos goes for: the Resource Pod (Storage Silo), the Under Hall, an outpost's hall. */
     public static readonly STORAGE: any[] = [6, 14, 112];
@@ -178,7 +182,7 @@ export class IoTargets extends ASObject {
             }
         } else if (id == IoTargets.EMBERGHOUL) {
             out = IoTargets.safeNear(m);
-        } else if (id == IoTargets.CLINKERJAW) {
+        } else if (id == IoTargets.CLINKERJAW || id == IoTargets.REZGHUL) {
             b = IoTargets.byAllies(m);
             if (b) {
                 out.push(b);
@@ -313,6 +317,7 @@ export class IoTargets extends ASObject {
             case IoTargets.GROKUS:
                 return KEYS.Get("io_mon2_tg_grokus");
             case IoTargets.CLINKERJAW:
+            case IoTargets.REZGHUL:
                 return KEYS.Get("io_mon2_tg_clinkerjaw", { "v1": IoTargets.CLINKERJAW_BLOCKS });
             case IoTargets.EMBERGHOUL:
                 return KEYS.Get("io_mon2_tg_emberghoul");

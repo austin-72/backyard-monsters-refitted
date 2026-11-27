@@ -1,13 +1,13 @@
 import * as as3 from "as3";
 import { int } from "as3";
-import { MovieClip, Sprite, Stage } from "flash/display";
+import { DisplayObject, MovieClip, Sprite, Stage } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
 import { GLOBAL, IoPinchZoom, ScrollSet_CLIP, TweenLite } from "@game";
 
 export class ScrollSet extends ScrollSet_CLIP {
     static {
-        as3.fields(this, { _IsInitialized: false, _Container: null, _ContainerHeight: 0, _Mask: null, _ScrollBarHeight: NaN, _OffsetY: 0, _Easing: 1, _Margin: 1, _Thresh: 0.03, _BottomPadding: 0, _AutoHideEnabled: true, isHiddenWhileUnnecessary: false, _MinScrollerHeight: NaN, _IsDragging: false, _ioPressY: NaN, _ioPressContainerY: NaN, _ioSwiped: false, _ioSwipeStage: null });
+        as3.fields(this, { _IsInitialized: false, _Container: null, _ContainerHeight: 0, _Mask: null, _ScrollBarHeight: NaN, _OffsetY: 0, _Easing: 1, _Margin: 1, _Thresh: 0.03, _BottomPadding: 0, _AutoHideEnabled: true, isHiddenWhileUnnecessary: false, _MinScrollerHeight: NaN, _IsDragging: false, _ioPressY: NaN, _ioPressContainerY: NaN, _ioSwiped: false, _ioSwipeStage: null, _ioWheelOn: false });
     }
 
     public static readonly BROWN: int = 0;
@@ -34,6 +34,10 @@ export class ScrollSet extends ScrollSet_CLIP {
     private _ioPressContainerY: number;
     private _ioSwiped: boolean;
     private _ioSwipeStage: Stage;
+    private _ioWheelOn: boolean;
+
+    /** 27 November: how far a notch of the mouse wheel moves a list. */
+    public static readonly IO_WHEEL_STEP: number = 40;
 
     public $ctor(): void {
         super.$ctor();
@@ -71,6 +75,13 @@ export class ScrollSet extends ScrollSet_CLIP {
         if (GLOBAL.INFERNO_ONLY) {
             this._Container.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ioSwipeDown), false, 0, true);
             this._Container.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ioSwipeClick), true, 0, true);
+            // (27 November: and the mouse wheel over the list)
+            if (!this._ioWheelOn) {
+                this._ioWheelOn = true;
+                IoPinchZoom.wheel(this, (): DisplayObject => this._Mask, (steps: number): boolean => {
+                    return this.ioScrollBy(-steps * ScrollSet.IO_WHEEL_STEP);
+                });
+            }
         }
         if (Boolean(this.parent) && param1.height < this._Mask.height) {
             this.parent.removeChild(this);
@@ -198,7 +209,25 @@ export class ScrollSet extends ScrollSet_CLIP {
         if (!this._ioSwiped || range <= 0) {
             return;
         }
-        let y: number = Math.max(this._OffsetY - range, Math.min(this._OffsetY, this._ioPressContainerY + dy));
+        this.ioPlace(this._ioPressContainerY + dy);
+    }
+
+    /** 27 November: the wheel: the list moved by dy (up negative); whether it moved. */
+    private ioScrollBy(dy: number): boolean {
+        if (!this._IsInitialized || this._IsDragging || this.ioRange() <= 0) {
+            return false;
+        }
+        let was: number = this._Container.y;
+        TweenLite.killTweensOf(this.mcScroller);
+        this.ioPlace(was + dy);
+        this.Show();
+        return this._Container.y != was;
+    }
+
+    /** The list at y (kept within its range), and the bar where its own drag would have put it. */
+    private ioPlace(y: number): void {
+        let range: number = this.ioRange();
+        y = Math.max(this._OffsetY - range, Math.min(this._OffsetY, y));
         this._Container.y = Math.round(y);
         // (the bar where its own drag would have put the list: OnDrag the other way round)
         let room: number = this.mcBG.height - this.mcScroller.height - this._Margin;

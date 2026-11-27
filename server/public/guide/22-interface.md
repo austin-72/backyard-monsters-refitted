@@ -51,6 +51,7 @@ The gear at the top right (on a phone or tablet, at the top centre; F10 in full 
 - Windows share one close button, in the same corner, and a few have a "?" with a short how-to. The Store, the Alliance window and the kit window open on the tab you last had; the Quest Book, Leaderboards, Attack Log and Change Log shrink to fit a small window.
 - Messages that pop up by themselves wait their turn, and wait until you close the Pit, an Arcade match, Hellgate Defense or the Quest Book.
 - While the game shows "Please wait", a second click can't send the same thing again.
+- **Scrolling:** every list and long text scrolls with the mouse wheel over it, by dragging its bar, or on a phone by dragging it with a finger. A long monster description has a small arrow at its foot: click it to read on.
 - **When something goes wrong:** going too fast says how long to wait and tries again by itself; a failure the server reported shows its reference in small print, for a bug report. Every stop has a **Reload** button that restarts the game still signed in: away too long, Connection Lost, "Anyone home?", errors, or a new version out.
 - **Maintenance:** players in the game are warned 15, 5 and 1 minutes ahead; when it begins your yard is saved and you are told.
 - **Inferno tips** show under the loading box while a yard loads.

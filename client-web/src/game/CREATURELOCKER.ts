@@ -358,6 +358,11 @@ export class CREATURELOCKER extends ASObject {
             _loc1_.props.bucket = [200];
             _loc1_.props.zombieHealthMultiplier = [0.75];
             _loc1_.props.zombieDamageMultiplier = [1, 1, 1.05, 1.1, 1.15, 1.2];
+            // 27 November (Goldair1's suggestion, the user's numbers): a quarter less damage (was 700-1200), and he
+            // goes for what his side is attacking, as Clinkerjaw (IoTargets.pick); anything nearest with none near
+            // (targetGroup 1, was 4: defences). The server's table says the same (monsterStats.ts).
+            _loc1_.props.damage = [525, 600, 675, 750, 825, 900];
+            _loc1_.props.targetGroup = [1];
         }
         if (GLOBAL.INFERNO_ONLY && _loc1_.page != 4) {
             // Page 4 of the Strongbox, after King Wormzer. The time is scaled with the rest by

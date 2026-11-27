@@ -3956,7 +3956,7 @@
     "hellraiser_attackended_title": "Defeat!",
     "hellraiser_attackended_failedOutpost": "0",
     "hellraiser_attackended_failed": "Are you tough enough to defeat the hellish creatures from inferno? Heal your monsters and try again!",
-    "mon_rezghuldesc": "This mighty monster can bring fellow monsters back from the dead at will, making Rezghul the perfect addition to any Backyard barrage.<br><b>Favorite Target:</b> Defenses<br>Every 15 seconds it teleports up to 5 blocks ahead along its way.",
+    "mon_rezghuldesc": "This mighty monster can bring fellow monsters back from the dead at will, making Rezghul the perfect addition to any Backyard barrage.<br><b>Favorite Target:</b> Whatever is nearest its allies or what they are attacking, within 10 blocks<br>Every 15 seconds it teleports up to 5 blocks ahead along its way.",
     "fp_hellraiserspop ": " ",
     "auto_upgraded1": "Moving to New World!",
     "auto_upgraded2": "You will be automatically moved to the New World Map on May 16th.",

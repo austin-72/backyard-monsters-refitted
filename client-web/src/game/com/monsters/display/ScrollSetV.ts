@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { DisplayObject, MovieClip, Stage } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
-import { GLOBAL, IoPinchZoom, ScrollSet_CLIP } from "@game";
+import { GLOBAL, IoPinchZoom, ScrollSet, ScrollSet_CLIP } from "@game";
 
 export class ScrollSetV extends ScrollSet_CLIP {
     static {
@@ -40,6 +40,10 @@ export class ScrollSetV extends ScrollSet_CLIP {
         if (GLOBAL.INFERNO_ONLY) {
             this._content.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ioSwipeDown));
             this._content.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ioSwipeClick), true);
+            // (27 November: and the mouse wheel over it)
+            IoPinchZoom.wheel(this, this._mask, (steps: number): boolean => {
+                return this.ioScrollBy(-steps * ScrollSet.IO_WHEEL_STEP);
+            });
         }
     }
 
@@ -121,7 +125,23 @@ export class ScrollSetV extends ScrollSet_CLIP {
         if (!this._ioSwiped || range <= 0) {
             return;
         }
-        let y: number = Math.max(this._mask.y - range, Math.min(this._mask.y, this._ioPressContent + d));
+        this.ioPlace(this._ioPressContent + d);
+    }
+
+    /** 27 November: the wheel: the content moved by d (up / left negative); whether it moved. */
+    private ioScrollBy(d: number): boolean {
+        if (!this.stage || !this.visible || this.ioRange() <= 0) {
+            return false;
+        }
+        let was: number = this._content.y;
+        this.ioPlace(was + d);
+        return this._content.y != was;
+    }
+
+    /** The content at y (kept within its range), and the bar where its own drag would have put it. */
+    private ioPlace(y: number): void {
+        let range: number = this.ioRange();
+        y = Math.max(this._mask.y - range, Math.min(this._mask.y, y));
         this._content.y = Math.round(y);
         // (the bar where its own drag would have put the list: onEnterFrame the other way round)
         let room: number = this.height - this._scroller.height;

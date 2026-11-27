@@ -3956,7 +3956,7 @@
     "hellraiser_attackended_title": "Derrota!",
     "hellraiser_attackended_failedOutpost": "Zero",
     "hellraiser_attackended_failed": "Você é forte o suficiente para derrotar as criaturas infernais do inferno? Cure os seus monstros e tente novamente!",
-    "mon_rezghuldesc": "Este poderoso monstro pode trazer os seus colegas monstros de volta dos mortos à vontade, tornando Rezghul a adição perfeita para qualquer investida no Backyard.<br><b> Alvo Favorito:</b> Defesas<br>A cada 15 segundos se teletransporta até 5 blocos à frente pelo seu caminho.",
+    "mon_rezghuldesc": "Este poderoso monstro pode trazer os seus colegas monstros de volta dos mortos à vontade, tornando Rezghul a adição perfeita para qualquer investida no Backyard.<br><b>Alvo favorito:</b> o que estiver mais perto dos aliados ou o que eles atacam, a no máximo 10 blocos<br>A cada 15 segundos se teletransporta até 5 blocos à frente pelo seu caminho.",
     "fp_hellraiserspop ": " ",
     "auto_upgraded1": "Indo para o Novo Mundo!",
     "auto_upgraded2": "Você será automaticamente movido para o Novo Mapa Mundial no dia 16 de maio.",

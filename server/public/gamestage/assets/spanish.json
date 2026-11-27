@@ -3957,7 +3957,7 @@
   "hellraiser_attackended_title": "¡Derrota!",
   "hellraiser_attackended_failedOutpost": "0",
   "hellraiser_attackended_failed": "¿Eres lo bastante duro para derrotar a las criaturas infernales? ¡Cura tus monstruos y vuelve a intentarlo!",
-  "mon_rezghuldesc": "Este poderoso monstruo puede devolver a sus aliados de entre los muertos, perfecto para cualquier asalto a una base rival.<br><b>Objetivo favorito:</b> Defensas<br>Cada 15 segundos se teletransporta hasta 5 bloques hacia delante por su camino.",
+  "mon_rezghuldesc": "Este poderoso monstruo puede devolver a sus aliados de entre los muertos, perfecto para cualquier asalto a una base rival.<br><b>Objetivo favorito:</b> lo más cercano a sus aliados o lo que ellos atacan, a 10 bloques como mucho<br>Cada 15 segundos se teletransporta hasta 5 bloques hacia delante por su camino.",
   "fp_hellraiserspop ": " ",
   "auto_upgraded1": "¡Rumbo al Nuevo Mundo!",
   "auto_upgraded2": "El 16 de mayo te trasladaremos automáticamente al Nuevo Mapa Mundial.",

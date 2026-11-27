@@ -4,7 +4,7 @@
   "entries": [
     {
       "date": "2026-11-27",
-      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, and fixes",
+      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, and fixes",
       "items": [
         {
           "area": "Yard",
@@ -67,6 +67,16 @@
           "text": "A monster's description now reads the same in the Strongbox, the Academy, the Incubator and the Incubation Control Station: its name with its level (or its training status), what it goes for, its abilities, its synergy, then the description, and last a tip where there is one. The Strongbox still adds its health and damage per 100 housing. A long one has the small arrow and scrolls in all four."
         },
         {
+          "area": "Monsters",
+          "title": "Rezghul fights with his side",
+          "text": "Rezghul now goes for what the monsters on his side are attacking, as Clinkerjaw does: whatever is nearest them or what they're attacking, within 10 blocks, and anything nearest when none of them is near. Before, he went for defences. He also does a quarter less damage: 525 at level 1 up to 900 at level 6 (was 700 to 1,200). His raising of the dead and his teleport are unchanged."
+        },
+        {
+          "area": "Interface",
+          "title": "The mouse wheel scrolls every list",
+          "text": "Many lists only scrolled by dragging their bar: the Incubator's monsters, the Compound, the bunkers, the Store, the mail, the map room's popups, the Yard Planner's side bar, the alliance tabs and the Champion Chamber. The mouse wheel over any of them now scrolls it. On a phone, a finger dragging a long monster description scrolls it too, as it already did for the lists."
+        },
+        {
           "area": "Fixes",
           "title": "The Strongbox's long descriptions",
           "text": "A monster's description that didn't fit used to run off the panel, and the synergy line could go missing with it. Long descriptions now have a small arrow and scroll with the mouse wheel, the synergy shows under the costs, and big costs read short (2.2M Magma).",
@@ -99,6 +109,11 @@
           "area": "Interface",
           "title": "No limit on reports above level 40",
           "text": "If your yard is above level 40 you can send as many bug reports and suggestions from the right-click menu as you like."
+        },
+        {
+          "area": "Fixes",
+          "title": "The Academy's description kept jumping to the top",
+          "text": "Scrolling down a long monster description in the Academy put it back at the top a second later. It now stays where you scrolled it. In the Strongbox's list, a row that read \"Can start · 19.2K Sulfur\" lost its last word; it is now drawn smaller to fit."
         }
       ]
     },

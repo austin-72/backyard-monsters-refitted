@@ -2,7 +2,7 @@ import * as as3 from "as3";
 import { DisplayObject, MovieClip, Stage } from "flash/display";
 import { Event, MouseEvent } from "flash/events";
 import { Rectangle } from "flash/geom";
-import { GLOBAL, IoPinchZoom, ScrollSetH_CLIP } from "@game";
+import { GLOBAL, IoPinchZoom, ScrollSet, ScrollSetH_CLIP } from "@game";
 
 export class ScrollSetH extends ScrollSetH_CLIP {
     static {
@@ -37,6 +37,10 @@ export class ScrollSetH extends ScrollSetH_CLIP {
         if (GLOBAL.INFERNO_ONLY) {
             this._content.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this.ioSwipeDown));
             this._content.addEventListener(MouseEvent.CLICK, as3.bind(this, this.ioSwipeClick), true);
+            // (27 November: and the mouse wheel over it)
+            IoPinchZoom.wheel(this, this._mask, (steps: number): boolean => {
+                return this.ioScrollBy(-steps * ScrollSet.IO_WHEEL_STEP);
+            });
         }
     }
 
@@ -98,7 +102,23 @@ export class ScrollSetH extends ScrollSetH_CLIP {
         if (!this._ioSwiped || range <= 0) {
             return;
         }
-        let x: number = Math.max(this._mask.x - range, Math.min(this._mask.x, this._ioPressContent + d));
+        this.ioPlace(this._ioPressContent + d);
+    }
+
+    /** 27 November: the wheel: the content moved by d (up / left negative); whether it moved. */
+    private ioScrollBy(d: number): boolean {
+        if (!this.stage || !this.visible || this.ioRange() <= 0) {
+            return false;
+        }
+        let was: number = this._content.x;
+        this.ioPlace(was + d);
+        return this._content.x != was;
+    }
+
+    /** The content at x (kept within its range), and the bar where its own drag would have put it. */
+    private ioPlace(x: number): void {
+        let range: number = this.ioRange();
+        x = Math.max(this._mask.x - range, Math.min(this._mask.x, x));
         this._content.x = Math.round(x);
         // (the bar where its own drag would have put the row: onEnterFrame the other way round)
         let room: number = this.width - this._scroller.width;

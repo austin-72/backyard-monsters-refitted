@@ -3956,7 +3956,7 @@
     "hellraiser_attackended_title": "Défaite !",
     "hellraiser_attackended_failedOutpost": "0",
     "hellraiser_attackended_failed": "Es-tu assez fort pour repousser les horribles créatures de l'Enfer ? Soigne tes monstres et essaie encore !",
-    "mon_rezghuldesc": "Ce puissant monstre est capable de ramener les monstres morts à la vie à volonté, ce qui fait de Rezghul un atout parfait contre les obstacles.<br><b>Cible préférée:</b> Défenses<br>Toutes les 15 secondes, il se téléporte jusqu'à 5 blocs plus loin sur son chemin.",
+    "mon_rezghuldesc": "Ce puissant monstre est capable de ramener les monstres morts à la vie à volonté, ce qui fait de Rezghul un atout parfait contre les obstacles.<br><b>Cible préférée :</b> ce qui est le plus proche de ses alliés ou ce qu'ils attaquent, à 10 blocs au plus<br>Toutes les 15 secondes, il se téléporte jusqu'à 5 blocs plus loin sur son chemin.",
     "fp_hellraiserspop ": " ",
     "auto_upgraded1": "Déplacement vers le Nouveau Monde !",
     "auto_upgraded2": "Tu vas être déplacé automatiquement dans la Carte du Nouveau Monde le 16 mai.",
