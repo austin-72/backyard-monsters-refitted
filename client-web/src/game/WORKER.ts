@@ -8,7 +8,7 @@ import { BASE, BFOUNDATION, BYMConfig, Bounce, GLOBAL, GRID, ImageCache, IoDave,
 
 export class WORKER extends WORKER_CLIP {
     static {
-        as3.fields(this, { _behaviour: null, _middle: 0, _speed: NaN, _targetRotation: NaN, _targetPosition: null, _targetTask: null, _hasPath: false, _frameNumber: NaN, _scale: NaN, _targetBuilding: null, _id: 0, _size: NaN, _container: null, _graphic: null, _lastRotation: 400, _messageMC: null, frameCount: 0, showTimer: null, hideTimer: null, yd: 0, xd: 0, _mc: null, _waypoints: null, _waypointIndex: 0, _hasGraphic: false, configObject: null, _jumping: false, _jumpingUp: false, _graphicMC: null, _rasterData: null, _rasterPt: null, ioDance: 0, ioFollow: 0, _ioHop: 0, _ioBaseY: -36, _ioFronted: false });
+        as3.fields(this, { _behaviour: null, _middle: 0, _speed: NaN, _targetRotation: NaN, _targetPosition: null, _targetTask: null, _hasPath: false, _frameNumber: NaN, _scale: NaN, _targetBuilding: null, _id: 0, _size: NaN, _container: null, _graphic: null, _lastRotation: 400, _messageMC: null, frameCount: 0, showTimer: null, hideTimer: null, yd: 0, xd: 0, _mc: null, _waypoints: null, _waypointIndex: 0, _hasGraphic: false, configObject: null, _jumping: false, _jumpingUp: false, _graphicMC: null, _rasterData: null, _rasterPt: null, ioDance: 0, ioFollow: 0, _ioHop: 0, _ioBaseY: -36, _ioFronted: false, _ioFrogT: 0, _ioFrogRow: 0, _ioFrogIdle: 0 });
     }
 
     public _behaviour: string;
@@ -49,6 +49,10 @@ export class WORKER extends WORKER_CLIP {
     private _ioBaseY: number;
     /** Gone round to the front of the building it works on (so it is seen: ioToFront). */
     private _ioFronted: boolean;
+    /** (27 November) A frog's hop: how far through it, the row drawn (0 sitting, 1 in the air), a hop on the spot's ticks left. */
+    private _ioFrogT: number;
+    private _ioFrogRow: int;
+    private _ioFrogIdle: int;
 
     public $ctor(param1?: any, param2?: Point, param3?: number): void {
         super.$ctor();
@@ -82,7 +86,8 @@ export class WORKER extends WORKER_CLIP {
             this._rasterData = this._rasterData || new RasterData(as3.cast(this._graphic, IBitmapDrawable), this._rasterPt, int.MAX_VALUE);
         }
         this._hasGraphic = false;
-        ImageCache.GetImageWithCallBack("monsters/worker.png", as3.bind(this, this.onAssetLoaded));
+        // (27 November: drawn once the sheet it is drawn from has come: the imps', the frogs', the builders')
+        ImageCache.GetImageWithCallBack(GLOBAL.INFERNO_ONLY && SPRITES._sprites && SPRITES._sprites.worker ? String(SPRITES._sprites.worker.key) : "monsters/worker.png", as3.bind(this, this.onAssetLoaded));
         this.mouseEnabled = false;
         this.mouseChildren = false;
     }
@@ -146,10 +151,14 @@ export class WORKER extends WORKER_CLIP {
         let _loc1_: int = (Math.random() * 600) | 0;
         if (GLOBAL.INFERNO_ONLY && this.ioPlay()) {
             // (dancing or following the pointer: IoWorkerFun)
-        } else if (_loc1_ < 5 && !this._targetTask && this._speed == 0) {
+        } else if (_loc1_ < (GLOBAL.INFERNO_ONLY && IoDave.frogWorkers ? 14 : 5) && !this._targetTask && this._speed == 0) {
+            // (27 November: a frog hops all around, off somewhere new about three times as often)
             this.Wander();
         }
         this.Move();
+        if (GLOBAL.INFERNO_ONLY && this.ioDance <= 0) {
+            this.ioFrog();
+        }
         if (this._hasGraphic) {
             this.Update();
         }
@@ -256,7 +265,55 @@ export class WORKER extends WORKER_CLIP {
         this._waypoints = waypoints;
     }
 
+    /**
+     * Inferno-only (27 November, 72's suggestion): a frog hops. Going somewhere, it goes in hops, about two a second,
+     * rising up to 14 pixels, in the air (its legs stretched out: row 1) for most of each; standing, it now and then
+     * hops on the spot. Nothing for the imps or the builders.
+     */
+    private ioFrog(): void {
+        if (!IoDave.frogWorkers) {
+            return;
+        }
+        let row: int = 0;
+        if (this._speed > 0.05 && (this._hasPath || this._waypoints.length > 0)) {
+            this._ioFrogT += 0.16 + this._speed * 0.06;
+            let h: number = Math.abs(Math.sin(this._ioFrogT));
+            this._ioHop = h * 14;
+            row = h > 0.22 ? 1 : 0;
+        } else if (this._ioFrogIdle > 0) {
+            this._ioFrogIdle--;
+            let h2: number = Math.sin((this._ioFrogIdle / 14) * Math.PI);
+            this._ioHop = h2 * 8;
+            row = h2 > 0.3 ? 1 : 0;
+        } else {
+            this._ioHop = 0;
+            this._ioFrogT = 0;
+            if (!GLOBAL._catchup && Math.random() < 0.006) {
+                this._ioFrogIdle = 14;
+                this.mcMarker.rotation += (Math.random() - 0.5) * 120;
+            }
+        }
+        if (!BYMConfig.instance.RENDERER_ON && this._graphicMC && !this._jumping) {
+            this._graphicMC.y = this._ioBaseY - this._ioHop;
+        }
+        if (row != this._ioFrogRow) {
+            this._ioFrogRow = row;
+            if (this._hasGraphic) {
+                this.Update(true);
+            }
+        }
+    }
+
     public Update(param1: boolean = false): void {
+        if (GLOBAL.INFERNO_ONLY && IoDave.frogWorkers && SPRITES._sprites && SPRITES._sprites.worker) {
+            // (a frog: its row, sitting or in the air, as well as its facing)
+            if (param1 || this._lastRotation != ((this.mcMarker.rotation / 12) | 0)) {
+                this._lastRotation = (this.mcMarker.rotation / 12) | 0;
+                let r: int = (((this.mcMarker.rotation % 360) + 360) % 360) | 0;
+                SPRITES.GetFrame(this._graphic, SPRITES._sprites.worker, (r / 12) | 0, this._ioFrogRow);
+            }
+            return;
+        }
         if (param1 || this._lastRotation != ((this.mcMarker.rotation / 12) | 0)) {
             this._lastRotation = (this.mcMarker.rotation / 12) | 0;
             SPRITES.GetSprite(this._graphic, "worker", "walking", this.mcMarker.rotation | 0, this._frameNumber | 0);

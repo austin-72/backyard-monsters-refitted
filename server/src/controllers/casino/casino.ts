@@ -18,6 +18,7 @@ import { bankDice, betDice, diceState, diceTables, leaveDice, sitDice, takeBackD
 import { cashoutBonePile, openBonePile, revealBonePile, settleIdleBonePiles, startBonePile } from "../../services/casino/bonePileSessions.js";
 import { actBlackjack, cashoutHiLo, decideDeal, guessHiLo, openBlackjack, openDeal, openDealCoffin, openHiLo, settleIdleCardGames, startBlackjack, startDeal, startHiLo } from "../../services/casino/cardSessions.js";
 import { isShinyLocked, visibleCredits } from "../../services/user/shinyLock.js";
+import { oddsSheets } from "../../services/casino/oddsSheet.js";
 
 /**
  * The Brimstone Pit's endpoints (config/CasinoConfig.ts, services/casino/). Every outcome is decided
@@ -93,6 +94,8 @@ export const casinoState: KoaController = async (ctx) => {
       hilo: { rtp: casinoConfig.hilo.rtp, max_skips: casinoConfig.hilo.maxSkips, max_multiplier: casinoConfig.maxMultiplier },
       deal: { prizes: casinoConfig.deal.prizes, rounds: casinoConfig.deal.rounds, offers: casinoConfig.deal.offers },
     },
+    // (27 November, 72's suggestion: every game's odds, for its (i) window)
+    odds: oddsSheets(),
     jackpot: await jackpotPool(),
     favor: await favorState(user, pit.level),
     bonepile: await openBonePile(user.userid),

@@ -18,7 +18,7 @@ import { AscentGame, BetSelector, BlackjackGame, BonePileGame, CASINO, CasinoUI,
  */
 export class CasinoWindow extends ASObject {
     static {
-        as3.fields(this, { _big: null, _bigT: 0, _bigAmount: 0, _bigText: null, _bigGems: null, _favorLine: null, mc: null, _content: null, _shiny: null, _level: null, _tabs: null, _game: null, _toast: null, _toastT: 0, _embers: null, _live: null, _liveT: 0, _emberLayer: null, _tabNow: 0, _emberT: 0, _ioSound: null, _ioGameId: null });
+        as3.fields(this, { _big: null, _bigT: 0, _bigAmount: 0, _bigText: null, _bigGems: null, _favorLine: null, mc: null, _content: null, _shiny: null, _level: null, _tabs: null, _game: null, _toast: null, _toastT: 0, _embers: null, _live: null, _liveT: 0, _emberLayer: null, _tabNow: 0, _emberT: 0, _ioSound: null, _ioGameId: null, _ioOddsPanel: null });
     }
 
     public static readonly W: int = 740;
@@ -521,11 +521,202 @@ export class CasinoWindow extends ASObject {
         if (this._game) {
             this._ioGameId = id;
             this._content.addChild(as3.as(this._game, Sprite));
+            if (GLOBAL.INFERNO_ONLY) {
+                this.ioOddsButton(id);
+            }
         }
+    }
+
+    /**
+     * Inferno-only (27 November, 72's suggestion: "Give an info button that publishes the odds for each game, a small (i)
+     * in the top left of each game"): a small round (i) on the game's top left corner, clear of LOBBY; it opens the
+     * game's odds (ioOdds).
+     */
+    private ioOddsButton(id: string): void {
+        let b: Sprite = new Sprite();
+        b.name = "ioPitOdds";
+        let draw = (over: boolean): void => {
+            b.graphics.clear();
+            b.graphics.lineStyle(1.5, 0x3A1A08, 1);
+            b.graphics.beginFill(over ? 0xFFE0A0 : CasinoUI.GOLD, 1);
+            b.graphics.drawCircle(0, 0, 9);
+            b.graphics.endFill();
+        };
+        draw(false);
+        let t: TextField = CasinoUI.label("i", 12, 0x3A1A08, true, 18, TextFormatAlign.CENTER, "Georgia");
+        t.x = -9;
+        t.y = -9;
+        t.mouseEnabled = false;
+        b.addChild(t);
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        b.x = -4;
+        b.y = -4;
+        b.addEventListener(MouseEvent.ROLL_OVER, (e: MouseEvent): void => {
+            draw(true);
+        });
+        b.addEventListener(MouseEvent.ROLL_OUT, (e: MouseEvent): void => {
+            draw(false);
+        });
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            this.ioOdds(id);
+        });
+        this._content.addChild(b);
+    }
+
+    /** (27 November) The open odds window, if any. */
+    private _ioOddsPanel: Sprite;
+
+    /** A number as a chance: 53.8%, 4.06%, 0.003% (1 in 32,768). */
+    public static ioPct(c: number): string {
+        let p: number = c * 100;
+        let s: string = p >= 10 ? String(Math.round(p * 10) / 10) : (p >= 1 ? String(Math.round(p * 100) / 100) : String(Number(p.toPrecision(2))));
+        return s + "%" + (c > 0 && c < 0.01 ? "  (" + KEYS.Get("io_t3c_odds_one_in", { "v1": CasinoUI.number(Math.round(1 / c)) }) + ")" : "");
+    }
+
+    /** A symbol's name in this game. */
+    private static ioSym(game: string, sym: string): string {
+        if (game == "scratch") {
+            return ScratchersGame.ioName(sym) || sym;
+        }
+        if (game == "fortune" && SlotsGame.FORTUNE_NAMES[sym]) {
+            return String(SlotsGame.FORTUNE_NAMES[sym]);
+        }
+        return sym == "wormzer" ? "King Wormzer" : sym.charAt(0).toUpperCase() + sym.substr(1);
+    }
+
+    /** A row's words, its values filled in. */
+    private static ioRowLabel(game: string, row: any): string {
+        let a: any = row.a || {};
+        let v1: string = "";
+        if (a.sym != null) {
+            v1 = CasinoWindow.ioSym(game, String(a.sym));
+        } else if (a.risk != null) {
+            v1 = KEYS.Get("io_t3c_odds_risk_" + a.risk);
+        } else if (a.card != null) {
+            v1 = ["", "A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"][a.card | 0];
+        } else if (a.n != null) {
+            v1 = String(a.n);
+        } else if (a.x != null) {
+            v1 = CasinoUI.mult(Number(a.x));
+        } else if (a.pct != null) {
+            v1 = String(a.pct) + "%";
+        }
+        return KEYS.Get("io_t3c_odds_" + row.k, { "v1": v1 });
+    }
+
+    /**
+     * (27 November) A game's odds, over the game: what it pays back over time, how often a play pays more than its bet,
+     * each result with what it pays and its chance, how the game works it out, and that these are without luck. From
+     * casino/state's `odds` (the server works them out from the rules the games are played by). A click closes it.
+     */
+    public ioOdds(id: string): void {
+        if (this._ioOddsPanel && this._ioOddsPanel.parent) {
+            this._ioOddsPanel.parent.removeChild(this._ioOddsPanel);
+            this._ioOddsPanel = null;
+            return;
+        }
+        let sheet: any = CASINO.state && CASINO.state.odds ? CASINO.state.odds[id] : null;
+        let w: int = (CasinoWindow.CW - 60) | 0;
+        let h: int = (CasinoWindow.CH - 20) | 0;
+        let p: Sprite = CasinoUI.panel(w, h, 0.97);
+        p.name = "ioPitOddsPanel";
+        p.x = 30;
+        p.y = 4;
+        this._ioOddsPanel = p;
+        this._content.addChild(p);
+        // (dark enough to read over the game; the rows' stripes on it: the panel's own drawing is redone when the kit comes)
+        let shade: Shape = new Shape();
+        shade.graphics.beginFill(0x0C0706, 0.82);
+        shade.graphics.drawRoundRect(3, 3, w - 6, h - 6, 10, 10);
+        shade.graphics.endFill();
+        p.addChild(shade);
+        p.buttonMode = true;
+        p.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            if (p.parent) {
+                p.parent.removeChild(p);
+            }
+            if (this._ioOddsPanel == p) {
+                this._ioOddsPanel = null;
+            }
+        });
+        let y: int = 12;
+        let put = (text: string, size: int, color: uint, bold: boolean, x: int, width: int, align: string = "left", html: boolean = false): TextField => {
+            let f: TextField = CasinoUI.label(text, size, color, bold, width, align);
+            f.x = x;
+            f.y = y;
+            f.mouseEnabled = false;
+            if (html) {
+                f.htmlText = text;
+            }
+            p.addChild(f);
+            return f;
+        };
+        put(KEYS.Get("io_t3c_odds_title", { "v1": LiveTab.gameName(id) }), 15, CasinoUI.GOLD, true, 20, w - 40, TextFormatAlign.CENTER);
+        y += 26;
+        if (!sheet) {
+            put(KEYS.Get("io_t3c_loading"), 11, CasinoUI.ASH, false, 20, w - 40, TextFormatAlign.CENTER);
+            return;
+        }
+        let rtp: any[] = as3.as(sheet.rtp, Array) || [0, 0];
+        let r0: string = CasinoWindow.ioPctPlain(Number(rtp[0]));
+        let r1: string = CasinoWindow.ioPctPlain(Number(rtp[1]));
+        put(r0 == r1 ? KEYS.Get("io_t3c_odds_rtp", { "v1": r0 }) : KEYS.Get("io_t3c_odds_rtp2", { "v1": r0, "v2": r1 }), 11, 0xE8DCC8, true, 20, w - 40, TextFormatAlign.CENTER);
+        y += 16;
+        if (sheet.win != null) {
+            put(KEYS.Get("io_t3c_odds_win", { "v1": CasinoWindow.ioPct(Number(sheet.win)) }), 11, 0xE8DCC8, false, 20, w - 40, TextFormatAlign.CENTER);
+            y += 16;
+        }
+        y += 6;
+        let c1: int = 30;
+        let c2: int = (w - 270) | 0;
+        let c3: int = (w - 170) | 0;
+        put(KEYS.Get("io_t3c_odds_col_result"), 10, CasinoUI.EMBER, true, c1, c2 - c1 - 10);
+        put(KEYS.Get("io_t3c_odds_col_pays"), 10, CasinoUI.EMBER, true, c2, 90, TextFormatAlign.RIGHT);
+        put(KEYS.Get("io_t3c_odds_col_chance"), 10, CasinoUI.EMBER, true, c3, 150, TextFormatAlign.RIGHT);
+        y += 16;
+        let rows: any[] = as3.as(sheet.rows, Array) || [];
+        for (let i: int = 0; i < rows.length; i++) {
+            let row: any = rows[i];
+            if (i % 2 == 0) {
+                shade.graphics.beginFill(0xFFFFFF, 0.06);
+                shade.graphics.drawRect(c1 - 8, y - 1, w - 2 * c1 + 16, 17);
+                shade.graphics.endFill();
+            }
+            put(CasinoWindow.ioRowLabel(id, row), 11, 0xFFFFFF, false, c1, c2 - c1 - 10);
+            let pays: string = "";
+            if (row.pays == null) {
+                pays = KEYS.Get("io_t3c_odds_pool");
+            } else if (as3.is(row.pays, Array)) {
+                pays = CasinoUI.mult(Number(row.pays[0])) + " – " + CasinoUI.mult(Number(row.pays[1]));
+            } else {
+                pays = CasinoUI.mult(Number(row.pays));
+            }
+            put(pays, 11, CasinoUI.GOLD, true, c2, 90, TextFormatAlign.RIGHT);
+            put(row.chance == null ? "—" : CasinoWindow.ioPct(Number(row.chance)), 11, 0xE8DCC8, false, c3, 150, TextFormatAlign.RIGHT);
+            y += 17;
+        }
+        y += 8;
+        let note: TextField = put(KEYS.Get("io_t3c_odds_note_" + id), 10, CasinoUI.ASH, false, 24, w - 48, TextFormatAlign.CENTER);
+        note.multiline = true;
+        note.wordWrap = true;
+        note.height = 30;
+        y += 30;
+        let foot: TextField = put(KEYS.Get("io_t3c_odds_foot"), 9, CasinoUI.ASH, false, 24, w - 48, TextFormatAlign.CENTER);
+        foot.multiline = true;
+        foot.wordWrap = true;
+        foot.height = 26;
+    }
+
+    /** What a game pays back: 99.98%. */
+    private static ioPctPlain(c: number): string {
+        return String(Math.round(c * 10000) / 100) + "%";
     }
 
     private endGame(): void {
         this._ioGameId = null;
+        this._ioOddsPanel = null;
         if (this._game) {
             this._game.dispose();
             this._game = null;

@@ -21,6 +21,8 @@ Build the Brimstone Pit (one per yard, from Under Hall 1) and play against the h
 
 Magma Drop, Roulette, Bone Pile, Ascent, Devil's Dice and the Derby have a **?** button by LOBBY with their rules and what they pay.
 
+Every game has a small **(i)** at its top left with its odds: what it pays back over time, how often a play pays more than the bet, and each result with what it pays and its chance. They are worked out from the rules the game is played by, without luck (see Fairness).
+
 ## How it's played {#pit-play}
 
 - **Fairness:** the Fairness tab shows the seeds every result is drawn from and how a bet's numbers are made from them. You choose your own client seed; changing seeds waits until a Bone Pile, Higher or Lower, Undertaker's Offer or Cinderjack game you have open is finished.

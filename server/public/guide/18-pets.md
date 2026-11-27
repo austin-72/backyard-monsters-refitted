@@ -14,4 +14,5 @@ Pets are small copies of the Inferno's monsters that wander your main yard. They
 ## Playing with your pet {#playing}
 
 - **Click your pet** for a menu of things to do together: have it follow your cursor, play fetch, do a trick, get a pat, run zoomies or take a nap, with hearts, sparkles and bones to show it's having fun.
+- **Their own tricks:** now and then each pet does what its monster does: Valgos and King Wormzer burrow and come up elsewhere, Malphus leaps over what's in the way, the Flickerfiend blinks out and back in, Zagnoid and Grokus stomp, Balthazar loops and bobs, Spurtz bounces, Sabnox dashes off, Clinkerjaw rattles its jaws, the Fusebug's fuse fizzes and the Emberghoul flares up in embers.
 - **Full size:** feed your pet 1,000,000 magma and it grows to a monster's full size for good. You are asked first, because it can't be undone.

@@ -6,7 +6,7 @@ import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { Matrix, Point, Rectangle } from "flash/geom";
 import { AntiAliasType, TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { getTimer } from "flash/utils";
-import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoDave, IoEmotes, IoHfo, IoPets, IoPetsPanel, IoSign, IoSkins, IoTrophies, KEYS, LOGIN, MAP, PLEASEWAIT, POPUPSETTINGS, IoWin, SOUNDS, SPRITES, URLLoaderApi, WORKERS, frame_CLIP, hell_land1_1, hell_land2_1, hell_land3_1, hell_land4_1, hell_land5_1, hell_land6_1, hell_sand1_big, hell_sand2_big, hfo_frozen1, inferno_lava1, io_ashfall_big, io_obsidian_big, io_soulfire_big, isocrater1, isograss1, isorock1, isosand1, UI_TOP, BUILDINGSPOPUP, IoChampionStatue, IoShop, io_sulfur_big, io_magma_big, io_witchfire_big, io_bloodstone_big, io_gilded_big } from "@game";
+import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoDave, IoEmotes, IoHfo, IoPets, IoPetsPanel, IoSign, IoSkins, IoTrophies, KEYS, LOGIN, MAP, PLEASEWAIT, POPUPSETTINGS, IoWin, SOUNDS, SPRITES, URLLoaderApi, WORKERS, frame_CLIP, hell_land1_1, hell_land2_1, hell_land3_1, hell_land4_1, hell_land5_1, hell_land6_1, hell_sand1_big, hell_sand2_big, hfo_frozen1, inferno_lava1, io_ashfall_big, io_obsidian_big, io_soulfire_big, isocrater1, isograss1, isorock1, isosand1, UI_TOP, BUILDINGSPOPUP, IoChampionStatue, IoShop, io_sulfur_big, io_magma_big, io_witchfire_big, io_bloodstone_big, io_gilded_big, io_cinder_big, io_amethyst_big, io_hellforge_big } from "@game";
 
 /**
  * Inferno-only (10 October): the D.A.V.E. Club. The button in the resources' column (UI_TOP.ioDaveClub) opens this
@@ -63,7 +63,11 @@ export class IoTerrainPopup extends ASObject {
         ["io_magma", "Magma Sea", io_magma_big],
         ["io_witchfire", "Witchfire Marsh", io_witchfire_big],
         ["io_bloodstone", "Bloodstone", io_bloodstone_big],
-        ["io_gilded", "Gilded Inferno", io_gilded_big]]);
+        ["io_gilded", "Gilded Inferno", io_gilded_big],
+        // (27 November, 72's suggestion) opened by reaching level 30, 40 and 50
+        ["io_cinder", "Cinder Steppe", io_cinder_big],
+        ["io_amethyst", "Amethyst Hollow", io_amethyst_big],
+        ["io_hellforge", "Hellforge", io_hellforge_big]]);
     }
 
     private static _terrains: any[] = null;
@@ -97,6 +101,13 @@ export class IoTerrainPopup extends ASObject {
 
     public static outpostNeed(id: string): int {
         return (IoTerrainPopup.OUTPOST_GROUNDS[id] | 0) as int;
+    }
+
+    /** (27 November, 72's suggestion) The level grounds: the level each needs (the server's LEVEL_GROUNDS). */
+    public static readonly LEVEL_GROUNDS: any = { "io_cinder": 30, "io_amethyst": 40, "io_hellforge": 50 };
+
+    public static levelNeed(id: string): int {
+        return (IoTerrainPopup.LEVEL_GROUNDS[id] | 0) as int;
     }
 
     /** The ground chosen for the loaded main yard (io_terrain), or null: its own. */
@@ -326,7 +337,7 @@ export class IoTerrainPopup extends ASObject {
         for (let row of as3.values(IoTerrainPopup.TERRAINS)) {
             let id: string = String(row[0]);
             let open: boolean = !allowed || allowed.indexOf(id) >= 0;
-            if ((id == "hfo_frozen" || IoTerrainPopup.inviteNeed(id) > 0 || IoTerrainPopup.outpostNeed(id) > 0) && !allowed) {
+            if ((id == "hfo_frozen" || IoTerrainPopup.inviteNeed(id) > 0 || IoTerrainPopup.outpostNeed(id) > 0 || IoTerrainPopup.levelNeed(id) > 0) && !allowed) {
                 open = false;
             }
             let tile: Sprite = this.tile(id, IoTerrainPopup.terrainName(row), row[2], open);
@@ -493,11 +504,15 @@ export class IoTerrainPopup extends ASObject {
             let id: string = String(fx.id);
             let spec: string = String(fx.spec);
             let need: int = fx.need | 0;
-            let open: boolean = IoDave.unlocked(need);
+            // (27 November, 72's suggestion: the looks opened by holding outposts, and by the player's level)
+            let needOutposts: int = fx.needOutposts | 0;
+            let needLevel: int = fx.needLevel | 0;
+            let open: boolean = IoDave.unlocked(need) && (me.outposts | 0) >= needOutposts && (me.level | 0) >= needLevel;
+            let lockText: string = need > 0 ? IoDave.inviteLock(need) : (needOutposts > 0 ? KEYS.Get("io_t3m_dc_outpost_lock", { "v1": GLOBAL.FormatNumber(needOutposts) }) : KEYS.Get("io_t3m_dc_level_lock", { "v1": needLevel }));
             let at: int = (names.length + k) | 0;
             let fb: Sprite = this.box(gx + (at % cols) * (bw + 12), gy + ((at / cols) | 0) * (bh + 30), bw, bh, String(fx.name) + (open ? "" : KEYS.Get("io_t3m_dc_locked")), (me.chatColor || null) == id, open, (): void => {
                 this.choose("chatColor", id);
-            }, open ? null : IoDave.inviteLock(need));
+            }, open ? null : lockText);
             fb.name = "ioDaveFx:" + id;
             let sample2: TextField = new TextField();
             sample2.selectable = false;
@@ -510,7 +525,7 @@ export class IoTerrainPopup extends ASObject {
             let plainWho: string = who.replace(/</g, "");
             sample2.htmlText = "<b>" + IoDave.fxHtml(spec, plainWho) + ":</b> " + KEYS.Get("io_t3m_dc_hi");
             sample2.y = 11;
-            if (!open) {
+            if (!open && need > 0) {
                 sample2.alpha = 0.3;
                 // (locked: a click shows the invite)
                 fb.buttonMode = true;
@@ -520,6 +535,8 @@ export class IoTerrainPopup extends ASObject {
                     this.close();
                     UI_TOP.ioShowInvite();
                 });
+            } else if (!open) {
+                sample2.alpha = 0.3;
             }
             fb.addChildAt(sample2, 0);
             if (IoDave.fxMoves(spec)) {
@@ -546,15 +563,16 @@ export class IoTerrainPopup extends ASObject {
     private workersTab(): void {
         this.intro(KEYS.Get("io_t3m_dc_workers_intro"));
         let me: any = IoDave.mine;
-        let skin: string = me.workerSkin == "overworld" ? "overworld" : "inferno";
-        let bw: int = 200;
+        let skin: string = me.workerSkin == "overworld" || me.workerSkin == "frog" || me.workerSkin == "frog_red" ? String(me.workerSkin) : "inferno";
+        // (27 November, 72's suggestion: two frogs, green and red, that hop all around: four looks in a row)
+        let bw: int = 140;
         let bh: int = 150;
-        let rows: any[] = [["inferno", KEYS.Get("io_t3m_dc_w_imps"), "monsters/inferno_worker.v2.png", 64, 55, 2.0, 0], ["overworld", KEYS.Get("io_t3m_dc_w_builders"), "monsters/worker.png", 27, 27, 4.0, 1]];
+        let rows: any[] = [["inferno", KEYS.Get("io_t3m_dc_w_imps"), "monsters/inferno_worker.v2.png", 64, 55, 2.0, 0, 3], ["overworld", KEYS.Get("io_t3m_dc_w_builders"), "monsters/worker.png", 27, 27, 4.0, 1, 3], ["frog", KEYS.Get("io_t3m_dc_w_frog"), "monsters/io_frog.png", 64, 55, 2.0, 0, 5], ["frog_red", KEYS.Get("io_t3m_dc_w_frog_red"), "monsters/io_frog_red.png", 64, 55, 2.0, 0, 5]];
         // (the builders' second row wears the yellow hard hat)
         for (let i: int = 0; i < rows.length; i++) {
             let r: any[] = rows[i];
             let id: string = String(r[0]);
-            let b: Sprite = this.box(-bw - 15 + i * (bw + 30), this._top + 150, bw, bh, String(r[1]), skin == id, true, (): void => {
+            let b: Sprite = this.box(-((rows.length * bw + (rows.length - 1) * 12) / 2) + i * (bw + 12), this._top + 150, bw, bh, String(r[1]), skin == id, true, (): void => {
                 this.choose("workerSkin", id, (): void => {
                     IoDave.setYard({ "workerSkin": id, "champSkins": IoDave.mine.champSkins });
                     SPRITES.ioWorkerSprite();
@@ -568,7 +586,8 @@ export class IoTerrainPopup extends ASObject {
                     }
                 });
             });
-            this.sheetPicture(b, String(r[2]), r[3] | 0, r[4] | 0, 3, r[6] | 0, Number(r[5]), bw, bh, false);
+            b.name = "ioDaveWorker:" + id;
+            this.sheetPicture(b, String(r[2]), r[3] | 0, r[4] | 0, r[7] | 0, r[6] | 0, Number(r[5]), bw, bh, false);
         }
     }
 
@@ -1305,7 +1324,8 @@ export class IoTerrainPopup extends ASObject {
             bm.alpha = 0.35;
             let need: int = IoTerrainPopup.inviteNeed(id);
             let outposts: int = IoTerrainPopup.outpostNeed(id);
-            let lock: TextField = IoTerrainPopup.label(need > 0 ? IoDave.inviteLock(need) : (outposts > 0 ? KEYS.Get("io_t3m_dc_outpost_lock", { "v1": GLOBAL.FormatNumber(outposts) }) : KEYS.Get("io_t3m_dc_hfo_lock")), 9, 0xFFFFFF, true, tw, TextFormatAlign.CENTER);
+            let level: int = IoTerrainPopup.levelNeed(id);
+            let lock: TextField = IoTerrainPopup.label(need > 0 ? IoDave.inviteLock(need) : (outposts > 0 ? KEYS.Get("io_t3m_dc_outpost_lock", { "v1": GLOBAL.FormatNumber(outposts) }) : (level > 0 ? KEYS.Get("io_t3m_dc_level_lock", { "v1": level }) : KEYS.Get("io_t3m_dc_hfo_lock"))), 9, 0xFFFFFF, true, tw, TextFormatAlign.CENTER);
             if (need > 0) {
                 // (the invite: what opens it)
                 t.buttonMode = true;

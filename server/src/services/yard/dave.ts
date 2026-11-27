@@ -6,13 +6,15 @@ import { refreshChatUser } from "../../chat/chatControl.js";
 import { BaseType } from "../../enums/Base.js";
 import { isShinyLocked, visibleCredits } from "../user/shinyLock.js";
 import { acceptedInvites, INVITE_UNLOCKS, inviteLockText, inviteLooksFree, invitesForLooks } from "../user/referrals.js";
+import { outpostsHeld, playerLevel } from "./terrain.js";
 
 /**
  * Inferno-only (10 October): the D.A.V.E. Club's choices besides the ground (that one: terrain.ts), kept on the
  * player (bym.user.io_dave):
  *
  *   chatColor   the colour of the player's name in chat (one of CHAT_COLORS; none: black)
- *   workerSkin  "inferno" (the Inferno's imps, the default) or "overworld" (the overworld's builders): the
+ *   workerSkin  "inferno" (the Inferno's imps, the default), "overworld" (the overworld's builders), or (27 November)
+ *               "frog" / "frog_red" (frogs that hop): the
  *               player's workers in every yard of theirs, as everyone sees them
  *   champSkins  { IC9: "frozen", IC10: "frozen" }: Korath's and Drull's frozen look, once Hell Freezes Over's last
  *               wave is won: the player's own Korath and Drull, at home, in attacks and to visitors
@@ -50,7 +52,23 @@ export const NAME_FX: Record<string, { name: string; spec: string }> = {
   fx_ember: { name: "Ember Glow", spec: "grad:#B0170B,#D8A000" },
   fx_brimstone: { name: "Brimstone", spec: "shine:#5E1A8C,#C2185B,#E65100" },
   fx_soulfire: { name: "Soulfire", spec: "flow:#1565C0,#00838F,#6A1B9A,#C2185B,#1565C0" },
+  // (27 November, 72's suggestion: "more name colorings/animations based on outpost count and player level") new
+  // moves the game draws (IoDave.fxHtml): pulse (the whole name breathing between two colours), fire (each letter
+  // flickering through its colours), beat (a heartbeat: two quick throbs, then rest), spark (shaded, letters
+  // twinkling bright now and then), chase (shaded, a bright band running back and forth)
+  fx_sulfur: { name: "Sulfur Pulse", spec: "pulse:#7A6A00,#D8E030" },
+  fx_magma: { name: "Magma Flow", spec: "flow:#7A1000,#E04000,#FFA000,#E04000,#7A1000" },
+  fx_witchfire: { name: "Witchfire", spec: "fire:#0B5A20,#20A040,#90FF70" },
+  fx_bloodstone: { name: "Heartstone", spec: "beat:#5A0010,#E01030" },
+  fx_gilded: { name: "Gilded", spec: "spark:#7A5600,#D8A800,#FFF4C0" },
+  fx_cinder: { name: "Cinder", spec: "fire:#4A1206,#C03A10,#FFB040" },
+  fx_amethyst: { name: "Amethyst", spec: "chase:#3A1060,#8A40D0,#F0D0FF" },
+  fx_hellforge: { name: "Hellforge", spec: "chase:#3A0A02,#C04010,#FFE0A0" },
 };
+
+/** (27 November) The name effects opened by holding outposts (as the grounds: terrain.ts), and by the player's level. */
+export const NAME_FX_OUTPOSTS: Record<string, number> = { fx_sulfur: 50, fx_magma: 100, fx_witchfire: 250, fx_bloodstone: 500, fx_gilded: 1000 };
+export const NAME_FX_LEVELS: Record<string, number> = { fx_cinder: 30, fx_amethyst: 40, fx_hellforge: 50 };
 
 /** A chatColor's look for the chat: a colour's #hex or a name effect's spec, or null. */
 // (13 October: own keys only: "constructor" or "toString" passed as a colour and was stored)
@@ -58,7 +76,8 @@ const isColor = (c: string) => Object.hasOwn(CHAT_COLORS, c);
 const isFx = (c: string) => Object.hasOwn(NAME_FX, c);
 const lookOf = (c: string | null | undefined): string | null => (c ? ((isColor(c) ? CHAT_COLORS[c] : null) ?? (isFx(c) ? NAME_FX[c].spec : null)) : null);
 
-export const WORKER_SKINS = ["inferno", "overworld"] as const;
+// (27 November, 72's suggestion) and the frogs, green and red, that hop all around
+export const WORKER_SKINS = ["inferno", "overworld", "frog", "frog_red"] as const;
 /** (14 October) Korath, Drull, Ashkarr, Rimegrave and the Basilisk. */
 export const CHAMPIONS = ["IC9", "IC10", "IC24", "IC25", "IC32"] as const;
 /**
@@ -148,7 +167,7 @@ export const daveForOwner = async (userid: number) => {
   const d = await readDave(userid);
   const frozen = await hfoFinalWaveWon(userid).catch(() => false);
   const invites = await acceptedInvites(userid).catch(() => 0);
-  const nameFx = Object.entries(NAME_FX).map(([id, fx]) => ({ id, name: fx.name, spec: fx.spec, need: INVITE_UNLOCKS.nameFx[id] ?? 0 }));
+  const nameFx = Object.entries(NAME_FX).map(([id, fx]) => ({ id, name: fx.name, spec: fx.spec, need: INVITE_UNLOCKS.nameFx[id] ?? 0, needOutposts: NAME_FX_OUTPOSTS[id] ?? 0, needLevel: NAME_FX_LEVELS[id] ?? 0 }));
   return {
     chatColor: d.chatColor ?? null,
     workerSkin: d.workerSkin ?? "inferno",
@@ -166,6 +185,9 @@ export const daveForOwner = async (userid: number) => {
     // (admins and moderators: every invite-only look, without inviting)
     inviteFree: await inviteLooksFree(userid).catch(() => false),
     inviteGrounds: INVITE_UNLOCKS.grounds,
+    // (27 November) what opens the outpost and level looks: how many outposts the player holds, and their level
+    outposts: await outpostsHeld(userid).catch(() => 0),
+    level: await playerLevel(userid).catch(() => 0),
   };
 };
 
@@ -179,6 +201,16 @@ export const setDave = async (user: User, key: string, raw: unknown) => {
     const need = isFx(value) ? Number(INVITE_UNLOCKS.nameFx[value] ?? 0) : 0;
     if (need > 0) {
       if ((await invitesForLooks(user.userid)) < need) throw new DaveError(inviteLockText(need, await acceptedInvites(user.userid)));
+    }
+    const outpostsNeed = NAME_FX_OUTPOSTS[value] ?? 0;
+    if (outpostsNeed > 0) {
+      const held = await outpostsHeld(user.userid);
+      if (held < outpostsNeed) throw new DaveError(`Hold ${outpostsNeed.toLocaleString("en-US")} outposts to have this look (you hold ${held.toLocaleString("en-US")}).`);
+    }
+    const levelNeed = NAME_FX_LEVELS[value] ?? 0;
+    if (levelNeed > 0) {
+      const level = await playerLevel(user.userid);
+      if (level < levelNeed) throw new DaveError(`Reach level ${levelNeed} to have this look (you are level ${level}).`);
     }
     now.chatColor = value || null;
   } else if (key === "workerSkin") {

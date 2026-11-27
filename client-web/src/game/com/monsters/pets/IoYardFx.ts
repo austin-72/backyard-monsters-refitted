@@ -114,6 +114,58 @@ export class IoYardFx extends ASObject {
         return as3.cast(IoYardFx._art[key], BitmapData);
     }
 
+    /** (27 November) A puff of dust or dirt: a soft brown cloud (a pet burrowing, stomping, landing). */
+    public static dustArt(): BitmapData {
+        if (!IoYardFx._art.dust) {
+            let s: Shape = new Shape();
+            s.graphics.beginFill(0x8A6A48, 0.55);
+            s.graphics.drawEllipse(2, 3, 16, 9);
+            s.graphics.endFill();
+            s.graphics.beginFill(0xB08E68, 0.6);
+            s.graphics.drawEllipse(6, 1, 10, 7);
+            s.graphics.endFill();
+            let b: BitmapData = new BitmapData(20, 13, true, 0);
+            b.draw(as3.cast(s, IBitmapDrawable), null, null, null, null, true);
+            IoYardFx._art.dust = b;
+        }
+        return as3.cast(IoYardFx._art.dust, BitmapData);
+    }
+
+    /** (27 November) An ember or a spark: a small glowing dot of this colour, white at its heart. */
+    public static emberArt(color: uint): BitmapData {
+        let key: string = "e:" + color;
+        if (!IoYardFx._art[key]) {
+            let s: Shape = new Shape();
+            s.graphics.beginFill(color, 0.35);
+            s.graphics.drawCircle(4, 4, 4);
+            s.graphics.endFill();
+            s.graphics.beginFill(color, 1);
+            s.graphics.drawCircle(4, 4, 2.2);
+            s.graphics.endFill();
+            s.graphics.beginFill(0xFFFFF0, 1);
+            s.graphics.drawCircle(4, 4, 1);
+            s.graphics.endFill();
+            let b: BitmapData = new BitmapData(9, 9, true, 0);
+            b.draw(as3.cast(s, IBitmapDrawable), null, null, null, null, true);
+            IoYardFx._art[key] = b;
+        }
+        return as3.cast(IoYardFx._art[key], BitmapData);
+    }
+
+    /** A puff of dust at the feet, drifting out to one side. */
+    public static dust(x: number, y: number, depthY: number): any {
+        let fx: any = IoYardFx.show(IoYardFx.dustArt(), x + (Math.random() - 0.5) * 16, y - 3 + (Math.random() - 0.5) * 4, depthY + 1, 26, -0.18);
+        fx.vx = (Math.random() - 0.5) * 0.9;
+        return fx;
+    }
+
+    /** An ember rising (and drifting a little). */
+    public static ember(x: number, y: number, depthY: number, color: uint = 0xFF7A20): any {
+        let fx: any = IoYardFx.show(IoYardFx.emberArt(color), x + (Math.random() - 0.5) * 12, y + (Math.random() - 0.5) * 6, depthY, 30 + ((Math.random() * 14) | 0), -0.7 - Math.random() * 0.5);
+        fx.vx = (Math.random() - 0.5) * 0.6;
+        return fx;
+    }
+
     // ---- showing them
     /**
      * Shows a picture centred at (x, y) on the map's building layer, drawn over what stands at depthY there. It
@@ -213,6 +265,9 @@ export class IoYardFx extends ASObject {
             }
             if (fx.life > 0) {
                 fx.y += fx.vy;
+                if (fx.vx) {
+                    fx.x += fx.vx;
+                }
             }
             IoYardFx.place(fx);
             keep.push(fx);

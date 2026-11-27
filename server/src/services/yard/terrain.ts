@@ -20,6 +20,7 @@ export const TERRAINS = [
   "hfo_frozen",
   "io_ashfall", "io_obsidian", "io_soulfire",
   "io_sulfur", "io_magma", "io_witchfire", "io_bloodstone", "io_gilded",
+  "io_cinder", "io_amethyst", "io_hellforge",
 ] as const;
 
 /**
@@ -27,6 +28,15 @@ export const TERRAINS = [
  * opened by how many outposts the player holds (their saves of type outpost, as the anticheat counts them).
  */
 export const OUTPOST_GROUNDS: Record<string, number> = { io_sulfur: 50, io_magma: 100, io_witchfire: 250, io_bloodstone: 500, io_gilded: 1000 };
+
+/** (27 November, 72's suggestion: "3 more backgrounds, unlocked by being level 30,40,50") Opened by the main yard's level. */
+export const LEVEL_GROUNDS: Record<string, number> = { io_cinder: 30, io_amethyst: 40, io_hellforge: 50 };
+
+/** A player's level (their main yard's). */
+export const playerLevel = async (userid: number): Promise<number> => {
+  const rows = (await postgres.em.getConnection().execute(`SELECT level FROM bym.save WHERE userid = ? AND type = ? LIMIT 1`, [userid, BaseType.MAIN], "all")) as { level: number | string | null }[];
+  return Number(rows[0]?.level ?? 0) || 0;
+};
 
 /** How many outposts a player holds. */
 export const outpostsHeld = async (userid: number): Promise<number> => {
@@ -52,13 +62,15 @@ export const terrainOf = async (userid: number): Promise<string | null> => {
 /**
  * What the window may offer this player: every ground, the frozen one once wave 13 is won, the invite grounds
  * (12 October: Ashfall, Obsidian Glass, Soulfire Rift) once 1, 2 and 3 friends have joined through their link, and the
- * outpost grounds (27 November) once they hold 50, 100, 250, 500 and 1000 outposts.
+ * outpost grounds (27 November) once they hold 50, 100, 250, 500 and 1000 outposts, and the level grounds (the same day)
+ * at level 30, 40 and 50.
  */
 export const terrainsFor = async (userid: number): Promise<string[]> => {
   const hfo = await hfoFinalWaveWon(userid).catch(() => false);
   const invites = await invitesForLooks(userid).catch(() => 0);
   const outposts = await outpostsHeld(userid).catch(() => 0);
-  return TERRAINS.filter((t) => (hfo || !HFO_TERRAINS.has(t)) && invites >= (INVITE_UNLOCKS.grounds[t] ?? 0) && outposts >= (OUTPOST_GROUNDS[t] ?? 0));
+  const level = await playerLevel(userid).catch(() => 0);
+  return TERRAINS.filter((t) => (hfo || !HFO_TERRAINS.has(t)) && invites >= (INVITE_UNLOCKS.grounds[t] ?? 0) && outposts >= (OUTPOST_GROUNDS[t] ?? 0) && level >= (LEVEL_GROUNDS[t] ?? 0));
 };
 
 /** Chooses the main yard's ground ("lava" puts it back to the Inferno's own). */
@@ -73,6 +85,11 @@ export const setTerrain = async (user: User, raw: unknown): Promise<string> => {
   if (outpostsNeed > 0) {
     const held = await outpostsHeld(user.userid);
     if (held < outpostsNeed) throw new TerrainError(`Hold ${outpostsNeed.toLocaleString("en-US")} outposts to have this ground (you hold ${held.toLocaleString("en-US")}).`);
+  }
+  const levelNeed = LEVEL_GROUNDS[terrain] ?? 0;
+  if (levelNeed > 0) {
+    const level = await playerLevel(user.userid);
+    if (level < levelNeed) throw new TerrainError(`Reach level ${levelNeed} to have this ground (you are level ${level}).`);
   }
   const need = INVITE_UNLOCKS.grounds[terrain] ?? 0;
   if (need > 0) {

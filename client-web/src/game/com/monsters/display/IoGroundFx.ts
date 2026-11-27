@@ -32,6 +32,10 @@ export class IoGroundFx extends ASObject {
         "io_witchfire": [["grounds/io_witchfire_glow.jpg"], [[2300, 0]], [38, 19]],
         "io_bloodstone": [["grounds/io_bloodstone_glow.jpg"], [[1400, 0]], null],
         "io_gilded": [["grounds/io_gilded_glow.jpg"], [[2800, 0]], [46, 23]],
+        // (27 November, 72's suggestion: the level grounds)
+        "io_cinder": [["grounds/io_cinder_glow.jpg"], [[2600, 0]], [34, 17]],
+        "io_amethyst": [["grounds/io_amethyst_glow.jpg"], [[2100, 0]], [40, 20]],
+        "io_hellforge": [["grounds/io_hellforge_glow.jpg"], [[3000, 0]], [48, 24]],
     };
 
     public static readonly FLOW: string = "grounds/io_ground_flow.png";

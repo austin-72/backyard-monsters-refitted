@@ -61,6 +61,15 @@ export class IoDave extends ASObject {
         }
     }
 
+    /**
+     * (27 November, 72's suggestion: "Add two new worker types: Frog - he hops all around / Red Frog - same frog but in
+     * red") The loaded yard's workers are frogs, green ("frog") or red ("frog_red"): their sheet, else null.
+     */
+    public static get frogWorkers(): string {
+        let s: string = GLOBAL.INFERNO_ONLY && IoDave._yard != null ? String(IoDave._yard.workerSkin) : "";
+        return s == "frog" ? "monsters/io_frog.png" : (s == "frog_red" ? "monsters/io_frog_red.png" : null);
+    }
+
     /** The loaded yard's workers are the overworld's builders (their owner's choice). */
     public static get overworldWorkers(): boolean {
         return GLOBAL.INFERNO_ONLY && IoDave._yard != null && IoDave._yard.workerSkin == "overworld";
@@ -175,9 +184,9 @@ export class IoDave extends ASObject {
         return KEYS.Get(need == 1 ? "io_t3m_dv_invite_one" : "io_t3m_dv_invite_n", { "v1": need, "v2": IoDave.invites });
     }
 
-    /** A name effect's spec (grad:, shine:, flow: and its colours), or null if this is not one. */
+    /** A name effect's spec (grad:, shine:, flow:, and 27 November's pulse:, fire:, beat:, spark:, chase:, with its colours), or null if this is not one. */
     public static fxOf(look: string): any {
-        let m: any = look ? /^(grad|shine|flow):(#[0-9A-Fa-f]{6}(?:,#[0-9A-Fa-f]{6})+)$/.exec(look) : null;
+        let m: any = look ? /^(grad|shine|flow|pulse|fire|beat|spark|chase):(#[0-9A-Fa-f]{6}(?:,#[0-9A-Fa-f]{6})+)$/.exec(look) : null;
         if (!m) {
             return null;
         }
@@ -222,6 +231,12 @@ export class IoDave extends ASObject {
      *  - grad: shaded from the first colour to the last, letter by letter
      *  - shine: shaded the same way, a bright amber light sweeping across it every 2.4 seconds
      *  - flow: the colours flowing along it, round and round, every 3 seconds
+     * (27 November, 72's suggestion: the looks opened by outposts and by level)
+     *  - pulse: the whole name breathing from the first colour to the last and back, every 1.8 seconds
+     *  - fire: each letter flickering through the colours on its own, as a flame does
+     *  - beat: a heartbeat, the whole name throbbing to the last colour twice, then resting (1.2 seconds)
+     *  - spark: shaded through the colours, a letter now and then twinkling white-bright
+     *  - chase: shaded through the colours, a bright band running back and forth along it (2 seconds each way)
      * at time ms (getTimer() if not given), so a moving one is drawn again with a later time.
      */
     public static fxHtml(look: string, text: string, ms: number = -1): string {
@@ -244,6 +259,32 @@ export class IoDave extends ASObject {
             if (fx.kind == "flow") {
                 // (the stops wrap round: the last is the first again)
                 c = IoDave.along(fx.stops, (t * 0.5 + flow) % 1);
+            } else if (fx.kind == "pulse") {
+                c = IoDave.along(fx.stops, 0.5 - 0.5 * Math.cos((now % 1800) / 1800 * Math.PI * 2));
+            } else if (fx.kind == "beat") {
+                // (two throbs in the first half of each 1.2 seconds, then rest)
+                let p: number = (now % 1200) / 1200;
+                let throb: number = Math.max(Math.max(0, 1 - Math.abs(p - 0.1) / 0.09), 0.75 * Math.max(0, 1 - Math.abs(p - 0.3) / 0.09));
+                c = IoDave.along(fx.stops, throb);
+            } else if (fx.kind == "fire") {
+                // (each letter its own flicker: two waves out of step, by its place)
+                let f: number = 0.5 + 0.3 * Math.sin(now / 90 + i * 2.7) + 0.2 * Math.sin(now / 37 + i * 5.3);
+                c = IoDave.along(fx.stops, Math.max(0, Math.min(1, f)));
+            } else if (fx.kind == "spark") {
+                c = IoDave.along(fx.stops, t);
+                // (each letter twinkles for 0.3 seconds once in a while, at its own moments)
+                let slot: int = Math.floor((now + i * 977) / 300) | 0;
+                let hash: number = Math.abs(Math.sin(slot * 12.9898 + i * 78.233) * 43758.5453) % 1;
+                if (hash < 0.12) {
+                    let k: number = ((now + i * 977) % 300) / 300;
+                    c = IoDave.blend(c, 0xFFFFFF, Math.sin(k * Math.PI) * 0.9);
+                }
+            } else if (fx.kind == "chase") {
+                c = IoDave.along(fx.stops, t * 0.7);
+                let ping: number = (now % 4000) / 2000;
+                let at: number = ping <= 1 ? ping : 2 - ping;
+                let band: number = Math.max(0, 1 - Math.abs(t - (at * 1.2 - 0.1)) / 0.22);
+                c = IoDave.blend(c, fx.stops[fx.stops.length - 1] | 0, band);
             } else {
                 c = IoDave.along(fx.stops, t);
                 if (fx.kind == "shine") {

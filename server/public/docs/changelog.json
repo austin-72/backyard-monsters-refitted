@@ -4,7 +4,7 @@
   "entries": [
     {
       "date": "2026-11-27",
-      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, and fixes",
+      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, level grounds, new name looks, frog workers, pets' tricks, the Pit's odds, and fixes",
       "items": [
         {
           "area": "Yard",
@@ -75,6 +75,31 @@
           "area": "Interface",
           "title": "The mouse wheel scrolls every list",
           "text": "Many lists only scrolled by dragging their bar: the Incubator's monsters, the Compound, the bunkers, the Store, the mail, the map room's popups, the Yard Planner's side bar, the alliance tabs and the Champion Chamber. The mouse wheel over any of them now scrolls it. On a phone, a finger dragging a long monster description scrolls it too, as it already did for the lists."
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Three grounds opened by your level",
+          "text": "Three more moving grounds, opened as you level up: the Cinder Steppe at level 30, its cracks smouldering, Amethyst Hollow at 40, purple soulflame flickering between violet crystal, and the Hellforge at 50, molten iron glowing between riveted plates and burning runes."
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Eight new name looks",
+          "text": "New looks for your name in chat, with new moves. By how many outposts you hold: Sulfur Pulse (50), its colour breathing; Magma Flow (100); Witchfire (250), flickering letter by letter; Heartstone (500), a heartbeat; and Gilded (1,000), its letters twinkling. By level: Cinder (30), Amethyst (40) and Hellforge (50), a bright band running back and forth."
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Frog workers",
+          "text": "Two new looks for your workers: frogs, green or red. They hop all around your yard, going about their jobs in leaps and now and then hopping on the spot."
+        },
+        {
+          "area": "Pets",
+          "title": "Pets do their own tricks",
+          "text": "Every pet now does what its monster does, now and then between its walks. Valgos and King Wormzer burrow, sinking into the ground and coming up somewhere else; Malphus leaps over whatever is in the way; the Flickerfiend blinks out and back in nearby, and flickers; Zagnoid and Grokus stomp; Balthazar loops in the air and bobs as it flies; Spurtz bounces; Sabnox dashes off in a cloud of dust; Clinkerjaw rattles its jaws; the Fusebug's fuse fizzes; and the Emberghoul flares up in embers."
+        },
+        {
+          "area": "Brimstone Pit",
+          "title": "The odds of every game",
+          "text": "Every Pit game has a small (i) at its top left. It shows the game's odds: how much it pays back over time, how often a play pays more than the bet, and each result with what it pays and its chance, worked out from the same rules the game is played by."
         },
         {
           "area": "Fixes",
