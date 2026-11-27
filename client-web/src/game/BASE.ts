@@ -8,7 +8,7 @@ import { SharedObject, URLRequest, netHooks } from "flash/net";
 import { System } from "flash/system";
 import { TextField } from "flash/text";
 import { Dictionary, getTimer, setTimeout } from "flash/utils";
-import { IoBaiter, IoBrag, IoLiveWatch, IoWatch, IoVisitUi, IoDave, IoFmi, IoFmiWaves, IoTrophies, IoTrophy, ACADEMY, ACHIEVEMENTS, ALLIANCES, ATTACK, AutoBankManager, BDECORATION, BFOUNDATION, BMUSHROOM, BRESOURCE, BTOTEM, BTOWER, BTRAP, BUILDING1, BUILDING10, BUILDING11, BUILDING112, BUILDING113, BUILDING115, BUILDING117, BUILDING118, BUILDING12, BUILDING13, BUILDING14, BUILDING15, BUILDING16, BUILDING17, BUILDING18, BUILDING19, BUILDING2, BUILDING20, BUILDING21, BUILDING22, BUILDING23, BUILDING24, BUILDING25, BUILDING26, BUILDING27, BUILDING3, BUILDING4, BUILDING5, BUILDING51, BUILDING52, BUILDING6, BUILDING7, BUILDING8, BUILDING9, BUILDINGINFO, BUILDINGS, BUY, BWALL, BYMConfig, BaseBuffHandler, BaseTemplate, BaseTemplateNode, BlackSpurtzCannon, BuildingOverlay, Bunker, CASINO, CHAMPIONCAGE, CHAMPIONCHAMBER, CHECKER, CREATURELOCKER, CREATURES, CREEPS, CUSTOMATTACKS, CellData, ChampionBase, Chat, Console, EFFECTS, Elastic, EnumYardType, FBPROMO_711_CLIP, FIREBALLS, Fire, FrontPageHandler, GAME, GIBLETS, GIFTS, GLOBAL, GRID, HATCHERYCC, GuardTower, HOUSING, HOUSINGBUNKER, ICoreBuilding, IHandler, INFERNOPORTAL, INFERNOQUAKETOWER, INFERNO_CANNON_TOWER, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_MAGMA_TOWER, InstanceManager, InventoryManager, IoAttackLogs, IoBugReport, IoChangelog, IoWhosOnline, IoDailyPopup, IoDesigner, IoGauntlet, IoHfo, IoHfoIce, IoHfoWaves, IoLeaderboards, IoOutpostsPopup, IoPets, IoTerrainPopup, IoQuests, IoQuestBook, IoReplayPlayer, IoReplayRecorder, IoSiege, IoTd, IoTestMode, IoUnderworld, KEYS, LOGGER, LOGIN, MAP, MAPBG, MAPROOM, MAPROOM_DESCENT, MAPROOM_INFERNO, MARKETING, MONSTERBAITER, MONSTERLAB, MUSHROOMS, MapRoom3, MapRoom3OutpostSecured, MapRoom3Tutorial, MapRoomCell, MapRoomManager, MonsterMadness, MouseWheelEnabler, NewPopupSystem, OutpostDefender, PATHING, PLEASEWAIT, POPUPS, POWERUPS, PROJECTILES, ParticleText, PlannerTemplate, Player, PopupLostMainBase, QUESTS, QUEUE, RADIO, RasterData, ReplayableEventHandler, ResourceBombs, ResourceCapacityBaseBuff, ResourceOutpost, ResourcePackages, RewardHandler, SOUNDS, SPECIALEVENT, SPECIALEVENT_WM1, SPRITES, STORE, SecNum, SiegeBuilding, SiegeFactory, SiegeLab, SiegeWeapons, Smoke, SpurtzCannon, TRIBES, TUTORIAL, Targeting, TweenLite, UI2, UPDATES, URLLoaderApi, WMATTACK, WMBASE, WORKERS, com_monsters_maproom_advanced_MapRoom as MapRoom, md5, popup_attackedme, popup_damaged, popup_damagedbase_onvisit, popup_levelup, popup_loot, popup_prefab, popup_prefab_help, print, IoSign, IoTd2Tower, IoTilt, IoToast, MAILBOX, IoAllianceBanner, IoChampionStatue, IoShop, IoTot, IoSynergy, IoDevil, IoYardHelp, IoJobs } from "@game";
+import { IoBaiter, IoBrag, IoLiveWatch, IoWatch, IoVisitUi, IoDave, IoFmi, IoFmiWaves, IoTrophies, IoTrophy, ACADEMY, ACHIEVEMENTS, ALLIANCES, ATTACK, AutoBankManager, BDECORATION, BFOUNDATION, BMUSHROOM, BRESOURCE, BTOTEM, BTOWER, BTRAP, BUILDING1, BUILDING10, BUILDING11, BUILDING112, BUILDING113, BUILDING115, BUILDING117, BUILDING118, BUILDING12, BUILDING13, BUILDING14, BUILDING15, BUILDING16, BUILDING17, BUILDING18, BUILDING19, BUILDING2, BUILDING20, BUILDING21, BUILDING22, BUILDING23, BUILDING24, BUILDING25, BUILDING26, BUILDING27, BUILDING3, BUILDING4, BUILDING5, BUILDING51, BUILDING52, BUILDING6, BUILDING7, BUILDING8, BUILDING9, BUILDINGINFO, BUILDINGS, BUY, BWALL, BYMConfig, BaseBuffHandler, BaseTemplate, BaseTemplateNode, BlackSpurtzCannon, BuildingOverlay, Bunker, CASINO, CHAMPIONCAGE, CHAMPIONCHAMBER, CHECKER, CREATURELOCKER, CREATURES, CREEPS, CUSTOMATTACKS, CellData, ChampionBase, Chat, Console, EFFECTS, Elastic, EnumYardType, FBPROMO_711_CLIP, FIREBALLS, Fire, FrontPageHandler, GAME, GIBLETS, GIFTS, GLOBAL, GRID, HATCHERYCC, GuardTower, HOUSING, HOUSINGBUNKER, ICoreBuilding, IHandler, INFERNOPORTAL, INFERNOQUAKETOWER, INFERNO_CANNON_TOWER, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_MAGMA_TOWER, InstanceManager, InventoryManager, IoAttackLogs, IoBugReport, IoChangelog, IoWhosOnline, IoDailyPopup, IoDesigner, IoGauntlet, IoHfo, IoHfoIce, IoHfoWaves, IoLeaderboards, IoOutpostsPopup, IoPets, IoTerrainPopup, IoQuests, IoQuestBook, IoReplayPlayer, IoReplayRecorder, IoSiege, IoTd, IoTestMode, IoUnderworld, KEYS, LOGGER, LOGIN, MAP, MAPBG, MAPROOM, MAPROOM_DESCENT, MAPROOM_INFERNO, MARKETING, MONSTERBAITER, MONSTERLAB, MUSHROOMS, MapRoom3, MapRoom3OutpostSecured, MapRoom3Tutorial, MapRoomCell, MapRoomManager, MonsterMadness, MouseWheelEnabler, NewPopupSystem, OutpostDefender, PATHING, PLEASEWAIT, POPUPS, POWERUPS, PROJECTILES, ParticleText, PlannerTemplate, Player, PopupLostMainBase, QUESTS, QUEUE, RADIO, RasterData, ReplayableEventHandler, ResourceBombs, ResourceCapacityBaseBuff, ResourceOutpost, ResourcePackages, RewardHandler, SOUNDS, SPECIALEVENT, SPECIALEVENT_WM1, SPRITES, STORE, SecNum, SiegeBuilding, SiegeFactory, SiegeLab, SiegeWeapons, Smoke, SpurtzCannon, TRIBES, TUTORIAL, Targeting, TweenLite, UI2, UPDATES, URLLoaderApi, WMATTACK, WMBASE, WORKERS, com_monsters_maproom_advanced_MapRoom as MapRoom, md5, popup_attackedme, popup_damaged, popup_damagedbase_onvisit, popup_levelup, popup_loot, popup_prefab, popup_prefab_help, print, IoSign, IoTd2Tower, IoTilt, IoToast, MAILBOX, IoAllianceBanner, IoChampionStatue, IoShop, IoTot, IoSynergy, IoDevil, IoYardHelp, IoJobs, IoFreezeWatch } from "@game";
 
 export class BASE extends ASObject {
     public static _baseID: number;
@@ -479,6 +479,8 @@ export class BASE extends ASObject {
     }
 
     public static LoadBase(url: string = null, userId: number = 0, baseId: number = 0, baseMode: string = "build", isError: boolean = false, baseType: int = -1, cellId: number = 0, keyValuePairs: any[] = null): boolean {
+        // (Inferno-only, 27 November, Goldair1's report #4: the freeze recorder's steps: IoFreezeWatch)
+        IoFreezeWatch.mark("LoadBase " + baseMode + " base " + baseId + " user " + userId + " type " + baseType + " cell " + cellId);
         if (isNaN(baseId)) {
             baseId = 0;
         }
@@ -660,6 +662,7 @@ export class BASE extends ASObject {
     }
 
     public static Load(url: string = null, userId: number = 0, baseId: number = 0, baseType: int = -1, cellId: number = 0): void {
+        IoFreezeWatch.mark("Load " + GLOBAL._loadmode + " base " + baseId + " user " + userId + " type " + baseType + " cell " + cellId);
         let requestData: any[] = null;
         let seq: int = 0;
         let tries: int = 0;
@@ -922,6 +925,7 @@ export class BASE extends ASObject {
     }
 
     private static handleBaseLoadSuccessful(data: any): void {
+        IoFreezeWatch.mark("yard loaded: reading it");
         let TauntB: Function = null;
         let attackObj: any = null;
         let loader: Loader = null;
@@ -1694,6 +1698,7 @@ export class BASE extends ASObject {
     }
 
     public static Build(): void {
+        IoFreezeWatch.mark("Build: laying out the yard (" + GLOBAL.mode + ")");
         let buildingFoundation: BFOUNDATION = null;
         let counter: int = 0;
         let building: any = null;
@@ -1956,6 +1961,7 @@ export class BASE extends ASObject {
                 ATTACK.WellDefended(false, GLOBAL.Array2StringB(BASE._attackerNameArray));
             }
         }
+        IoFreezeWatch.mark("Build: buildings placed");
         GRID.Clear();
         MAP.SortDepth();
         HOUSING.HousingSpace();
@@ -1963,6 +1969,7 @@ export class BASE extends ASObject {
         if (GLOBAL.mode == GLOBAL.e_BASE_MODE.WMVIEW || GLOBAL.mode == GLOBAL.e_BASE_MODE.WMATTACK) {
             BASE._lastProcessed = BASE._currentTime;
         }
+        IoFreezeWatch.mark("Process: catching up the yard's time");
         BASE.Process();
         RADIO.Setup();
     }
@@ -2183,6 +2190,7 @@ export class BASE extends ASObject {
     }
 
     public static ProcessD(): void {
+        IoFreezeWatch.mark("ProcessD: the yard ready");
         let popupMCDamaged: popup_damaged = null;
         let RepairAll: Function = null;
         let RepairNow: Function = null;

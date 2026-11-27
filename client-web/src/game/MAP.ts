@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, DisplayObject, IBitmapDrawable, MovieClip, Sprite, 
 import { Event, KeyboardEvent, MouseEvent } from "flash/events";
 import { Matrix, Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BFOUNDATION, BYMConfig, CREEPS, Cubic, GLOBAL, GRID, IoGroundFx, IoPinchZoom, IoTilt, IoYardPick, KeyboardInputHandler, LOGGER, Linear, MAPBG, MagmaPuddle, MonsterBase, PLANNER, RasterData, Renderer, Targeting, TweenLite, UI2 } from "@game";
+import { BFOUNDATION, BYMConfig, CREEPS, Cubic, GLOBAL, GRID, IoGroundFx, IoPinchZoom, IoTilt, IoYardPick, KeyboardInputHandler, LOGGER, Linear, MAPBG, MagmaPuddle, MonsterBase, PLANNER, RasterData, Renderer, Targeting, TweenLite, UI2, IoFreezeWatch } from "@game";
 
 export class MAP extends ASObject {
     static {
@@ -319,6 +319,8 @@ export class MAP extends ASObject {
         let _loc3_: DisplayObject = null;
         let _loc4_: int = 0;
         let _loc5_: int = 0;
+        // (Inferno-only, 27 November: the freeze recorder's steps: IoFreezeWatch)
+        IoFreezeWatch.mark("ground: " + param1);
         MAP.s_texture = param1;
         if (!BYMConfig.instance.RENDERER_ON) {
             while (MAP._BGTILES.numChildren) {

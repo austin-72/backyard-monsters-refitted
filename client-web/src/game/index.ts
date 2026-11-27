@@ -881,6 +881,7 @@ export { Console } from "./com/monsters/debug/Console";
 export { ConsoleCommands } from "./com/monsters/debug/ConsoleCommands";
 export { ConsoleView } from "./com/monsters/debug/ConsoleView";
 export { IoBugReport } from "./com/monsters/debug/IoBugReport";
+export { IoFreezeWatch } from "./com/monsters/debug/IoFreezeWatch";
 export { BuildingAssetContainer } from "./com/monsters/display/BuildingAssetContainer";
 export { BuildingOverlay } from "./com/monsters/display/BuildingOverlay";
 export { CreepSkinManager } from "./com/monsters/display/CreepSkinManager";

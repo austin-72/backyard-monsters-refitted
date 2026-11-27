@@ -53,6 +53,8 @@ In the **Bugs** tab:
 
 A player's name in a row opens their card, if you need to look at their account.
 
+**Freezes** (since 27 November): when a player's game gets stuck (the page shown, nothing moving for 10 seconds), the game reports it by itself: a row **The game stopped responding**, and if it comes back, **The game stopped responding for a while, then carried on**. Its details say how long, the game's last steps (which yard it was loading, laying out, the ground), where the player was and what they did last. The last step shows where it got stuck: send that row to whoever fixes the game.
+
 ## 3b. Player feedback (the Feedback tab)
 
 Players right-click anything in the game (or use **Bugs and ideas** in the settings menu on a phone) to

@@ -8,7 +8,7 @@ import { SoundMixer } from "flash/media";
 import { SharedObject, URLRequest } from "flash/net";
 import { ApplicationDomain, LoaderContext, Security } from "flash/system";
 import { Timer } from "flash/utils";
-import { BASE, ExternalInterfaceManager, GLOBAL, IoBugReport, IoServerHold, IoTestMode, LOGGER, LOGIN, MapRoomManager, MarketingRecapture, PLEASEWAIT, ReferencedExposedStructures, SWFProfiler, URLLoaderApi, IoEscape, IoHotkeys, KEYS, IoFeedback } from "@game";
+import { BASE, ExternalInterfaceManager, GLOBAL, IoBugReport, IoServerHold, IoTestMode, LOGGER, LOGIN, MapRoomManager, MarketingRecapture, PLEASEWAIT, ReferencedExposedStructures, SWFProfiler, URLLoaderApi, IoEscape, IoHotkeys, KEYS, IoFeedback, IoFreezeWatch } from "@game";
 
 export class GAME extends Sprite {
     static {
@@ -375,6 +375,8 @@ export class GAME extends Sprite {
         IoBugReport.Watch(this.stage);
         // (25 November) the right-click menu: report a bug, suggest a change, ... (com/monsters/feedback/IoFeedback.ts)
         IoFeedback.Install(this.stage);
+        // (27 November, Goldair1's report #4) the freeze recorder: a stuck game reported by a worker beside it
+        IoFreezeWatch.Start();
         this.setLauncherVars(loaderParams);
         SWFProfiler.init(this.stage, this);
         Security.allowDomain("*");

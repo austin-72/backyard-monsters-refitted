@@ -5,7 +5,7 @@ import { Event, MouseEvent } from "flash/events";
 import { Capabilities } from "flash/system";
 import { TextField } from "flash/text";
 import { getQualifiedClassName, getTimer } from "flash/utils";
-import { BASE, Button, GLOBAL, IOBuild, MapRoomManager, POPUPS, URLLoaderApi } from "@game";
+import { BASE, Button, GLOBAL, IOBuild, IoFreezeWatch, MapRoomManager, POPUPS, URLLoaderApi } from "@game";
 
 /**
  * Inferno-only automatic bug reports. Every error the game logs (LOGGER.Log "err", which includes every
@@ -120,6 +120,8 @@ export class IoBugReport extends ASObject {
     public static Screen(what: string): void {
         if (what) {
             IoBugReport.push(IoBugReport._screens, IoBugReport.stamp() + " " + what.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").substr(0, 120), IoBugReport.TRAIL);
+            // (27 November) the freeze recorder's steps too
+            IoFreezeWatch.mark("screen: " + what.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").substr(0, 80));
         }
     }
 
