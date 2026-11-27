@@ -8,16 +8,18 @@ The D.A.V.E. Club's button, under your resources, opens the choices for how your
 - Three are opened by inviting friends: **Ashfall**, its embers glowing (1 friend), **Obsidian Glass**, fire shifting through its seams (2), and the **Soulfire Rift**, its blue rivers flowing (3).
 - Five more are opened by how many outposts you hold: **Sulfur Springs**, its springs bubbling (50), the **Magma Sea**, its lava shifting between the plates (100), the **Witchfire Marsh**, green fire flickering in its pools (250), **Bloodstone**, its veins beating (500), and the **Gilded Inferno**, its rivers of white-gold fire (1,000).
 - Three are opened by your level: the **Cinder Steppe**, its cracks smouldering (30), **Amethyst Hollow**, purple soulflame between violet crystal (40), and the **Hellforge**, molten iron between riveted plates and burning runes (50).
+- **Make your own Hellforge:** with the Hellforge open, **Make your own Hellforge…** on the Ground tab lets you design it: ten patterns, three sizes, the colours of its stone, its glow and the heart of its light, and how it moves (still, pulsing, drifting, both, flickering or shifting colour), slow, normal or fast. **Surprise me** picks one; **Save and wear** puts it in your yard for everyone to see.
 
 ## Your name in chat {#name-colour}
 
 - Pick one of twelve colours for your name in chat, for everyone to see. Only the name is coloured.
 - **Name effects,** for players who invite friends: **Ember Glow**, shaded red to gold (1 friend), **Brimstone**, a light sweeping across it (2), and **Soulfire**, its colours flowing all the time (3).
 - **More name looks,** by the outposts you hold: **Sulfur Pulse**, its colour breathing (50), **Magma Flow** (100), **Witchfire**, flickering letter by letter (250), **Heartstone**, a heartbeat (500), and **Gilded**, its letters twinkling (1,000); and by your level: **Cinder** (30), **Amethyst** (40) and **Hellforge** (50), a bright band running back and forth.
+- **Make your own Hellforge name:** with the Hellforge look open, **Make your own Hellforge name…** on the Chat name tab: how it moves (eight ways), any three of 32 colours, and its speed.
 
 ## Workers {#worker-looks}
 
-- Choose your workers' look, in all your yards: the Underworld imps, the Overworld builders, **frogs** (green or red) that hop all around, **lava crabs** that scuttle sideways, **skeletons** that rattle and lose their heads, **penguins** that slide on their bellies, **ghosts** that float through walls, **clockwork robots** that puff steam and wind their keys, or **slugs** (orange, green or purple) that leave a glowing trail.
+- Choose your workers' look, in all your yards: the Underworld imps, the Overworld builders, **frogs** (green or red) that hop all around, **lava crabs** that scuttle sideways, **skeletons** that rattle and lose their heads, **penguins** that slide on their bellies, **ghosts** that float through walls, **clockwork robots** that puff steam and wind their keys, or **slugs** (orange, green or purple) that leave a glowing trail. The workers' buttons show the look you chose.
 
 ## Signs {#signs}
 

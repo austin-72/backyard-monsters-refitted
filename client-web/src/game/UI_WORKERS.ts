@@ -5,7 +5,7 @@ import { GlowFilter } from "flash/filters";
 import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, UI_BOTTOM, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno, IoJobs } from "@game";
+import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, UI_BOTTOM, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno, IoJobs, IoDave, ImageCache } from "@game";
 
 export class UI_WORKERS extends ASObject {
     private static _do: DisplayObject = null;
@@ -677,8 +677,136 @@ export class UI_WORKERS extends ASObject {
             // Inferno-only (10 October): no worker to hire here (every one is there from the start), so a slot
             // left by a sacrificed worker is not shown
             _loc2_.mc.visible = !GLOBAL.INFERNO_ONLY || Boolean(_loc2_.purchased);
+            UI_WORKERS.ioLookIcon(as3.as(_loc2_.mc, MovieClip));
             _loc1_++;
         }
+    }
+
+    /**
+     * Inferno-only (27 November, admintester's report from the right-click menu: "Add new icons for whatever the
+     * selected worker is"): the workers' buttons show the yard's workers' look (the D.A.V.E. Club's Workers tab): the
+     * imps keep the button's own picture; any other look, a frame of its sheet facing out, cut to the worker, in its
+     * place. [sheet, frame width, height, column, row] by look.
+     */
+    private static ioIconWant(): any[] {
+        let skin: string = IoDave.yardWorkerSkin;
+        if (skin == "overworld") {
+            return ["monsters/worker.png", 27, 27, 3, 1];
+        }
+        let sheet: string = IoDave.WORKER_SHEETS[skin] ? String(IoDave.WORKER_SHEETS[skin]) : null;
+        if (!sheet) {
+            return null;
+        }
+        // (a slug facing out is end-on: seen from the side, as the Workers tab shows it)
+        return [sheet, 64, 55, skin.indexOf("slug_") == 0 ? 2 : 8, 0];
+    }
+
+    private static _ioIconKey: string = null;
+
+    private static _ioIconBmd: BitmapData = null;
+
+    private static _ioIconLoading: string = null;
+
+    /** The look's picture for the buttons: its frame, cut to what isn't see-through (not its shadow). */
+    private static ioLoadIcon(want: any[]): void {
+        let key: string = want.join(",");
+        if (UI_WORKERS._ioIconLoading == key) {
+            return;
+        }
+        UI_WORKERS._ioIconLoading = key;
+        ImageCache.GetImageWithCallBack(String(want[0]), (k: string, bmd: BitmapData, args: any[] = null): void => {
+            if (UI_WORKERS._ioIconLoading != key) {
+                return;
+            }
+            UI_WORKERS._ioIconLoading = null;
+            if (!bmd) {
+                return;
+            }
+            let fw: int = want[1] | 0;
+            let fh: int = want[2] | 0;
+            let f: BitmapData = new BitmapData(fw, fh, true, 0);
+            f.copyPixels(bmd, new Rectangle((want[3] | 0) * fw, (want[4] | 0) * fh, fw, fh), new Point(0, 0));
+            let x0: int = fw;
+            let y0: int = fh;
+            let x1: int = -1;
+            let y1: int = -1;
+            for (let y: int = 0; y < fh; y++) {
+                for (let x: int = 0; x < fw; x++) {
+                    if ((f.getPixel32(x, y) >>> 24) > 150) {
+                        x0 = Math.min(x0, x) | 0;
+                        x1 = Math.max(x1, x) | 0;
+                        y0 = Math.min(y0, y) | 0;
+                        y1 = Math.max(y1, y) | 0;
+                    }
+                }
+            }
+            if (x1 < x0) {
+                return;
+            }
+            let cut: BitmapData = new BitmapData(x1 - x0 + 1, y1 - y0 + 1, true, 0);
+            cut.copyPixels(f, new Rectangle(x0, y0, x1 - x0 + 1, y1 - y0 + 1), new Point(0, 0));
+            f.dispose();
+            UI_WORKERS._ioIconBmd = cut;
+            UI_WORKERS._ioIconKey = key;
+            UI_WORKERS.ioReskinIcons();
+        });
+    }
+
+    /** Every button's picture again (the look just changed: IoTerrainPopup's Workers tab). */
+    public static ioReskinIcons(): void {
+        for (let w of as3.values(UI_WORKERS._workers || [])) {
+            if (w && w.mc) {
+                UI_WORKERS.ioLookIcon(as3.as(w.mc, MovieClip));
+            }
+        }
+    }
+
+    /** One button: the look's picture over where the imp is (the imp hidden), or the button's own. */
+    private static ioLookIcon(mc: MovieClip): void {
+        if (!GLOBAL.INFERNO_ONLY || !mc) {
+            return;
+        }
+        let want: any[] = UI_WORKERS.ioIconWant();
+        let icon: DisplayObject = as3.as(mc.mcIcon, DisplayObject);
+        let bm: Bitmap = as3.as(mc.getChildByName("ioLookIcon"), Bitmap);
+        let show: boolean = want != null && icon != null && mc.currentFrame != 3;
+        if (show && UI_WORKERS._ioIconKey != want.join(",")) {
+            UI_WORKERS.ioLoadIcon(want);
+            // (a picture already loaded comes back at once, the buttons done in it: this one too)
+            show = UI_WORKERS._ioIconKey == want.join(",");
+            if (show) {
+                return;
+            }
+        }
+        if (!show) {
+            if (bm) {
+                bm.visible = false;
+            }
+            if (icon) {
+                icon.visible = true;
+            }
+            return;
+        }
+        if (!bm) {
+            // (where the imp is, and its size: taken before it is hidden)
+            let r: Rectangle = icon.getBounds(mc);
+            bm = new Bitmap();
+            bm.name = "ioLookIcon";
+            mc.addChild(bm);
+            (bm as any).ioBox = [r.x + r.width / 2, r.y + r.height / 2, Math.max(r.width, r.height)];
+        }
+        if (bm.bitmapData != UI_WORKERS._ioIconBmd) {
+            bm.bitmapData = UI_WORKERS._ioIconBmd;
+            bm.smoothing = true;
+            let box: any[] = (bm as any).ioBox;
+            let b: BitmapData = UI_WORKERS._ioIconBmd;
+            let sc: number = Number(box[2]) * 1.05 / Math.max(b.width, b.height);
+            bm.scaleX = bm.scaleY = sc;
+            bm.x = Number(box[0]) - b.width * sc / 2;
+            bm.y = Number(box[1]) - b.height * sc / 2;
+        }
+        bm.visible = true;
+        icon.visible = false;
     }
 
     /** Inferno-only: a worker went (IoWorkerFun, sacrificed): the slots shown again from the queue. */

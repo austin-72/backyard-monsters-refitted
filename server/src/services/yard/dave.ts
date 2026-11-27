@@ -6,7 +6,7 @@ import { refreshChatUser } from "../../chat/chatControl.js";
 import { BaseType } from "../../enums/Base.js";
 import { isShinyLocked, visibleCredits } from "../user/shinyLock.js";
 import { acceptedInvites, INVITE_UNLOCKS, inviteLockText, inviteLooksFree, invitesForLooks } from "../user/referrals.js";
-import { outpostsHeld, playerLevel } from "./terrain.js";
+import { LEVEL_GROUNDS, outpostsHeld, playerLevel } from "./terrain.js";
 
 /**
  * Inferno-only (10 October): the D.A.V.E. Club's choices besides the ground (that one: terrain.ts), kept on the
@@ -71,11 +71,77 @@ export const NAME_FX: Record<string, { name: string; spec: string }> = {
 export const NAME_FX_OUTPOSTS: Record<string, number> = { fx_sulfur: 50, fx_magma: 100, fx_witchfire: 250, fx_bloodstone: 500, fx_gilded: 1000 };
 export const NAME_FX_LEVELS: Record<string, number> = { fx_cinder: 30, fx_amethyst: 40, fx_hellforge: 50 };
 
+/**
+ * (27 November, admintester's reports: "Make hellforge a completely customizable background so the user can make it any
+ * colors and shapes they want with thousands of possible backgrounds" and the same of its chat name, "in color and
+ * animaiton") The Hellforge ground and name, made by the player (the game draws them: IoForge):
+ *   forgeGround  { p pattern 0-9, z size 0-2, s stone, g glow, h heart (#hex each), a moving 0-5, v speed 0-2 }
+ *   forgeName    { m one of FORGE_MOVES, c three #hex colours, v speed 0-2 }
+ * Whoever has the Hellforge ground (or name) open may make theirs; saving it puts it on (the ground: the main yard's
+ * io_terrain io_hellforge; the name: chatColor fx_hellforge). Visitors see the ground (daveForYard); the chat sends the
+ * name's spec ("fire@2:#a,#b,#c": FORGE_SPEEDS' 0.5 or 2 after an @).
+ */
+export const FORGE_MOVES = ["grad", "shine", "flow", "pulse", "fire", "beat", "spark", "chase"] as const;
+const FORGE_SPEEDS = ["0.5", "1", "2"];
+const HEX = /^#[0-9A-Fa-f]{6}$/;
+export interface ForgeGround { p: number; z: number; s: string; g: string; h: string; a: number; v: number }
+export interface ForgeName { m: string; c: string[]; v: number }
+const intIn = (x: unknown, n: number): number | null => (typeof x === "number" && Number.isInteger(x) && x >= 0 && x < n ? x : null);
+const hexOf = (x: unknown): string | null => (typeof x === "string" && HEX.test(x) ? x.toUpperCase() : null);
+
+/** A Hellforge ground's settings, checked (null: not one). */
+export const forgeGroundOf = (raw: unknown): ForgeGround | null => {
+  let v: unknown = raw;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const p = intIn(o.p, 10), z = intIn(o.z, 3), a = intIn(o.a, 6), sp = intIn(o.v, 3);
+  const st = hexOf(o.s), g = hexOf(o.g), h = hexOf(o.h);
+  if (p == null || z == null || a == null || sp == null || !st || !g || !h) return null;
+  return { p, z, s: st, g, h, a, v: sp };
+};
+
+/** A Hellforge name's settings, checked (null: not one). */
+export const forgeNameOf = (raw: unknown): ForgeName | null => {
+  let v: unknown = raw;
+  if (typeof v === "string") {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  if (!v || typeof v !== "object") return null;
+  const o = v as Record<string, unknown>;
+  const m = typeof o.m === "string" && (FORGE_MOVES as readonly string[]).includes(o.m) ? o.m : null;
+  const sp = intIn(o.v, 3);
+  const c = Array.isArray(o.c) && o.c.length === 3 ? o.c.map(hexOf) : null;
+  if (!m || sp == null || !c || c.some((x) => !x)) return null;
+  return { m, c: c as string[], v: sp };
+};
+
+/** A Hellforge name's look for the chat: "fire@2:#A,#B,#C". */
+export const forgeNameSpec = (f: ForgeName): string => `${f.m}${f.v === 1 ? "" : `@${FORGE_SPEEDS[f.v]}`}:${f.c.join(",")}`;
+
 /** A chatColor's look for the chat: a colour's #hex or a name effect's spec, or null. */
 // (13 October: own keys only: "constructor" or "toString" passed as a colour and was stored)
 const isColor = (c: string) => Object.hasOwn(CHAT_COLORS, c);
 const isFx = (c: string) => Object.hasOwn(NAME_FX, c);
-const lookOf = (c: string | null | undefined): string | null => (c ? ((isColor(c) ? CHAT_COLORS[c] : null) ?? (isFx(c) ? NAME_FX[c].spec : null)) : null);
+// (27 November) the Hellforge name, if its owner made one, is theirs
+const lookOf = (c: string | null | undefined, forge?: unknown): string | null => {
+  if (!c) return null;
+  if (c === "fx_hellforge") {
+    const f = forgeNameOf(forge);
+    if (f) return forgeNameSpec(f);
+  }
+  return (isColor(c) ? CHAT_COLORS[c] : null) ?? (isFx(c) ? NAME_FX[c].spec : null);
+};
 
 // (27 November, 72's suggestion) and the frogs, green and red, that hop all around
 // (the same day, the user's) lava crabs, skeletons, penguins, ghosts, clockwork robots, and slugs in three colours
@@ -99,6 +165,8 @@ const isShinySkin = (s: string) => (SHINY_SKINS as readonly string[]).includes(s
 export interface DaveChoices {
   chatColor?: string | null;
   workerSkin?: string | null;
+  forgeGround?: ForgeGround;
+  forgeName?: ForgeName;
   champSkins?: Record<string, string>;
   ownedSkins?: string[];
 }
@@ -112,6 +180,10 @@ const parse = (raw: unknown): DaveChoices => {
     const out: DaveChoices = {};
     const c = (v as DaveChoices).chatColor;
     if (typeof c === "string" && (isColor(c) || isFx(c))) out.chatColor = c;
+    const fg = forgeGroundOf((v as DaveChoices).forgeGround);
+    if (fg) out.forgeGround = fg;
+    const fn = forgeNameOf((v as DaveChoices).forgeName);
+    if (fn) out.forgeName = fn;
     const w = (v as DaveChoices).workerSkin;
     if (w && (WORKER_SKINS as readonly string[]).includes(w)) out.workerSkin = w;
     const s = (v as DaveChoices).champSkins;
@@ -141,7 +213,7 @@ export const readDave = async (userid: number): Promise<DaveChoices> => {
 /** A player's name colour for the chat (a #hex, or a name effect's spec), or null. */
 export const chatColorOf = async (userid: number): Promise<string | null> => {
   const d = await readDave(userid);
-  return lookOf(d.chatColor);
+  return lookOf(d.chatColor, d.forgeName);
 };
 
 /** The colours of several players' names, for the chat's history. */
@@ -150,9 +222,9 @@ export const chatColorsOf = async (userids: number[]): Promise<Map<number, strin
   if (!infernoOnlyConfig.enabled || !userids.length) return out;
   const rows = (await postgres.em
     .getConnection()
-    .execute(`SELECT userid, io_dave->>'chatColor' AS c FROM bym."user" WHERE userid IN (${userids.map(() => "?").join(",")})`, userids)) as { userid: number; c: string | null }[];
+    .execute(`SELECT userid, io_dave->>'chatColor' AS c, io_dave->'forgeName' AS f FROM bym."user" WHERE userid IN (${userids.map(() => "?").join(",")})`, userids)) as { userid: number; c: string | null; f: unknown }[];
   for (const r of rows) {
-    const look = lookOf(r.c);
+    const look = lookOf(r.c, r.f);
     if (look) out.set(Number(r.userid), look);
   }
   return out;
@@ -161,7 +233,7 @@ export const chatColorsOf = async (userids: number[]): Promise<Map<number, strin
 /** What a yard's visitors see of its owner's choices. */
 export const daveForYard = async (userid: number) => {
   const d = await readDave(userid);
-  return { workerSkin: d.workerSkin ?? "inferno", champSkins: d.champSkins ?? {} };
+  return { workerSkin: d.workerSkin ?? "inferno", champSkins: d.champSkins ?? {}, forgeGround: d.forgeGround ?? null };
 };
 
 /** The player's own, with what the window can offer them. */
@@ -173,6 +245,9 @@ export const daveForOwner = async (userid: number) => {
   return {
     chatColor: d.chatColor ?? null,
     workerSkin: d.workerSkin ?? "inferno",
+    // (27 November) the Hellforge ground and name the player made (null: the Hellforge's own)
+    forgeGround: d.forgeGround ?? null,
+    forgeName: d.forgeName ?? null,
     champSkins: d.champSkins ?? {},
     // (14 October) the Shiny skins bought, and their price
     ownedSkins: d.ownedSkins ?? [],
@@ -217,6 +292,25 @@ export const setDave = async (user: User, key: string, raw: unknown) => {
       if (level < levelNeed) throw new DaveError(`Reach level ${levelNeed} to have this look (you are level ${level}).`);
     }
     now.chatColor = value || null;
+  } else if (key === "forgeGround" || key === "forgeName") {
+    // (27 November, admintester's reports) a Hellforge made: open to whoever has the Hellforge (level 50, or staff)
+    const f = key === "forgeGround" ? forgeGroundOf(raw) : forgeNameOf(raw);
+    if (!f) throw new DaveError("That Hellforge can't be made.");
+    if (!(await inviteLooksFree(user.userid).catch(() => false))) {
+      const need = key === "forgeGround" ? LEVEL_GROUNDS.io_hellforge : NAME_FX_LEVELS.fx_hellforge;
+      const level = await playerLevel(user.userid);
+      if (level < need) throw new DaveError(`Reach level ${need} to make your own Hellforge (you are level ${level}).`);
+    }
+    const conn = postgres.em.getConnection();
+    if (key === "forgeGround") {
+      await conn.execute(`UPDATE bym."user" SET io_dave = COALESCE(io_dave, '{}'::jsonb) || CAST(? AS jsonb) WHERE userid = ? RETURNING userid`, [JSON.stringify({ forgeGround: f }), user.userid]);
+      // (worn at once: the main yard's ground)
+      await conn.execute(`UPDATE bym.save SET io_terrain = 'io_hellforge' WHERE userid = ? AND type = ? RETURNING basesaveid`, [user.userid, BaseType.MAIN]);
+    } else {
+      await conn.execute(`UPDATE bym."user" SET io_dave = COALESCE(io_dave, '{}'::jsonb) || CAST(? AS jsonb) WHERE userid = ? RETURNING userid`, [JSON.stringify({ forgeName: f, chatColor: "fx_hellforge" }), user.userid]);
+      await refreshChatUser(user.userid).catch(() => undefined);
+    }
+    return daveForOwner(user.userid);
   } else if (key === "workerSkin") {
     if (!(WORKER_SKINS as readonly string[]).includes(value)) throw new DaveError("There is no such look for workers.");
     now.workerSkin = value;

@@ -4,7 +4,7 @@ import { BitmapData, IBitmapDrawable, Shape } from "flash/display";
 import { Event } from "flash/events";
 import { ColorTransform, Matrix, Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
-import { BYMConfig, GLOBAL, ImageCache, MAP, RasterData } from "@game";
+import { BYMConfig, GLOBAL, ImageCache, IoForge, MAP, RasterData } from "@game";
 
 /**
  * Inferno-only (12 October): the invite grounds move (com/monsters/subscriptions/IoTerrainPopup; art/grounds).
@@ -21,7 +21,10 @@ import { BYMConfig, GLOBAL, ImageCache, MAP, RasterData } from "@game";
  * the ground's sheet is laid (MAP.swapBG), so it costs the same whatever the yard's size.
  */
 export class IoGroundFx extends ASObject {
-    /** [the light's pictures, [period ms, phase] of each one's glowing or null, the mask's drift in px a second or null]. */
+    /**
+     * [the light's pictures, [period ms, phase] of each one's glowing or null, the mask's drift in px a second or null,
+     * (27 November) a flicker's speed or nothing].
+     */
     public static readonly LOOKS: any = {
         "io_ashfall": [["grounds/io_ashfall_glowA.jpg", "grounds/io_ashfall_glowB.jpg"], [[2200, 0], [2900, 2.1]], null],
         "io_obsidian": [["grounds/io_obsidian_glow.jpg"], null, [44, 22]],
@@ -44,6 +47,8 @@ export class IoGroundFx extends ASObject {
     public static readonly STEP_MS: int = 80;
 
     private static _texture: string = null;
+    /** (27 November) The light's look being shown (LOOKS's, or a Hellforge's made by its owner: IoForge.fxLook). */
+    private static _look: any = null;
     private static _entries: any[] = [];
     private static _overlay: BitmapData = null;
     private static _layers: any[] = null;
@@ -63,13 +68,32 @@ export class IoGroundFx extends ASObject {
     public static start(texture: string): void {
         IoGroundFx.stop();
         let look: any = IoGroundFx.LOOKS[texture];
+        // (27 November, admintester's reports) a Hellforge its owner made: its light drawn in the game (IoForge), moving
+        // as they chose (or not at all)
+        let forge: any = GLOBAL.INFERNO_ONLY && texture == "io_hellforge" ? IoForge.yardGround() : null;
+        if (forge) {
+            look = IoForge.fxLook(forge);
+        }
         if (!GLOBAL.INFERNO_ONLY || !look || !BYMConfig.instance.RENDERER_ON || !MAP.ioGroundRaster) {
             return;
         }
         IoGroundFx._texture = texture;
         let gen: int = ++IoGroundFx._gen;
-        let names: any[] = (as3.as(look[0], Array)).concat(look[2] ? [IoGroundFx.FLOW] : []);
         let got: any = {};
+        if (forge) {
+            let keys: any[] = [];
+            for (let i: int = 0; i < (look[0] as any[]).length; i++) {
+                got["forge:" + i] = look[0][i];
+                keys.push("forge:" + i);
+            }
+            look = [keys, look[1], look[2], look[3]];
+        }
+        IoGroundFx._look = look;
+        let names: any[] = forge ? (look[2] ? [IoGroundFx.FLOW] : []) : (as3.as(look[0], Array)).concat(look[2] ? [IoGroundFx.FLOW] : []);
+        if (!names.length) {
+            IoGroundFx.build(look, got);
+            return;
+        }
         let left: int = names.length | 0;
         for (let n of as3.values(names)) {
             let name: string = String(n);
@@ -109,6 +133,7 @@ export class IoGroundFx extends ASObject {
         }
         IoGroundFx._layers = null;
         IoGroundFx._texture = null;
+        IoGroundFx._look = null;
     }
 
     /** Whether a ground's light is moving now (the tests). */
@@ -139,10 +164,7 @@ export class IoGroundFx extends ASObject {
             if (!flow) {
                 return;
             }
-            IoGroundFx._mask = new BitmapData(flow.width * 2, flow.height * 2, true, 0);
-            for (let i: int = 0; i < 4; i++) {
-                IoGroundFx._mask.copyPixels(flow, flow.rect, new Point((i % 2) * flow.width, ((i / 2) | 0) * flow.height));
-            }
+            IoGroundFx._mask = IoGroundFx.doubled(flow);
         }
         // the light at the ground's 16 places (MAP.swapBG: 4 x 4 of the 1000 x 500 sheet), drawn added just after the ground
         let at: int = RasterData.s_unsortedData.indexOf(ground) | 0;
@@ -183,30 +205,49 @@ export class IoGroundFx extends ASObject {
     /** The light at time `now` (ms) into the one picture all 16 places show. */
     private static draw(now: int): void {
         IoGroundFx._last = now;
-        let look: any = IoGroundFx.LOOKS[IoGroundFx._texture];
-        let o: BitmapData = IoGroundFx._overlay;
+        IoGroundFx.paint(IoGroundFx._overlay, IoGroundFx._look, IoGroundFx._layers, IoGroundFx._mask, now, 1);
+    }
+
+    /** A flow mask two by two (seamless), so a window of it can slide anywhere and wrap round. */
+    public static doubled(flow: BitmapData): BitmapData {
+        let m: BitmapData = new BitmapData(flow.width * 2, flow.height * 2, true, 0);
+        for (let i: int = 0; i < 4; i++) {
+            m.copyPixels(flow, flow.rect, new Point((i % 2) * flow.width, ((i / 2) | 0) * flow.height));
+        }
+        return m;
+    }
+
+    /**
+     * A look's light at time `now` into o: its pictures glowing as it says, through the sliding mask (`k`: the size it
+     * is drawn at, 1 for the yard; 27 November: the D.A.V.E. Club's forge window shows a Hellforge smaller).
+     */
+    public static paint(o: BitmapData, look: any, layers: any[], mask: BitmapData, now: int, k: number): void {
         let pulse: any[] = look[1] ? as3.as(look[1], Array) : null;
         o.fillRect(o.rect, 0);
-        for (let i: int = 0; i < IoGroundFx._layers.length; i++) {
+        for (let i: int = 0; i < layers.length; i++) {
             let p: number = 1;
             if (pulse && pulse[i]) {
                 // between a little and all of it (the sheet already has half the light)
                 p = 0.08 + 0.92 * (0.5 + 0.5 * Math.sin(2 * Math.PI * now / Number(pulse[i][0]) + Number(pulse[i][1])));
+            } else if (look[3]) {
+                // (27 November: a Hellforge's flicker, as a forge's fire does, at its speed)
+                let f: number = Number(look[3]);
+                p = Math.max(0.05, Math.min(1, 0.55 + 0.25 * Math.sin(now * f / 70) + 0.2 * Math.sin(now * f / 23 + 1.3) + 0.12 * Math.sin(now * f / 11 + 4.1)));
             }
             IoGroundFx._ct.alphaMultiplier = p;
-            o.draw(as3.cast(IoGroundFx._layers[i], IBitmapDrawable), null, IoGroundFx._ct, i == 0 ? null : "add");
+            o.draw(as3.cast(layers[i], IBitmapDrawable), null, IoGroundFx._ct, i == 0 ? null : "add");
         }
         let drift: any[] = look[2] ? as3.as(look[2], Array) : null;
-        if (drift && IoGroundFx._mask) {
+        if (drift && mask) {
             // the mask at twice its size (it is soft), sliding; only the light under its bright patches stays
-            let mw: number = IoGroundFx._mask.width;
-            let mh: number = IoGroundFx._mask.height;
+            let mw: number = mask.width;
+            let mh: number = mask.height;
             let sx: number = (now / 1000 * Number(drift[0])) % mw;
             let sy: number = (now / 1000 * Number(drift[1])) % mh;
-            IoGroundFx._m.a = IoGroundFx._m.d = 2;
-            IoGroundFx._m.tx = -sx;
-            IoGroundFx._m.ty = -sy;
-            o.draw(as3.cast(IoGroundFx._mask, IBitmapDrawable), IoGroundFx._m, null, "alpha", null, true);
+            IoGroundFx._m.a = IoGroundFx._m.d = 2 * k;
+            IoGroundFx._m.tx = -sx * k;
+            IoGroundFx._m.ty = -sy * k;
+            o.draw(as3.cast(mask, IBitmapDrawable), IoGroundFx._m, null, "alpha", null, true);
         }
     }
 }

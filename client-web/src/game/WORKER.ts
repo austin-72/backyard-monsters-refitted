@@ -312,7 +312,8 @@ export class WORKER extends WORKER_CLIP {
      * Inferno-only (27 November, the user's: "add 1/2/4/5/6/7 (in 3 colors)"): how the looks with sheets of their own
      * move (the frogs: ioFrog). Rows: 0 and 1 of the look's sheet (art/workers/make_workers.py).
      *   crab      scuttles sideways (drawn across its way: Update), its legs going; standing, now and then clacks its claws
-     *   skeleton  rattles as it walks; standing, now and then takes its head off and holds it, then puts it back
+     *   skeleton  strides, its legs and arms swinging (rows 2 and 3), and rattles; standing, now and then takes its
+     *             head off and holds it, then puts it back
      *   penguin   waddles; a long way to go, it slides on its belly
      *   ghost     floats, bobbing, see-through, and goes straight through buildings and walls (Target, Move);
      *             standing, now and then says boo
@@ -345,8 +346,12 @@ export class WORKER extends WORKER_CLIP {
             }
         } else if (kind == "skeleton") {
             if (moving) {
-                this._ioLookX = t % 6 < 3 ? 1 : -1;
-                this._ioHop = Math.abs(Math.sin(t / 4)) * 2;
+                // (27 November, admintester's report: "his legs dont move") it strides: left leg forward (row 2),
+                // legs together (0), right leg forward (3), together, 5 ticks each; a rattle, and a bob at each step
+                let step: int = Math.floor(t / 5) % 4;
+                row = step == 0 ? 2 : (step == 2 ? 3 : 0);
+                this._ioLookX = t % 6 < 3 ? 0.5 : -0.5;
+                this._ioHop = row == 0 ? 1 : 0;
             } else if (this._ioFrogIdle > 0) {
                 this._ioFrogIdle--;
                 row = 1;

@@ -4,7 +4,7 @@
   "entries": [
     {
       "date": "2026-11-27",
-      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, level grounds, new name looks, frog and five more kinds of workers, pets' tricks, the Pit's odds, and fixes",
+      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, level grounds, new name looks, frog and five more kinds of workers, make your own Hellforge, pets' tricks, the Pit's odds, and fixes",
       "items": [
         {
           "area": "Yard",
@@ -102,7 +102,26 @@
         {
           "area": "D.A.V.E. Club",
           "title": "Six more kinds of workers",
-          "text": "More looks for your workers, each moving its own way: lava crabs that scuttle sideways and clack their claws; skeletons that rattle along and now and then take their heads off; penguins that waddle, and slide on their bellies when they have far to go; ghosts that float, see-through, straight through buildings and walls, and say boo; clockwork robots that clank along puffing steam, give off sparks at work and wind their own keys; and slugs in orange, green or purple that glide along leaving a glowing trail."
+          "text": "More looks for your workers, each moving its own way: lava crabs that scuttle sideways and clack their claws; skeletons that rattle along and now and then take their heads off; penguins that waddle, and slide on their bellies when they have far to go; ghosts that float, see-through, straight through buildings and walls, and say boo; clockwork robots that clank along puffing steam, give off sparks at work and wind their own keys; and slugs in orange, green or purple that glide along leaving a glowing trail.",
+          "later": {
+            "date": "2026-11-27",
+            "note": "the skeletons' legs now walk"
+          }
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Make your own Hellforge",
+          "text": "Once you have the Hellforge ground (level 50), Make your own Hellforge… on the Ground tab lets you design it: one of ten patterns (lattice, cracks, scales, bricks, honeycomb, rings, rivers, sigils, veins, pools), three sizes, the colour of its stone, its glow and the heart of its light, and how it moves (still, pulsing, drifting, both, flickering, or shifting between its two colours), slow, normal or fast. Over two million grounds. Surprise me picks one for you. Save and wear puts it in your yard, and everyone who visits or attacks sees yours."
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Make your own Hellforge name",
+          "text": "With the Hellforge name look (level 50), Make your own Hellforge name… on the Chat name tab lets you pick how your name moves (shaded, shine, flow, pulse, fire, heartbeat, sparkle or chase), any three of 32 colours, and slow, normal or fast. Save and wear and everyone in chat sees it."
+        },
+        {
+          "area": "Yard",
+          "title": "Your workers' buttons show your workers",
+          "text": "The buttons in the workers' column now show whichever workers you chose in the D.A.V.E. Club: crabs, ghosts, penguins and the rest, not always the imp."
         },
         {
           "area": "Pets",

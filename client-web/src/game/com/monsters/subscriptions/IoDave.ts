@@ -82,6 +82,16 @@ export class IoDave extends ASObject {
         return IoDave.WORKER_SHEETS[s] ? String(IoDave.WORKER_SHEETS[s]) : null;
     }
 
+    /** (27 November) The loaded yard's workers' look ("inferno", "overworld", "frog"... ; "" none). */
+    public static get yardWorkerSkin(): string {
+        return GLOBAL.INFERNO_ONLY && IoDave._yard != null && IoDave._yard.workerSkin ? String(IoDave._yard.workerSkin) : "";
+    }
+
+    /** (27 November, admintester's reports) The loaded yard's owner's own Hellforge ground (IoForge), or null. */
+    public static get yardForgeGround(): any {
+        return GLOBAL.INFERNO_ONLY && IoDave._yard != null && IoDave._yard.forgeGround ? IoDave._yard.forgeGround : null;
+    }
+
     /** (27 November) A slug's trail's colour, by its look. */
     public static get workerSkinColor(): number {
         let s: string = GLOBAL.INFERNO_ONLY && IoDave._yard != null ? String(IoDave._yard.workerSkin) : "";
@@ -156,7 +166,7 @@ export class IoDave extends ASObject {
             }
             IoDave.setMine(r.dave);
             if (r.dave) {
-                IoDave._yard = { "workerSkin": r.dave.workerSkin, "champSkins": r.dave.champSkins };
+                IoDave._yard = { "workerSkin": r.dave.workerSkin, "champSkins": r.dave.champSkins, "forgeGround": r.dave.forgeGround };
             }
             if (r.credits != null) {
                 CASINO.setCredits(r.credits | 0);
@@ -183,7 +193,7 @@ export class IoDave extends ASObject {
             IoDave.setMine(r.dave);
             // (the player's own yard: its looks are theirs)
             if (r.dave) {
-                IoDave._yard = { "workerSkin": r.dave.workerSkin, "champSkins": r.dave.champSkins };
+                IoDave._yard = { "workerSkin": r.dave.workerSkin, "champSkins": r.dave.champSkins, "forgeGround": r.dave.forgeGround };
             }
             onDone(null);
         }, (e: IOErrorEvent): void => {
@@ -213,15 +223,16 @@ export class IoDave extends ASObject {
 
     /** A name effect's spec (grad:, shine:, flow:, and 27 November's pulse:, fire:, beat:, spark:, chase:, with its colours), or null if this is not one. */
     public static fxOf(look: string): any {
-        let m: any = look ? /^(grad|shine|flow|pulse|fire|beat|spark|chase):(#[0-9A-Fa-f]{6}(?:,#[0-9A-Fa-f]{6})+)$/.exec(look) : null;
+        // (27 November, admintester's report: a Hellforge name its owner made: "fire@2:..." at twice the speed, "@0.5" half)
+        let m: any = look ? /^(grad|shine|flow|pulse|fire|beat|spark|chase)(?:@(0\.5|2))?:(#[0-9A-Fa-f]{6}(?:,#[0-9A-Fa-f]{6})+)$/.exec(look) : null;
         if (!m) {
             return null;
         }
         let stops: any[] = [];
-        for (let c of String(m[2]).split(",")) {
+        for (let c of String(m[3]).split(",")) {
             stops.push(parseInt(c.substr(1), 16));
         }
-        return { "kind": String(m[1]), "stops": stops };
+        return { "kind": String(m[1]), "stops": stops, "speed": m[2] ? Number(m[2]) : 1 };
     }
 
     /** Does this look move (it has to be drawn again as time goes)? */
@@ -271,7 +282,7 @@ export class IoDave extends ASObject {
         let out: string = "";
         let chars: any[] = text.split("");
         let n: int = Math.max(1, chars.length - 1) | 0;
-        let now: number = ms >= 0 ? ms : getTimer();
+        let now: number = (ms >= 0 ? ms : getTimer()) * (fx ? Number(fx.speed) : 1);
         let sweep: number = (now % 2400) / 2400 * 1.8 - 0.4;
         let flow: number = (now % 3000) / 3000;
         for (let i: int = 0; i < chars.length; i++) {

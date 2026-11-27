@@ -6,7 +6,7 @@ import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { Matrix, Point, Rectangle } from "flash/geom";
 import { AntiAliasType, TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { getTimer } from "flash/utils";
-import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoDave, IoEmotes, IoHfo, IoPets, IoPetsPanel, IoSign, IoSkins, IoTrophies, KEYS, LOGIN, MAP, PLEASEWAIT, POPUPSETTINGS, IoWin, SOUNDS, SPRITES, URLLoaderApi, WORKERS, frame_CLIP, hell_land1_1, hell_land2_1, hell_land3_1, hell_land4_1, hell_land5_1, hell_land6_1, hell_sand1_big, hell_sand2_big, hfo_frozen1, inferno_lava1, io_ashfall_big, io_obsidian_big, io_soulfire_big, isocrater1, isograss1, isorock1, isosand1, UI_TOP, BUILDINGSPOPUP, IoChampionStatue, IoShop, io_sulfur_big, io_magma_big, io_witchfire_big, io_bloodstone_big, io_gilded_big, io_cinder_big, io_amethyst_big, io_hellforge_big } from "@game";
+import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoDave, IoEmotes, IoHfo, IoPets, IoPetsPanel, IoSign, IoSkins, IoTrophies, KEYS, LOGIN, UI_WORKERS, MAP, PLEASEWAIT, POPUPSETTINGS, IoWin, SOUNDS, SPRITES, URLLoaderApi, WORKERS, frame_CLIP, hell_land1_1, hell_land2_1, hell_land3_1, hell_land4_1, hell_land5_1, hell_land6_1, hell_sand1_big, hell_sand2_big, hfo_frozen1, inferno_lava1, io_ashfall_big, io_obsidian_big, io_soulfire_big, isocrater1, isograss1, isorock1, isosand1, UI_TOP, BUILDINGSPOPUP, IoChampionStatue, IoShop, io_sulfur_big, io_magma_big, io_witchfire_big, io_bloodstone_big, io_gilded_big, io_cinder_big, io_amethyst_big, io_hellforge_big, IoForge, IoGroundFx } from "@game";
 
 /**
  * Inferno-only (10 October): the D.A.V.E. Club. The button in the resources' column (UI_TOP.ioDaveClub) opens this
@@ -34,7 +34,7 @@ import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoD
  */
 export class IoTerrainPopup extends ASObject {
     static {
-        as3.fields(this, { _mc: null, _tiles: null, _chosen: null, _tab: "ground", _body: null, _tabs: null, _w: 0, _h: 0, _top: 0, _blocker: null, _blockerAlpha: 1, _was: null, _previewing: false, _skinPreview: null });
+        as3.fields(this, { _mc: null, _tiles: null, _chosen: null, _tab: "ground", _body: null, _tabs: null, _w: 0, _h: 0, _top: 0, _blocker: null, _blockerAlpha: 1, _was: null, _previewing: false, _skinPreview: null, _forge: null, _forgeName: null });
     }
 
     /** The grounds, in the window's order: [id, name, picture class] (a getter: the picture classes load later). */
@@ -135,6 +135,10 @@ export class IoTerrainPopup extends ASObject {
     private _previewing: boolean;
     /** (QoL #138) The skin preview over the Champions tab, while open. */
     private _skinPreview: Sprite;
+
+    /** (27 November) The Hellforge ground and name being made in the forge windows (IoForge). */
+    private _forge: any;
+    private _forgeName: any;
 
     /** The tab to open on (the tests use it too). */
     public static openTab: string = "ground";
@@ -290,7 +294,7 @@ export class IoTerrainPopup extends ASObject {
             this._blocker.alpha = id == "ground" && IoTerrainPopup.canPreview() ? this._blockerAlpha * 0.3 : this._blockerAlpha;
         }
         for (let t of as3.values(this._tabs)) {
-            (t.b as Button_CLIP).Highlight = t.id == id || (t.id == "decor" && (id == "signs" || id == "trophies"));
+            (t.b as Button_CLIP).Highlight = t.id == id || (t.id == "decor" && (id == "signs" || id == "trophies")) || (t.id == "ground" && id == "forge") || (t.id == "chat" && id == "forgename");
         }
         while (this._body.numChildren > 0) {
             this._body.removeChildAt(0);
@@ -298,6 +302,10 @@ export class IoTerrainPopup extends ASObject {
         this._tiles = [];
         if (id == "chat") {
             this.chatTab();
+        } else if (id == "forge" && GLOBAL.INFERNO_ONLY) {
+            this.forgeGroundView();
+        } else if (id == "forgename" && GLOBAL.INFERNO_ONLY) {
+            this.forgeNameView();
         } else if (id == "workers") {
             this.workersTab();
         } else if (id == "champions") {
@@ -354,6 +362,21 @@ export class IoTerrainPopup extends ASObject {
         save.x = -((save.width * 0.5) | 0);
         save.y = this._top + this._h - 68;
         save.addEventListener(MouseEvent.CLICK, as3.bind(this, this.onSave));
+        // (27 November, admintester's report: "Make hellforge a completely customizable background") the Hellforge's
+        // owners make their own
+        if (GLOBAL.INFERNO_ONLY && IoTerrainPopup.forgeOpen()) {
+            let fb: Button_CLIP = as3.as(this._body.addChild(new Button_CLIP()), Button_CLIP);
+            fb.name = "ioForgeGroundBtn";
+            fb.Setup(KEYS.Get("io_forge_btn_ground"), false, 190, 36);
+            GLOBAL.ioFitText(fb._txt);
+            fb.x = this._w / 2 - 30 - 190;
+            fb.y = this._top + this._h - 68;
+            fb.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                this._forge = IoForge.ground(IoDave.mine.forgeGround) || IoForge.ground(IoForge.DEFAULT);
+                this.showTab("forge");
+            });
+        }
         // (QoL #592: the curse's ice hides the ground until it breaks; QoL #137: else a ground clicked shows in the yard)
         let noteText: string = null;
         let cursed: boolean = GLOBAL.INFERNO_ONLY && IoHfo.frozenGround();
@@ -503,6 +526,10 @@ export class IoTerrainPopup extends ASObject {
             let fx: any = fxs[k];
             let id: string = String(fx.id);
             let spec: string = String(fx.spec);
+            // (27 November) a Hellforge name its owner made: theirs
+            if (id == "fx_hellforge" && IoForge.nameCfg(me.forgeName)) {
+                spec = IoForge.nameSpec(me.forgeName);
+            }
             let need: int = fx.need | 0;
             // (27 November, 72's suggestion: the looks opened by holding outposts, and by the player's level)
             let needOutposts: int = fx.needOutposts | 0;
@@ -559,6 +586,354 @@ export class IoTerrainPopup extends ASObject {
                 sample2.addEventListener(Event.ENTER_FRAME, tick);
             }
         }
+        // (27 November, admintester's report: "Make hellforge a completely customizable in color and animaiton") the
+        // Hellforge name's owners make their own
+        if (GLOBAL.INFERNO_ONLY && IoTerrainPopup.forgeOpen()) {
+            let nb: Button_CLIP = as3.as(this._body.addChild(new Button_CLIP()), Button_CLIP);
+            nb.name = "ioForgeNameBtn";
+            nb.Setup(KEYS.Get("io_forge_btn_name"), false, 240, 36);
+            GLOBAL.ioFitText(nb._txt);
+            nb.x = -120;
+            nb.y = this._top + this._h - 68;
+            nb.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                this._forgeName = IoForge.nameCfg(me.forgeName) || IoForge.nameCfg(IoForge.NAME_DEFAULT);
+                this.showTab("forgename");
+            });
+        }
+    }
+
+    /** (27 November) May the player make their own Hellforge (they have it: level 50, or staff)? */
+    public static forgeOpen(): boolean {
+        let me: any = IoDave.mine;
+        return IoDave.inviteFree || (me.level | 0) >= (IoTerrainPopup.levelNeed("io_hellforge") | 0);
+    }
+
+    // ---- (27 November, admintester's reports) the forge windows: a Hellforge ground and name of the player's own
+
+    private static _forgeMask: BitmapData = null;
+
+    /** A small label at the left of a row of choices. */
+    private forgeLabel(text: string, y: number): void {
+        let l: TextField = as3.as(this._body.addChild(IoTerrainPopup.label(text, 11, 0x3A2A18, true, 80, TextFormatAlign.LEFT)), TextField);
+        GLOBAL.ioFitText(l);
+        l.x = -300;
+        l.y = y + 4;
+    }
+
+    /** A row of buttons, the chosen one lit; onPick(index). */
+    private forgeButtons(prefix: string, x: number, y: number, labels: any[], chosen: int, bw: int, perRow: int, onPick: Function): void {
+        for (let i: int = 0; i < labels.length; i++) {
+            let b: Button_CLIP = as3.as(this._body.addChild(new Button_CLIP()), Button_CLIP);
+            b.name = prefix + i;
+            b.Setup(String(labels[i]), false, bw, 24);
+            GLOBAL.ioFitText(b._txt);
+            b.Highlight = i == chosen;
+            b.x = x + (i % perRow) * (bw + 5);
+            b.y = y + ((i / perRow) | 0) * 29;
+            let k: int = i;
+            b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                onPick(k);
+            });
+        }
+    }
+
+    /** A row of colours, the chosen one framed in gold; onPick(#hex). */
+    private forgeSwatches(prefix: string, x: number, y: number, colours: any[], chosen: string, size: int, perRow: int, onPick: Function): void {
+        for (let i: int = 0; i < colours.length; i++) {
+            let hex: string = String(colours[i]);
+            let sw: Sprite = new Sprite();
+            sw.name = prefix + i;
+            let on: boolean = hex.toUpperCase() == String(chosen).toUpperCase();
+            sw.graphics.lineStyle(on ? 3 : 1, on ? 0xFFC125 : 0x3A2A18, 1, true);
+            sw.graphics.beginFill(parseInt(hex.substr(1), 16), 1);
+            sw.graphics.drawRoundRect(0, 0, size, size, 6, 6);
+            sw.graphics.endFill();
+            sw.x = x + (i % perRow) * (size + 4);
+            sw.y = y + ((i / perRow) | 0) * (size + 4);
+            sw.buttonMode = true;
+            sw.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                onPick(hex);
+            });
+            this._body.addChild(sw);
+        }
+    }
+
+    /** Back, Surprise me and Save and wear, at the window's foot. */
+    private forgeFoot(back: string, onRandom: Function, onSave: Function): void {
+        let y: number = this._top + this._h - 68;
+        let bb: Button_CLIP = as3.as(this._body.addChild(new Button_CLIP()), Button_CLIP);
+        bb.name = "ioForgeBack";
+        bb.Setup(KEYS.Get("io_forge_back"), false, 120, 36);
+        bb.x = -300;
+        bb.y = y;
+        bb.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            this.showTab(back);
+        });
+        let rb: Button_CLIP = as3.as(this._body.addChild(new Button_CLIP()), Button_CLIP);
+        rb.name = "ioForgeRandom";
+        rb.Setup(KEYS.Get("io_forge_random"), false, 150, 36);
+        GLOBAL.ioFitText(rb._txt);
+        rb.x = -75;
+        rb.y = y;
+        rb.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            SOUNDS.Play("click1");
+            onRandom();
+        });
+        let sb: Button_CLIP = as3.as(this._body.addChild(new Button_CLIP()), Button_CLIP);
+        sb.name = "ioForgeSave";
+        sb.Setup(KEYS.Get("io_forge_save"), false, 160, 36);
+        GLOBAL.ioFitText(sb._txt);
+        sb.Highlight = true;
+        sb.x = 300 - 160;
+        sb.y = y;
+        sb.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            onSave();
+        });
+    }
+
+    /**
+     * The Hellforge ground made: a moving picture of it (the whole 1000 x 500 sheet, at 0.3), its pattern, size,
+     * moving and speed, its stone's, glow's and heart's colours, Surprise me, and Save and wear (dave/set forgeGround,
+     * which also makes it the yard's ground; laid in the yard behind at once).
+     */
+    private forgeGroundView(): void {
+        let cfg: any = this._forge || IoForge.ground(IoForge.DEFAULT);
+        this._forge = cfg;
+        this.intro(KEYS.Get("io_forge_g_intro"));
+        let top: number = this._top;
+        let redo: Function = (): void => {
+            this.showTab("forge");
+        };
+        // the picture: the middle of the ground at half size (as near as the yard shows it), moving
+        let pw: int = 300;
+        let ph: int = 150;
+        let drawn: any[] = IoForge.draw(cfg, pw * 2, ph * 2);
+        let look: any[] = IoForge.fxLook(cfg, drawn);
+        let cut: Rectangle = new Rectangle(pw / 2, ph / 2, pw, ph);
+        let shift: Matrix = new Matrix(1, 0, 0, 1, -pw / 2, -ph / 2);
+        let out: BitmapData = new BitmapData(pw, ph, false, 0);
+        out.copyPixels(drawn[0], cut, new Point(0, 0));
+        let overlay: BitmapData = new BitmapData(pw * 2, ph * 2, true, 0);
+        let box: Sprite = new Sprite();
+        box.name = "ioForgePreview";
+        box.x = -300;
+        box.y = top + 140;
+        box.graphics.lineStyle(2, 0x3A2A18, 1, true);
+        box.graphics.drawRect(-1, -1, pw + 2, ph + 2);
+        let bm: Bitmap = new Bitmap(out);
+        box.addChild(bm);
+        this._body.addChild(box);
+        if (look) {
+            if (look[2] && !IoTerrainPopup._forgeMask) {
+                ImageCache.GetImageWithCallBack(IoGroundFx.FLOW, (k: string, bmd: BitmapData, args: any[] = null): void => {
+                    if (bmd && !IoTerrainPopup._forgeMask) {
+                        IoTerrainPopup._forgeMask = IoGroundFx.doubled(bmd);
+                    }
+                });
+            }
+            let last: int = 0;
+            let tick: Function = null;
+            tick = (e: Event): void => {
+                if (!box.stage && last > 0) {
+                    box.removeEventListener(Event.ENTER_FRAME, tick);
+                    return;
+                }
+                let now: int = getTimer();
+                if (now - last < 60) {
+                    return;
+                }
+                last = now;
+                IoGroundFx.paint(overlay, look, look[0], IoTerrainPopup._forgeMask, now, pw * 2 / 1000);
+                out.copyPixels(drawn[0], cut, new Point(0, 0));
+                out.draw(overlay, shift, null, "add");
+            };
+            box.addEventListener(Event.ENTER_FRAME, tick);
+            tick(null);
+        }
+        // the pattern (two columns beside the picture)
+        let pats: any[] = [];
+        for (let p of as3.values(IoForge.PATTERNS)) {
+            pats.push(KEYS.Get("io_forge_p_" + p));
+        }
+        this.forgeButtons("ioForgePattern:", 20, top + 140, pats, cfg.p, 137, 2, (k: int): void => {
+            cfg.p = k;
+            redo();
+        });
+        let x0: number = -215;
+        let y: number = top + 305;
+        this.forgeLabel(KEYS.Get("io_forge_size"), y);
+        this.forgeButtons("ioForgeSize:", x0, y, [KEYS.Get("io_forge_z0"), KEYS.Get("io_forge_z1"), KEYS.Get("io_forge_z2")], cfg.z, 100, 3, (k: int): void => {
+            cfg.z = k;
+            redo();
+        });
+        y += 34;
+        let moves: any[] = [];
+        for (let m of as3.values(IoForge.MOVES)) {
+            moves.push(KEYS.Get("io_forge_a_" + m));
+        }
+        this.forgeLabel(KEYS.Get("io_forge_moving"), y);
+        this.forgeButtons("ioForgeMove:", x0, y, moves, cfg.a, 82, 6, (k: int): void => {
+            cfg.a = k;
+            redo();
+        });
+        y += 34;
+        this.forgeLabel(KEYS.Get("io_forge_speed"), y);
+        this.forgeButtons("ioForgeSpeed:", x0, y, [KEYS.Get("io_forge_v0"), KEYS.Get("io_forge_v1"), KEYS.Get("io_forge_v2")], cfg.v, 100, 3, (k: int): void => {
+            cfg.v = k;
+            redo();
+        });
+        y += 42;
+        this.forgeLabel(KEYS.Get("io_forge_stone"), y);
+        this.forgeSwatches("ioForgeStone:", x0, y, IoForge.STONES, cfg.s, 26, 16, (hex: string): void => {
+            cfg.s = hex;
+            redo();
+        });
+        y += 38;
+        this.forgeLabel(KEYS.Get("io_forge_glow"), y);
+        this.forgeSwatches("ioForgeGlow:", x0, y, IoForge.LIGHTS, cfg.g, 26, 16, (hex: string): void => {
+            cfg.g = hex;
+            redo();
+        });
+        y += 38;
+        this.forgeLabel(KEYS.Get("io_forge_heart"), y);
+        this.forgeSwatches("ioForgeHeart:", x0, y, IoForge.LIGHTS, cfg.h, 26, 16, (hex: string): void => {
+            cfg.h = hex;
+            redo();
+        });
+        this.forgeFoot("ground", (): void => {
+            this._forge = IoForge.random();
+            redo();
+        }, (): void => {
+            this.saveForgeGround();
+        });
+    }
+
+    private saveForgeGround(): void {
+        let cfg: any = this._forge;
+        PLEASEWAIT.Show(KEYS.Get("radio_bSaving"));
+        IoDave.set("forgeGround", JSON.stringify(cfg), (err: string): void => {
+            PLEASEWAIT.Hide();
+            if (err) {
+                GLOBAL.Message(err);
+                return;
+            }
+            SOUNDS.Play("purchasepopup");
+            // (worn at once: the yard's ground, laid behind the window now and kept)
+            IoTerrainPopup.chosen = "io_hellforge";
+            this._chosen = "io_hellforge";
+            if (IoTerrainPopup.canPreview()) {
+                MAP.swapBG("io_hellforge");
+            }
+            this._was = MAP.texture;
+            this._previewing = false;
+            if (this._mc) {
+                this.showTab("ground");
+            }
+        });
+    }
+
+    /**
+     * The Hellforge name made: the player's name moving as it will in chat, how it moves (the chat's eight), three
+     * colours of 32, its speed, Surprise me, and Save and wear (dave/set forgeName, which also makes it their name's look).
+     */
+    private forgeNameView(): void {
+        let cfg: any = this._forgeName || IoForge.nameCfg(IoForge.NAME_DEFAULT);
+        this._forgeName = cfg;
+        this.intro(KEYS.Get("io_forge_n_intro"));
+        let top: number = this._top;
+        let redo: Function = (): void => {
+            this.showTab("forgename");
+        };
+        let who: string = (LOGIN._playerName ? String(LOGIN._playerName) : KEYS.Get("io_t3m_cm_you")).replace(/</g, "");
+        let spec: string = IoForge.nameSpec(cfg);
+        let box: Sprite = new Sprite();
+        box.name = "ioForgeNamePreview";
+        box.graphics.beginFill(0xF4ECDA, 1);
+        box.graphics.drawRoundRect(0, 0, 420, 44, 10, 10);
+        box.graphics.endFill();
+        box.graphics.lineStyle(2, 0x3A2A18, 1, true);
+        box.graphics.drawRoundRect(0, 0, 420, 44, 10, 10);
+        box.x = -210;
+        box.y = top + 140;
+        let sample: TextField = new TextField();
+        sample.selectable = false;
+        sample.mouseEnabled = false;
+        sample.width = 420;
+        sample.height = 30;
+        let f: TextFormat = new TextFormat("Verdana", 18, 0, true);
+        f.align = TextFormatAlign.CENTER;
+        sample.defaultTextFormat = f;
+        sample.y = 9;
+        let paint: Function = (now: int): void => {
+            sample.htmlText = "<b>" + IoDave.fxHtml(spec, who, now) + ":</b> " + KEYS.Get("io_t3m_dc_hi");
+        };
+        paint(getTimer());
+        box.addChild(sample);
+        this._body.addChild(box);
+        if (IoDave.fxMoves(spec)) {
+            let last: int = 0;
+            let tick: Function = null;
+            tick = (e: Event): void => {
+                if (!sample.stage && last > 0) {
+                    sample.removeEventListener(Event.ENTER_FRAME, tick);
+                    return;
+                }
+                let now: int = getTimer();
+                if (now - last >= 50) {
+                    last = now;
+                    paint(now);
+                }
+            };
+            sample.addEventListener(Event.ENTER_FRAME, tick);
+        }
+        let x0: number = -215;
+        let y: number = top + 205;
+        let moves: any[] = [];
+        for (let m of as3.values(IoForge.NAME_MOVES)) {
+            moves.push(KEYS.Get("io_forge_m_" + m));
+        }
+        this.forgeLabel(KEYS.Get("io_forge_moving"), y);
+        this.forgeButtons("ioForgeNameMove:", x0, y, moves, IoForge.NAME_MOVES.indexOf(cfg.m), 124, 4, (k: int): void => {
+            cfg.m = IoForge.NAME_MOVES[k];
+            redo();
+        });
+        y += 64;
+        this.forgeLabel(KEYS.Get("io_forge_speed"), y);
+        this.forgeButtons("ioForgeNameSpeed:", x0, y, [KEYS.Get("io_forge_v0"), KEYS.Get("io_forge_v1"), KEYS.Get("io_forge_v2")], cfg.v, 100, 3, (k: int): void => {
+            cfg.v = k;
+            redo();
+        });
+        y += 44;
+        for (let ci: int = 0; ci < 3; ci++) {
+            let slot: int = ci;
+            this.forgeLabel(KEYS.Get("io_forge_colour", { "v1": ci + 1 }), y);
+            this.forgeSwatches("ioForgeNameColour" + ci + ":", x0, y, IoForge.NAME_COLORS, cfg.c[ci], 26, 16, (hex: string): void => {
+                cfg.c[slot] = hex;
+                redo();
+            });
+            y += 66;
+        }
+        this.forgeFoot("chat", (): void => {
+            this._forgeName = IoForge.randomName();
+            redo();
+        }, (): void => {
+            PLEASEWAIT.Show(KEYS.Get("radio_bSaving"));
+            IoDave.set("forgeName", JSON.stringify(this._forgeName), (err: string): void => {
+                PLEASEWAIT.Hide();
+                if (err) {
+                    GLOBAL.Message(err);
+                    return;
+                }
+                SOUNDS.Play("purchasepopup");
+                if (this._mc) {
+                    this.showTab("chat");
+                }
+            });
+        });
     }
 
     private workersTab(): void {
@@ -580,8 +955,10 @@ export class IoTerrainPopup extends ASObject {
             let perRow: int = 6;
             let b: Sprite = this.box(-((perRow * bw + (perRow - 1) * 8) / 2) + (i % perRow) * (bw + 8), this._top + 130 + ((i / perRow) | 0) * (bh + 30), bw, bh, String(r[1]), skin == id, true, (): void => {
                 this.choose("workerSkin", id, (): void => {
-                    IoDave.setYard({ "workerSkin": id, "champSkins": IoDave.mine.champSkins });
+                    IoDave.setYard({ "workerSkin": id, "champSkins": IoDave.mine.champSkins, "forgeGround": IoDave.mine.forgeGround });
                     SPRITES.ioWorkerSprite();
+                    // (27 November, admintester's report) the workers' buttons show the look too
+                    UI_WORKERS.ioReskinIcons();
                     for (let wk of as3.values(WORKERS._workers || [])) {
                         if (wk && wk.mc) {
                             try {
@@ -1298,11 +1675,18 @@ export class IoTerrainPopup extends ASObject {
         let th: int = IoTerrainPopup.TILE_H;
         let pic: BitmapData = new BitmapData(tw, th, false, 0x201008);
         try {
-            let src: BitmapData = as3.as(new art(0, 0), BitmapData);
-            // (the middle of the tile, at half size: enough of the ground to see it)
-            let scale: number = Math.max(tw / src.width, th / src.height, 0.5);
-            let m: Matrix = new Matrix(scale, 0, 0, scale, (tw - src.width * scale) / 2, (th - src.height * scale) / 2);
-            pic.draw(as3.cast(src, IBitmapDrawable), m, null, null, new Rectangle(0, 0, tw, th), true);
+            // (27 November) a Hellforge its owner made: theirs, drawn at half size
+            let made: any = id == "io_hellforge" && GLOBAL.INFERNO_ONLY ? IoForge.ground(IoDave.mine.forgeGround) : null;
+            if (made) {
+                let half: BitmapData = as3.as(IoForge.draw(made, 500, 250)[0], BitmapData);
+                pic.copyPixels(half, new Rectangle((half.width - tw) / 2, (half.height - th) / 2, tw, th), new Point(0, 0));
+            } else {
+                let src: BitmapData = as3.as(new art(0, 0), BitmapData);
+                // (the middle of the tile, at half size: enough of the ground to see it)
+                let scale: number = Math.max(tw / src.width, th / src.height, 0.5);
+                let m: Matrix = new Matrix(scale, 0, 0, scale, (tw - src.width * scale) / 2, (th - src.height * scale) / 2);
+                pic.draw(as3.cast(src, IBitmapDrawable), m, null, null, new Rectangle(0, 0, tw, th), true);
+            }
         } catch (e) {
         }
         let bm: Bitmap = new Bitmap(pic);

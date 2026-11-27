@@ -751,6 +751,7 @@ export { ARCADE } from "./com/monsters/arcade/ARCADE";
 export { ArcadeArt } from "./com/monsters/arcade/ArcadeArt";
 export { IoKit } from "./com/monsters/display/IoKit";
 export { IoGroundFx } from "./com/monsters/display/IoGroundFx";
+export { IoForge } from "./com/monsters/display/IoForge";
 export { ArcadeNet } from "./com/monsters/arcade/ArcadeNet";
 export { ArcadeWindow } from "./com/monsters/arcade/ArcadeWindow";
 export { IoTouchPad } from "./com/monsters/arcade/IoTouchPad";
