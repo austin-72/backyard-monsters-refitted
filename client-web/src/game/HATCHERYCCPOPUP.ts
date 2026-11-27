@@ -305,9 +305,11 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         }
         this.mcMonsterInfo.tDescription.htmlText = "<b>" + KEYS.Get("hatcherypopup_level", { "v1": level }) + " " + KEYS.Get(as3.str(creature.name)) + "</b><br>" + KEYS.Get(as3.str(creature.description));
         if (GLOBAL.INFERNO_ONLY) {
-            // (QoL #352: what it goes for, under its name)
-            this.mcMonsterInfo.tDescription.htmlText = "<b>" + KEYS.Get("hatcherypopup_level", { "v1": level }) + " " + KEYS.Get(as3.str(creature.name)) + "</b><br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(creatureID) + "</font><br>" + KEYS.Get(as3.str(creature.description));
-            GLOBAL.ioFitHeight(this.mcMonsterInfo.tDescription, 9);
+            // (QoL #352: what it goes for, under its name; 27 November: the same layout as the Strongbox, the Academy and
+            // the Incubator: CREATURELOCKER.ioInfoHtml)
+            this.mcMonsterInfo.tDescription.htmlText = CREATURELOCKER.ioInfoHtml(creatureID, CREATURELOCKER.ioLevelText(creatureID));
+            // (27 November, 72's bug report: a long one was cut off at 9 px: its arrow and the wheel, GLOBAL.ioScrollMore)
+            GLOBAL.ioScrollMore(this.mcMonsterInfo.tDescription, 9);
         }
         if (Boolean(CREATURELOCKER._lockerData[creatureID]) && CREATURELOCKER._lockerData[creatureID].t == 2) {
             this.mcMonsterInfo.mcLocked.visible = false;
@@ -353,8 +355,8 @@ export class HATCHERYCCPOPUP extends HATCHERYCCPOPUP_CLIP {
         }
         this.MonsterInfoB(id);
         if (CREATURELOCKER._lockerData[id] && CREATURELOCKER._lockerData[id].t == 2) {
-            this.mcMonsterInfo.tDescription.htmlText += "<br><font color=\"#B26A00\"><b>" + KEYS.Get("io_ph_tap_add") + "</b></font>";
-            GLOBAL.ioFitHeight(this.mcMonsterInfo.tDescription, IoPhoneText.smallest(9));
+            this.mcMonsterInfo.tDescription.htmlText = CREATURELOCKER.ioInfoHtml(id, CREATURELOCKER.ioLevelText(id), "", KEYS.Get("io_ph_tap_add"));
+            GLOBAL.ioScrollMore(this.mcMonsterInfo.tDescription, IoPhoneText.smallest(9));
         }
         return true;
     }

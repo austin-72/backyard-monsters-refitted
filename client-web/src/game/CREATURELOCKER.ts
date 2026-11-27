@@ -4,7 +4,7 @@ import { MovieClip, Sprite } from "flash/display";
 import { MouseEvent } from "flash/events";
 import { GlowFilter } from "flash/filters";
 import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
-import { ACHIEVEMENTS, Ashkarr, BASE, BFOUNDATION, BYMConfig, CREATURES, MAP, Balthazar, Basilisk, Bandito, Bolt, Brain, CREATURELOCKERPOPUP, Clinkerjaw, CreepTypeManager, DAVE, Emberghoul, Eyera, Fang, Fink, Flickerfiend, Fusebug, GLOBAL, IoTargets, IoTeleport, HATCHERYCC, IoChampionCreep, IoHailspitter, IoHfo, IoIceCreep, IoRimegrave, KEYS, KingWormzer, LOGGER, MAPROOM_DESCENT, MapRoomManager, POPUPS, ProjectX, QUESTS, RebalancedCreatures, Rezghul, SOUNDS, STORE, Sabnox, Slimeattikus, Spurtz, SubscriptionHandler, Teratorn, Vorg, Wormzer, Zafreeti, md5, popup_monster, IoSocial, IoShop } from "@game";
+import { ACHIEVEMENTS, Ashkarr, BASE, BFOUNDATION, BYMConfig, CREATURES, MAP, Balthazar, Basilisk, Bandito, Bolt, Brain, CREATURELOCKERPOPUP, Clinkerjaw, CreepTypeManager, DAVE, Emberghoul, Eyera, Fang, Fink, Flickerfiend, Fusebug, GLOBAL, IoTargets, IoTeleport, HATCHERYCC, IoChampionCreep, IoHailspitter, IoHfo, IoIceCreep, IoRimegrave, KEYS, KingWormzer, LOGGER, MAPROOM_DESCENT, MapRoomManager, POPUPS, ProjectX, QUESTS, RebalancedCreatures, Rezghul, SOUNDS, STORE, Sabnox, Slimeattikus, Spurtz, SubscriptionHandler, Teratorn, Vorg, Wormzer, Zafreeti, md5, popup_monster, IoSocial, IoShop, IoSynergy } from "@game";
 
 export class CREATURELOCKER extends ASObject {
     public static readonly k_USE_REBALANCED_MONSTERS: boolean = false;
@@ -949,6 +949,11 @@ export class CREATURELOCKER extends ASObject {
     private static readonly IO_DEFAULT_ATTACK_DELAY: int = 60;
 
     /** Inferno-only: the level a monster's stats are read at (0: the one the player has trained it to, as GetProperty). */
+    /** Inferno-only: "Level N", its level now (the head of ioInfoHtml in the Strongbox and the Incubators). */
+    public static ioLevelText(param1: string): string {
+        return KEYS.Get("hatcherypopup_level", { "v1": CREATURELOCKER.ioLevel(param1) });
+    }
+
     public static ioLevel(param1: string, param2: int = 0): int {
         if (param2 > 0) {
             return param2;
@@ -1007,6 +1012,53 @@ export class CREATURELOCKER extends ASObject {
             return GLOBAL.FormatNumber(Math.round(-dps)) + " (" + KEYS.Get("str_heal") + ")";
         }
         return GLOBAL.FormatNumber(Math.round(dps));
+    }
+
+    /**
+     * Inferno-only (27 November, the user's: "Check all monster descriptions in strongbox, incubator, and academy.
+     * Make them all consistent in their layouts as well"): a monster's text, the same in the Strongbox, the
+     * Incubator, the Incubation Control Station and the Academy, line by line:
+     *   <b>Name</b> · what the window says of it (its level, the Academy's status)
+     *   what it goes for, how it moves and its reach (ioTags, brown)
+     *   its abilities and the levels they come at (ioAbilitiesLine), when it has any
+     *   its synergy, or that a champion has none (IoSynergy.describe, green)
+     *   `note` (blue: the Strongbox's per 100 housing), when given
+     *   its description
+     *   `tip` (orange: Shift-click fills the Compound; tap to add), when given
+     * Shown with GLOBAL.ioScrollMore: smaller to fit, and its arrow and the wheel when it still doesn't.
+     */
+    /**
+     * Inferno-only (27 November: "make them all consistent"): the one layout of a monster's description in the
+     * Strongbox, the Academy, the Incubator and the Incubation Control Station: its name (and level or status), what it
+     * goes for (brown), its abilities, its synergy (green), a note (blue: the Strongbox's per-100-housing line), the
+     * description, and a tip (orange: the Incubator's fill tip, the phone's tap-to-add).
+     */
+    public static ioInfoHtml(id: string, head: string = "", note: string = "", tip: string = "", level: int = 0): string {
+        let c: any = CREATURELOCKER._creatures ? CREATURELOCKER._creatures[id] : null;
+        if (!c) {
+            return "";
+        }
+        let lines: any[] = ["<b>" + KEYS.Get(as3.str(c.name)) + "</b>" + (head ? "  ·  " + head : "")];
+        let tags: string = CREATURELOCKER.ioTags(id, level);
+        if (tags) {
+            lines.push("<font color=\"#8A5A00\">" + tags + "</font>");
+        }
+        let abilities: string = CREATURELOCKER.ioAbilitiesLine(id, level);
+        if (abilities) {
+            lines.push(abilities);
+        }
+        let syn: string = IoSynergy.describe(id);
+        if (syn) {
+            lines.push("<font color=\"#0B6B58\">" + syn + "</font>");
+        }
+        if (note) {
+            lines.push("<font color=\"#1E5A7A\">" + note + "</font>");
+        }
+        lines.push(KEYS.Get(as3.str(c.description)));
+        if (tip) {
+            lines.push("<font color=\"#B26A00\"><b>" + tip + "</b></font>");
+        }
+        return lines.join("<br>");
     }
 
     /**

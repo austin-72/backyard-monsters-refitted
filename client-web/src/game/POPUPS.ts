@@ -5,7 +5,7 @@ import { Event, KeyboardEvent, MouseEvent, TimerEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { TextField, TextFieldAutoSize, TextFormatAlign } from "flash/text";
 import { Timer, getQualifiedClassName, getTimer, setTimeout } from "flash/utils";
-import { ACADEMY, ArcadeWindow, BASE, BFOUNDATION, BUILDINGINFO, BUILDINGOPTIONS, BUILDINGS, BUY, BYMDevConfig, CasinoUI, CasinoWindow, CREATURELOCKER, frame, FrontPageGraphic, GAME, GLOBAL, ImageCache, IoBugReport, IoQuestBook, IoQuests, IoTd, IoWelcomeBack, IoWin, KEYS, LOGGER, MESSAGE, MUSHROOMS, NewPopupSystem, popup_afk_gift, popup_attackedme, popup_bg, popup_bg2, popup_damaged, popup_dialogue, popup_generic, popup_invite_friends, popup_noshiny, popup_noworker, popup_pleasebuy, popup_pleaserate, popup_timeout, popup_welcome, POPUPSETTINGS, print, QUEUE, SOUNDS, STORE, TUTORIAL, TweenLite, UI_TOP, UPDATES } from "@game";
+import { ACADEMY, ArcadeWindow, BASE, BFOUNDATION, BUILDINGINFO, BUILDINGOPTIONS, BUILDINGS, BUY, BYMDevConfig, CasinoUI, CasinoWindow, CREATURELOCKER, frame, FrontPageGraphic, GAME, GLOBAL, ImageCache, IoBugReport, IoQuestBook, IoQuests, IoTd, IoWelcomeBack, IoWin, KEYS, LOGGER, MESSAGE, MUSHROOMS, NewPopupSystem, popup_afk_gift, popup_attackedme, popup_bg, popup_bg2, popup_damaged, popup_dialogue, popup_generic, popup_invite_friends, popup_noshiny, popup_noworker, popup_pleasebuy, popup_pleaserate, popup_timeout, popup_welcome, POPUPSETTINGS, print, QUEUE, SOUNDS, STORE, TUTORIAL, TweenLite, UI_TOP, UPDATES, IoJobs, Button_CLIP } from "@game";
 
 export class POPUPS extends ASObject {
     public static readonly k_TOP_LEFT: int = 1;
@@ -1193,6 +1193,27 @@ export class POPUPS extends ASObject {
                 mc.bGet.addEventListener(MouseEvent.CLICK, getWorker);
             }
             mc.bGet.Highlight = true;
+        }
+        // (Inferno-only, 27 November, 72's: "Add to queue": an upgrade or a calcification put in the Jobs queue
+        // (IoJobs), to start by itself when a worker is free)
+        let ioB: BFOUNDATION = as3.as(b, BFOUNDATION);
+        if (GLOBAL.INFERNO_ONLY && (n == 1 || n == 3) && ioB && IoJobs.ownYard()) {
+            let kind: string = n == 1 ? "upgrade" : "fortify";
+            let qb: Button_CLIP = new Button_CLIP();
+            qb.name = "ioQueueJob";
+            qb.Setup(KEYS.Get("io_jobs_queue_add"), false, Math.max(120, mc.bGet.width | 0), mc.bGet.height | 0);
+            qb.x = mc.bGet.x - qb.width - 10;
+            qb.y = mc.bGet.y;
+            if (qb.x < -mc.width / 2 + 10 && mc.mcFrame) {
+                qb.x = mc.bGet.x;
+                qb.y = mc.bGet.y + mc.bGet.height + 6;
+            }
+            qb.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                IoJobs.enqueue(ioB, kind);
+                BUILDINGOPTIONS.Hide();
+                POPUPS.Next();
+            });
+            mc.addChild(qb);
         }
         POPUPS.Push(mc, null, null, null, workerImage);
     }

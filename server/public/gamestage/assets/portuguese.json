@@ -8703,5 +8703,6 @@
     "io_jobs_started": "Iniciado da sua fila: #v1#",
     "io_jobs_queue_full": "Isso já está na fila até ao fim.",
     "io_jobs_tip": "Todas as melhorias e calcificações possíveis, para começar ou pôr na fila.",
-    "io_jobs_tip_queued": "#v1# na fila: começam sozinhos quando um trabalhador fica livre."
+    "io_jobs_tip_queued": "#v1# na fila: começam sozinhos quando um trabalhador fica livre.",
+    "io_jobs_queue_add": "Adicionar à fila"
 }

@@ -236,13 +236,11 @@ export class HATCHERYPOPUP extends HATCHERYPOPUP_CLIP {
         }
         this.mcMonsterInfo.tDescription.htmlText = "<b>" + KEYS.Get("hatcherypopup_level", { "v1": level }) + " " + KEYS.Get(as3.str(creature.name)) + "</b><br>" + KEYS.Get(as3.str(creature.description));
         if (GLOBAL.INFERNO_ONLY) {
-            // (QoL #352: what it goes for, under its name)
-            this.mcMonsterInfo.tDescription.htmlText = "<b>" + KEYS.Get("hatcherypopup_level", { "v1": level }) + " " + KEYS.Get(as3.str(creature.name)) + "</b><br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(creatureStringID) + "</font><br>" + KEYS.Get(as3.str(creature.description));
-            GLOBAL.ioFitHeight(this.mcMonsterInfo.tDescription, 9);
-        }
-        if (GLOBAL.INFERNO_ONLY && CREATURELOCKER._lockerData[creatureStringID] && CREATURELOCKER._lockerData[creatureStringID].t == 2) {
-            // (QoL #27: Shift-click fills the Compound with it)
-            this.mcMonsterInfo.tDescription.htmlText += "<br><font color=\"#B26A00\">" + KEYS.Get("io_hatch_fill_tip", { "v1": this.ioFillCount(creatureStringID) }) + "</font>";
+            // (QoL #352: what it goes for, under its name; 27 November: the same layout as the Strongbox, the Academy and
+            // the Incubation Control Station: CREATURELOCKER.ioInfoHtml, QoL #27's fill tip last; long ones scroll)
+            let ioTip: string = CREATURELOCKER._lockerData[creatureStringID] && CREATURELOCKER._lockerData[creatureStringID].t == 2 ? KEYS.Get("io_hatch_fill_tip", { "v1": this.ioFillCount(creatureStringID) }) : "";
+            this.mcMonsterInfo.tDescription.htmlText = CREATURELOCKER.ioInfoHtml(creatureStringID, CREATURELOCKER.ioLevelText(creatureStringID), "", ioTip);
+            GLOBAL.ioScrollMore(this.mcMonsterInfo.tDescription, 9);
         }
         if (Boolean(CREATURELOCKER._lockerData[creatureStringID]) && CREATURELOCKER._lockerData[creatureStringID].t == 2) {
             this.mcMonsterInfo.mcLocked.visible = false;
@@ -295,8 +293,8 @@ export class HATCHERYPOPUP extends HATCHERYPOPUP_CLIP {
         this.MonsterInfoB(n);
         let id: string = HATCHERYPOPUP.ioMonsterId(n);
         if (CREATURELOCKER._lockerData[id] && CREATURELOCKER._lockerData[id].t == 2) {
-            this.mcMonsterInfo.tDescription.htmlText += "<br><font color=\"#B26A00\"><b>" + KEYS.Get("io_ph_tap_add") + "</b></font>";
-            GLOBAL.ioFitHeight(this.mcMonsterInfo.tDescription, IoPhoneText.smallest(9));
+            this.mcMonsterInfo.tDescription.htmlText = CREATURELOCKER.ioInfoHtml(id, CREATURELOCKER.ioLevelText(id), "", KEYS.Get("io_ph_tap_add"));
+            GLOBAL.ioScrollMore(this.mcMonsterInfo.tDescription, IoPhoneText.smallest(9));
         }
     }
 

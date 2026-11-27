@@ -70,7 +70,7 @@ In the **Feedback** tab:
    game; a new answer, or planned / done / not planned, shows as new to them.
 4. **copy as text** for an issue or a message; **delete** removes it for the player too.
 
-A player can send 6 reports in 10 minutes and 30 a day. On the server's computer, `docker compose exec -T web
+A player can send 6 reports in 10 minutes and 30 a day; a player whose main yard is above level 40, and an admin, has no cap. On the server's computer, `docker compose exec -T web
 bun run feedback` in `server` writes the open reports with their pictures to `server\logs\feedback\`.
 
 ## 4. Cheat reports and refused attacks

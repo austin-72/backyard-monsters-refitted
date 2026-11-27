@@ -55,7 +55,7 @@ export class UI_WORKERS extends ASObject {
     /** QoL #589: "Break all ice", under it (while the event's Days 1-3 ice is in the yard). */
     private static _ioIceBtn: Sprite = null;
 
-    /** (27 November, admintester's) The job list (IoJobs), left of the first worker in the player's own yards. */
+    /** (27 November, admintester's) The job list (IoJobs): in the column under the workers, above Pick all warts (72's). */
     private static _ioJobsBtn: Sprite = null;
 
     /** Those two are smaller than the event buttons: their ring, across the middle; the room each takes. */
@@ -130,17 +130,8 @@ export class UI_WORKERS extends ASObject {
         // a week apart, each hidden until a week before it starts).
         // (QoL #25, #589: first "Pick all warts" and "Break all ice", while shown; the event buttons go under them)
         let top: number = r.y + r.height + UI_WORKERS.IO_EXTRA_GAP;
-        // (27 November: Jobs beside the first worker, to its left: the column's height is kept for the workers)
-        if (UI_WORKERS._ioJobsBtn) {
-            if (UI_WORKERS._ioJobsBtn.parent != UI_WORKERS._mc) {
-                UI_WORKERS._mc.addChild(UI_WORKERS._ioJobsBtn);
-            }
-            let first: Rectangle = UI_WORKERS._workers && UI_WORKERS._workers.length ? as3.cast(UI_WORKERS._workers[0].mc, DisplayObject).getBounds(UI_WORKERS._mc) : new Rectangle(0, 20, 40, 40);
-            UI_WORKERS._ioJobsBtn.x = first.x - 2 * UI_WORKERS.IO_EXTRA_MIDDLE - 6;
-            UI_WORKERS._ioJobsBtn.y = first.y + first.height / 2 - UI_WORKERS.IO_EXTRA_MIDDLE;
-        }
         let off: number = 0;
-        for (let y of as3.values([UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
+        for (let y of as3.values([UI_WORKERS._ioJobsBtn, UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
             if (!y) {
                 continue;
             }
@@ -363,10 +354,6 @@ export class UI_WORKERS extends ASObject {
         b.addEventListener(MouseEvent.MOUSE_OVER, (e: MouseEvent): void => {
             let n: int = IoJobs.queued;
             UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("io_jobs_title") + "</b><br>" + KEYS.Get(n > 0 ? "io_jobs_tip_queued" : "io_jobs_tip", { "v1": n }));
-            // (it stands left of the column: the tip further left, clear of it)
-            if (UI_WORKERS._popupmc) {
-                UI_WORKERS._popupmc.x -= 2 * C + 6;
-            }
         });
         b.addEventListener(MouseEvent.MOUSE_OUT, (e: MouseEvent): void => {
             UI_WORKERS.PopupHide();
@@ -436,7 +423,7 @@ export class UI_WORKERS extends ASObject {
                 if (menu && menu.stage && menu.visible && UI_WORKERS._mc.stage) {
                     let top: number = UI_WORKERS._mc.globalToLocal(new Point(0, menu.getBounds(menu.stage).y)).y;
                     let under: number = UI_WORKERS.IO_EXTRA_GAP;
-                    for (let y of as3.values([UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
+                    for (let y of as3.values([UI_WORKERS._ioJobsBtn, UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
                         if (y && y.visible) {
                             under += UI_WORKERS.IO_YARD_STEP;
                         }
@@ -447,7 +434,7 @@ export class UI_WORKERS extends ASObject {
                         }
                     }
                     let room: number = top - 20 - under - 46;
-                    step = Math.max(36, Math.min(UI_WORKERS._workerMCOffset, Math.floor(room / Math.max(1, n - 1))));
+                    step = Math.max(32, Math.min(UI_WORKERS._workerMCOffset, Math.floor(room / Math.max(1, n - 1))));
                 }
             } catch (e) {
             }

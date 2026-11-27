@@ -8704,5 +8704,6 @@
     "io_jobs_started": "Empezado desde tu cola: #v1#",
     "io_jobs_queue_full": "Eso ya está en cola hasta el final.",
     "io_jobs_tip": "Todas las mejoras y calcificaciones posibles, para empezar o poner en cola.",
-    "io_jobs_tip_queued": "#v1# en cola: empiezan solos cuando queda libre un trabajador."
+    "io_jobs_tip_queued": "#v1# en cola: empiezan solos cuando queda libre un trabajador.",
+    "io_jobs_queue_add": "Añadir a la cola"
 }

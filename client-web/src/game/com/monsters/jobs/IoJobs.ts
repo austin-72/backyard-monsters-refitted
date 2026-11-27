@@ -219,7 +219,7 @@ export class IoJobs extends ASObject {
     }
 
     /** Queues a job: the next level of that kind after any already queued for the building. */
-    private static enqueue(b: BFOUNDATION, kind: string): void {
+    public static enqueue(b: BFOUNDATION, kind: string): void {
         IoJobs.load();
         let lvl: int = IoJobs.nextLevel(b, kind);
         if (lvl <= 0) {

@@ -3,7 +3,7 @@ import { int } from "as3";
 import { Bitmap, BitmapData, DisplayObject, MovieClip, Sprite } from "flash/display";
 import { TextField } from "flash/text";
 import { MouseEvent } from "flash/events";
-import { BASE, CREATURELOCKER, CREATURELOCKERPOPUP_CLIP, CREATURES, Circ, CreatureLockerItem, GLOBAL, ImageCache, IoHfo, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, QUESTS, STORE, TweenLite, popup_monster, IoSocial, IoShop, IoSynergy } from "@game";
+import { BASE, CREATURELOCKER, CREATURELOCKERPOPUP_CLIP, CREATURES, Circ, CreatureLockerItem, GLOBAL, ImageCache, IoHfo, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, QUESTS, STORE, TweenLite, popup_monster, IoSocial, IoShop } from "@game";
 
 export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
     static {
@@ -244,9 +244,9 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             // (QoL #352: what it goes for, how it moves and its reach, under its name; drawn smaller when the
             // description runs long)
             // (QoL #353: and what 100 housing of it brings, to compare monsters of different sizes)
-            let ioPer100: string = CREATURELOCKER.ioPer100Line(this._creatureID);
-            this.tDescription.htmlText = "<b>" + KEYS.Get(as3.str(data.name)) + "</b><br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(this._creatureID) + "</font><br>" + (ioPer100 ? "<font color=\"#1E5A7A\">" + ioPer100 + "</font><br>" : "") + KEYS.Get(as3.str(data.description));
-            // (11 November: its synergy, or that a champion has none; 27 November: placed by ioFitTexts, at the end)
+            // (27 November: the same layout as the Academy and the Incubators: CREATURELOCKER.ioInfoHtml, the synergy in it)
+            let ioUnlocked: boolean = Boolean(CREATURELOCKER._lockerData[this._creatureID]) && CREATURELOCKER._lockerData[this._creatureID].t == 2;
+            this.tDescription.htmlText = CREATURELOCKER.ioInfoHtml(this._creatureID, ioUnlocked ? CREATURELOCKER.ioLevelText(this._creatureID) : "", CREATURELOCKER.ioPer100Line(this._creatureID));
         }
         str = "";
         // (Inferno-only, QoL #346, 14 October: while another monster unlocks, this one's costs still show, with the
@@ -392,63 +392,15 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
      * size, and the synergy line, last, with them. Now: the synergy goes under the unlock line in the box below when it
      * fits there (an unlocked monster's box is nearly empty), else at the end of the description; the description is
      * drawn smaller to fit (down to 9); what still doesn't fit scrolls (the wheel over it, or the arrow at its foot).
+     * (Later the same day: the synergy is in the description, as in the Academy and the Incubators: ioInfoHtml.)
      */
     private ioFitTexts(): void {
-        let syn: string = IoSynergy.describe(this._creatureID);
-        let line: string = syn ? "<font color=\"#0B6B58\">" + syn + "</font>" : "";
         this.tDescription.scrollV = 1;
         this.tCosts.scrollV = 1;
-        if (line) {
-            let costs: string = this.tCosts.htmlText;
-            this.tCosts.htmlText = costs + "<p>" + line + "</p>";
-            GLOBAL.ioFitHeight(this.tCosts, 9);
-            if (this.tCosts.textHeight > this.tCosts.height - 4) {
-                this.tCosts.htmlText = costs;
-                this.tDescription.htmlText += "<br>" + line;
-            }
-        }
-        GLOBAL.ioFitHeight(this.tDescription, 9);
         GLOBAL.ioFitHeight(this.tCosts, 9);
-        let more: boolean = this.tDescription.maxScrollV > 1;
-        if (!this._ioMore) {
-            this._ioMore = new Sprite();
-            this._ioMore.name = "ioDescMore";
-            this._ioMore.buttonMode = true;
-            let g: any = this._ioMore.graphics;
-            g.beginFill(0xffffff, 0.92);
-            g.drawRoundRect(-11, -9, 22, 18, 6, 6);
-            g.endFill();
-            g.beginFill(0x8a5a00);
-            g.moveTo(-5, -3);
-            g.lineTo(5, -3);
-            g.lineTo(0, 4);
-            g.endFill();
-            this._ioMore.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
-                let d: TextField = this.tDescription;
-                d.scrollV = d.scrollV >= d.maxScrollV ? 1 : d.scrollV + 3;
-                this.ioMoreArrow();
-            });
-            this.addEventListener(MouseEvent.MOUSE_WHEEL, (e: MouseEvent): void => {
-                let d: TextField = this.tDescription;
-                if (d.maxScrollV > 1 && d.hitTestPoint(e.stageX, e.stageY, false)) {
-                    d.scrollV = d.scrollV + (e.delta > 0 ? -1 : 1);
-                    this.ioMoreArrow();
-                }
-            });
-            this.addChild(this._ioMore);
-        }
-        this._ioMore.x = this.tDescription.x + this.tDescription.width - 14;
-        this._ioMore.y = this.tDescription.y + this.tDescription.height - 9;
-        this._ioMore.visible = more;
-        this.ioMoreArrow();
-    }
-
-    /** The arrow at the description's foot: down while there is more below, up at the end. */
-    private ioMoreArrow(): void {
-        if (this._ioMore) {
-            let d: TextField = this.tDescription;
-            this._ioMore.scaleY = d.scrollV >= d.maxScrollV ? -1 : 1;
-        }
+        // (its arrow and wheel scrolling: GLOBAL.ioScrollMore, shared with the Academy and the Incubation Control Station)
+        GLOBAL.ioScrollMore(this.tDescription, 9);
+        this._ioMore = (this.tDescription as any).ioMore || null;
     }
 
     public Start(param1: MouseEvent): void {

@@ -33,6 +33,7 @@ The Inferno roster grew from eight monsters to sixteen.
 
 - **Padlocks** on monsters you haven't unlocked, in every monster menu. The Strongbox says what an unlock takes ("Lv 2 · 38.4K Sulfur", red where you're short) and opens on the next monster to unlock.
 - **Damage per second** in the Strongbox, the Academy and the incubators, worked out from how often a monster really hits, and its health and damage **per 100 housing**, to compare monsters of different sizes.
+- **One monster card everywhere:** the Strongbox, the Academy, the Incubator and the Incubation Control Station describe a monster the same way: its name and level (in the Academy, its training status), what it goes for, its abilities, its synergy, the description, then a tip (Shift-click to fill the Compound, or tap to add on a phone). A long one has a small arrow and scrolls with the mouse wheel.
 - **A tag line** in monster info: what it goes for, whether it flies, burrows or jumps walls (Balthazar: "Stopped by walls"), and its reach. The attack bar's tips show health and damage per second too.
 - The Academy says "Needs Academy level N" and still shows the training's cost and time, and what it's busy with and for how long; its upgrade says what level monsters it can then train to.
 - Clicking a locked monster in the Incubator says it isn't unlocked yet, with Open the Strongbox; not enough magma says how much it costs and what you have, with Top up. The window shows the Compound's room, with what's queued.

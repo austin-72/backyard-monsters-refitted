@@ -1052,6 +1052,66 @@ export class GLOBAL extends ASObject {
         }
     }
 
+    /**
+     * Inferno-only (27 November, the Strongbox's, the Academy's and the Incubation Control Station's descriptions cut
+     * off): ioFitHeight, then, when the text still doesn't fit, a small arrow at the field's foot (in its parent):
+     * a click scrolls it on (back to the top at the end), and the mouse wheel over the field scrolls it. Called again
+     * whenever the field's text changes: the arrow is made once, moved, and shown only while there's more.
+     */
+    public static ioScrollMore(field: TextField, smallest: int = 9): void {
+        if (!GLOBAL.INFERNO_ONLY || !field) {
+            return;
+        }
+        field.scrollV = 1;
+        GLOBAL.ioFitHeight(field, smallest);
+        let f: any = field;
+        let host: DisplayObjectContainer = field.parent;
+        let more: boolean = field.maxScrollV > 1;
+        let arrow: Sprite = f.ioMore;
+        if (!arrow && host && more) {
+            arrow = new Sprite();
+            arrow.name = "ioDescMore";
+            arrow.buttonMode = true;
+            let g: any = arrow.graphics;
+            g.beginFill(0xffffff, 0.92);
+            g.drawRoundRect(-11, -9, 22, 18, 6, 6);
+            g.endFill();
+            g.beginFill(0x8a5a00);
+            g.moveTo(-5, -3);
+            g.lineTo(5, -3);
+            g.lineTo(0, 4);
+            g.endFill();
+            let flip = (): void => {
+                arrow.scaleY = field.scrollV >= field.maxScrollV ? -1 : 1;
+            };
+            f.ioMoreFlip = flip;
+            arrow.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                field.scrollV = field.scrollV >= field.maxScrollV ? 1 : field.scrollV + 3;
+                flip();
+                e.stopPropagation();
+            });
+            host.addEventListener(MouseEvent.MOUSE_WHEEL, (e: MouseEvent): void => {
+                if (field.maxScrollV > 1 && field.stage && field.hitTestPoint(e.stageX, e.stageY, false)) {
+                    field.scrollV = field.scrollV + (e.delta > 0 ? -1 : 1);
+                    flip();
+                }
+            });
+            f.ioMore = arrow;
+        }
+        if (!arrow) {
+            return;
+        }
+        if (host && arrow.parent != host) {
+            host.addChild(arrow);
+        }
+        arrow.x = field.x + field.width - 14;
+        arrow.y = field.y + field.height - 9;
+        arrow.visible = more && field.visible;
+        if (f.ioMoreFlip) {
+            f.ioMoreFlip();
+        }
+    }
+
     /** Any number of any building: admin test mode, or a wild tribe / Moloch design. */
     public static ioNoLimits(): boolean {
         return GLOBAL.ioTestMode() || GLOBAL.ioDesignFree();

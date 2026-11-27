@@ -292,9 +292,10 @@ export class ACADEMYPOPUP extends ACADEMYPOPUP_CLIP {
         if (GLOBAL.INFERNO_ONLY) {
             // (QoL #352: what it goes for, how it moves and its reach; QoL #356: the levels its abilities come at.
             // Under the status, before the description; all of it drawn smaller when it runs long)
-            let ioAbilities: string = CREATURELOCKER.ioAbilitiesLine(ACADEMYPOPUP._monsterID);
-            this.tName.htmlText = "<b>" + KEYS.Get("acad_mon_name") + "</b> " + KEYS.Get(as3.str(CREATURELOCKER._creatures[ACADEMYPOPUP._monsterID].name)) + "<br><b>" + KEYS.Get("acad_mon_status") + "</b> " + _loc3_.status + "<br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(ACADEMYPOPUP._monsterID) + "</font>" + (ioAbilities ? "<br>" + ioAbilities : "") + "<br>" + KEYS.Get(as3.str(CREATURELOCKER._creatures[ACADEMYPOPUP._monsterID].description));
-            GLOBAL.ioFitHeight(this.tName, 9);
+            // (27 November: the same layout as the Strongbox and the Incubators: CREATURELOCKER.ioInfoHtml, the status by the name)
+            this.tName.htmlText = CREATURELOCKER.ioInfoHtml(ACADEMYPOPUP._monsterID, as3.str(_loc3_.status));
+            // (27 November, 72's bug reports: a long one was cut off at 9 px: its arrow and the wheel, GLOBAL.ioScrollMore)
+            GLOBAL.ioScrollMore(this.tName, 9);
         }
         let _loc6_: int = 0;
         if ((_loc6_ = CREATURES.GetProperty(ACADEMYPOPUP._monsterID, "damage") | 0) > 0) {

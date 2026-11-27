@@ -8703,5 +8703,6 @@
     "io_jobs_started": "Lancé depuis votre file : #v1#",
     "io_jobs_queue_full": "C'est déjà en file jusqu'au bout.",
     "io_jobs_tip": "Toutes les améliorations et calcifications possibles, à lancer ou mettre en file.",
-    "io_jobs_tip_queued": "#v1# en file : ils démarrent seuls quand un ouvrier se libère."
+    "io_jobs_tip_queued": "#v1# en file : ils démarrent seuls quand un ouvrier se libère.",
+    "io_jobs_queue_add": "Mettre en file"
 }

@@ -4,12 +4,17 @@
   "entries": [
     {
       "date": "2026-11-27",
-      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, and fixes",
+      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, and fixes",
       "items": [
         {
           "area": "Yard",
           "title": "Jobs list",
-          "text": "A new Jobs button beside your first worker lists every upgrade and calcification your yard can have next, with what it costs and how long it takes. Start one at once, or Queue it: queued jobs start by themselves, one after another, as soon as a worker is free and you have the resources (while you have the yard open). Tick \"Pick warts before starting the next job\" and your workers pick the yard's warts first."
+          "text": "A new Jobs button in the workers' column, under your workers and above Pick all warts, lists every upgrade and calcification your yard can have next, with what it costs and how long it takes. Start one at once, or Queue it: queued jobs start by themselves, one after another, as soon as a worker is free and you have the resources (while you have the yard open). Tick \"Pick warts before starting the next job\" and your workers pick the yard's warts first."
+        },
+        {
+          "area": "Yard",
+          "title": "Add to queue when every worker is busy",
+          "text": "When you try to upgrade or calcify with every worker busy, All Workers Are Busy now has Add to queue: the job goes in your Jobs queue and starts by itself when a worker is free."
         },
         {
           "area": "Yard",
@@ -57,9 +62,18 @@
           "text": "On Browse, clicking an alliance's badge or name opens its card: its badge large, its whole description, its leader and members, and Actions."
         },
         {
+          "area": "Monsters",
+          "title": "One monster card everywhere",
+          "text": "A monster's description now reads the same in the Strongbox, the Academy, the Incubator and the Incubation Control Station: its name with its level (or its training status), what it goes for, its abilities, its synergy, then the description, and last a tip where there is one. The Strongbox still adds its health and damage per 100 housing. A long one has the small arrow and scrolls in all four."
+        },
+        {
           "area": "Fixes",
           "title": "The Strongbox's long descriptions",
-          "text": "A monster's description that didn't fit used to run off the panel, and the synergy line could go missing with it. Long descriptions now have a small arrow and scroll with the mouse wheel, the synergy shows under the costs, and big costs read short (2.2M Magma)."
+          "text": "A monster's description that didn't fit used to run off the panel, and the synergy line could go missing with it. Long descriptions now have a small arrow and scroll with the mouse wheel, the synergy shows under the costs, and big costs read short (2.2M Magma).",
+          "later": {
+            "date": "2026-11-27",
+            "note": "the synergy now sits in the description, as in the other monster windows"
+          }
         },
         {
           "area": "Fixes",
@@ -75,6 +89,16 @@
           "area": "Fixes",
           "title": "Online dots in chat",
           "text": "The dot by each name in the chat lines stayed green for everyone. It now turns grey when that player goes offline, and green again when they come back, checked every minute."
+        },
+        {
+          "area": "Fixes",
+          "title": "Long monster descriptions in the Academy and the Incubation Control Station",
+          "text": "A long description was cut off at the bottom. It now has a small arrow and scrolls with the mouse wheel, as in the Strongbox."
+        },
+        {
+          "area": "Interface",
+          "title": "No limit on reports above level 40",
+          "text": "If your yard is above level 40 you can send as many bug reports and suggestions from the right-click menu as you like."
         }
       ]
     },

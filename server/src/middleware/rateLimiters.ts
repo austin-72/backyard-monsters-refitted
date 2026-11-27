@@ -2,7 +2,9 @@ import { hasChatSession } from "../chat/chatHttpBridge.js";
 import { RateLimit } from "koa2-ratelimit";
 import { Env } from "../enums/Env.js";
 import { Status } from "../enums/StatusCodes.js";
-import type { Context } from "koa";
+import type { Context, Next } from "koa";
+import type { User } from "../database/models/user.model.js";
+import { feedbackUncapped } from "../services/feedback/playerFeedback.js";
 
 /**
  * Keys a limiter by account, falling back to IP only for unauthenticated routes.
@@ -221,7 +223,7 @@ export const crucibleLimiter = RateLimit.middleware({
  * Inferno-only (25 November): the game's right-click menu (feedback, feedback/mine): 20 requests a minute per player
  * (the reports themselves have their own limits: services/feedback/playerFeedback.ts).
  */
-export const feedbackLimiter = RateLimit.middleware({
+const feedbackLimiterCapped = RateLimit.middleware({
   interval: { min: 1 },
   max: 20,
   prefixKey: "feedback",
@@ -230,6 +232,12 @@ export const feedbackLimiter = RateLimit.middleware({
     refuse(ctx, Status.OK, { error: "Too many requests. Wait a moment." });
   },
 });
+/** (27 November) Not for a player with no cap on reports: above level 40, or an admin (feedbackUncapped). */
+export const feedbackLimiter = async (ctx: Context, next: Next) => {
+  const user = (ctx as unknown as { authUser?: User }).authUser;
+  if (user && (await feedbackUncapped(user).catch(() => false))) return next();
+  return feedbackLimiterCapped(ctx, next);
+};
 
 /** Inferno-only (13 November): the Devil's Contract (devil/*): 30 requests a minute per player. */
 export const devilLimiter = RateLimit.middleware({

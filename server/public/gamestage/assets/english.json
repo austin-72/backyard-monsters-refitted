@@ -8703,5 +8703,6 @@
     "io_jobs_started": "Started from your queue: #v1#",
     "io_jobs_queue_full": "That's queued as far as it goes.",
     "io_jobs_tip": "Every upgrade and calcification this yard can have, to start or queue.",
-    "io_jobs_tip_queued": "#v1# queued: they start by themselves as workers come free."
+    "io_jobs_tip_queued": "#v1# queued: they start by themselves as workers come free.",
+    "io_jobs_queue_add": "Add to queue"
 }

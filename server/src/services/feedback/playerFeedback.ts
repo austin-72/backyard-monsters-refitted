@@ -19,8 +19,10 @@ import type { User } from "../../database/models/user.model.js";
  * game says). Admins read and answer them in the panel's Feedback tab; the player sees the status and the answer
  * under My reports. `bun run feedback` (scripts/feedback.ts) writes the open ones out to read and review.
  *
- * Limits: a player sends at most 6 reports in 10 minutes and 30 a day (admins 200 a day); text up to 3000
- * characters; each picture up to 1.5 MB (JPEG, PNG or WebP, checked by its first bytes).
+ * Limits: a player sends at most 6 reports in 10 minutes and 30 a day; (27 November, the user's: "remove the cap on
+ * reports being sent. No cap for players ... > level 40 in game") none for a player whose main yard is above level 40,
+ * nor for an admin. Text up to 3000 characters; each picture up to 1.5 MB (JPEG, PNG or WebP, checked by its first
+ * bytes).
  */
 
 export const FEEDBACK_KINDS = ["bug", "idea"] as const;
@@ -34,7 +36,8 @@ export const TEXT_MAX = 3000;
 const PICTURE_MAX = 1.5 * 1024 * 1024;
 const PER_10_MIN = 6;
 const PER_DAY = 30;
-const PER_DAY_STAFF = 200;
+/** Above this level (the main yard's), no cap. */
+export const UNCAPPED_ABOVE_LEVEL = 40;
 
 export class FeedbackRefused extends Error {}
 
@@ -73,6 +76,24 @@ const boxOf = (v: unknown): number[] | null => {
   return n.every((x) => Number.isFinite(x) && Math.abs(x) < 100000) ? n : null;
 };
 
+const uncappedSeen = new Map<number, { at: number; yes: boolean }>();
+/** No cap on reports for this player: an admin, or a main yard above UNCAPPED_ABOVE_LEVEL (known for a minute). */
+export const feedbackUncapped = async (user: User): Promise<boolean> => {
+  if (adminRole(user)) return true;
+  const seen = uncappedSeen.get(user.userid);
+  if (seen && Date.now() - seen.at < 60_000) return seen.yes;
+  let yes = false;
+  try {
+    const rows = await sqlRows<{ level: number }>(`SELECT level FROM bym.save WHERE userid = ? AND type = 'main' LIMIT 1`, [user.userid]);
+    yes = Number(rows[0]?.level ?? 0) > UNCAPPED_ABOVE_LEVEL;
+  } catch {
+    yes = false;
+  }
+  if (uncappedSeen.size > 5000) uncappedSeen.clear();
+  uncappedSeen.set(user.userid, { at: Date.now(), yes });
+  return yes;
+};
+
 /** Counts a report against the player's limits; refused when over one. */
 const countAgainstLimits = async (user: User, staff: boolean) => {
   const day = new Date().toISOString().slice(0, 10);
@@ -82,8 +103,9 @@ const countAgainstLimits = async (user: User, staff: boolean) => {
   if (recent === 1) await redis.send("EXPIRE", [shortKey, "600"]).catch(() => 0);
   const today = Number(await redis.send("INCR", [dayKey]).catch(() => 0));
   if (today === 1) await redis.send("EXPIRE", [dayKey, String(26 * 3600)]).catch(() => 0);
-  if (!staff && recent > PER_10_MIN) throw new FeedbackRefused("limit");
-  if (today > (staff ? PER_DAY_STAFF : PER_DAY)) throw new FeedbackRefused("limit");
+  if (staff) return;
+  if (recent > PER_10_MIN) throw new FeedbackRefused("limit");
+  if (today > PER_DAY) throw new FeedbackRefused("limit");
 };
 
 export interface FeedbackInput {
@@ -112,7 +134,7 @@ export const recordFeedback = async (user: User, input: FeedbackInput, userAgent
   const shot = pictureOf(input.shot);
   const picture = pictureOf(input.picture);
   const role = adminRole(user);
-  await countAgainstLimits(user, !!role);
+  await countAgainstLimits(user, await feedbackUncapped(user));
 
   const h = (input.highlight ?? null) as { pic?: unknown; stage?: unknown } | null;
   const highlight = h && typeof h === "object" ? { pic: boxOf(h.pic), stage: boxOf(h.stage) } : null;
