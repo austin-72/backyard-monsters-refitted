@@ -8756,5 +8756,13 @@
     "io_t3c_odds_note_deal": "Ir até ao fim paga a média dos prémios. As ofertas do Coveiro são de 75% a 97% da média ainda selada.",
     "io_t3c_odds_note_ascent": "A chance de chegar a um multiplicador é 99,99% dividido por ele. Recolha antes de ele ser abatido.",
     "io_t3c_odds_note_derby": "As odds de cada corrida estão nos corredores: 99,99% dividido pela chance de ganhar, arredondado para baixo.",
-    "io_t3c_odds_foot": "As chances sem sorte (ver Equidade). Cada resultado é sorteado no servidor. Clique para fechar."
+    "io_t3c_odds_foot": "As chances sem sorte (ver Equidade). Cada resultado é sorteado no servidor. Clique para fechar.",
+    "io_t3m_dc_w_crab": "Caranguejos de lava",
+    "io_t3m_dc_w_skeleton": "Esqueletos",
+    "io_t3m_dc_w_penguin": "Pinguins",
+    "io_t3m_dc_w_ghost": "Fantasmas",
+    "io_t3m_dc_w_robot": "Robôs de corda",
+    "io_t3m_dc_w_slug_orange": "Lesmas de lava",
+    "io_t3m_dc_w_slug_green": "Lesmas tóxicas",
+    "io_t3m_dc_w_slug_purple": "Lesmas de alma"
 }

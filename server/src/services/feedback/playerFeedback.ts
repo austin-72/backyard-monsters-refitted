@@ -4,6 +4,7 @@ import { adminRole } from "../admin/admin.js";
 import { sendAlert } from "../admin/alerts.js";
 import { clientOf } from "../admin/bugReports.js";
 import type { User } from "../../database/models/user.model.js";
+import { playerLevel } from "../yard/terrain.js";
 
 /**
  * Inferno-only (25 November, the user's: "Make it so right clicking shows options that are not game related like
@@ -84,8 +85,8 @@ export const feedbackUncapped = async (user: User): Promise<boolean> => {
   if (seen && Date.now() - seen.at < 60_000) return seen.yes;
   let yes = false;
   try {
-    const rows = await sqlRows<{ level: number }>(`SELECT level FROM bym.save WHERE userid = ? AND type = 'main' LIMIT 1`, [user.userid]);
-    yes = Number(rows[0]?.level ?? 0) > UNCAPPED_ABOVE_LEVEL;
+    // (the level as the game works it out: bym.save's own level column stays 1; terrain.ts playerLevel)
+    yes = (await playerLevel(user.userid)) > UNCAPPED_ABOVE_LEVEL;
   } catch {
     yes = false;
   }

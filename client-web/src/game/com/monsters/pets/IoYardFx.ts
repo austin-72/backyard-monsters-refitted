@@ -166,6 +166,56 @@ export class IoYardFx extends ASObject {
         return fx;
     }
 
+    /** (27 November) A puff of steam (a clockwork robot's chimney): a soft white cloud. */
+    public static steamArt(): BitmapData {
+        if (!IoYardFx._art.steam) {
+            let s: Shape = new Shape();
+            s.graphics.beginFill(0xF0F0F0, 0.55);
+            s.graphics.drawCircle(7, 7, 6);
+            s.graphics.endFill();
+            s.graphics.beginFill(0xFFFFFF, 0.5);
+            s.graphics.drawCircle(5, 5, 3.5);
+            s.graphics.endFill();
+            let b: BitmapData = new BitmapData(14, 14, true, 0);
+            b.draw(as3.cast(s, IBitmapDrawable), null, null, null, null, true);
+            IoYardFx._art.steam = b;
+        }
+        return as3.cast(IoYardFx._art.steam, BitmapData);
+    }
+
+    /** (27 November) A slug's trail: a flat glowing smear on the ground, of this colour. */
+    public static trailArt(color: uint): BitmapData {
+        let key: string = "t:" + color;
+        if (!IoYardFx._art[key]) {
+            let s: Shape = new Shape();
+            s.graphics.beginFill(color, 0.25);
+            s.graphics.drawEllipse(0, 0, 16, 7);
+            s.graphics.endFill();
+            s.graphics.beginFill(color, 0.45);
+            s.graphics.drawEllipse(3, 1.5, 10, 4);
+            s.graphics.endFill();
+            let b: BitmapData = new BitmapData(16, 7, true, 0);
+            b.draw(as3.cast(s, IBitmapDrawable), null, null, null, null, true);
+            IoYardFx._art[key] = b;
+        }
+        return as3.cast(IoYardFx._art[key], BitmapData);
+    }
+
+    /** A puff of steam, rising and drifting. */
+    public static steam(x: number, y: number, depthY: number): any {
+        let fx: any = IoYardFx.show(IoYardFx.steamArt(), x, y, depthY + 2, 36, -0.6);
+        fx.vx = (Math.random() - 0.3) * 0.4;
+        return fx;
+    }
+
+    /** A slug's trail on the ground: it stays put (under everything standing there) and fades over two seconds. */
+    public static trail(x: number, y: number, color: uint): any {
+        let fx: any = IoYardFx.show(IoYardFx.trailArt(color), x, y - 2, y, 80, 0);
+        fx.flat = true;
+        IoYardFx.place(fx);
+        return fx;
+    }
+
     // ---- showing them
     /**
      * Shows a picture centred at (x, y) on the map's building layer, drawn over what stands at depthY there. It
@@ -242,7 +292,8 @@ export class IoYardFx extends ASObject {
             let offset: Point = MAP.instance.offset;
             fx.pt.x = (left - offset.x) | 0;
             fx.pt.y = (top - offset.y) | 0;
-            fx.raster.depth = (fx.depthY - offset.y) * 1000 + fx.x - offset.x + 5000;
+            // (a trail lies on the ground: with the shadows, under everything standing)
+            fx.raster.depth = fx.flat ? MAP.DEPTH_SHADOW + 1 : (fx.depthY - offset.y) * 1000 + fx.x - offset.x + 5000;
             fx.raster.alpha = a;
         } else if (fx.bm) {
             fx.bm.x = left;

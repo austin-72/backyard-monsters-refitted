@@ -14,7 +14,8 @@ import { outpostsHeld, playerLevel } from "./terrain.js";
  *
  *   chatColor   the colour of the player's name in chat (one of CHAT_COLORS; none: black)
  *   workerSkin  "inferno" (the Inferno's imps, the default), "overworld" (the overworld's builders), or (27 November)
- *               "frog" / "frog_red" (frogs that hop): the
+ *               "frog" / "frog_red" (frogs that hop), and the same day crab, skeleton, penguin, ghost, robot,
+ *               slug_orange / slug_green / slug_purple: the
  *               player's workers in every yard of theirs, as everyone sees them
  *   champSkins  { IC9: "frozen", IC10: "frozen" }: Korath's and Drull's frozen look, once Hell Freezes Over's last
  *               wave is won: the player's own Korath and Drull, at home, in attacks and to visitors
@@ -77,7 +78,8 @@ const isFx = (c: string) => Object.hasOwn(NAME_FX, c);
 const lookOf = (c: string | null | undefined): string | null => (c ? ((isColor(c) ? CHAT_COLORS[c] : null) ?? (isFx(c) ? NAME_FX[c].spec : null)) : null);
 
 // (27 November, 72's suggestion) and the frogs, green and red, that hop all around
-export const WORKER_SKINS = ["inferno", "overworld", "frog", "frog_red"] as const;
+// (the same day, the user's) lava crabs, skeletons, penguins, ghosts, clockwork robots, and slugs in three colours
+export const WORKER_SKINS = ["inferno", "overworld", "frog", "frog_red", "crab", "skeleton", "penguin", "ghost", "robot", "slug_orange", "slug_green", "slug_purple"] as const;
 /** (14 October) Korath, Drull, Ashkarr, Rimegrave and the Basilisk. */
 export const CHAMPIONS = ["IC9", "IC10", "IC24", "IC25", "IC32"] as const;
 /**
@@ -202,12 +204,14 @@ export const setDave = async (user: User, key: string, raw: unknown) => {
     if (need > 0) {
       if ((await invitesForLooks(user.userid)) < need) throw new DaveError(inviteLockText(need, await acceptedInvites(user.userid)));
     }
-    const outpostsNeed = NAME_FX_OUTPOSTS[value] ?? 0;
+    // (27 November, the user's: admins and moderators have every look, whatever opens it)
+    const free = await inviteLooksFree(user.userid).catch(() => false);
+    const outpostsNeed = free ? 0 : (NAME_FX_OUTPOSTS[value] ?? 0);
     if (outpostsNeed > 0) {
       const held = await outpostsHeld(user.userid);
       if (held < outpostsNeed) throw new DaveError(`Hold ${outpostsNeed.toLocaleString("en-US")} outposts to have this look (you hold ${held.toLocaleString("en-US")}).`);
     }
-    const levelNeed = NAME_FX_LEVELS[value] ?? 0;
+    const levelNeed = free ? 0 : (NAME_FX_LEVELS[value] ?? 0);
     if (levelNeed > 0) {
       const level = await playerLevel(user.userid);
       if (level < levelNeed) throw new DaveError(`Reach level ${levelNeed} to have this look (you are level ${level}).`);

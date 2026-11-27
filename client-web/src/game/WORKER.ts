@@ -8,7 +8,7 @@ import { BASE, BFOUNDATION, BYMConfig, Bounce, GLOBAL, GRID, ImageCache, IoDave,
 
 export class WORKER extends WORKER_CLIP {
     static {
-        as3.fields(this, { _behaviour: null, _middle: 0, _speed: NaN, _targetRotation: NaN, _targetPosition: null, _targetTask: null, _hasPath: false, _frameNumber: NaN, _scale: NaN, _targetBuilding: null, _id: 0, _size: NaN, _container: null, _graphic: null, _lastRotation: 400, _messageMC: null, frameCount: 0, showTimer: null, hideTimer: null, yd: 0, xd: 0, _mc: null, _waypoints: null, _waypointIndex: 0, _hasGraphic: false, configObject: null, _jumping: false, _jumpingUp: false, _graphicMC: null, _rasterData: null, _rasterPt: null, ioDance: 0, ioFollow: 0, _ioHop: 0, _ioBaseY: -36, _ioFronted: false, _ioFrogT: 0, _ioFrogRow: 0, _ioFrogIdle: 0 });
+        as3.fields(this, { _behaviour: null, _middle: 0, _speed: NaN, _targetRotation: NaN, _targetPosition: null, _targetTask: null, _hasPath: false, _frameNumber: NaN, _scale: NaN, _targetBuilding: null, _id: 0, _size: NaN, _container: null, _graphic: null, _lastRotation: 400, _messageMC: null, frameCount: 0, showTimer: null, hideTimer: null, yd: 0, xd: 0, _mc: null, _waypoints: null, _waypointIndex: 0, _hasGraphic: false, configObject: null, _jumping: false, _jumpingUp: false, _graphicMC: null, _rasterData: null, _rasterPt: null, ioDance: 0, ioFollow: 0, _ioHop: 0, _ioBaseY: -36, _ioFronted: false, _ioFrogT: 0, _ioFrogRow: 0, _ioFrogIdle: 0, _ioLookX: 0 });
     }
 
     public _behaviour: string;
@@ -132,7 +132,7 @@ export class WORKER extends WORKER_CLIP {
             if (this._middle) {
                 _loc2_ = this._middle;
             }
-            this._rasterPt.x = this.x + this._graphicMC.x - _loc1_.x;
+            this._rasterPt.x = this.x + this._graphicMC.x + this._ioLookX - _loc1_.x;
             this._rasterPt.y = this.y + this._graphicMC.y - this._ioHop - _loc1_.y;
             this._rasterData.depth = Math.max(MAP.DEPTH_SHADOW + 1, (this.y - _loc1_.y + _loc2_) * 1000 + this.x - _loc1_.x);
         }
@@ -151,13 +151,14 @@ export class WORKER extends WORKER_CLIP {
         let _loc1_: int = (Math.random() * 600) | 0;
         if (GLOBAL.INFERNO_ONLY && this.ioPlay()) {
             // (dancing or following the pointer: IoWorkerFun)
-        } else if (_loc1_ < (GLOBAL.INFERNO_ONLY && IoDave.frogWorkers ? 14 : 5) && !this._targetTask && this._speed == 0) {
+        } else if (_loc1_ < (GLOBAL.INFERNO_ONLY && IoDave.workerKind == "frog" ? 14 : 5) && !this._targetTask && this._speed == 0) {
             // (27 November: a frog hops all around, off somewhere new about three times as often)
             this.Wander();
         }
         this.Move();
         if (GLOBAL.INFERNO_ONLY && this.ioDance <= 0) {
             this.ioFrog();
+            this.ioLook();
         }
         if (this._hasGraphic) {
             this.Update();
@@ -271,7 +272,7 @@ export class WORKER extends WORKER_CLIP {
      * hops on the spot. Nothing for the imps or the builders.
      */
     private ioFrog(): void {
-        if (!IoDave.frogWorkers) {
+        if (IoDave.workerKind != "frog") {
             return;
         }
         let row: int = 0;
@@ -304,12 +305,117 @@ export class WORKER extends WORKER_CLIP {
         }
     }
 
+    /** (27 November) Sideways, a jiggle (a skeleton's rattle, a penguin's waddle), drawn: updateRasterData. */
+    private _ioLookX: number;
+
+    /**
+     * Inferno-only (27 November, the user's: "add 1/2/4/5/6/7 (in 3 colors)"): how the looks with sheets of their own
+     * move (the frogs: ioFrog). Rows: 0 and 1 of the look's sheet (art/workers/make_workers.py).
+     *   crab      scuttles sideways (drawn across its way: Update), its legs going; standing, now and then clacks its claws
+     *   skeleton  rattles as it walks; standing, now and then takes its head off and holds it, then puts it back
+     *   penguin   waddles; a long way to go, it slides on its belly
+     *   ghost     floats, bobbing, see-through, and goes straight through buildings and walls (Target, Move);
+     *             standing, now and then says boo
+     *   robot     clanks along, puffing steam; at work, sparks; standing, now and then winds its key
+     *   slug      glides, stretching and bunching, leaving a glowing trail that fades (its colour)
+     */
+    private ioLook(): void {
+        let kind: string = IoDave.workerKind;
+        if (!kind || kind == "frog") {
+            return;
+        }
+        let row: int = 0;
+        let moving: boolean = this._speed > 0.05 && (this._hasPath || this._waypoints.length > 0);
+        this._ioLookX = 0;
+        this._ioHop = 0;
+        let t: int = this._frameNumber | 0;
+        let p: Point = null;
+        if (moving) {
+            this._ioFrogIdle = 0;
+        }
+        if (kind == "crab") {
+            if (moving) {
+                row = ((t / 5) | 0) % 2;
+                this._ioHop = Math.abs(Math.sin(t / 3)) * 1.5;
+            } else if (this._ioFrogIdle > 0) {
+                this._ioFrogIdle--;
+                row = ((this._ioFrogIdle / 4) | 0) % 2;
+            } else if (!GLOBAL._catchup && Math.random() < 0.005) {
+                this._ioFrogIdle = 24;
+            }
+        } else if (kind == "skeleton") {
+            if (moving) {
+                this._ioLookX = t % 6 < 3 ? 1 : -1;
+                this._ioHop = Math.abs(Math.sin(t / 4)) * 2;
+            } else if (this._ioFrogIdle > 0) {
+                this._ioFrogIdle--;
+                row = 1;
+            } else if (!GLOBAL._catchup && !this._targetTask && Math.random() < 0.003) {
+                this._ioFrogIdle = 70;
+            }
+        } else if (kind == "penguin") {
+            if (moving) {
+                let left: number = this._waypoints.length * 30;
+                if (this._targetPosition) {
+                    left += Point.distance(this._targetPosition, new Point(this.x, this.y));
+                }
+                if (left > 160) {
+                    row = 1;
+                } else {
+                    this._ioLookX = Math.sin(t / 3) * 1.6;
+                    this._ioHop = Math.abs(Math.sin(t / 3)) * 1.5;
+                }
+            }
+        } else if (kind == "ghost") {
+            this._ioHop = 7 + 3 * Math.sin(t / 12);
+            if (this._ioFrogIdle > 0) {
+                this._ioFrogIdle--;
+                row = 1;
+            } else if (!moving && !GLOBAL._catchup && Math.random() < 0.004) {
+                this._ioFrogIdle = 30;
+            }
+        } else if (kind == "robot") {
+            if (moving) {
+                this._ioHop = Math.abs(Math.sin(t / 4)) * 1.2;
+                if (t % 45 == 0 && !GLOBAL._catchup) {
+                    IoYardFx.steam(this.x - 4, this.y - 30, this.y);
+                }
+            } else if (this._ioFrogIdle > 0) {
+                this._ioFrogIdle--;
+                row = 1;
+            } else if (this._targetTask && this._targetTask._hasWorker) {
+                if (t % 14 == 0 && !GLOBAL._catchup) {
+                    IoYardFx.ember(this.x + 6, this.y - 16, this.y + 2, 0xFFD040);
+                }
+            } else if (!GLOBAL._catchup && Math.random() < 0.004) {
+                this._ioFrogIdle = 40;
+            }
+        } else if (kind == "slug") {
+            if (moving) {
+                row = ((t / 10) | 0) % 2;
+                if (t % 7 == 0 && !GLOBAL._catchup) {
+                    IoYardFx.trail(this.x, this.y + 1, IoDave.workerSkinColor);
+                }
+            }
+        }
+        if (row != this._ioFrogRow) {
+            this._ioFrogRow = row;
+            if (this._hasGraphic) {
+                this.Update(true);
+            }
+        }
+        if (this._rasterData) {
+            this._rasterData.alpha = kind == "ghost" ? 0.8 : 1;
+        }
+    }
+
     public Update(param1: boolean = false): void {
-        if (GLOBAL.INFERNO_ONLY && IoDave.frogWorkers && SPRITES._sprites && SPRITES._sprites.worker) {
-            // (a frog: its row, sitting or in the air, as well as its facing)
+        if (GLOBAL.INFERNO_ONLY && IoDave.workerSheet && SPRITES._sprites && SPRITES._sprites.worker) {
+            // (a frog: its row, sitting or in the air, as well as its facing; the other looks with sheets the same:
+            // ioLook; a crab faces across the way it goes, as crabs scuttle sideways)
             if (param1 || this._lastRotation != ((this.mcMarker.rotation / 12) | 0)) {
                 this._lastRotation = (this.mcMarker.rotation / 12) | 0;
-                let r: int = (((this.mcMarker.rotation % 360) + 360) % 360) | 0;
+                let r: int = ((((this.mcMarker.rotation + (IoDave.workerKind == "crab" ? 90 : 0)) % 360) + 360) % 360) | 0;
                 SPRITES.GetFrame(this._graphic, SPRITES._sprites.worker, (r / 12) | 0, this._ioFrogRow);
             }
             return;
@@ -325,7 +431,11 @@ export class WORKER extends WORKER_CLIP {
         if (param2) {
             this._ioFronted = false;
         }
-        if (!GLOBAL._catchup) {
+        if (!GLOBAL._catchup && GLOBAL.INFERNO_ONLY && IoDave.workerKind == "ghost") {
+            // (27 November: a ghost goes straight there, through whatever is between)
+            this._hasPath = true;
+            this._waypoints = [new Point(param1.x, param1.y)];
+        } else if (!GLOBAL._catchup) {
             _loc3_ = new Rectangle(param1.x, param1.y, 10, 10);
             if (param2) {
                 _loc3_ = new Rectangle(param2._mc.x, param2._mc.y, param2._footprint[0].width, param2._footprint[0].height);
@@ -345,7 +455,7 @@ export class WORKER extends WORKER_CLIP {
         let Distance: int = 0;
         if (this._waypoints.length > 0) {
             this._targetPosition = as3.cast(this._waypoints[0], Point);
-            if (!this._jumping) {
+            if (!this._jumping && !(GLOBAL.INFERNO_ONLY && IoDave.workerKind == "ghost")) {
                 building = PATHING.GetBuildingFromISO(this._targetPosition);
                 if (building) {
                     if (building.health > 0) {

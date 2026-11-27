@@ -507,7 +507,8 @@ export class IoTerrainPopup extends ASObject {
             // (27 November, 72's suggestion: the looks opened by holding outposts, and by the player's level)
             let needOutposts: int = fx.needOutposts | 0;
             let needLevel: int = fx.needLevel | 0;
-            let open: boolean = IoDave.unlocked(need) && (me.outposts | 0) >= needOutposts && (me.level | 0) >= needLevel;
+            let open: boolean = IoDave.inviteFree || (IoDave.unlocked(need) && (me.outposts | 0) >= needOutposts && (me.level | 0) >= needLevel);
+            // (27 November, the user's: admins and moderators have every look: IoDave.inviteFree)
             let lockText: string = need > 0 ? IoDave.inviteLock(need) : (needOutposts > 0 ? KEYS.Get("io_t3m_dc_outpost_lock", { "v1": GLOBAL.FormatNumber(needOutposts) }) : KEYS.Get("io_t3m_dc_level_lock", { "v1": needLevel }));
             let at: int = (names.length + k) | 0;
             let fb: Sprite = this.box(gx + (at % cols) * (bw + 12), gy + ((at / cols) | 0) * (bh + 30), bw, bh, String(fx.name) + (open ? "" : KEYS.Get("io_t3m_dc_locked")), (me.chatColor || null) == id, open, (): void => {
@@ -563,16 +564,21 @@ export class IoTerrainPopup extends ASObject {
     private workersTab(): void {
         this.intro(KEYS.Get("io_t3m_dc_workers_intro"));
         let me: any = IoDave.mine;
-        let skin: string = me.workerSkin == "overworld" || me.workerSkin == "frog" || me.workerSkin == "frog_red" ? String(me.workerSkin) : "inferno";
-        // (27 November, 72's suggestion: two frogs, green and red, that hop all around: four looks in a row)
-        let bw: int = 140;
-        let bh: int = 150;
-        let rows: any[] = [["inferno", KEYS.Get("io_t3m_dc_w_imps"), "monsters/inferno_worker.v2.png", 64, 55, 2.0, 0, 3], ["overworld", KEYS.Get("io_t3m_dc_w_builders"), "monsters/worker.png", 27, 27, 4.0, 1, 3], ["frog", KEYS.Get("io_t3m_dc_w_frog"), "monsters/io_frog.png", 64, 55, 2.0, 0, 5], ["frog_red", KEYS.Get("io_t3m_dc_w_frog_red"), "monsters/io_frog_red.png", 64, 55, 2.0, 0, 5]];
+        let skin: string = me.workerSkin == "overworld" || IoDave.WORKER_SHEETS[String(me.workerSkin)] ? String(me.workerSkin) : "inferno";
+        // (27 November, 72's suggestion: two frogs, green and red, that hop all around; later the same day the user's
+        // crabs, skeletons, penguins, ghosts, robots and slugs in three colours: twelve looks, six to a row)
+        let bw: int = 92;
+        let bh: int = 112;
+        let rows: any[] = [["inferno", KEYS.Get("io_t3m_dc_w_imps"), "monsters/inferno_worker.v2.png", 64, 55, 1.4, 0, 3], ["overworld", KEYS.Get("io_t3m_dc_w_builders"), "monsters/worker.png", 27, 27, 3.0, 1, 3]];
+        for (let look of ["frog", "frog_red", "crab", "skeleton", "penguin", "ghost", "robot", "slug_orange", "slug_green", "slug_purple"]) {
+            rows.push([look, KEYS.Get("io_t3m_dc_w_" + look), String(IoDave.WORKER_SHEETS[look]), 64, 55, 1.4, 0, look.indexOf("slug") == 0 ? 2 : 5]);
+        }
         // (the builders' second row wears the yellow hard hat)
         for (let i: int = 0; i < rows.length; i++) {
             let r: any[] = rows[i];
             let id: string = String(r[0]);
-            let b: Sprite = this.box(-((rows.length * bw + (rows.length - 1) * 12) / 2) + i * (bw + 12), this._top + 150, bw, bh, String(r[1]), skin == id, true, (): void => {
+            let perRow: int = 6;
+            let b: Sprite = this.box(-((perRow * bw + (perRow - 1) * 8) / 2) + (i % perRow) * (bw + 8), this._top + 130 + ((i / perRow) | 0) * (bh + 30), bw, bh, String(r[1]), skin == id, true, (): void => {
                 this.choose("workerSkin", id, (): void => {
                     IoDave.setYard({ "workerSkin": id, "champSkins": IoDave.mine.champSkins });
                     SPRITES.ioWorkerSprite();

@@ -8756,5 +8756,13 @@
     "io_t3c_odds_note_deal": "Going to the end pays the prizes' average. The Undertaker's offers are 75% to 97% of the average still sealed.",
     "io_t3c_odds_note_ascent": "The chance of reaching any multiplier is 99.99% over it. Cash out before he is shot down.",
     "io_t3c_odds_note_derby": "Each race's odds are on its runners: 99.99% over their chance of winning, rounded down.",
-    "io_t3c_odds_foot": "The odds without luck (see Fairness). Every result is drawn on the server. Click to close."
+    "io_t3c_odds_foot": "The odds without luck (see Fairness). Every result is drawn on the server. Click to close.",
+    "io_t3m_dc_w_crab": "Lava crabs",
+    "io_t3m_dc_w_skeleton": "Skeletons",
+    "io_t3m_dc_w_penguin": "Penguins",
+    "io_t3m_dc_w_ghost": "Ghosts",
+    "io_t3m_dc_w_robot": "Clockwork robots",
+    "io_t3m_dc_w_slug_orange": "Lava slugs",
+    "io_t3m_dc_w_slug_green": "Toxic slugs",
+    "io_t3m_dc_w_slug_purple": "Soul slugs"
 }

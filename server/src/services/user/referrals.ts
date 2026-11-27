@@ -166,11 +166,17 @@ export const inviteProgress = async (userid: number): Promise<{ joined: number; 
   return { joined: Number(rows[0]?.joined ?? 0), paid: Number(rows[0]?.paid ?? 0), waiting: Number(rows[0]?.waiting ?? 0) };
 };
 
-/** Admins and moderators have the invite-only looks without inviting anyone. */
+/**
+ * Admins and moderators have the invite-only looks without inviting anyone, and (27 November, the user's: "unlock
+ * everything for admins/mods in terms of grounds/chat names in dave club") every ground and name look, whatever opens
+ * it (outposts, level, Hell Freezes Over: terrain.ts, dave.ts). Admins: the config's names, and an account given a role
+ * in the panel (owner, admin, support); moderators: the chat's.
+ */
 export const inviteLooksFree = async (userid: number): Promise<boolean> => {
   if (!userid) return false;
-  const rows = (await postgres.em.getConnection().execute(`SELECT username FROM bym."user" WHERE userid = ?`, [userid])) as { username: string }[];
+  const rows = (await postgres.em.getConnection().execute(`SELECT username, admin_role FROM bym."user" WHERE userid = ?`, [userid])) as { username: string; admin_role: string | null }[];
   if (!rows[0]?.username) return false;
+  if (["owner", "admin", "support"].includes(String(rows[0].admin_role ?? ""))) return true;
   return (await roleOf(userid, rows[0].username).catch(() => null)) != null;
 };
 

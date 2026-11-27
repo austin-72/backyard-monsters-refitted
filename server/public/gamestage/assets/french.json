@@ -8756,5 +8756,13 @@
     "io_t3c_odds_note_deal": "Aller jusqu'au bout rend la moyenne des prix. Les offres du Croque-mort valent 75 % à 97 % de la moyenne encore scellée.",
     "io_t3c_odds_note_ascent": "La chance d'atteindre un multiplicateur est 99,99 % divisé par lui. Encaissez avant qu'il soit abattu.",
     "io_t3c_odds_note_derby": "Les cotes de chaque course sont sur ses coureurs : 99,99 % divisé par leur chance de gagner, arrondi vers le bas.",
-    "io_t3c_odds_foot": "Les chances sans la chance (voir Équité). Chaque résultat est tiré sur le serveur. Cliquez pour fermer."
+    "io_t3c_odds_foot": "Les chances sans la chance (voir Équité). Chaque résultat est tiré sur le serveur. Cliquez pour fermer.",
+    "io_t3m_dc_w_crab": "Crabes de lave",
+    "io_t3m_dc_w_skeleton": "Squelettes",
+    "io_t3m_dc_w_penguin": "Manchots",
+    "io_t3m_dc_w_ghost": "Fantômes",
+    "io_t3m_dc_w_robot": "Robots mécaniques",
+    "io_t3m_dc_w_slug_orange": "Limaces de lave",
+    "io_t3m_dc_w_slug_green": "Limaces toxiques",
+    "io_t3m_dc_w_slug_purple": "Limaces d'âme"
 }

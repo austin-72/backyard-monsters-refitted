@@ -3,7 +3,8 @@ import { BaseType } from "../../enums/Base.js";
 import { infernoOnlyConfig } from "../../config/InfernoOnlyConfig.js";
 import { postgres } from "../../server.js";
 import { hfoFinalWaveWon } from "../events/hfo.js";
-import { acceptedInvites, INVITE_UNLOCKS, inviteLockText, invitesForLooks } from "../user/referrals.js";
+import { acceptedInvites, INVITE_UNLOCKS, inviteLockText, inviteLooksFree, invitesForLooks } from "../user/referrals.js";
+import { calculateBaseLevel } from "../base/calculateBaseLevel.js";
 
 /**
  * Inferno-only (10 October): the D.A.V.E. Club's ground for the main yard. Every ground the game has can be
@@ -32,10 +33,15 @@ export const OUTPOST_GROUNDS: Record<string, number> = { io_sulfur: 50, io_magma
 /** (27 November, 72's suggestion: "3 more backgrounds, unlocked by being level 30,40,50") Opened by the main yard's level. */
 export const LEVEL_GROUNDS: Record<string, number> = { io_cinder: 30, io_amethyst: 40, io_hellforge: 50 };
 
-/** A player's level (their main yard's). */
+/**
+ * A player's level: their main yard's, worked out from its points and value as the game does (calculateBaseLevel).
+ * (27 November, the user's: "I am level 49 and have none unlocked": bym.save's own level column stays 1, it is
+ * only set on the copy a load sends; it was read here.)
+ */
 export const playerLevel = async (userid: number): Promise<number> => {
-  const rows = (await postgres.em.getConnection().execute(`SELECT level FROM bym.save WHERE userid = ? AND type = ? LIMIT 1`, [userid, BaseType.MAIN], "all")) as { level: number | string | null }[];
-  return Number(rows[0]?.level ?? 0) || 0;
+  const rows = (await postgres.em.getConnection().execute(`SELECT points, basevalue FROM bym.save WHERE userid = ? AND type = ? LIMIT 1`, [userid, BaseType.MAIN], "all")) as { points: string | number | null; basevalue: string | number | null }[];
+  if (!rows[0]) return 0;
+  return calculateBaseLevel(String(rows[0].points ?? "0"), String(rows[0].basevalue ?? "0"));
 };
 
 /** How many outposts a player holds. */
@@ -66,6 +72,8 @@ export const terrainOf = async (userid: number): Promise<string | null> => {
  * at level 30, 40 and 50.
  */
 export const terrainsFor = async (userid: number): Promise<string[]> => {
+  // (27 November, the user's: "unlock everything for admins/mods in terms of grounds/chat names in dave club")
+  if (await inviteLooksFree(userid).catch(() => false)) return [...TERRAINS];
   const hfo = await hfoFinalWaveWon(userid).catch(() => false);
   const invites = await invitesForLooks(userid).catch(() => 0);
   const outposts = await outpostsHeld(userid).catch(() => 0);
@@ -78,20 +86,24 @@ export const setTerrain = async (user: User, raw: unknown): Promise<string> => {
   if (!terrainEnabled()) throw new TerrainError("Grounds can't be chosen here.");
   const terrain = String(raw ?? "");
   if (!(TERRAINS as readonly string[]).includes(terrain)) throw new TerrainError("There is no such ground.");
-  if (HFO_TERRAINS.has(terrain) && !(await hfoFinalWaveWon(user.userid).catch(() => false))) {
+  // (admins and moderators: every ground, whatever opens it)
+  const free = await inviteLooksFree(user.userid).catch(() => false);
+  if (free) {
+    // (nothing to check)
+  } else if (HFO_TERRAINS.has(terrain) && !(await hfoFinalWaveWon(user.userid).catch(() => false))) {
     throw new TerrainError("Win the last wave of Hell Freezes Over to have its frozen ground.");
   }
-  const outpostsNeed = OUTPOST_GROUNDS[terrain] ?? 0;
+  const outpostsNeed = free ? 0 : (OUTPOST_GROUNDS[terrain] ?? 0);
   if (outpostsNeed > 0) {
     const held = await outpostsHeld(user.userid);
     if (held < outpostsNeed) throw new TerrainError(`Hold ${outpostsNeed.toLocaleString("en-US")} outposts to have this ground (you hold ${held.toLocaleString("en-US")}).`);
   }
-  const levelNeed = LEVEL_GROUNDS[terrain] ?? 0;
+  const levelNeed = free ? 0 : (LEVEL_GROUNDS[terrain] ?? 0);
   if (levelNeed > 0) {
     const level = await playerLevel(user.userid);
     if (level < levelNeed) throw new TerrainError(`Reach level ${levelNeed} to have this ground (you are level ${level}).`);
   }
-  const need = INVITE_UNLOCKS.grounds[terrain] ?? 0;
+  const need = free ? 0 : (INVITE_UNLOCKS.grounds[terrain] ?? 0);
   if (need > 0) {
     if ((await invitesForLooks(user.userid)) < need) throw new TerrainError(inviteLockText(need, await acceptedInvites(user.userid)));
   }

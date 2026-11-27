@@ -8757,5 +8757,13 @@
     "io_t3c_odds_note_deal": "Llegar al final paga la media de los premios. Las ofertas del Enterrador son del 75 % al 97 % de la media aún sellada.",
     "io_t3c_odds_note_ascent": "La probabilidad de llegar a un multiplicador es 99,99 % entre él. Cobra antes de que lo derriben.",
     "io_t3c_odds_note_derby": "Las cuotas de cada carrera están en sus corredores: 99,99 % entre su probabilidad de ganar, redondeado hacia abajo.",
-    "io_t3c_odds_foot": "Las probabilidades sin suerte (ver Equidad). Cada resultado se saca en el servidor. Haz clic para cerrar."
+    "io_t3c_odds_foot": "Las probabilidades sin suerte (ver Equidad). Cada resultado se saca en el servidor. Haz clic para cerrar.",
+    "io_t3m_dc_w_crab": "Cangrejos de lava",
+    "io_t3m_dc_w_skeleton": "Esqueletos",
+    "io_t3m_dc_w_penguin": "Pingüinos",
+    "io_t3m_dc_w_ghost": "Fantasmas",
+    "io_t3m_dc_w_robot": "Robots de cuerda",
+    "io_t3m_dc_w_slug_orange": "Babosas de lava",
+    "io_t3m_dc_w_slug_green": "Babosas tóxicas",
+    "io_t3m_dc_w_slug_purple": "Babosas de alma"
 }

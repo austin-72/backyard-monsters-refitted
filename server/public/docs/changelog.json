@@ -4,7 +4,7 @@
   "entries": [
     {
       "date": "2026-11-27",
-      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, level grounds, new name looks, frog workers, pets' tricks, the Pit's odds, and fixes",
+      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, one monster card everywhere, Rezghul fighting with his side, the wheel on every list, level grounds, new name looks, frog and five more kinds of workers, pets' tricks, the Pit's odds, and fixes",
       "items": [
         {
           "area": "Yard",
@@ -79,17 +79,30 @@
         {
           "area": "D.A.V.E. Club",
           "title": "Three grounds opened by your level",
-          "text": "Three more moving grounds, opened as you level up: the Cinder Steppe at level 30, its cracks smouldering, Amethyst Hollow at 40, purple soulflame flickering between violet crystal, and the Hellforge at 50, molten iron glowing between riveted plates and burning runes."
+          "text": "Three more moving grounds, opened as you level up: the Cinder Steppe at level 30, its cracks smouldering, Amethyst Hollow at 40, purple soulflame flickering between violet crystal, and the Hellforge at 50, molten iron glowing between riveted plates and burning runes.",
+          "later": {
+            "date": "2026-11-27",
+            "note": "fixed later the same day: the level was misread"
+          }
         },
         {
           "area": "D.A.V.E. Club",
           "title": "Eight new name looks",
-          "text": "New looks for your name in chat, with new moves. By how many outposts you hold: Sulfur Pulse (50), its colour breathing; Magma Flow (100); Witchfire (250), flickering letter by letter; Heartstone (500), a heartbeat; and Gilded (1,000), its letters twinkling. By level: Cinder (30), Amethyst (40) and Hellforge (50), a bright band running back and forth."
+          "text": "New looks for your name in chat, with new moves. By how many outposts you hold: Sulfur Pulse (50), its colour breathing; Magma Flow (100); Witchfire (250), flickering letter by letter; Heartstone (500), a heartbeat; and Gilded (1,000), its letters twinkling. By level: Cinder (30), Amethyst (40) and Hellforge (50), a bright band running back and forth.",
+          "later": {
+            "date": "2026-11-27",
+            "note": "fixed later the same day: the level was misread"
+          }
         },
         {
           "area": "D.A.V.E. Club",
           "title": "Frog workers",
           "text": "Two new looks for your workers: frogs, green or red. They hop all around your yard, going about their jobs in leaps and now and then hopping on the spot."
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Six more kinds of workers",
+          "text": "More looks for your workers, each moving its own way: lava crabs that scuttle sideways and clack their claws; skeletons that rattle along and now and then take their heads off; penguins that waddle, and slide on their bellies when they have far to go; ghosts that float, see-through, straight through buildings and walls, and say boo; clockwork robots that clank along puffing steam, give off sparks at work and wind their own keys; and slugs in orange, green or purple that glide along leaving a glowing trail."
         },
         {
           "area": "Pets",
@@ -133,12 +146,21 @@
         {
           "area": "Interface",
           "title": "No limit on reports above level 40",
-          "text": "If your yard is above level 40 you can send as many bug reports and suggestions from the right-click menu as you like."
+          "text": "If your yard is above level 40 you can send as many bug reports and suggestions from the right-click menu as you like.",
+          "later": {
+            "date": "2026-11-27",
+            "note": "fixed later the same day: the level was misread"
+          }
         },
         {
           "area": "Fixes",
           "title": "The Academy's description kept jumping to the top",
           "text": "Scrolling down a long monster description in the Academy put it back at the top a second later. It now stays where you scrolled it. In the Strongbox's list, a row that read \"Can start · 19.2K Sulfur\" lost its last word; it is now drawn smaller to fit."
+        },
+        {
+          "area": "Fixes",
+          "title": "Grounds and name looks opened by your level",
+          "text": "The grounds and name looks opened at levels 30, 40 and 50 stayed locked whatever your level. They now open at the level shown. The same mistake kept the limit on reports for players above level 40; that is fixed too."
         }
       ]
     },

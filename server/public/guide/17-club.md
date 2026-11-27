@@ -17,7 +17,7 @@ The D.A.V.E. Club's button, under your resources, opens the choices for how your
 
 ## Workers {#worker-looks}
 
-- Choose the Underworld imps, the Overworld builders, or **frogs**, green or red, that hop all around, as your workers, in all your yards.
+- Choose your workers' look, in all your yards: the Underworld imps, the Overworld builders, **frogs** (green or red) that hop all around, **lava crabs** that scuttle sideways, **skeletons** that rattle and lose their heads, **penguins** that slide on their bellies, **ghosts** that float through walls, **clockwork robots** that puff steam and wind their keys, or **slugs** (orange, green or purple) that leave a glowing trail.
 
 ## Signs {#signs}
 

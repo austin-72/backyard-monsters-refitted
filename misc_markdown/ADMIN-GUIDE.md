@@ -71,6 +71,8 @@ In the **Feedback** tab:
 4. **copy as text** for an issue or a message; **delete** removes it for the player too.
 
 A player can send 6 reports in 10 minutes and 30 a day; a player whose main yard is above level 40, and an admin, has no cap. On the server's computer, `docker compose exec -T web
+
+**Looks for staff:** admins (the config's names and any panel role: owner, admin, support) and chat moderators have every ground and every name look in the D.A.V.E. Club, whatever opens it for players (invites, outposts, level, Hell Freezes Over).
 bun run feedback` in `server` writes the open reports with their pictures to `server\logs\feedback\`.
 
 ## 4. Cheat reports and refused attacks

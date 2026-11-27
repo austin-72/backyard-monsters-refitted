@@ -147,9 +147,10 @@ export class SPRITES extends ASObject {
         }
         if (!BASE.isInfernoMainYardOrOutpost || IoDave.overworldWorkers) {
             SPRITES._sprites.worker = new SpriteData("monsters/worker.png", 27, 27, 9, 19);
-        } else if (IoDave.frogWorkers) {
-            // (27 November, 72's suggestion: the frogs, in the imps' layout; row 0 sitting, row 1 in the air: WORKER.ioFrog)
-            SPRITES._sprites.worker = new SpriteData(IoDave.frogWorkers, 64, 55, 32, 36);
+        } else if (IoDave.workerSheet) {
+            // (27 November, 72's suggestion: the frogs, in the imps' layout; row 0 sitting, row 1 in the air: WORKER.ioFrog;
+            // later the same day the other looks with sheets of their own: IoDave.WORKER_SHEETS, WORKER.ioLook)
+            SPRITES._sprites.worker = new SpriteData(IoDave.workerSheet, 64, 55, 32, 36);
         } else {
             SPRITES._sprites.worker = new SpriteData("monsters/inferno_worker.v2.png", 64, 55, 32, 36);
         }

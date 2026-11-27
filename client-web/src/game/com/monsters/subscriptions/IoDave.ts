@@ -66,8 +66,35 @@ export class IoDave extends ASObject {
      * red") The loaded yard's workers are frogs, green ("frog") or red ("frog_red"): their sheet, else null.
      */
     public static get frogWorkers(): string {
+        return IoDave.workerKind == "frog" ? IoDave.workerSheet : null;
+    }
+
+    /**
+     * (27 November, the user's: "add 1/2/4/5/6/7 (in 3 colors)") The workers drawn from a sheet of their own, by look:
+     * the frogs, the lava crabs, the skeletons, the penguins, the ghosts, the clockwork robots, the slugs (orange,
+     * green, purple). Each sheet is in the imps' layout, a row for each pose (art/workers/make_frogs.py, make_workers.py).
+     */
+    public static readonly WORKER_SHEETS: any = { "frog": "monsters/io_frog.png", "frog_red": "monsters/io_frog_red.png", "crab": "monsters/io_crab.png", "skeleton": "monsters/io_skeleton.png", "penguin": "monsters/io_penguin.png", "ghost": "monsters/io_ghost.png", "robot": "monsters/io_robot.png", "slug_orange": "monsters/io_slug_orange.png", "slug_green": "monsters/io_slug_green.png", "slug_purple": "monsters/io_slug_purple.png" };
+
+    /** The loaded yard's workers' own sheet (one of WORKER_SHEETS), or null for the imps and the builders. */
+    public static get workerSheet(): string {
         let s: string = GLOBAL.INFERNO_ONLY && IoDave._yard != null ? String(IoDave._yard.workerSkin) : "";
-        return s == "frog" ? "monsters/io_frog.png" : (s == "frog_red" ? "monsters/io_frog_red.png" : null);
+        return IoDave.WORKER_SHEETS[s] ? String(IoDave.WORKER_SHEETS[s]) : null;
+    }
+
+    /** (27 November) A slug's trail's colour, by its look. */
+    public static get workerSkinColor(): number {
+        let s: string = GLOBAL.INFERNO_ONLY && IoDave._yard != null ? String(IoDave._yard.workerSkin) : "";
+        return s == "slug_green" ? 0xB8F040 : (s == "slug_purple" ? 0xD080FF : 0xFF9A30);
+    }
+
+    /** What kind they are, for how they move (WORKER.ioLook): frog, crab, skeleton, penguin, ghost, robot, slug; "" none. */
+    public static get workerKind(): string {
+        let s: string = GLOBAL.INFERNO_ONLY && IoDave._yard != null ? String(IoDave._yard.workerSkin) : "";
+        if (!IoDave.WORKER_SHEETS[s]) {
+            return "";
+        }
+        return s == "frog_red" ? "frog" : (s.indexOf("slug_") == 0 ? "slug" : s);
     }
 
     /** The loaded yard's workers are the overworld's builders (their owner's choice). */
