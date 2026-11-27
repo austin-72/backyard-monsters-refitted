@@ -34,7 +34,7 @@ The Alliances window was redesigned in the game's familiar beige look. Open it f
 ## Recruiting and joining {#recruiting}
 
 - **Recruit** (leader and officers): suggested players, filtered by your world, a lowest level and players active in the last day, with pages; **Invite by name** for anyone else. The sent invites are listed (who, when and by whom) and can be cancelled; an invite runs out after 14 days, and it shows who sent it.
-- **Browse** ranks alliances by empire value (every member's main yard and outposts on the map), the same as the leaderboards. It finds alliances by tag or name, shows each one's tag, its members ("12/50" or Full), who can join, and how each alliance sees yours.
+- **Browse** ranks alliances by empire value (every member's main yard and outposts on the map), the same as the leaderboards. It finds alliances by tag or name, shows each one's tag, its members ("12/50" or Full), who can join, and how each alliance sees yours. Click an alliance's badge or name for its card: the badge large, its whole description, leader and members, and Actions.
 - **Asking to join** lets you add a few words for the leader; leaders and officers see them with the request, along with your level, world, outposts and when you were last on. Joining an alliance turns down your other pending invites.
 - A friend who joins the game through your invite link gets an invite into your alliance if you lead it or are an officer.
 

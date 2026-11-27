@@ -1804,6 +1804,10 @@ export class BYMChat extends Sprite {
         new URLLoaderApi().load(GLOBAL.serverUrl + "chat/online", [["v", 1], ["brief", 1]], (r: any): void => {
             if (r && !r.error && r.online != null && this.chatBox) {
                 this.chatBox.ioChat2Presence(!!r.hidden, r.online | 0);
+                // (27 November, 72's bug report: the dots on the lines follow who is online now)
+                if (as3.is(r.ids, Array)) {
+                    this.chatBox.ioDotsLive(r.ids);
+                }
             }
         }, (e: any): void => {
         });

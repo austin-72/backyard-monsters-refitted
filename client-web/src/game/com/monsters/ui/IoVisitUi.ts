@@ -1,11 +1,11 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
-import { DisplayObject, Shape, Sprite, Stage } from "flash/display";
+import { DisplayObject, MovieClip, Shape, Sprite, Stage } from "flash/display";
 import { Event, IOErrorEvent, KeyboardEvent, MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { TextField, TextFieldAutoSize } from "flash/text";
 import { getTimer } from "flash/utils";
-import { IoPlanShare, ALLIANCES, ALLIANCEWINDOW, ATTACK, AllianceConstants, BASE, BFOUNDATION, BRESOURCE, BSTORAGE, BUILDING5, Chat, EnumYardType, GLOBAL, InstanceManager, IoAllianceUi, IoChatMenu, IoCritterMenu, IoLeaderboards, IoMapShare, IoMapSnapshot, IoMapUi, IoPet, IoPets, IoPetsPanel, IoQuests, IoSign, IoToast, IoUnderworld, IoWhosOnline, KEYS, LOGIN, MAP, MapRoomCell, MapRoomManager, SOUNDS, UI2, URLLoaderApi, com_monsters_maproom_advanced_MapRoom as MapRoom } from "@game";
+import { IoPlanShare, ALLIANCES, ALLIANCEWINDOW, ATTACK, AllianceConstants, BASE, BFOUNDATION, BRESOURCE, BSTORAGE, BUILDING5, Chat, EnumYardType, GLOBAL, InstanceManager, IoAllianceUi, IoChatMenu, IoCritterMenu, IoLeaderboards, IoMapShare, IoMapSnapshot, IoMapUi, IoPet, IoPets, IoPetsPanel, IoQuests, IoSign, IoToast, IoUnderworld, IoWhosOnline, KEYS, LOGIN, MAP, MapRoomCell, MapRoomManager, SOUNDS, UI2, URLLoaderApi, com_monsters_maproom_advanced_MapRoom as MapRoom, IoYardHelp } from "@game";
 
 /**
  * Inferno-only (15 October, QoL #667-#669, #671, #672, #676): looking at another player's yard.
@@ -1179,6 +1179,34 @@ export class IoVisitUi extends ASObject {
         body.y = 28;
         c.addChild(body);
         let h: int = Math.ceil(body.y + body.height + 8) | 0;
+        // (27 November, 72's suggestion: Help out, a job here 5% nearer done, once a player a job: IoYardHelp)
+        if (IoYardHelp.canHelp(b)) {
+            let helped: boolean = IoYardHelp.helped(b);
+            let hb: MovieClip = IoMapUi.button(KEYS.Get(helped ? "io_help_btn_done" : "io_help_btn", { "v1": Math.round(IoYardHelp.share * 100) }), W - 20, 26, (e: MouseEvent): void => {
+                if (!IoYardHelp.helped(b)) {
+                    IoYardHelp.help(b, (): void => {
+                        if (IoVisitUi._card && IoVisitUi._card.parent) {
+                            let at: Point = new Point(IoVisitUi._card.x, IoVisitUi._card.y);
+                            IoVisitUi.showCard(b);
+                            if (IoVisitUi._card) {
+                                IoVisitUi._card.x = at.x;
+                                IoVisitUi._card.y = at.y;
+                            }
+                        }
+                    });
+                }
+            }, helped ? "grey" : "gold");
+            hb.name = "ioVisitHelp";
+            hb.x = 10;
+            hb.y = h - 2;
+            if (helped) {
+                hb.alpha = 0.6;
+                hb.mouseEnabled = false;
+                hb.mouseChildren = false;
+            }
+            c.addChild(hb);
+            h = (h + 32) | 0;
+        }
         IoMapUi.glass(c.graphics, W, h, 8);
         c.addEventListener(MouseEvent.MOUSE_DOWN, IoVisitUi.stop);
         let stage: Stage = GLOBAL._ROOT.stage;

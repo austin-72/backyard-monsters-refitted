@@ -154,7 +154,8 @@ import { crucibleGetStatus, cruciblePour } from "./controllers/crucible/crucible
 import { devilGetState, devilRefuse, devilSettle, devilSign } from "./controllers/devil/devil.js";
 import { shopBuy, shopCoat, shopGuard, shopHop, shopInfo, shopStatue, shopScout, shopTag } from "./controllers/shop/ioShop.js";
 import { trophiesOf } from "./controllers/events/trophies.js";
-import { workersSacrifice, workersUnsacrifice } from "./controllers/workers/workers.js";
+import { yardHelp, yardHelps } from "./controllers/yard/yardHelp.js";
+import { workersFeed, workersSacrifice, workersUnsacrifice } from "./controllers/workers/workers.js";
 import { terrainSet } from "./controllers/yard/terrain.js";
 import { daveBuy, daveSet } from "./controllers/yard/dave.js";
 import { attackWatchStatus, liveList, liveTicket, liveView, replayChunk, replayDownload, replayFavourite, replayGet, replayImport, replayLive, replayRaid } from "./controllers/replays/replays.js";
@@ -384,8 +385,13 @@ router.post("/trophies/of", verifyUserAuth, verifyAccountStatus, daveLimiter, lo
 router.post("/workers/sacrifice", verifyUserAuth, verifyAccountStatus, petsLimiter, logRequest, workersSacrifice);
 // (QoL #497: Moloch gives a sacrificed worker back within 2 minutes, while the Shiny is unspent)
 router.post("/workers/unsacrifice", verifyUserAuth, verifyAccountStatus, petsLimiter, logRequest, workersUnsacrifice);
+// Inferno-only (27 November): a worker fed a Spurtz, twice as fast for a week (services/shop/ioShop.ts feedWorker)
+router.post("/workers/feed", verifyUserAuth, verifyAccountStatus, petsLimiter, logRequest, workersFeed);
 // Inferno-only: the D.A.V.E. Club's ground for the main yard (services/yard/terrain.ts)
 router.post("/terrain/set", verifyUserAuth, verifyAccountStatus, petsLimiter, logRequest, terrainSet);
+// Inferno-only (27 November): a visitor helps out with a building's job; the owner's game takes the helps (services/yard/yardHelp.ts)
+router.post("/yard/help", verifyUserAuth, verifyAccountStatus, petsLimiter, logRequest, yardHelp);
+router.post("/yard/helps", verifyUserAuth, verifyAccountStatus, logRequest, yardHelps);
 // Inferno-only: the D.A.V.E. Club's other choices (services/yard/dave.ts)
 router.post("/dave/set", verifyUserAuth, verifyAccountStatus, daveLimiter, logRequest, daveSet);
 router.post("/dave/buy", verifyUserAuth, verifyAccountStatus, daveLimiter, logRequest, daveBuy);

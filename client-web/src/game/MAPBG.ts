@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, BitmapDataChannel, IBitmapDrawable } from "flash/di
 import { Point, Rectangle } from "flash/geom";
 import { getTimer } from "flash/utils";
 import { perlinArgs, perlinForget, perlinHave, perlinPrefetch, perlinStats, perlinWorkersAvailable } from "flash/_perlin";
-import { BASE, LOGGER, io_ashfall_big, io_obsidian_big, io_soulfire_big, hell_land1_1, hell_land1_2, hell_land1_3, hell_land1_4, hell_land2_1, hell_land2_2, hell_land2_3, hell_land2_4, hell_land3_1, hell_land3_2, hell_land3_3, hell_land3_4, hell_land4_1, hell_land4_2, hell_land4_3, hell_land4_4, hell_land5_1, hell_land5_2, hell_land5_3, hell_land5_4, hell_land6_1, hell_land6_2, hell_land6_3, hell_land6_4, hell_sand1_big, hell_sand2_big, hfo_frozen1, hfo_frozen2, hfo_frozen3, hfo_frozen4, inferno_lava1, inferno_lava2, inferno_lava3, inferno_lava4, isocrater1, isograss1, isograss2, isograss3, isograss4, isograss5, isograss6, isograss7, isorock1, isorock2, isorock3, isosand1, isosand2, isosand3, isosand4 } from "@game";
+import { BASE, LOGGER, io_ashfall_big, io_obsidian_big, io_soulfire_big, io_sulfur_big, io_magma_big, io_witchfire_big, io_bloodstone_big, io_gilded_big, hell_land1_1, hell_land1_2, hell_land1_3, hell_land1_4, hell_land2_1, hell_land2_2, hell_land2_3, hell_land2_4, hell_land3_1, hell_land3_2, hell_land3_3, hell_land3_4, hell_land4_1, hell_land4_2, hell_land4_3, hell_land4_4, hell_land5_1, hell_land5_2, hell_land5_3, hell_land5_4, hell_land6_1, hell_land6_2, hell_land6_3, hell_land6_4, hell_sand1_big, hell_sand2_big, hfo_frozen1, hfo_frozen2, hfo_frozen3, hfo_frozen4, inferno_lava1, inferno_lava2, inferno_lava3, inferno_lava4, isocrater1, isograss1, isograss2, isograss3, isograss4, isograss5, isograss6, isograss7, isorock1, isorock2, isorock3, isosand1, isosand2, isosand3, isosand4 } from "@game";
 
 export class MAPBG extends ASObject {
     public $ctor(): void {
@@ -109,6 +109,22 @@ export class MAPBG extends ASObject {
             }
             if (texture == "io_soulfire") {
                 return new io_soulfire_big(0, 0);
+            }
+            // (27 November, 72's suggestion: the grounds opened by how many outposts the player holds, one sheet each)
+            if (texture == "io_sulfur") {
+                return new io_sulfur_big(0, 0);
+            }
+            if (texture == "io_magma") {
+                return new io_magma_big(0, 0);
+            }
+            if (texture == "io_witchfire") {
+                return new io_witchfire_big(0, 0);
+            }
+            if (texture == "io_bloodstone") {
+                return new io_bloodstone_big(0, 0);
+            }
+            if (texture == "io_gilded") {
+                return new io_gilded_big(0, 0);
             }
             if (texture == "hfo_frozen") {
                 // Hell Freezes Over: the lava ground frozen over (the same four tiles, iced)

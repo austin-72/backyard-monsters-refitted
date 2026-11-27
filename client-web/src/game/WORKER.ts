@@ -4,7 +4,7 @@ import { Bitmap, BitmapData, DisplayObject, DisplayObjectContainer, IBitmapDrawa
 import { TimerEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
 import { Timer } from "flash/utils";
-import { BASE, BFOUNDATION, BYMConfig, Bounce, GLOBAL, GRID, ImageCache, IoDave, IoPets, IoYardFx, MAP, PATHING, RasterData, SPRITES, Sine, TweenLite, WORKER_CLIP, workerMessage } from "@game";
+import { BASE, BFOUNDATION, BYMConfig, Bounce, GLOBAL, GRID, ImageCache, IoDave, IoPets, IoWorkerFun, IoYardFx, MAP, PATHING, RasterData, SPRITES, Sine, TweenLite, WORKER_CLIP, workerMessage } from "@game";
 
 export class WORKER extends WORKER_CLIP {
     static {
@@ -340,6 +340,10 @@ export class WORKER extends WORKER_CLIP {
             }
         }
         newSpeed = this._speed;
+        // (Inferno-only, 27 November, admintester's: a worker fed a Spurtz walks twice as fast: IoWorkerFun)
+        if (GLOBAL.INFERNO_ONLY && IoWorkerFun.isFed(this)) {
+            newSpeed *= 2;
+        }
         if (this._jumping) {
             if (this._jumpingUp) {
                 newSpeed *= 3;

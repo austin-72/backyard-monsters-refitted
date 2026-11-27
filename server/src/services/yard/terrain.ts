@@ -19,7 +19,20 @@ export const TERRAINS = [
   "grass", "rock", "sand", "crater",
   "hfo_frozen",
   "io_ashfall", "io_obsidian", "io_soulfire",
+  "io_sulfur", "io_magma", "io_witchfire", "io_bloodstone", "io_gilded",
 ] as const;
+
+/**
+ * (27 November, 72's suggestion: "more animated yard backgrounds available based on outpost count") Moving grounds
+ * opened by how many outposts the player holds (their saves of type outpost, as the anticheat counts them).
+ */
+export const OUTPOST_GROUNDS: Record<string, number> = { io_sulfur: 50, io_magma: 100, io_witchfire: 250, io_bloodstone: 500, io_gilded: 1000 };
+
+/** How many outposts a player holds. */
+export const outpostsHeld = async (userid: number): Promise<number> => {
+  const rows = (await postgres.em.getConnection().execute(`SELECT count(*) AS n FROM bym.save WHERE saveuserid = ? AND type = ?`, [userid, BaseType.OUTPOST], "all")) as { n: string }[];
+  return Number(rows[0]?.n ?? 0) || 0;
+};
 
 /** Grounds that need Hell Freezes Over's last wave won. */
 export const HFO_TERRAINS = new Set<string>(["hfo_frozen"]);
@@ -37,13 +50,15 @@ export const terrainOf = async (userid: number): Promise<string | null> => {
 };
 
 /**
- * What the window may offer this player: every ground, the frozen one once wave 13 is won, and the invite grounds
- * (12 October: Ashfall, Obsidian Glass, Soulfire Rift) once 1, 2 and 3 friends have joined through their link.
+ * What the window may offer this player: every ground, the frozen one once wave 13 is won, the invite grounds
+ * (12 October: Ashfall, Obsidian Glass, Soulfire Rift) once 1, 2 and 3 friends have joined through their link, and the
+ * outpost grounds (27 November) once they hold 50, 100, 250, 500 and 1000 outposts.
  */
 export const terrainsFor = async (userid: number): Promise<string[]> => {
   const hfo = await hfoFinalWaveWon(userid).catch(() => false);
   const invites = await invitesForLooks(userid).catch(() => 0);
-  return TERRAINS.filter((t) => (hfo || !HFO_TERRAINS.has(t)) && invites >= (INVITE_UNLOCKS.grounds[t] ?? 0));
+  const outposts = await outpostsHeld(userid).catch(() => 0);
+  return TERRAINS.filter((t) => (hfo || !HFO_TERRAINS.has(t)) && invites >= (INVITE_UNLOCKS.grounds[t] ?? 0) && outposts >= (OUTPOST_GROUNDS[t] ?? 0));
 };
 
 /** Chooses the main yard's ground ("lava" puts it back to the Inferno's own). */
@@ -53,6 +68,11 @@ export const setTerrain = async (user: User, raw: unknown): Promise<string> => {
   if (!(TERRAINS as readonly string[]).includes(terrain)) throw new TerrainError("There is no such ground.");
   if (HFO_TERRAINS.has(terrain) && !(await hfoFinalWaveWon(user.userid).catch(() => false))) {
     throw new TerrainError("Win the last wave of Hell Freezes Over to have its frozen ground.");
+  }
+  const outpostsNeed = OUTPOST_GROUNDS[terrain] ?? 0;
+  if (outpostsNeed > 0) {
+    const held = await outpostsHeld(user.userid);
+    if (held < outpostsNeed) throw new TerrainError(`Hold ${outpostsNeed.toLocaleString("en-US")} outposts to have this ground (you hold ${held.toLocaleString("en-US")}).`);
   }
   const need = INVITE_UNLOCKS.grounds[terrain] ?? 0;
   if (need > 0) {

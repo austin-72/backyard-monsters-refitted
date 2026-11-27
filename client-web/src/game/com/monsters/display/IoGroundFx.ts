@@ -26,6 +26,12 @@ export class IoGroundFx extends ASObject {
         "io_ashfall": [["grounds/io_ashfall_glowA.jpg", "grounds/io_ashfall_glowB.jpg"], [[2200, 0], [2900, 2.1]], null],
         "io_obsidian": [["grounds/io_obsidian_glow.jpg"], null, [44, 22]],
         "io_soulfire": [["grounds/io_soulfire_glow.jpg"], [[2600, 0]], [52, 26]],
+        // (27 November, 72's suggestion: the outpost grounds)
+        "io_sulfur": [["grounds/io_sulfur_glowA.jpg", "grounds/io_sulfur_glowB.jpg"], [[1900, 0], [2500, 1.7]], null],
+        "io_magma": [["grounds/io_magma_glow.jpg"], [[3400, 0]], [30, 15]],
+        "io_witchfire": [["grounds/io_witchfire_glow.jpg"], [[2300, 0]], [38, 19]],
+        "io_bloodstone": [["grounds/io_bloodstone_glow.jpg"], [[1400, 0]], null],
+        "io_gilded": [["grounds/io_gilded_glow.jpg"], [[2800, 0]], [46, 23]],
     };
 
     public static readonly FLOW: string = "grounds/io_ground_flow.png";

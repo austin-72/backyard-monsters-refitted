@@ -1,6 +1,6 @@
 import * as as3 from "as3";
 import { int, uint } from "as3";
-import { Bitmap, BitmapData, DisplayObject, GradientType, MovieClip } from "flash/display";
+import { Bitmap, BitmapData, DisplayObject, GradientType, MovieClip, Sprite } from "flash/display";
 import { IOErrorEvent, KeyboardEvent, MouseEvent } from "flash/events";
 import { Matrix } from "flash/geom";
 import { TextField, TextFieldType, TextFormat, TextFormatAlign } from "flash/text";
@@ -95,7 +95,7 @@ export class BrowseTab extends AllianceTabBase {
     private _filterMode: int;
     private _filterBtnAll: MovieClip;
     private _filterBtnWorld: MovieClip;
-    private _activePopup: BrowseActionPopup;
+    private _activePopup: any;
     private _currentPage: int;
     private _totalPages: int;
     private _searchTerm: string;
@@ -593,6 +593,24 @@ export class BrowseTab extends AllianceTabBase {
                     descField.text = desc + "...";
                 }
             }
+            // (Inferno-only, 27 November, admintester's: the badge and the name clicked: the alliance's card, its badge
+            // large and its whole description)
+            if (GLOBAL.INFERNO_ONLY) {
+                let hit: Sprite = new Sprite();
+                hit.name = "ioAlBrowseCardHit";
+                hit.graphics.beginFill(0xffffff, 0);
+                hit.graphics.drawRect(0, 0, nameX + nameW - (BrowseTab.C_NAME_X + 1), BrowseTab.ROW_H);
+                hit.graphics.endFill();
+                hit.x = BrowseTab.C_NAME_X + 1;
+                hit.y = rowBaseY;
+                hit.buttonMode = true;
+                hit.useHandCursor = true;
+                tableMC.addChild(hit);
+                hit.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                    SOUNDS.Play("click1");
+                    this._ioShowCard(rowData);
+                });
+            }
             let full: boolean = (rowData.max | 0) > 0 && (rowData.members | 0) >= (rowData.max | 0);
             let online: int = rowData.online != null ? rowData.online | 0 : -1;
             this._addLabel(tableMC, (rowData.max | 0) > 0 ? (full ? KEYS.Get("io_ally_full") : rowData.members + "/" + rowData.max) : String(rowData.members), BrowseTab.C_MEM_X, (online >= 0 ? rowBaseY - 8 : rowBaseY) | 0, BrowseTab.C_MEM_W, BrowseTab.ROW_H, full, TextFormatAlign.CENTER, (full ? 0xC0281C : 0) >>> 0);
@@ -791,6 +809,78 @@ export class BrowseTab extends AllianceTabBase {
         this._activePopup.y = popY;
         this.addChild(this._activePopup);
         this.stage.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this._onStageMouseDown));
+    }
+
+    /**
+     * (Inferno-only, 27 November, admintester's: "clicking on an alliance badge should make it larger", and "clicking
+     * on an alliance name should make the description larger in a popup (combine this with badge recommendation)")
+     * A card in the middle of the tab: the badge at 150 px, the tag and name, the whole description, the leader and
+     * members, and Actions (the row's own popup). Closed by its X, a click outside it, or Actions.
+     */
+    private _ioShowCard(rowData: any): void {
+        this._dismissActivePopup();
+        const W: int = 460;
+        const BADGE: int = 150;
+        const PAD: int = 16;
+        let card: Sprite = new Sprite();
+        card.name = "ioAlBrowseCard";
+        let textX: int = (PAD + BADGE + 16) | 0;
+        let textW: int = (W - textX - PAD) | 0;
+        let title: TextField = IoAllianceUi.addText(card, (rowData.tag ? "[" + rowData.tag + "] " : "") + as3.str(rowData.name), textX, PAD, 15, AllianceConstants.IO_INK, true, (textW - 18) | 0, "left", false, true);
+        title.name = "ioAlCardName";
+        let y: int = (title.y + title.height + 4) | 0;
+        let facts: TextField = IoAllianceUi.addText(card, KEYS.Get("alliance_col_leader") + ": " + as3.str(rowData.leader) + "\n" + KEYS.Get("alliance_col_members") + ": " + ((rowData.max | 0) > 0 ? rowData.members + "/" + rowData.max : String(rowData.members)) + (rowData.online != null ? "  ·  " + KEYS.Get("io_al2_browse_online", { "v1": String(rowData.online | 0) }) : ""), textX, y, 11, AllianceConstants.IO_MUTED, false, textW, "left", false, true);
+        y = (facts.y + facts.height + 8) | 0;
+        let desc: string = rowData.desc ? String(rowData.desc) : KEYS.Get("io_al_card_nodesc");
+        let body: TextField = IoAllianceUi.addText(card, desc, textX, y, 13, AllianceConstants.IO_INK, false, textW, "left", false, true);
+        body.name = "ioAlCardDesc";
+        body.selectable = true;
+        body.mouseEnabled = true;
+        // (a long one: up to 220 px of it, scrolled with the wheel)
+        if (body.height > 220) {
+            body.height = 220;
+        }
+        let h: int = Math.max(PAD * 2 + BADGE, body.y + body.height + PAD + (rowData.self ? 0 : 34)) | 0;
+        card.graphics.lineStyle(2, AllianceConstants.TABLE_BORDER, 1);
+        card.graphics.beginFill(0xFBF4E6, 1);
+        card.graphics.drawRoundRect(0, 0, W, h, 14, 14);
+        card.graphics.endFill();
+        card.graphics.lineStyle(1, AllianceConstants.CELL_BORDER, 1);
+        card.graphics.beginFill(rowData.color >>> 0, 1);
+        card.graphics.drawRect(PAD - 4, PAD - 4, BADGE + 8, BADGE + 8);
+        card.graphics.endFill();
+        let badge: Sprite = new Sprite();
+        badge.name = "ioAlCardBadge";
+        badge.mouseEnabled = false;
+        badge.x = PAD;
+        badge.y = PAD;
+        card.addChild(badge);
+        IoAllianceUi.emblem(badge, rowData.image | 0, BADGE, rowData.crest);
+        let close: MovieClip = IoAllianceUi.button("X", 22, 22, (e: MouseEvent): void => {
+            SOUNDS.Play("close");
+            this._dismissActivePopup();
+        });
+        close.name = "ioAlCardClose";
+        close.x = W - 22 - 8;
+        close.y = 8;
+        card.addChild(close);
+        if (!rowData.self) {
+            let act: MovieClip = IoAllianceUi.button(KEYS.Get("alliance_col_actions"), 110, 26, (e: MouseEvent): void => {
+                SOUNDS.Play("click1");
+                this._showActionsPopup(rowData, (BrowseTab.POP_X - 30) | 0, Math.min(card.y, this.CONTENT_H - BrowseActionPopup.PopupHeight()) | 0);
+            });
+            act.name = "ioAlCardActions";
+            act.x = W - PAD - 110;
+            act.y = h - PAD - 26;
+            card.addChild(act);
+        }
+        card.x = ((this.CONTENT_W - W) / 2) | 0;
+        card.y = Math.max(8, ((this.CONTENT_H - h) / 2) | 0) | 0;
+        this._activePopup = card;
+        this.addChild(card);
+        if (this.stage) {
+            this.stage.addEventListener(MouseEvent.MOUSE_DOWN, as3.bind(this, this._onStageMouseDown));
+        }
     }
 
     private _dismissActivePopup(): void {

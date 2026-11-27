@@ -1265,6 +1265,8 @@ registerClasses({
     "com.monsters.baiter::IoBaiter": G.IoBaiter,
     "com.monsters.baiter::IoBaiterWindow": G.IoBaiterWindow,
     "com.monsters.feedback::IoFeedback": G.IoFeedback,
+    "com.monsters.visit::IoYardHelp": G.IoYardHelp,
+    "com.monsters.jobs::IoJobs": G.IoJobs,
     "com.monsters.devil::IoDevilMark": G.IoDevilMark,
     "com.monsters.devil::IoDevil": G.IoDevil,
     "com.monsters.devil::IoDevilWindow": G.IoDevilWindow,

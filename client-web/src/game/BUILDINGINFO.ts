@@ -342,6 +342,11 @@ export class BUILDINGINFO extends ASObject {
                             if (!BUILDINGINFO._building.isImmobile || GLOBAL._aiDesignMode) {
                                 _loc1_.push(["btn_move", 30]);
                             }
+                            // (Inferno-only, 27 November, admintester's: a decoration put in storage from here; it
+                            // was only from its Info window)
+                            if (GLOBAL.INFERNO_ONLY && BUILDINGINFO._props.type == "decoration" && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD && !BUILDINGINFO._building._blockRecycle && !GLOBAL.ioDesignMode()) {
+                                _loc1_.push(["btn_addstorage", 30]);
+                            }
                         }
                     }
                     if (_loc2_ && BUILDINGINFO._props.type == "taunt") {
@@ -678,6 +683,9 @@ export class BUILDINGINFO extends ASObject {
         }
         if (param1.target.labelKey == "btn_move") {
             BUILDINGINFO._building.StartMove();
+        }
+        if (param1.target.labelKey == "btn_addstorage" && GLOBAL.mode == GLOBAL.e_BASE_MODE.BUILD) {
+            BUILDINGINFO._building.RecycleB();
         }
         if (param1.target.labelKey == "btn_upgrade") {
             if (BUILDINGINFO._building._type == 14 && BUILDINGINFO._building._lvl.Get() && BUILDINGINFO._building._lvl.Get() < BUILDINGINFO._building._buildingProps.costs.length) {

@@ -20,7 +20,7 @@ Two towers, the Brimstone Pit and the Devil's Arcade were added, the Strongbox a
 ## How many you can build {#limits}
 
 - **More bone blocks in your main yard:** 10 at Under Hall 1, 50 at 2, 90 at 3, 160 at 4, 260 at 5 and 300 at 6 (the stock game has 0, 30, 60, 120, 200 and 220).
-- **A fourth Magma Tower** at Under Hall 6 (the stock game has 3).
+- **A fourth Magma Tower** at Under Hall 6 (the stock game has 3), and every Magma Tower reaches 25% further than the stock game's (225 at level 1 up to 313 at level 8).
 - **Outposts have their own limits:** 4 of each harvester, 1 Flinger, 1 Yard Planner, 2 hatcheries, 200 blocks, 40 traps, 4 of each tower, 2 Cinder Coils, 2 Obsidian Mortars, 1 Compound, 1 Incubation Control Station and 1 Juicer.
 - In the build menu, a building at its limit says when the Under Hall lets you build more ("+1 at Under Hall 5").
 - Yard Planner and decorations can be built in your main yard and in outposts (a few that don't suit the Inferno are left out).
@@ -47,6 +47,7 @@ Two towers, the Brimstone Pit and the Devil's Arcade were added, the Strongbox a
 ## Decorations {#decorations}
 
 - Decorations are built the moment you place them. After placing one from storage, the next one stays in your hand while more are stored (Esc stops); **Place all** on a stored decoration puts every one down next to the Under Hall.
+- **Add to Storage:** clicking a decoration in your yard shows it beside Move and Info.
 - **Animated decorations** (Decorations, Animated): a Bubbling Cauldron, a Chained Imp, a Lava Fountain, a Soul Lantern, a Hellfire Brazier, a Skull Totem, a Pendulum Blade, an Ember Geyser, the Eye of the Abyss, a Spit Roast, a Bat Weathervane, a Magma Waterwheel and a Tentacle Pit, 150 to 400 Shiny each (prices on the [Shiny page](/shiny)).
 - Trophies you win are decorations too (see [Events and rewards](13-events.md#trophies)).
 

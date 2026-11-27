@@ -5,7 +5,8 @@ The D.A.V.E. Club's button, under your resources, opens the choices for how your
 ## Ground {#grounds}
 
 - Pick the ground your yard stands on: every ground there is, from the Inferno's and the overworld's to the outposts'. It shows in your yard behind the Club at once, and goes back if you close without saving.
-- The last three are opened by inviting friends: **Ashfall**, its embers glowing (1 friend), **Obsidian Glass**, fire shifting through its seams (2), and the **Soulfire Rift**, its blue rivers flowing (3).
+- Three are opened by inviting friends: **Ashfall**, its embers glowing (1 friend), **Obsidian Glass**, fire shifting through its seams (2), and the **Soulfire Rift**, its blue rivers flowing (3).
+- Five more are opened by how many outposts you hold: **Sulfur Springs**, its springs bubbling (50), the **Magma Sea**, its lava shifting between the plates (100), the **Witchfire Marsh**, green fire flickering in its pools (250), **Bloodstone**, its veins beating (500), and the **Gilded Inferno**, its rivers of white-gold fire (1,000).
 
 ## Your name in chat {#name-colour}
 

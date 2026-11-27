@@ -146,7 +146,11 @@ let visitEpoch = 0;
 export function touch(o: DisplayObject | null | undefined, hiding = false): void {
   const s = visitEpoch + 1;
   let d: any = o;
-  while (d && d.$dk !== s) {
+  // (27 November, AkumaGath17's bug report, the Catapult's tooltips "slowly crashy": o itself is always gone up from,
+  // marked already or not. A change inside it while it was hidden marked it and stopped there (nothing shows inside
+  // something hidden); shown again in the same frame, its parents went unmarked, so the drawing stepped over them and
+  // the tooltip (its text set, then shown) was not drawn, or drawn in part, until something else round it changed.)
+  while (d && (d.$dk !== s || d === o)) {
     d.$dk = s;
     if (d.$maskOwner) touch(d.$maskOwner);
     // (inside something hidden nothing shows: showing it again marks it, and what it holds is then compared whole,

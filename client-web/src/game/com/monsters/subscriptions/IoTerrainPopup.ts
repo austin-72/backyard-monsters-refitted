@@ -6,7 +6,7 @@ import { DropShadowFilter, GlowFilter } from "flash/filters";
 import { Matrix, Point, Rectangle } from "flash/geom";
 import { AntiAliasType, TextField, TextFormat, TextFormatAlign } from "flash/text";
 import { getTimer } from "flash/utils";
-import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoDave, IoEmotes, IoHfo, IoPets, IoPetsPanel, IoSign, IoSkins, IoTrophies, KEYS, LOGIN, MAP, PLEASEWAIT, POPUPSETTINGS, IoWin, SOUNDS, SPRITES, URLLoaderApi, WORKERS, frame_CLIP, hell_land1_1, hell_land2_1, hell_land3_1, hell_land4_1, hell_land5_1, hell_land6_1, hell_sand1_big, hell_sand2_big, hfo_frozen1, inferno_lava1, io_ashfall_big, io_obsidian_big, io_soulfire_big, isocrater1, isograss1, isorock1, isosand1, UI_TOP, BUILDINGSPOPUP, IoChampionStatue, IoShop } from "@game";
+import { BASE, BUILDINGS, Button_CLIP, GLOBAL, ImageCache, InventoryManager, IoDave, IoEmotes, IoHfo, IoPets, IoPetsPanel, IoSign, IoSkins, IoTrophies, KEYS, LOGIN, MAP, PLEASEWAIT, POPUPSETTINGS, IoWin, SOUNDS, SPRITES, URLLoaderApi, WORKERS, frame_CLIP, hell_land1_1, hell_land2_1, hell_land3_1, hell_land4_1, hell_land5_1, hell_land6_1, hell_sand1_big, hell_sand2_big, hfo_frozen1, inferno_lava1, io_ashfall_big, io_obsidian_big, io_soulfire_big, isocrater1, isograss1, isorock1, isosand1, UI_TOP, BUILDINGSPOPUP, IoChampionStatue, IoShop, io_sulfur_big, io_magma_big, io_witchfire_big, io_bloodstone_big, io_gilded_big } from "@game";
 
 /**
  * Inferno-only (10 October): the D.A.V.E. Club. The button in the resources' column (UI_TOP.ioDaveClub) opens this
@@ -57,7 +57,13 @@ export class IoTerrainPopup extends ASObject {
         // (12 October) opened by inviting friends: 1, 2 and 3 who joined through the player's link
         ["io_ashfall", "Ashfall", io_ashfall_big],
         ["io_obsidian", "Obsidian Glass", io_obsidian_big],
-        ["io_soulfire", "Soulfire Rift", io_soulfire_big]]);
+        ["io_soulfire", "Soulfire Rift", io_soulfire_big],
+        // (27 November, 72's suggestion) opened by holding 50, 100, 250, 500 and 1000 outposts
+        ["io_sulfur", "Sulfur Springs", io_sulfur_big],
+        ["io_magma", "Magma Sea", io_magma_big],
+        ["io_witchfire", "Witchfire Marsh", io_witchfire_big],
+        ["io_bloodstone", "Bloodstone", io_bloodstone_big],
+        ["io_gilded", "Gilded Inferno", io_gilded_big]]);
     }
 
     private static _terrains: any[] = null;
@@ -84,6 +90,13 @@ export class IoTerrainPopup extends ASObject {
             return need[id] | 0;
         }
         return (id == "io_ashfall" ? 1 : (id == "io_obsidian" ? 2 : (id == "io_soulfire" ? 3 : 0))) | 0;
+    }
+
+    /** (27 November, 72's suggestion) The outpost grounds: how many outposts each needs (the server's OUTPOST_GROUNDS). */
+    public static readonly OUTPOST_GROUNDS: any = { "io_sulfur": 50, "io_magma": 100, "io_witchfire": 250, "io_bloodstone": 500, "io_gilded": 1000 };
+
+    public static outpostNeed(id: string): int {
+        return (IoTerrainPopup.OUTPOST_GROUNDS[id] | 0) as int;
     }
 
     /** The ground chosen for the loaded main yard (io_terrain), or null: its own. */
@@ -313,7 +326,7 @@ export class IoTerrainPopup extends ASObject {
         for (let row of as3.values(IoTerrainPopup.TERRAINS)) {
             let id: string = String(row[0]);
             let open: boolean = !allowed || allowed.indexOf(id) >= 0;
-            if ((id == "hfo_frozen" || IoTerrainPopup.inviteNeed(id) > 0) && !allowed) {
+            if ((id == "hfo_frozen" || IoTerrainPopup.inviteNeed(id) > 0 || IoTerrainPopup.outpostNeed(id) > 0) && !allowed) {
                 open = false;
             }
             let tile: Sprite = this.tile(id, IoTerrainPopup.terrainName(row), row[2], open);
@@ -1291,7 +1304,8 @@ export class IoTerrainPopup extends ASObject {
         } else {
             bm.alpha = 0.35;
             let need: int = IoTerrainPopup.inviteNeed(id);
-            let lock: TextField = IoTerrainPopup.label(need > 0 ? IoDave.inviteLock(need) : KEYS.Get("io_t3m_dc_hfo_lock"), 9, 0xFFFFFF, true, tw, TextFormatAlign.CENTER);
+            let outposts: int = IoTerrainPopup.outpostNeed(id);
+            let lock: TextField = IoTerrainPopup.label(need > 0 ? IoDave.inviteLock(need) : (outposts > 0 ? KEYS.Get("io_t3m_dc_outpost_lock", { "v1": GLOBAL.FormatNumber(outposts) }) : KEYS.Get("io_t3m_dc_hfo_lock")), 9, 0xFFFFFF, true, tw, TextFormatAlign.CENTER);
             if (need > 0) {
                 // (the invite: what opens it)
                 t.buttonMode = true;

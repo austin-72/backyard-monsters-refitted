@@ -1,5 +1,6 @@
 import "./config/normalizeEnv.js"; // first: every other module reads process.env.ENV as it loads
 import { countServerErrors } from "./services/admin/health.js";
+import { ensureYardHelp } from "./services/yard/yardHelp.js";
 import { ensureAllianceTag } from "./services/alliance/allianceTag.js";
 import { ensureAllianceCrest } from "./services/alliance/allianceCrest.js";
 import { ensureInviteColumns } from "./services/alliance/allianceInvites.js";
@@ -171,6 +172,8 @@ redis.onclose = (err) => logger.error(`Redis disconnected: ${err.message}`);
   // (22 October: the Store's Extras, the pets' coats and tags, Harvest Moon and Builders' Guild)
   await ensureIoShop().catch((err) => logger.error(`Shop: columns not ready: ${err}`));
   await ensureDevilContract().catch((err) => logger.error(`Devil's Contract: column not ready: ${err}`));
+  // (27 November: helping out with another player's jobs, services/yard/yardHelp.ts)
+  await ensureYardHelp().catch((err) => logger.error(`Yard help: table not ready: ${err}`));
 
   startAdminNames();
   // (QoL #268: an alert when the backups fail or are late, with ALERT_WEBHOOK_URL set)

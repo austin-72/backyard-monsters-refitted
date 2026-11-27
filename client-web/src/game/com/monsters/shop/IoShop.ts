@@ -44,9 +44,10 @@ export class IoShop extends ASObject {
      * Drone; Speed-Ups the Repair Crew, the Training Manual and the Academy Scholarship (they make things go faster);
      * Combat the Scout Report, Raid Insurance and Outpost Guard; Looks the Champion Statue (beside the animated
      * decorations, where it is put down) and the pets' Golden Coat, Name Tag and Treats. In Looks, "@id": a look had
-     * elsewhere (STORE.ioLookCard).
+     * elsewhere (STORE.ioLookCard). 27 November (admintester's): Short Hop is had from the map only (a yard's window
+     * there), not the Store; the Scout Report is gone from the game.
      */
-    public static readonly TAB_ITEMS: any = { 1: ["apprentice", "hop"], 2: ["drone"], 3: ["repair", "manual", "scholar"], 4: ["scout", "insure", "guard"], 5: ["@decor", "statue", "@skins", "@emotes", "@crests", "coat", "tag", "treats"] };
+    public static readonly TAB_ITEMS: any = { 1: ["apprentice"], 2: ["drone"], 3: ["repair", "manual", "scholar"], 4: ["insure", "guard"], 5: ["@decor", "statue", "@skins", "@emotes", "@crests", "coat", "tag", "treats"] };
 
     /** The Repair Crew's look at the yard, in ms. */
     public static readonly REPAIR_EVERY: int = 5000;
@@ -615,9 +616,16 @@ export class IoShop extends ASObject {
             let n: int = IoShop._data && as3.is(IoShop._data.scouted, Array) ? IoShop._data.scouted.length : 0;
             return n > 0 ? KEYS.Get("io_shop_scout_today", { "v1": n }) : "";
         }
-        if (id == "apprentice" && !IoShop.active("apprentice")) {
-            let next: number = IoShop._data ? Number(IoShop._data.apprenticeNext) || 0 : 0;
-            return next > IoShop.now() ? KEYS.Get("io_shop_apprentice_next", { "v1": GLOBAL.ioDuration(next - IoShop.now()) }) : "";
+        if (id == "apprentice") {
+            // (27 November: up to 5 at once: how many work, and when the next one's time is up)
+            let ends: any[] = IoShop.apprenticeEnds().filter((u: number): boolean => u > IoShop.now()).sort((a: number, b: number): number => a - b);
+            if (ends.length > 1) {
+                return KEYS.Get("io_shop_apprentices_working", { "v1": ends.length, "v2": IoShop.apprenticesMost(), "v3": GLOBAL.ioDuration(ends[0] - IoShop.now()) });
+            }
+            if (!IoShop.active("apprentice")) {
+                let next: number = IoShop._data ? Number(IoShop._data.apprenticeNext) || 0 : 0;
+                return next > IoShop.now() ? KEYS.Get("io_shop_apprentice_next", { "v1": GLOBAL.ioDuration(next - IoShop.now()) }) : "";
+            }
         }
         if (id == "insure") {
             let left: number = IoShop.insuredLeft();
@@ -641,20 +649,44 @@ export class IoShop extends ASObject {
     }
 
     /**
-     * How many Apprentices come out when the main yard is built (QUEUE.Spawn): one while it's hired; and one whose time
-     * is up but whose job isn't done (more jobs in the yard than the player's own workers: it finishes that first, as a
-     * job without a worker would be called off when the yard loads).
+     * (27 November, admintester's: up to 5 Apprentices at once, each its own 3 days, no wait between them.) Each one's
+     * end (the server's shopView: working, or ended in the last 30 days); before then, the one until.apprentice.
+     */
+    public static apprenticeEnds(): any[] {
+        if (!IoShop._data) {
+            return [];
+        }
+        if (as3.is(IoShop._data.apprentices, Array)) {
+            return IoShop._data.apprentices.map((u: any): number => Number(u) || 0);
+        }
+        let one: number = IoShop._data.until ? Number(IoShop._data.until.apprentice) || 0 : 0;
+        return one > 0 ? [one] : [];
+    }
+
+    /** How many Apprentices can work at once (5). */
+    public static apprenticesMost(): int {
+        return IoShop._data && (IoShop._data.apprenticesMost | 0) > 0 ? IoShop._data.apprenticesMost | 0 : 1;
+    }
+
+    /** How many Apprentices are hired now (their time not up). */
+    public static apprenticesWorking(): int {
+        let now: number = IoShop.now();
+        return IoShop.apprenticeEnds().filter((u: number): boolean => u > now).length | 0;
+    }
+
+    /**
+     * How many Apprentices come out when the main yard is built (QUEUE.Spawn): one for each hired; and one for each
+     * whose time is up but whose job isn't done (more jobs in the yard than the player's own workers and the hired
+     * Apprentices: it finishes that first, as a job without a worker would be called off when the yard loads).
      */
     public static apprenticeWorkers(): int {
         if (!GLOBAL.INFERNO_ONLY || !IoShop._data || !IoShop.ownYard()) {
             return 0;
         }
-        if (IoShop.active("apprentice")) {
-            return 1;
-        }
-        let started: number = (Number(IoShop._data.apprenticeNext) || 0) - 7 * 86400;
-        if (started <= 0 || IoShop.now() - started > 30 * 86400) {
-            return 0;
+        let working: int = IoShop.apprenticesWorking();
+        let ended: int = (IoShop.apprenticeEnds().length - working) | 0;
+        if (ended <= 0) {
+            return working;
         }
         let jobs: int = 0;
         for (let k in BASE._buildingData ?? {}) {
@@ -664,53 +696,78 @@ export class IoShop extends ASObject {
             }
         }
         let own: int = (1 + (STORE._storeData && STORE._storeData.BEW ? STORE._storeData.BEW.q | 0 : 0)) | 0;
-        return jobs > own ? 1 : 0;
+        return (working + Math.max(0, Math.min(ended, jobs - own - working))) | 0;
     }
 
-    /** Can an Apprentice be hired now (none working, and 7 days since the last one's start)? */
+    /** Can an Apprentice be hired now (fewer than 5 working, and its wait, if any, over)? */
     public static canHireApprentice(): boolean {
-        if (!IoShop._data || IoShop.active("apprentice")) {
+        if (!IoShop._data || IoShop.apprenticesWorking() >= IoShop.apprenticesMost()) {
             return false;
         }
         return (Number(IoShop._data.apprenticeNext) || 0) <= IoShop.now();
     }
 
-    /** One Apprentice put to work in the yard (bought now, or the yard's load). */
+    /** The Apprentices put to work in the yard (bought now, or the yard's load): as many as apprenticeWorkers, at least one. */
     public static spawnApprentice(): void {
-        if (!IoShop.ownYard() || IoShop.apprentice()) {
+        if (!IoShop.ownYard()) {
             return;
         }
-        QUEUE.Spawn(1);
-        let w: any = WORKERS._workers.length ? WORKERS._workers[WORKERS._workers.length - 1] : null;
-        let q: any = QUEUE._stack.length ? QUEUE._stack[QUEUE._stack.length - 1] : null;
-        if (w) {
-            w.ioApprentice = true;
-        }
-        if (q) {
-            q.ioApprentice = true;
-        }
-    }
-
-    /** The Apprentice's entry in the queue, or null. */
-    public static apprentice(): any {
-        for (let q of as3.values(QUEUE._stack ?? [])) {
-            if (q && q.ioApprentice) {
-                return q;
+        let want: int = Math.max(1, IoShop.apprenticeWorkers()) | 0;
+        for (let n: int = IoShop.apprentices().length; n < want; n++) {
+            QUEUE.Spawn(1);
+            let w: any = WORKERS._workers.length ? WORKERS._workers[WORKERS._workers.length - 1] : null;
+            let q: any = QUEUE._stack.length ? QUEUE._stack[QUEUE._stack.length - 1] : null;
+            if (w) {
+                w.ioApprentice = true;
+            }
+            if (q) {
+                q.ioApprentice = true;
             }
         }
-        return null;
     }
 
-    /** Is this worker the Apprentice (never sacrificed: IoWorkerFun)? */
+    /** The Apprentices' entries in the queue. */
+    public static apprentices(): any[] {
+        let out: any[] = [];
+        for (let q of as3.values(QUEUE._stack ?? [])) {
+            if (q && q.ioApprentice) {
+                out.push(q);
+            }
+        }
+        return out;
+    }
+
+    /** The first Apprentice's entry in the queue, or null. */
+    public static apprentice(): any {
+        let all: any[] = IoShop.apprentices();
+        return all.length ? all[0] : null;
+    }
+
+    /** Is this worker an Apprentice (never sacrificed: IoWorkerFun)? */
     public static isApprentice(mc: any): boolean {
-        let q: any = IoShop.apprentice();
-        return q != null && q.workermc == mc;
+        for (let q of IoShop.apprentices()) {
+            if (q.workermc == mc) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /** Its time up and no job: it goes home (from the yard and the queue). */
+    /** One whose time is up and has no job goes home (from the yard and the queue): more out than are hired. */
     private static apprenticeTick(): void {
-        let q: any = IoShop.apprentice();
-        if (!q || q.active || IoShop.active("apprentice")) {
+        let all: any[] = IoShop.apprentices();
+        let working: int = IoShop.apprenticesWorking();
+        if (all.length <= working) {
+            return;
+        }
+        let q: any = null;
+        for (let a of all) {
+            if (!a.active) {
+                q = a;
+                break;
+            }
+        }
+        if (!q) {
             return;
         }
         let mc: any = q.workermc;

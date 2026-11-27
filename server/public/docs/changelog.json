@@ -1,7 +1,83 @@
 {
   "title": "Changelog",
-  "updated": "2026-11-26",
+  "updated": "2026-11-27",
   "entries": [
+    {
+      "date": "2026-11-27",
+      "headline": "A Jobs list with a queue, helping out friends' yards, feeding workers Spurtz, five new grounds, and fixes",
+      "items": [
+        {
+          "area": "Yard",
+          "title": "Jobs list",
+          "text": "A new Jobs button beside your first worker lists every upgrade and calcification your yard can have next, with what it costs and how long it takes. Start one at once, or Queue it: queued jobs start by themselves, one after another, as soon as a worker is free and you have the resources (while you have the yard open). Tick \"Pick warts before starting the next job\" and your workers pick the yard's warts first."
+        },
+        {
+          "area": "Yard",
+          "title": "Help out a friend's yard",
+          "text": "Visiting another player's yard, click a building that's being built, upgraded or calcified: its card has Help out, which takes 5% off the time it has left. Each player can help with each job once, and up to 5 players can help with one job. The owner is told who helped next time they have the yard open."
+        },
+        {
+          "area": "Yard",
+          "title": "Feed your workers a Spurtz",
+          "text": "A worker's menu has Feed it a Spurtz: one Spurtz from your Compound makes that worker walk twice as fast for a week. Feed it up to 4 to keep it fast for 4 weeks."
+        },
+        {
+          "area": "Economy",
+          "title": "Up to 5 Apprentices",
+          "text": "You can now hire up to 5 Apprentices at once, with no wait between them. Each works for its own 3 days."
+        },
+        {
+          "area": "Economy",
+          "title": "Short Hop from the map only, and no more Scout Reports",
+          "text": "Short Hop is no longer in the Store: get it from your outpost's window on the map, as before. Scout Reports are gone from the game."
+        },
+        {
+          "area": "D.A.V.E. Club",
+          "title": "Five new moving grounds",
+          "text": "Five new grounds that glow and shift, opened by how many outposts you hold: Sulfur Springs (50), Magma Sea (100), Witchfire Marsh (250), Bloodstone (500) and the Gilded Inferno (1,000)."
+        },
+        {
+          "area": "Buildings",
+          "title": "Longer Magma Tower range",
+          "text": "Every Magma Tower reaches 25% further, at every level."
+        },
+        {
+          "area": "Buildings",
+          "title": "Decorations to storage from their menu",
+          "text": "Clicking a decoration in your yard now shows Add to Storage beside Move and Info."
+        },
+        {
+          "area": "Buildings",
+          "title": "Resource Pod in its place",
+          "text": "In the Buildings menu's Resources tab the Resource Pod always comes 5th, after the four harvesters, even when one of them is built as many times as it can be."
+        },
+        {
+          "area": "Alliances",
+          "title": "An alliance's card",
+          "text": "On Browse, clicking an alliance's badge or name opens its card: its badge large, its whole description, its leader and members, and Actions."
+        },
+        {
+          "area": "Fixes",
+          "title": "The Strongbox's long descriptions",
+          "text": "A monster's description that didn't fit used to run off the panel, and the synergy line could go missing with it. Long descriptions now have a small arrow and scroll with the mouse wheel, the synergy shows under the costs, and big costs read short (2.2M Magma)."
+        },
+        {
+          "area": "Fixes",
+          "title": "Doubled trophies",
+          "text": "Event trophies could end up in your yard twice. A trophy is no longer given again while your yard is still loading, and a second copy of a trophy is taken away when your yard loads."
+        },
+        {
+          "area": "Fixes",
+          "title": "The Catapult's tooltips in an attack",
+          "text": "Hovering the Catapult's ammunition sometimes showed its tooltip late, in pieces or not at all, worse after the first shot. Tooltips now show at once, whole."
+        },
+        {
+          "area": "Fixes",
+          "title": "Online dots in chat",
+          "text": "The dot by each name in the chat lines stayed green for everyone. It now turns grey when that player goes offline, and green again when they come back, checked every minute."
+        }
+      ]
+    },
     {
       "date": "2026-11-26",
       "headline": "Room for 20 warts, a button for every worker, event buttons nearer the day",
@@ -448,7 +524,8 @@
         {
           "area": "Economy",
           "title": "Store items in the right tabs",
-          "text": "The Store's Extras tab is gone: each item is in the tab it belongs to. Construction has the Apprentice and Short Hop, Resources the Harvest Drone, Speed-Ups the Repair Crew, Training Manual and Academy Scholarship, Combat the Scout Report, Raid Insurance and Outpost Guard, and Looks the Champion Statue (beside the animated decorations) and the pets' Golden Coat, Name Tag and Treats. Buy still offers Gift beside it."
+          "text": "The Store's Extras tab is gone: each item is in the tab it belongs to. Construction has the Apprentice and Short Hop, Resources the Harvest Drone, Speed-Ups the Repair Crew, Training Manual and Academy Scholarship, Combat the Scout Report, Raid Insurance and Outpost Guard, and Looks the Champion Statue (beside the animated decorations) and the pets' Golden Coat, Name Tag and Treats. Buy still offers Gift beside it.",
+          "later": "2026-11-27"
         },
         {
           "area": "D.A.V.E. Club",
@@ -567,7 +644,8 @@
         {
           "area": "Yard",
           "title": "Apprentice",
-          "text": "100 Shiny, in the Store's Construction tab: one more worker in your yard for 3 days. When the time's up it finishes the job it's on first, then goes home. One at a time, and a week from one's start to the next. It can't be sacrificed."
+          "text": "100 Shiny, in the Store's Construction tab: one more worker in your yard for 3 days. When the time's up it finishes the job it's on first, then goes home. One at a time, and a week from one's start to the next. It can't be sacrificed.",
+          "later": "2026-11-27"
         },
         {
           "area": "Yard",
@@ -577,7 +655,8 @@
         {
           "area": "Battles",
           "title": "Scout Report",
-          "text": "10 Shiny, from the map: press Scout on another player's yard or outpost to see its towers by level, its traps by kind (not where they are) and its last 3 defences. Looking at the same yard again that day is free. It's listed in the Store's Combat tab."
+          "text": "10 Shiny, from the map: press Scout on another player's yard or outpost to see its towers by level, its traps by kind (not where they are) and its last 3 defences. Looking at the same yard again that day is free. It's listed in the Store's Combat tab.",
+          "later": "2026-11-27"
         },
         {
           "area": "Interface",

@@ -901,11 +901,11 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
         if (dotW > 0) {
             let dot: Shape = new Shape();
             dot.name = "ioDot";
-            let on: boolean = param1.dot == "on";
-            dot.graphics.lineStyle(1, (on ? 0x1E7A12 : 0x6E6E6E) >>> 0, 1);
-            dot.graphics.beginFill((on ? 0x35C21F : 0xA8A8A8) >>> 0, 1);
-            dot.graphics.drawCircle(0, 0, 3.5);
-            dot.graphics.endFill();
+            // (27 November, 72's bug report: the dot follows who is online now: ioDotsLive)
+            line.ioDotSaid = param1.dot == "on";
+            line.ioDotUser = Number(param1.user) | 0;
+            line.ioDotAt = Number(param1.ts) > 0 ? Number(param1.ts) : BYMChat.ioNow();
+            ChatBox.ioDrawDot(dot, ChatBox.ioDotOn(line));
             dot.x = line.txt.x - dotW + 6;
             dot.y = line.txt.y + 9;
             line.addChild(dot);
@@ -992,6 +992,66 @@ export class ChatBox extends AbstractChatBox implements IChatDisplay {
     }
 
     /** "now", "33s", "2m", "4h", "3d": how long ago a line was said. */
+    /** (27 November) The players online now (their ids: BYMChat's minute's ask), and when that was (server time, ms). */
+    private static _ioLive: any = null;
+    private static _ioLiveAt: number = 0;
+
+    /**
+     * Is a line's dot green: its speaker was online when it was said (the server's), and still is (the minute's
+     * answer), or it was said after that answer came. Before the first answer, as the server said.
+     */
+    private static ioDotOn(line: any): boolean {
+        if (!line.ioDotSaid) {
+            return false;
+        }
+        if (!ChatBox._ioLive || Number(line.ioDotAt) > ChatBox._ioLiveAt) {
+            return true;
+        }
+        return ChatBox._ioLive[String(line.ioDotUser)] === true;
+    }
+
+    private static ioDrawDot(dot: Shape, on: boolean): void {
+        dot.graphics.clear();
+        dot.graphics.lineStyle(1, (on ? 0x1E7A12 : 0x6E6E6E) >>> 0, 1);
+        dot.graphics.beginFill((on ? 0x35C21F : 0xA8A8A8) >>> 0, 1);
+        dot.graphics.drawCircle(0, 0, 3.5);
+        dot.graphics.endFill();
+    }
+
+    /**
+     * (27 November, 72's bug report: "everyone is appearing as online in the chat box ... in the chat lines where
+     * there is a dot next to the name") The dot was whether the speaker was online when the line was said, and
+     * speaking is being online, so every line said while the chat was open stayed green. Now each minute's answer
+     * (chat/online, brief: the ids online now) redraws them all.
+     */
+    public ioDotsLive(ids: any[]): void {
+        let live: any = {};
+        for (let id of ids) {
+            live[String(Number(id) | 0)] = true;
+        }
+        ChatBox._ioLive = live;
+        ChatBox._ioLiveAt = BYMChat.ioNow();
+        let seen: any[] = [];
+        let redo = (line: any): void => {
+            if (!line || seen.indexOf(line) >= 0 || line.ioDotSaid == null) {
+                return;
+            }
+            seen.push(line);
+            let dot: Shape = as3.as(line.getChildByName("ioDot"), Shape);
+            if (dot) {
+                ChatBox.ioDrawDot(dot, ChatBox.ioDotOn(line));
+            }
+        };
+        for (let line of this._chatHistory) {
+            redo(line);
+        }
+        if (this._chatMessages) {
+            for (let k: int = 0; k < this._chatMessages.numChildren; k++) {
+                redo(this._chatMessages.getChildAt(k));
+            }
+        }
+    }
+
     public static ioAgo(param1: number): string {
         let sec: int = Math.max(0, ((BYMChat.ioNow() - param1) / 1000) | 0) | 0;
         if (sec < 5) {

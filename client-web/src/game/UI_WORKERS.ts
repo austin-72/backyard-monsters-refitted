@@ -5,7 +5,7 @@ import { GlowFilter } from "flash/filters";
 import { TextField, TextFieldAutoSize, TextFormat, TextFormatAlign } from "flash/text";
 import { MouseEvent } from "flash/events";
 import { Point, Rectangle } from "flash/geom";
-import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, UI_BOTTOM, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno } from "@game";
+import { BASE, BFOUNDATION, BUILDINGINFO, BUILDINGS, Chat, GLOBAL, IoHfoArt, IoWarts, KEYS, MAP, MUSHROOMS, QUEUE, STORE, TUTORIAL, UI2, UI_BOTTOM, bubblepopup, bubblepopupRight, icon_worker, icon_worker_inferno, IoJobs } from "@game";
 
 export class UI_WORKERS extends ASObject {
     private static _do: DisplayObject = null;
@@ -54,6 +54,9 @@ export class UI_WORKERS extends ASObject {
 
     /** QoL #589: "Break all ice", under it (while the event's Days 1-3 ice is in the yard). */
     private static _ioIceBtn: Sprite = null;
+
+    /** (27 November, admintester's) The job list (IoJobs), left of the first worker in the player's own yards. */
+    private static _ioJobsBtn: Sprite = null;
 
     /** Those two are smaller than the event buttons: their ring, across the middle; the room each takes. */
     private static readonly IO_YARD_R: int = 18;
@@ -127,6 +130,15 @@ export class UI_WORKERS extends ASObject {
         // a week apart, each hidden until a week before it starts).
         // (QoL #25, #589: first "Pick all warts" and "Break all ice", while shown; the event buttons go under them)
         let top: number = r.y + r.height + UI_WORKERS.IO_EXTRA_GAP;
+        // (27 November: Jobs beside the first worker, to its left: the column's height is kept for the workers)
+        if (UI_WORKERS._ioJobsBtn) {
+            if (UI_WORKERS._ioJobsBtn.parent != UI_WORKERS._mc) {
+                UI_WORKERS._mc.addChild(UI_WORKERS._ioJobsBtn);
+            }
+            let first: Rectangle = UI_WORKERS._workers && UI_WORKERS._workers.length ? as3.cast(UI_WORKERS._workers[0].mc, DisplayObject).getBounds(UI_WORKERS._mc) : new Rectangle(0, 20, 40, 40);
+            UI_WORKERS._ioJobsBtn.x = first.x - 2 * UI_WORKERS.IO_EXTRA_MIDDLE - 6;
+            UI_WORKERS._ioJobsBtn.y = first.y + first.height / 2 - UI_WORKERS.IO_EXTRA_MIDDLE;
+        }
         let off: number = 0;
         for (let y of as3.values([UI_WORKERS._ioWartsBtn, UI_WORKERS._ioIceBtn])) {
             if (!y) {
@@ -175,7 +187,29 @@ export class UI_WORKERS extends ASObject {
         if (ice > 0 && !UI_WORKERS._ioIceBtn) {
             UI_WORKERS._ioIceBtn = UI_WORKERS.ioYardButton("ioYard2BreakIce", true);
         }
-        let moved: boolean = UI_WORKERS.ioYardCount(UI_WORKERS._ioWartsBtn, warts);
+        // (27 November: Jobs, always there in the player's own yards; its count the jobs queued)
+        if (IoJobs.ownYard() && !UI_WORKERS._ioJobsBtn) {
+            UI_WORKERS._ioJobsBtn = UI_WORKERS.ioJobsButton();
+        }
+        let jobsMoved: boolean = false;
+        if (UI_WORKERS._ioJobsBtn) {
+            let show: boolean = IoJobs.ownYard();
+            let n: int = show ? IoJobs.queued : 0;
+            let label: TextField = as3.as(UI_WORKERS._ioJobsBtn.getChildByName("ioYard2Count"), TextField);
+            let disc: DisplayObject = UI_WORKERS._ioJobsBtn.getChildByName("ioJobsDisc");
+            if (label && label.text != (n > 0 ? String(n) : "")) {
+                label.text = n > 0 ? String(n) : "";
+            }
+            if (disc && disc.visible != n > 0) {
+                disc.visible = n > 0;
+            }
+            if (UI_WORKERS._ioJobsBtn.visible != show) {
+                UI_WORKERS._ioJobsBtn.visible = show;
+                jobsMoved = true;
+            }
+            jobsMoved = jobsMoved || UI_WORKERS._ioJobsBtn.parent != UI_WORKERS._mc;
+        }
+        let moved: boolean = UI_WORKERS.ioYardCount(UI_WORKERS._ioWartsBtn, warts) || jobsMoved;
         moved = UI_WORKERS.ioYardCount(UI_WORKERS._ioIceBtn, ice) || moved;
         if (moved) {
             UI_WORKERS.ioPlaceExtra();
@@ -265,6 +299,73 @@ export class UI_WORKERS extends ASObject {
                 UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("io_yard2_ice_btn", { "v1": MUSHROOMS.ioIceLeft() }) + "</b><br>" + KEYS.Get("io_yard2_ice_tip1") + "<br>" + KEYS.Get("io_yard2_ice_tip2"));
             } else {
                 UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("io_yard2_warts_btn", { "v1": MUSHROOMS.ioWartsLeft() }) + "</b><br>" + KEYS.Get("io_yard2_warts_tip1") + "<br>" + KEYS.Get("io_yard2_warts_tip2"));
+            }
+        });
+        b.addEventListener(MouseEvent.MOUSE_OUT, (e: MouseEvent): void => {
+            UI_WORKERS.PopupHide();
+        });
+        return b;
+    }
+
+    /** (27 November) Jobs: a round button with a list on a scroll, and the queue's count. */
+    private static ioJobsButton(): Sprite {
+        let C: number = UI_WORKERS.IO_EXTRA_MIDDLE;
+        let b: Sprite = new Sprite();
+        b.name = "ioJobsBtn";
+        b.buttonMode = true;
+        b.mouseChildren = false;
+        let g: any = b.graphics;
+        g.lineStyle(2, 0xE0A040, 1);
+        g.beginFill(0x4A2A08, 1);
+        g.drawCircle(C, C, UI_WORKERS.IO_YARD_R);
+        g.endFill();
+        // (a parchment with three lines, each ticked)
+        g.lineStyle(1, 0x6A4A20, 1);
+        g.beginFill(0xF3E2BE, 1);
+        g.drawRoundRect(C - 9, C - 11, 18, 22, 4, 4);
+        g.endFill();
+        for (let i: int = 0; i < 3; i++) {
+            g.lineStyle(1.6, 0x3A2410, 1);
+            g.moveTo(C - 2, C - 6 + i * 6);
+            g.lineTo(C + 6, C - 6 + i * 6);
+            g.lineStyle(1.6, 0xB02000, 1);
+            g.moveTo(C - 7, C - 6 + i * 6);
+            g.lineTo(C - 5.5, C - 4.5 + i * 6);
+            g.lineTo(C - 3.5, C - 8 + i * 6);
+        }
+        let disc: Sprite = new Sprite();
+        disc.name = "ioJobsDisc";
+        disc.graphics.lineStyle(1, 0xFFF2C4, 1);
+        disc.graphics.beginFill(0x1A0A00, 0.9);
+        disc.graphics.drawCircle(0, 0, 8);
+        disc.graphics.endFill();
+        disc.x = C + 13;
+        disc.y = C + 13;
+        disc.visible = false;
+        b.addChild(disc);
+        let t: TextField = new TextField();
+        t.name = "ioYard2Count";
+        let f: TextFormat = new TextFormat("Verdana", 9, 0xFFF2C4, true);
+        f.align = TextFormatAlign.CENTER;
+        t.defaultTextFormat = f;
+        t.selectable = false;
+        t.mouseEnabled = false;
+        t.width = 22;
+        t.height = 14;
+        t.x = C + 2;
+        t.y = C + 6;
+        b.addChild(t);
+        b.visible = false;
+        b.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+            UI_WORKERS.PopupHide();
+            IoJobs.Show();
+        });
+        b.addEventListener(MouseEvent.MOUSE_OVER, (e: MouseEvent): void => {
+            let n: int = IoJobs.queued;
+            UI_WORKERS.ioShowTip(b, "<b>" + KEYS.Get("io_jobs_title") + "</b><br>" + KEYS.Get(n > 0 ? "io_jobs_tip_queued" : "io_jobs_tip", { "v1": n }));
+            // (it stands left of the column: the tip further left, clear of it)
+            if (UI_WORKERS._popupmc) {
+                UI_WORKERS._popupmc.x -= 2 * C + 6;
             }
         });
         b.addEventListener(MouseEvent.MOUSE_OUT, (e: MouseEvent): void => {

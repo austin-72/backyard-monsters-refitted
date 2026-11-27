@@ -418,6 +418,12 @@ export class BUILDINGSPOPUP extends BUILDINGSPOPUP_CLIP {
             }
             _loc4_++;
         }
+        // (Inferno-only, 27 November, admintester's: the Resources tab in its own order whatever's built: the four
+        // harvesters, then the Resource Pod 5th, then the rest; a full one no longer moves to the end)
+        if (GLOBAL.INFERNO_ONLY && BUILDINGS._menuA == 1) {
+            as3.sortOn(param1, ["order"], Array.NUMERIC);
+            return;
+        }
         as3.sortOn(param1, ["buildStatus", "order"], Array.NUMERIC);
     }
 

@@ -13,6 +13,9 @@
 - When every worker is busy, the game names the job that ends soonest, how long it has left and what finishing it costs.
 - **Command your workers** (main yard): click one to make it dance, tell a joke (they know plenty), wave, follow you or go for a stroll.
 - **Sacrifice a worker to Moloch:** an idle worker can be given to Moloch for 500 Shiny. It is gone for good (you are warned first), and you always keep at least one. Changed your mind? You can take it back within 2 minutes, as long as you still have the Shiny it earned.
+- **Feed a worker a Spurtz** (its menu): one Spurtz from your Compound makes that worker walk twice as fast for a week. Feed it up to 4 to keep it fast for 4 weeks; the menu says how long it's fed for.
+- **Jobs:** the button beside your first worker lists every upgrade and calcification the yard can have next, with its cost and time. **Start** one at once, or **Queue** it: queued jobs start by themselves, in turn, as soon as a worker is free and the resources are there (while you have the yard open; the queue is kept in your browser for each yard). Tick **Pick warts before starting the next job** to have the warts picked first.
+- **Apprentices** (the Store's Construction tab): up to 5 at once, each one more worker for its own 3 days.
 - The D.A.V.E. Club lets you pick Underworld imps or Overworld builders as your workers (see [The D.A.V.E. Club](17-club.md)).
 
 ## Light and shadows {#light}
@@ -48,6 +51,7 @@
 
 - A panel shows the owner: alliance, stance, coordinates, and online or last seen (click it for their menu), with **Bookmark**, **Share**, **Open on map**, **Home** and **Attack** when it's in reach.
 - Click a building for its card: level, health, a tower's range and damage, a storage's rough loot. The panel also gives a rough idea of what destroying the whole yard would pay.
+- **Help out:** a building being built, upgraded or calcified has Help out on its card: it takes 5% off the time it has left. You can help with each job once, and up to 5 players can help with one job. The owner is told who helped.
 - Signs with a message are marked and show it on hover; clicking someone's pet shows its name and kind.
 - **Copy layout** puts the yard's buildings (no traps or decorations) in your Yard Planner's Import.
 - The top bar keeps Alliances, the Attack Log, Watch, the Leaderboards and the Change Log while you visit.

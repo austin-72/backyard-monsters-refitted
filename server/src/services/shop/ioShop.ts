@@ -73,8 +73,12 @@ const DAY = 24 * 3600;
 
 /** The timed items and how long one runs. */
 export const TIMED: Partial<Record<ShopItem, number>> = { drone: 7 * DAY, manual: 7 * DAY, scholar: 7 * DAY, treats: DAY, apprentice: 3 * DAY, repair: 7 * DAY };
-/** From one Apprentice's start to the next's, at least this long. */
-export const APPRENTICE_GAP = 7 * DAY;
+/** From one Apprentice's start to the next's, at least this long (27 November, admintester's: none). */
+export const APPRENTICE_GAP = 0;
+/** Apprentices working at once (27 November, admintester's: up to 5, each its own 3 days). */
+export const APPRENTICES_MOST = 5;
+/** An Apprentice whose time is up is still counted this long (its job left to finish: the game's apprenticeWorkers). */
+const APPRENTICE_KEPT = 30 * DAY;
 /** A Scout Report: the yards looked at today kept (free again that day), no more than this many. */
 const SCOUTED_MOST = 200;
 /** Towers and traps as a Scout Report counts them (the building types: game-data/anticheat/buildingProps.json). */
@@ -151,9 +155,13 @@ export interface ShopState {
   last: Record<string, number>;
   /** The yards Scout-Reported today (a day number: UTC days), free again that day. */
   scout: { day: number; ids: string[] } | null;
+  /** (27 November) each Apprentice's end, the working ones and those ended in the last APPRENTICE_KEPT. */
+  appr: number[];
+  /** (27 November) each of the player's own workers (by its place among them): fed with a Spurtz until then. */
+  fed: number[];
 }
 
-export const emptyShop = (): ShopState => ({ until: {}, tokens: {}, ins: null, statue: null, statueLevel: null, gifts: [], last: {}, scout: null });
+export const emptyShop = (): ShopState => ({ until: {}, tokens: {}, ins: null, statue: null, statueLevel: null, gifts: [], last: {}, scout: null, appr: [], fed: [] });
 
 export const parseShop = (raw: unknown): ShopState => {
   let v: unknown = raw;
@@ -183,6 +191,10 @@ export const parseShop = (raw: unknown): ShopState => {
   if (sc && typeof sc === "object" && Number.isFinite(Number(sc.day)) && Array.isArray(sc.ids)) {
     s.scout = { day: Math.floor(Number(sc.day)), ids: (sc.ids as unknown[]).map(String).slice(-SCOUTED_MOST) };
   }
+  if (Array.isArray(o.appr)) s.appr = (o.appr as unknown[]).map(Number).filter((n) => Number.isFinite(n) && n > 0).map(Math.floor).slice(-20);
+  // (from before 27 November: the one Apprentice was until.apprentice alone)
+  else if (s.until.apprentice) s.appr = [s.until.apprentice];
+  if (Array.isArray(o.fed)) s.fed = (o.fed as unknown[]).slice(0, WORKERS_FED_MOST).map((n) => Math.max(0, Math.floor(Number(n) || 0)));
   return s;
 };
 
@@ -256,14 +268,19 @@ const days = (seconds: number) => {
 /** Gives one item to a state (bought or a gift): a timed one runs (longer), insurance starts, a token is kept. */
 export const grant = (state: ShopState, item: ShopItem, now: number, forOther: boolean): void => {
   const who = forOther ? "They have" : "You have";
-  if (item === "scout") throw new ShopError("A Scout Report is had from the map: pick a player's yard there.");
+  if (item === "scout") throw new ShopError("Scout Reports are no longer sold.");
   const seconds = TIMED[item];
-  // (an Apprentice: one at a time, and a gap from one's start to the next's)
+  // (an Apprentice: 27 November, admintester's: up to APPRENTICES_MOST working at once, each its own 3 days, with
+  // no wait between them; it was one at a time and a week from one's start to the next's)
   if (item === "apprentice") {
-    if ((state.until.apprentice ?? 0) > now) throw new ShopError(`${who} an Apprentice already.`);
+    const appr = (state.appr ?? []).filter((u) => u > now - APPRENTICE_KEPT);
+    const working = appr.filter((u) => u > now).length;
+    if (working >= APPRENTICES_MOST) throw new ShopError(`${who} ${APPRENTICES_MOST} Apprentices working already: that's as many as there can be.`);
     const next = (state.last.apprentice ?? 0) + APPRENTICE_GAP;
     if (next > now) throw new ShopError(`${forOther ? "Their" : "Your"} next Apprentice can start in ${days(next - now)}.`);
-    state.until.apprentice = now + (seconds ?? 3 * DAY);
+    appr.push(now + (seconds ?? 3 * DAY));
+    state.appr = appr;
+    state.until.apprentice = Math.max(...appr);
     state.last.apprentice = now;
     return;
   }
@@ -306,6 +323,13 @@ export const shopView = (state: ShopState, now = getCurrentDateTime()) => {
     tagColours: TAG_COLOURS,
     // (the Apprentice: when the next can start; the yards scouted today, free again)
     apprenticeNext: (state.last.apprentice ?? 0) + APPRENTICE_GAP,
+    // (27 November: each Apprentice's end, working or ended lately; how many can work at once)
+    apprentices: (state.appr ?? []).filter((u) => u > now - APPRENTICE_KEPT),
+    apprenticesMost: APPRENTICES_MOST,
+    // (27 November: until when each of the player's own workers is fed)
+    fed: state.fed ?? [],
+    fedWeek: WEEK,
+    fedMost: FED_WEEKS_MOST,
     scouted: state.scout && state.scout.day === Math.floor(now / DAY) ? state.scout.ids : [],
     now,
   };
@@ -382,7 +406,37 @@ const payToUse = async (em: Em, user: User, item: ShopItem, state: ShopState): P
  * its towers by kind and level, its traps by kind (not where), and its last 3 defences (when, how much was destroyed).
  * The first look at a yard each day (UTC) costs the price; the same yard again that day is free.
  */
+const SCOUT_GONE = true;
+
+/**
+ * (27 November, admintester's: a worker fed a Spurtz moves twice as fast for a week; up to 4 Spurtz, 4 weeks ahead.)
+ * The game takes the Spurtz from the player's monsters and saves; here only how long each worker is fed is kept, by
+ * its place among the player's own workers (not the Apprentices or the Devil's). Answers the fed list.
+ */
+const WEEK = 7 * DAY;
+const FED_WEEKS_MOST = 4;
+const WORKERS_FED_MOST = 12;
+export const feedWorker = async (user: User, slotRaw: unknown): Promise<number[]> => {
+  const slot = Math.floor(Number(slotRaw));
+  if (!Number.isFinite(slot) || slot < 0 || slot >= WORKERS_FED_MOST) throw new ShopError("That worker could not be found.");
+  const now = getCurrentDateTime();
+  const r = await postgres.em.fork().transactional(async (em) => {
+    await lockSave(em, user.userid);
+    const { state } = await withShop(em, user.userid, (st) => {
+      const fed = (st.fed ?? []).slice(0, WORKERS_FED_MOST);
+      while (fed.length <= slot) fed.push(0);
+      const from = Math.max(now, fed[slot] || 0);
+      if (from + WEEK > now + FED_WEEKS_MOST * WEEK + 60) throw new ShopError(`That worker is fed for ${FED_WEEKS_MOST} weeks already.`);
+      fed[slot] = from + WEEK;
+      st.fed = fed;
+    });
+    return state.fed;
+  });
+  return r;
+};
 export const scoutReport = async (user: User, baseid: unknown) => {
+  // (27 November, admintester's: the Scout Report is gone from the game)
+  if (SCOUT_GONE) throw new ShopError("Scout Reports are no longer sold.");
   await checkBuyer(user);
   const id = String(baseid ?? "");
   if (!/^\d{1,20}$/.test(id) || id === "0") throw new ShopError("That yard could not be found.");

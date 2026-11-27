@@ -20,8 +20,8 @@ const MAX_LISTED = 300;
  * Answers { error: 0, now, onlineSeconds, hidden, players: [{ id, name, tag?, aid?, at, online, hidden? }] }. `hide=1` (or 0):
  * the player appears offline (or not) from now on: on nobody else's list, a grey dot in chat.
  *
- * (QoL #477) `brief=1`: only { error: 0, hidden, online } (how many are online now, as others see them), for the chat
- * bar's Offline chip and the count on the folded chat, which asks every minute.
+ * (QoL #477) `brief=1`: only { error: 0, hidden, online, ids } (how many are online now, as others see them, and
+ * their ids), for the chat bar's Offline chip, the count on the folded chat and the dots on its lines, asked every minute.
  */
 export const whosOnline: KoaController = async (ctx) => {
   if (!infernoOnlyConfig.enabled) throw permissionErr();
@@ -37,7 +37,9 @@ export const whosOnline: KoaController = async (ctx) => {
   if (String((ctx.request.body as Record<string, unknown> | undefined)?.brief ?? "") === "1") {
     const [hiddenNow, online] = await Promise.all([isHidden(me.userid), onlineNow()]);
     ctx.status = Status.OK;
-    ctx.body = { error: 0, hidden: hiddenNow, online: online.size };
+    // (27 November, 72's bug report: and who they are, so the dots on the chat's lines follow them; a line's dot was
+    // whether its speaker was online when it was sent, so every line said live was green)
+    ctx.body = { error: 0, hidden: hiddenNow, online: online.size, ids: [...online].slice(0, 2000) };
     return;
   }
   const all = await presenceSince(RECENT_SECONDS, MAX_LISTED * 2);

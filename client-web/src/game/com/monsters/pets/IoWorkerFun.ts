@@ -1,7 +1,8 @@
 import * as as3 from "as3";
 import { ASObject, int } from "as3";
 import { IOErrorEvent } from "flash/events";
-import { BASE, BFOUNDATION, CASINO, GLOBAL, IoCritterMenu, IoShop, IoYardFx, KEYS, QUEUE, STORE, UI_WORKERS, URLLoaderApi, WORKER, WORKERS, IoDevil } from "@game";
+import { getTimer } from "flash/utils";
+import { BASE, BFOUNDATION, CASINO, GLOBAL, HOUSING, IoCritterMenu, IoShop, IoYardFx, KEYS, MonsterData, QUEUE, STORE, UI_WORKERS, URLLoaderApi, WORKER, WORKERS, IoDevil } from "@game";
 
 /**
  * Inferno-only (10 October): a worker clicked in the main yard (IoYardPick) opens a menu of things to tell it
@@ -112,6 +113,22 @@ export class IoWorkerFun extends ASObject {
                 mc.Say(KEYS.Get("io_t3t_worker_stretch"), 1600);
             } });
         }
+        // (27 November, admintester's: "feed spurtz": twice as fast for a week a Spurtz, up to 4 weeks ahead; the
+        // player's own workers, not the Apprentices or the Devil's)
+        let slot: int = IoWorkerFun.slotOf(mc);
+        if (slot >= 0 && IoShop.data) {
+            let left: number = IoWorkerFun.fedLeft(slot);
+            let full: boolean = left > (IoWorkerFun.fedWeeksMost() - 1) * IoWorkerFun.fedWeek() + 60;
+            let spurtz: int = IoWorkerFun.spurtzHeld();
+            items.push({ "label": left > 0 ? KEYS.Get("io_wk_feed_more", { "v1": GLOBAL.ioDuration(left) }) : KEYS.Get("io_wk_feed"), "enabled": !full && spurtz > 0 && !IoWorkerFun._busy, "onClick": (): void => {
+                IoWorkerFun.feed(mc);
+            } });
+            if (full) {
+                line = KEYS.Get("io_wk_feed_full", { "v1": line });
+            } else if (spurtz <= 0) {
+                line = KEYS.Get("io_wk_feed_none", { "v1": line });
+            }
+        }
         if (IoWorkerFun.canSacrifice) {
             let many: boolean = WORKERS._workers.length > 1;
             items.push({ "label": KEYS.Get("io_t3t_worker_sac", { "v1": IoWorkerFun.shiny }), "style": "red", "enabled": many && !task, "onClick": (): void => {
@@ -124,6 +141,127 @@ export class IoWorkerFun extends ASObject {
             }
         }
         IoCritterMenu.Show(KEYS.Get("io_t3t_worker"), line, items);
+    }
+
+    // ---- (27 November, admintester's) a worker fed a Spurtz
+    /** A worker's place among the player's own workers (not an Apprentice or the Devil's), or -1. */
+    public static slotOf(mc: any): int {
+        if (!GLOBAL.INFERNO_ONLY || !mc || !BASE.isMainYard || BASE.isOutpost || IoShop.isApprentice(mc) || IoDevil.isLent(mc)) {
+            return -1;
+        }
+        let n: int = 0;
+        for (let w of as3.values(WORKERS._workers || [])) {
+            if (!w || !w.mc || IoShop.isApprentice(w.mc) || IoDevil.isLent(w.mc)) {
+                continue;
+            }
+            if (w.mc == mc) {
+                return n;
+            }
+            n++;
+        }
+        return -1;
+    }
+
+    /** How long that worker is still fed (seconds). */
+    public static fedLeft(slot: int): number {
+        let d: any = IoShop.data;
+        if (!d || !as3.is(d.fed, Array) || slot < 0 || slot >= d.fed.length) {
+            return 0;
+        }
+        return Math.max(0, (Number(d.fed[slot]) || 0) - IoShop.now());
+    }
+
+    public static fedWeek(): number {
+        return IoShop.data && Number(IoShop.data.fedWeek) > 0 ? Number(IoShop.data.fedWeek) : 7 * 86400;
+    }
+
+    public static fedWeeksMost(): int {
+        return IoShop.data && (IoShop.data.fedMost | 0) > 0 ? IoShop.data.fedMost | 0 : 4;
+    }
+
+    /** Is this worker fed now (twice as fast: WORKER.Move)? Looked up at most every half second for each. */
+    public static isFed(mc: any): boolean {
+        if (!GLOBAL.INFERNO_ONLY || !mc) {
+            return false;
+        }
+        let t: int = getTimer();
+        if (mc.ioFedAt == null || t - mc.ioFedAt > 500) {
+            mc.ioFedAt = t;
+            mc.ioFed = IoWorkerFun.fedLeft(IoWorkerFun.slotOf(mc)) > 0;
+        }
+        return !!mc.ioFed;
+    }
+
+    /** The player's Spurtz (in the Compound, not out on an attack or guarding). */
+    public static spurtzHeld(): int {
+        let md: MonsterData = GLOBAL.player ? GLOBAL.player.monsterListByID("IC1") : null;
+        if (!md) {
+            return 0;
+        }
+        let n: int = 0;
+        for (let c of as3.values(md.m_creeps)) {
+            if (c && !c.ownerID) {
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /** The server first (the week kept), then a Spurtz taken from the Compound (it vanishes in a puff), and saved. */
+    private static feed(mc: WORKER): void {
+        let slot: int = IoWorkerFun.slotOf(mc);
+        if (IoWorkerFun._busy || slot < 0 || IoWorkerFun.spurtzHeld() <= 0) {
+            return;
+        }
+        IoWorkerFun._busy = true;
+        new URLLoaderApi().load(GLOBAL.serverUrl + "workers/feed", [["slot", slot]], (response: any): void => {
+            IoWorkerFun._busy = false;
+            if (!response || response.error !== 0 && response.error !== "0") {
+                GLOBAL.Message(response && response.error ? String(response.error) : KEYS.Get("io_t3t_srv_try"));
+                return;
+            }
+            if (IoShop.data && as3.is(response.fed, Array)) {
+                IoShop.data.fed = response.fed;
+            }
+            IoWorkerFun.eatSpurtz();
+            mc.ioFedAt = null;
+            mc.Say(KEYS.Get("io_wk_fed_say"), 2000);
+            for (let k: int = 0; k < 4; k++) {
+                IoYardFx.sparkle(mc.x, mc.y - 20, mc.y);
+            }
+            BASE.Save();
+        }, (e: IOErrorEvent): void => {
+            IoWorkerFun._busy = false;
+            GLOBAL.Message(KEYS.Get("io_t3t_srv_conn"));
+        });
+    }
+
+    /** One Spurtz out of the Compound: its record, and the monster walking there. */
+    private static eatSpurtz(): void {
+        let md: MonsterData = GLOBAL.player ? GLOBAL.player.monsterListByID("IC1") : null;
+        if (!md) {
+            return;
+        }
+        for (let i: int = md.m_creeps.length - 1; i >= 0; i--) {
+            let c: any = as3.vget(md.m_creeps, i);
+            if (c && !c.ownerID) {
+                md.m_creeps.splice(i, 1);
+                let m: any = c.self;
+                if (m) {
+                    try {
+                        IoYardFx.sparkle(m.x, m.y - 10, m.y);
+                    } catch (err) {
+                    }
+                    m.isDisposable = true;
+                    m._dead = true;
+                }
+                break;
+            }
+        }
+        try {
+            HOUSING.HousingSpace();
+        } catch (err) {
+        }
     }
 
     private static buildingName(b: BFOUNDATION): string {

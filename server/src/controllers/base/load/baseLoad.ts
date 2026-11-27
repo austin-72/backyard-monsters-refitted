@@ -58,6 +58,7 @@ import { underworldConfig } from "../../../config/UnderworldConfig.js";
 import { infernoOnlyConfig } from "../../../config/InfernoOnlyConfig.js";
 import { AlliancePowerupType } from "../../../enums/Alliance.js";
 import { daveForYard } from "../../../services/yard/dave.js";
+import { helpedBy, pendingHelp, yardHelpEnabled } from "../../../services/yard/yardHelp.js";
 import { terrainEnabled, terrainOf, terrainsFor } from "../../../services/yard/terrain.js";
 import { listPets, petsEnabled, petsForGame, petsInfo } from "../../../services/pets/pets.js";
 import { shopEnabled, shopOf, shopView, statueOf, takeShopNotices, treatsUntil } from "../../../services/shop/ioShop.js";
@@ -573,6 +574,14 @@ const baseLoadOne: KoaController = async (ctx) => {
   if (terrainEnabled() && baseSave.type === BaseType.MAIN && !replayView) {
     response.io_terrain = await terrainOf(baseSave.userid);
     if (isOwner) response.io_terrains = await terrainsFor(baseSave.userid);
+  }
+
+  // Inferno-only (27 November, 72's suggestion): helping out (services/yard/yardHelp.ts): for the owner in build mode,
+  // the helps their game hasn't taken yet for this yard; for a visitor, the jobs here they have helped with
+  if (yardHelpEnabled() && !replayView && (baseSave.type === BaseType.MAIN || baseSave.type === BaseType.OUTPOST)) {
+    const owner = Number(baseSave.saveuserid || baseSave.userid) || 0;
+    if (isOwner && type === BaseMode.BUILD) response.io_help = await pendingHelp(user.userid, baseSave.baseid).catch(() => []);
+    else if (owner > 0 && owner !== user.userid) response.io_helped = await helpedBy(user.userid, baseSave.baseid).catch(() => []);
   }
 
   // Inferno-only: its owner's D.A.V.E. Club looks (services/yard/dave.ts): the workers' and the champions', for

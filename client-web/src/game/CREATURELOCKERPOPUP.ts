@@ -1,6 +1,7 @@
 import * as as3 from "as3";
 import { int } from "as3";
-import { Bitmap, BitmapData, DisplayObject, MovieClip } from "flash/display";
+import { Bitmap, BitmapData, DisplayObject, MovieClip, Sprite } from "flash/display";
+import { TextField } from "flash/text";
 import { MouseEvent } from "flash/events";
 import { BASE, CREATURELOCKER, CREATURELOCKERPOPUP_CLIP, CREATURES, Circ, CreatureLockerItem, GLOBAL, ImageCache, IoHfo, IoLockIcon, KEYS, LOGGER, POPUPS, POPUPSETTINGS, QUESTS, STORE, TweenLite, popup_monster, IoSocial, IoShop, IoSynergy } from "@game";
 
@@ -245,12 +246,7 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             // (QoL #353: and what 100 housing of it brings, to compare monsters of different sizes)
             let ioPer100: string = CREATURELOCKER.ioPer100Line(this._creatureID);
             this.tDescription.htmlText = "<b>" + KEYS.Get(as3.str(data.name)) + "</b><br><font color=\"#8A5A00\">" + CREATURELOCKER.ioTags(this._creatureID) + "</font><br>" + (ioPer100 ? "<font color=\"#1E5A7A\">" + ioPer100 + "</font><br>" : "") + KEYS.Get(as3.str(data.description));
-            // (11 November: its synergy, or that a champion has none)
-            let ioSynergy: string = IoSynergy.describe(this._creatureID);
-            if (ioSynergy) {
-                this.tDescription.htmlText += "<br><font color=\"#0B6B58\">" + ioSynergy + "</font>";
-            }
-            GLOBAL.ioFitHeight(this.tDescription, 9);
+            // (11 November: its synergy, or that a champion has none; 27 November: placed by ioFitTexts, at the end)
         }
         str = "";
         // (Inferno-only, QoL #346, 14 October: while another monster unlocks, this one's costs still show, with the
@@ -329,6 +325,10 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             this.tDamage.htmlText = -dam + " (" + KEYS.Get("str_heal") + ")";
         }
         this.tResource.htmlText = CREATURES.GetProperty(this._creatureID, "cResource") + " " + KEYS.Get(as3.str(GLOBAL._resourceNames[3]));
+        // (Inferno-only, 27 November: "2200000 Magma" didn't fit its box: 100,000 and over short, "2.2M Magma")
+        if (GLOBAL.INFERNO_ONLY && Number(CREATURES.GetProperty(this._creatureID, "cResource")) >= 100000) {
+            this.tResource.htmlText = GLOBAL.ioShort(Number(CREATURES.GetProperty(this._creatureID, "cResource"))) + " " + KEYS.Get(as3.str(GLOBAL._resourceNames[3]));
+        }
         this.tStorage.htmlText = KEYS.Get("mon_statsstorage", { "v1": CREATURES.GetProperty(this._creatureID, "cStorage") });
         this.tTime.htmlText = GLOBAL.ToTime(CREATURES.GetProperty(this._creatureID, "cTime") | 0, true);
         if (GLOBAL.INFERNO_ONLY) {
@@ -379,6 +379,76 @@ export class CREATURELOCKERPOPUP extends CREATURELOCKERPOPUP_CLIP {
             this._portraitImage.parent.removeChild(this._portraitImage);
         }
         ImageCache.GetImageWithCallBack("monsters/" + this._creatureID + "-portrait.jpg", UpdatePortrait, true, 1);
+        if (GLOBAL.INFERNO_ONLY) {
+            this.ioFitTexts();
+        }
+    }
+
+    private _ioMore: Sprite = null;
+
+    /**
+     * Inferno-only (27 November, admintester's reports from the right-click menu, 12 of the Strongbox: "text doesnt
+     * fit right", "synergy is missing"): the long descriptions ran off the bottom of their box even at the smallest
+     * size, and the synergy line, last, with them. Now: the synergy goes under the unlock line in the box below when it
+     * fits there (an unlocked monster's box is nearly empty), else at the end of the description; the description is
+     * drawn smaller to fit (down to 9); what still doesn't fit scrolls (the wheel over it, or the arrow at its foot).
+     */
+    private ioFitTexts(): void {
+        let syn: string = IoSynergy.describe(this._creatureID);
+        let line: string = syn ? "<font color=\"#0B6B58\">" + syn + "</font>" : "";
+        this.tDescription.scrollV = 1;
+        this.tCosts.scrollV = 1;
+        if (line) {
+            let costs: string = this.tCosts.htmlText;
+            this.tCosts.htmlText = costs + "<p>" + line + "</p>";
+            GLOBAL.ioFitHeight(this.tCosts, 9);
+            if (this.tCosts.textHeight > this.tCosts.height - 4) {
+                this.tCosts.htmlText = costs;
+                this.tDescription.htmlText += "<br>" + line;
+            }
+        }
+        GLOBAL.ioFitHeight(this.tDescription, 9);
+        GLOBAL.ioFitHeight(this.tCosts, 9);
+        let more: boolean = this.tDescription.maxScrollV > 1;
+        if (!this._ioMore) {
+            this._ioMore = new Sprite();
+            this._ioMore.name = "ioDescMore";
+            this._ioMore.buttonMode = true;
+            let g: any = this._ioMore.graphics;
+            g.beginFill(0xffffff, 0.92);
+            g.drawRoundRect(-11, -9, 22, 18, 6, 6);
+            g.endFill();
+            g.beginFill(0x8a5a00);
+            g.moveTo(-5, -3);
+            g.lineTo(5, -3);
+            g.lineTo(0, 4);
+            g.endFill();
+            this._ioMore.addEventListener(MouseEvent.CLICK, (e: MouseEvent): void => {
+                let d: TextField = this.tDescription;
+                d.scrollV = d.scrollV >= d.maxScrollV ? 1 : d.scrollV + 3;
+                this.ioMoreArrow();
+            });
+            this.addEventListener(MouseEvent.MOUSE_WHEEL, (e: MouseEvent): void => {
+                let d: TextField = this.tDescription;
+                if (d.maxScrollV > 1 && d.hitTestPoint(e.stageX, e.stageY, false)) {
+                    d.scrollV = d.scrollV + (e.delta > 0 ? -1 : 1);
+                    this.ioMoreArrow();
+                }
+            });
+            this.addChild(this._ioMore);
+        }
+        this._ioMore.x = this.tDescription.x + this.tDescription.width - 14;
+        this._ioMore.y = this.tDescription.y + this.tDescription.height - 9;
+        this._ioMore.visible = more;
+        this.ioMoreArrow();
+    }
+
+    /** The arrow at the description's foot: down while there is more below, up at the end. */
+    private ioMoreArrow(): void {
+        if (this._ioMore) {
+            let d: TextField = this.tDescription;
+            this._ioMore.scaleY = d.scrollV >= d.maxScrollV ? -1 : 1;
+        }
     }
 
     public Start(param1: MouseEvent): void {

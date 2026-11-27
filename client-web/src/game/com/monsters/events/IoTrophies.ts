@@ -300,8 +300,17 @@ export class IoTrophies extends ASObject {
         g.endFill();
     }
 
-    public static Sync(): void {
+    /** A second trophy of a kind was taken away on this load (saved then). */
+    private static _fixed: boolean = false;
+
+    public static Sync(atLoad: boolean = false): void {
         if (!IoTrophies.own() || !BASE._buildingsStored) {
+            return;
+        }
+        // (27 November, Goldair1's bug report: his four trophies two of each. One was put in storage while the yard's
+        // buildings weren't all there (a poll's answer while it loaded, or one in hand being placed or moved): none
+        // placed, none stored, so one more was given. Not then; and on the yard's load, any second one taken away.)
+        if (!atLoad && (BASE._loading || (BASE._buildingCount | 0) <= 0 || GLOBAL._newBuilding)) {
             return;
         }
         let added: any[] = [];
@@ -312,6 +321,22 @@ export class IoTrophies extends ASObject {
                 continue;
             }
             let here: any[] = IoTrophies.placed(type);
+            if (atLoad && here.length + InventoryManager.buildingStorageCount(type) > 1) {
+                // (one of each: a stored one goes first, then any placed after the first)
+                while (InventoryManager.buildingStorageCount(type) > 0 && here.length + InventoryManager.buildingStorageCount(type) > 1) {
+                    InventoryManager.buildingStorageRemove(type);
+                    if (InventoryManager.buildingStorageCount(type) > 0) {
+                        BASE._buildingsStored["bl" + type] = new SecNum(lvl);
+                    }
+                }
+                while (here.length > 1) {
+                    let extra: any = here.pop();
+                    extra.RecycleC();
+                    // (RecycleC puts a decoration in storage: taken out again)
+                    InventoryManager.buildingStorageRemove(type);
+                }
+                IoTrophies._fixed = true;
+            }
             for (let b of here) {
                 if (b._lvl.Get() != lvl) {
                     b._lvl.Set(lvl);
@@ -335,6 +360,12 @@ export class IoTrophies extends ASObject {
                 BASE._buildingsStored["bl" + type] = new SecNum(lvl);
             }
             IoTrophies._told[type + ":" + lvl] = true;
+        }
+        if (IoTrophies._fixed) {
+            IoTrophies._fixed = false;
+            if (!added.length) {
+                BASE.Save();
+            }
         }
         if (added.length) {
             let names: any[] = [];

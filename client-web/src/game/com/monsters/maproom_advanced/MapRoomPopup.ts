@@ -2177,14 +2177,8 @@ export class MapRoomPopup extends MapRoomPopup_CLIP {
             actions.push([KEYS.Get("io_shop_map_guard", { "v1": IoShop.tokens("guard") > 0 ? KEYS.Get("io_shop_kept") : GLOBAL.FormatNumber(IoShop.price("guard")) }), (): void => {
                 IoShop.guardAsk(baseid, cellX, cellY);
             }]);
-        } else if ((cell._base == 2 || cell._base == 3) && !cell._mine && cell._baseID && (cell._userID | 0) > 0) {
-            // (22 October: a Scout Report of another player's yard, free again the same day)
-            let sid: string = String(cell._baseID);
-            let who: string = String(cell._name ?? "");
-            actions.push([IoShop.scoutedToday(sid) ? KEYS.Get("io_shop_map_scout_again") : KEYS.Get("io_shop_map_scout", { "v1": GLOBAL.FormatNumber(IoShop.price("scout")) }), (): void => {
-                IoShop.scoutAsk(sid, who);
-            }]);
         }
+        // (22 October: a Scout Report of another player's yard; 27 November, admintester's: the Scout Report is gone)
         if (!actions.length) {
             this.ioFitFrame(popup);
             return;

@@ -8,7 +8,7 @@ import { SharedObject, URLRequest, netHooks } from "flash/net";
 import { System } from "flash/system";
 import { TextField } from "flash/text";
 import { Dictionary, getTimer, setTimeout } from "flash/utils";
-import { IoBaiter, IoBrag, IoLiveWatch, IoWatch, IoVisitUi, IoDave, IoFmi, IoFmiWaves, IoTrophies, IoTrophy, ACADEMY, ACHIEVEMENTS, ALLIANCES, ATTACK, AutoBankManager, BDECORATION, BFOUNDATION, BMUSHROOM, BRESOURCE, BTOTEM, BTOWER, BTRAP, BUILDING1, BUILDING10, BUILDING11, BUILDING112, BUILDING113, BUILDING115, BUILDING117, BUILDING118, BUILDING12, BUILDING13, BUILDING14, BUILDING15, BUILDING16, BUILDING17, BUILDING18, BUILDING19, BUILDING2, BUILDING20, BUILDING21, BUILDING22, BUILDING23, BUILDING24, BUILDING25, BUILDING26, BUILDING27, BUILDING3, BUILDING4, BUILDING5, BUILDING51, BUILDING52, BUILDING6, BUILDING7, BUILDING8, BUILDING9, BUILDINGINFO, BUILDINGS, BUY, BWALL, BYMConfig, BaseBuffHandler, BaseTemplate, BaseTemplateNode, BlackSpurtzCannon, BuildingOverlay, Bunker, CASINO, CHAMPIONCAGE, CHAMPIONCHAMBER, CHECKER, CREATURELOCKER, CREATURES, CREEPS, CUSTOMATTACKS, CellData, ChampionBase, Chat, Console, EFFECTS, Elastic, EnumYardType, FBPROMO_711_CLIP, FIREBALLS, Fire, FrontPageHandler, GAME, GIBLETS, GIFTS, GLOBAL, GRID, HATCHERYCC, GuardTower, HOUSING, HOUSINGBUNKER, ICoreBuilding, IHandler, INFERNOPORTAL, INFERNOQUAKETOWER, INFERNO_CANNON_TOWER, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_MAGMA_TOWER, InstanceManager, InventoryManager, IoAttackLogs, IoBugReport, IoChangelog, IoWhosOnline, IoDailyPopup, IoDesigner, IoGauntlet, IoHfo, IoHfoIce, IoHfoWaves, IoLeaderboards, IoOutpostsPopup, IoPets, IoTerrainPopup, IoQuests, IoQuestBook, IoReplayPlayer, IoReplayRecorder, IoSiege, IoTd, IoTestMode, IoUnderworld, KEYS, LOGGER, LOGIN, MAP, MAPBG, MAPROOM, MAPROOM_DESCENT, MAPROOM_INFERNO, MARKETING, MONSTERBAITER, MONSTERLAB, MUSHROOMS, MapRoom3, MapRoom3OutpostSecured, MapRoom3Tutorial, MapRoomCell, MapRoomManager, MonsterMadness, MouseWheelEnabler, NewPopupSystem, OutpostDefender, PATHING, PLEASEWAIT, POPUPS, POWERUPS, PROJECTILES, ParticleText, PlannerTemplate, Player, PopupLostMainBase, QUESTS, QUEUE, RADIO, RasterData, ReplayableEventHandler, ResourceBombs, ResourceCapacityBaseBuff, ResourceOutpost, ResourcePackages, RewardHandler, SOUNDS, SPECIALEVENT, SPECIALEVENT_WM1, SPRITES, STORE, SecNum, SiegeBuilding, SiegeFactory, SiegeLab, SiegeWeapons, Smoke, SpurtzCannon, TRIBES, TUTORIAL, Targeting, TweenLite, UI2, UPDATES, URLLoaderApi, WMATTACK, WMBASE, WORKERS, com_monsters_maproom_advanced_MapRoom as MapRoom, md5, popup_attackedme, popup_damaged, popup_damagedbase_onvisit, popup_levelup, popup_loot, popup_prefab, popup_prefab_help, print, IoSign, IoTd2Tower, IoTilt, IoToast, MAILBOX, IoAllianceBanner, IoChampionStatue, IoShop, IoTot, IoSynergy, IoDevil } from "@game";
+import { IoBaiter, IoBrag, IoLiveWatch, IoWatch, IoVisitUi, IoDave, IoFmi, IoFmiWaves, IoTrophies, IoTrophy, ACADEMY, ACHIEVEMENTS, ALLIANCES, ATTACK, AutoBankManager, BDECORATION, BFOUNDATION, BMUSHROOM, BRESOURCE, BTOTEM, BTOWER, BTRAP, BUILDING1, BUILDING10, BUILDING11, BUILDING112, BUILDING113, BUILDING115, BUILDING117, BUILDING118, BUILDING12, BUILDING13, BUILDING14, BUILDING15, BUILDING16, BUILDING17, BUILDING18, BUILDING19, BUILDING2, BUILDING20, BUILDING21, BUILDING22, BUILDING23, BUILDING24, BUILDING25, BUILDING26, BUILDING27, BUILDING3, BUILDING4, BUILDING5, BUILDING51, BUILDING52, BUILDING6, BUILDING7, BUILDING8, BUILDING9, BUILDINGINFO, BUILDINGS, BUY, BWALL, BYMConfig, BaseBuffHandler, BaseTemplate, BaseTemplateNode, BlackSpurtzCannon, BuildingOverlay, Bunker, CASINO, CHAMPIONCAGE, CHAMPIONCHAMBER, CHECKER, CREATURELOCKER, CREATURES, CREEPS, CUSTOMATTACKS, CellData, ChampionBase, Chat, Console, EFFECTS, Elastic, EnumYardType, FBPROMO_711_CLIP, FIREBALLS, Fire, FrontPageHandler, GAME, GIBLETS, GIFTS, GLOBAL, GRID, HATCHERYCC, GuardTower, HOUSING, HOUSINGBUNKER, ICoreBuilding, IHandler, INFERNOPORTAL, INFERNOQUAKETOWER, INFERNO_CANNON_TOWER, INFERNO_DESCENT_POPUPS, INFERNO_EMERGENCE_EVENT, INFERNO_MAGMA_TOWER, InstanceManager, InventoryManager, IoAttackLogs, IoBugReport, IoChangelog, IoWhosOnline, IoDailyPopup, IoDesigner, IoGauntlet, IoHfo, IoHfoIce, IoHfoWaves, IoLeaderboards, IoOutpostsPopup, IoPets, IoTerrainPopup, IoQuests, IoQuestBook, IoReplayPlayer, IoReplayRecorder, IoSiege, IoTd, IoTestMode, IoUnderworld, KEYS, LOGGER, LOGIN, MAP, MAPBG, MAPROOM, MAPROOM_DESCENT, MAPROOM_INFERNO, MARKETING, MONSTERBAITER, MONSTERLAB, MUSHROOMS, MapRoom3, MapRoom3OutpostSecured, MapRoom3Tutorial, MapRoomCell, MapRoomManager, MonsterMadness, MouseWheelEnabler, NewPopupSystem, OutpostDefender, PATHING, PLEASEWAIT, POPUPS, POWERUPS, PROJECTILES, ParticleText, PlannerTemplate, Player, PopupLostMainBase, QUESTS, QUEUE, RADIO, RasterData, ReplayableEventHandler, ResourceBombs, ResourceCapacityBaseBuff, ResourceOutpost, ResourcePackages, RewardHandler, SOUNDS, SPECIALEVENT, SPECIALEVENT_WM1, SPRITES, STORE, SecNum, SiegeBuilding, SiegeFactory, SiegeLab, SiegeWeapons, Smoke, SpurtzCannon, TRIBES, TUTORIAL, Targeting, TweenLite, UI2, UPDATES, URLLoaderApi, WMATTACK, WMBASE, WORKERS, com_monsters_maproom_advanced_MapRoom as MapRoom, md5, popup_attackedme, popup_damaged, popup_damagedbase_onvisit, popup_levelup, popup_loot, popup_prefab, popup_prefab_help, print, IoSign, IoTd2Tower, IoTilt, IoToast, MAILBOX, IoAllianceBanner, IoChampionStatue, IoShop, IoTot, IoSynergy, IoDevil, IoYardHelp, IoJobs } from "@game";
 
 export class BASE extends ASObject {
     public static _baseID: number;
@@ -1176,6 +1176,8 @@ export class BASE extends ASObject {
                 }
                 // Inferno-only: the ground its owner chose (the D.A.V.E. Club: IoTerrainPopup), laid by Build
                 IoTerrainPopup.setData(GLOBAL.INFERNO_ONLY ? serverData.io_terrain : null, GLOBAL.INFERNO_ONLY ? serverData.io_terrains : null);
+                // Inferno-only (27 November): helping out: the owner's helps not taken yet, a visitor's helped jobs (IoYardHelp)
+                IoYardHelp.fromLoad(serverData);
                 // Inferno-only: its owner's D.A.V.E. Club looks (workers, champions: IoDave), and the workers' sheet
                 IoDave.setYard(GLOBAL.INFERNO_ONLY ? serverData.io_dave : null);
                 // Inferno-only (16 October): its owner's alliance shield, for the Alliance Banners (IoAllianceBanner)
@@ -2493,6 +2495,10 @@ export class BASE extends ASObject {
             IoTot.afterLoad();
             // (22 October: the Harvest Drone's first round, and gifts or a Raid Insurance payout said once: IoShop)
             IoShop.afterLoad();
+            // (27 November: visitors' helps with this yard's jobs taken off: IoYardHelp)
+            IoYardHelp.afterLoad();
+            // (27 November: the job list's queue runs in the player's own yards: IoJobs)
+            IoJobs.afterLoad();
             // (18 October: attacks on the player's yards while they play, watched as they happen: IoLiveWatch)
             IoLiveWatch.start();
             IoWatch.afterLoad();
@@ -2505,7 +2511,7 @@ export class BASE extends ASObject {
         IoHfo.Setup();
         // the Frozen Monster Invasion (the player's own main yard only), and the event trophies won
         IoFmi.Setup();
-        IoTrophies.Sync();
+        IoTrophies.Sync(true);
         // Hellgate Defense: the arena's run starts (the arena only)
         IoTd.Setup();
         NewPopupSystem.instance.CheckAll(true);
